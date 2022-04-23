@@ -1,0 +1,286 @@
+void name=32,4269726431000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,8D450CFF
+--|--
+void id=4,01000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,CDCCCC3F
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00008040
+--|--
+void obedience=4,00004040
+--|--
+void price=4,00002041
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726432000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,27A312FF
+--|--
+void id=4,02000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,33337340
+--|--
+void attraction=4,0000803F
+--|--
+void endurance=4,0000803F
+--|--
+void obedience=4,00004040
+--|--
+void price=4,00002041
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726433000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,3A3AE6FF
+--|--
+void id=4,03000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,0000A040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00004040
+--|--
+void price=4,0000C841
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726434000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,35CDD7FF
+--|--
+void id=4,04000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00004040
+--|--
+void attraction=4,0000A040
+--|--
+void endurance=4,00008040
+--|--
+void obedience=4,0000803F
+--|--
+void price=4,00000C42
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726435000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,C5CB09FF
+--|--
+void id=4,05000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00008040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,0000C040
+--|--
+void obedience=4,00000040
+--|--
+void price=4,0000C842
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726436000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,BC1B94FF
+--|--
+void id=4,06000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00004040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00004040
+--|--
+void obedience=4,0000E040
+--|--
+void price=4,00007A43
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726437000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,016892FF
+--|--
+void id=4,07000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00000041
+--|--
+void price=4,0000AF43
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726438000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,08086BFF
+--|--
+void id=4,08000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00000041
+--|--
+void price=4,0000C843
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726439000000000000000000000000000000000000000000000000000000
+--|--
+void color=4,0059F3FF
+--|--
+void id=4,09000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00000041
+--|--
+void price=4,00001B44
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726431300000000000000000000000000000000000000000000000000000
+--|--
+void color=4,FF1900FF
+--|--
+void id=4,0A000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00000041
+--|--
+void price=4,0080A244
+--|--
+void upkeep=4,CDCCCC3D
+--|--
+void name=32,4269726431310000000000000000000000000000000000000000000000000000
+--|--
+void color=4,03FF00FF
+--|--
+void id=4,0B000000
+--|--
+void hp=4,64000000
+--|--
+void xp=4,00000000
+--|--
+void activity=4,00000000
+--|--
+void location=4,01000000
+--|--
+void charisma=4,00000040
+--|--
+void attraction=4,00000040
+--|--
+void endurance=4,00000040
+--|--
+void obedience=4,00000041
+--|--
+void price=4,00001645
+--|--
+void upkeep=4,CDCCCC3D
+--|--

@@ -1,0 +1,48 @@
+void name=32,5369746520310000000000000000000000000000000000000000000000000000
+--|--
+void capacity=4,02000000
+--|--
+void petCount=4,00000000
+--|--
+void owned=1,01
+--|--
+void price=4,00004842
+--|--
+void clientsPerDay=4,04000000
+--|--
+void hasShade=1,00
+--|--
+void frontAttractionsLevel=4,00000000
+--|--
+void name=32,54696E7920736974650000000000000000000000000000000000000000000000
+--|--
+void capacity=4,01000000
+--|--
+void petCount=4,00000000
+--|--
+void owned=1,00
+--|--
+void price=4,00004842
+--|--
+void clientsPerDay=4,04000000
+--|--
+void hasShade=1,00
+--|--
+void frontAttractionsLevel=4,00000000
+--|--
+void name=32,4269672073697465000000000000000000000000000000000000000000000000
+--|--
+void capacity=4,03000000
+--|--
+void petCount=4,00000000
+--|--
+void owned=1,00
+--|--
+void price=4,0000FA42
+--|--
+void clientsPerDay=4,04000000
+--|--
+void hasShade=1,00
+--|--
+void frontAttractionsLevel=4,00000000
+--|--

@@ -1,0 +1,10 @@
+bin/
+log
+errors.err
+HBrothGameAssets/assets/images/WIP/
+bulletHellGame/assets/logs
+bulletHellGameServer/assets/logs
+tags
+*.blend1
+*.hdr
+sesh

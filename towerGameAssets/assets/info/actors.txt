@@ -1,0 +1,4000 @@
+void id=4,01000000
+--|--
+void type=4,01000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,19E468C33F357442
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,5A325D3A2264F639
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,00000000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,0F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000B0C300007043
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,10000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000080C300007043
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,11000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000020C300007043
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,12000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000E0C300002043
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,13000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000D0C300008042
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,14000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000E8C3000000C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,15000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000000C4000000C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,16000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000010C4000060C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,17000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000028C4000098C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,19000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000804100008042
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,1A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000A042000000C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,1B000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00008042000000C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,1C000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C042000060C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,1D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000E0420000A0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,25000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000080420000D0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,26000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00004042000000C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,10140100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,27000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,58013DC3086AEBC3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,00000000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,3A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000038C40000C8C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,520B0100
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,45000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000604300002CC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,E0FE0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,46000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00009043000044C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,91FE0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,44000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00000043000018C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,2EFF0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,4D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000050C40000E0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C6F80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,4F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000068C40000D0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,5DF80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,50000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000080C40000B8C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,01F80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,51000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00008CC40000C0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,42F70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,53000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000098C40000D0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,57F30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,54000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000A4C40000E0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,FDF20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,55000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000B0C40000D0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,6BF20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,56000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000BCC40000E8C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,12F20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,57000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C8C40000D0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,1CF10000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,58000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000D4C40000B0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,77F00000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,59000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000E0C4000098C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,1CF00000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000E8C4000050C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,A7EF0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5B000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000EEC40000E0C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,4BEF0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5C000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000FAC4000040C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,0EEF0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000003C500000000
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,98EE0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5E000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000009C5000040C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,59EE0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,5F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00000FC50000C0C2
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,0DEE0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,60000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000013C5000040C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C9ED0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,61000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000017C5000090C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,91ED0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,64000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001AC50000C0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,D5EA0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,65000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001DC50000F0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,8EEA0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,66000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001DC5000010C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,52EA0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,67000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001DC5000028C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,23EA0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,68000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000020C5000040C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,5AE80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,69000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001FC5000058C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,F7E70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000022C5000070C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,96E70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6B000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000021C5000084C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,4EE70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6C000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001FC5000090C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,E1E60000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00001CC500009CC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C9E50000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6E000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000019C50000A8C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,68E50000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,6F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000015C50000B4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,21E50000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,70000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000011C50000C0C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C3E40000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,71000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00000DC50000CCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,4EE40000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,72000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000007C50000C4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,F5E30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,73000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000001C50000CCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,9BE30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,74000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000F6C40000D4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,58E30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,75000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000EAC40000DCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,76E10000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,76000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000CCC40000DCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C7DD0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,77000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C0C40000E0C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,FDDC0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,78000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000B4C40000DAC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,A7DC0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,79000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000A8C40000D4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,52DC0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,7A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00009CC40000CEC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,0CDC0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,7B000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000090C40000D6C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,C1DB0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,7D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000084C40000DAC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,43D90000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,7E000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000070C40000D6C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,F3D80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,7F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000058C40000DCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,BDD80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,80000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000040C40000D8C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,89D80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,81000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000028C40000D6C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,56D80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,82000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000010C40000D2C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,15D80000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,83000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000F0C30000D6C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,AAD70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,84000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C0C30000D2C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,2ED70000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,85000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000090C30000D8C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,D9D60000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,86000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000040C30000D2C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,91D60000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,87000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C0C20000CAC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,B7D50000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,88000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000000000000C4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,4ED50000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,89000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C0420000C0C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,FBD40000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8A000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000040430000C4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,A0D40000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8B000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,000090430000BCC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,5BD40000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8C000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000B0430000B0C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,D3D30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8D000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C0430000A4C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,69D30000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8E000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000D043000098C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,F9D20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,8F000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000B04300008CC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,CFD20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,90000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C043000080C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,8DD20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,91000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000D043000068C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,55D20000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,92000000
+--|--
+void type=4,02000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,0000C043000050C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,F7D10000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,93000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,0000C8C300008EC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,A6090000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,C4D2343F
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,98000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,000058C400009EC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,CD070000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,952F313E
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,9D000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,000074C4000070C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,43070000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,601D8B3F
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,A5000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,00003043000080C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,BF060000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,0C9C283E
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,A9000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,00000DC50000C0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,3B060000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,2EC2EF3F
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,AC000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,000004C5000080C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,81070000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,6D2FA73E
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,B2000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,0000FAC40000C0C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,62060000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,7832213F
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,B5000000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,000005C5000008C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,B4040000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,2EC0C43F
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,3C020000
+--|--
+void type=4,03000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,F80DAEC4853881C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,64000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,17020000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,0000A040
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,94020000
+--|--
+void type=4,06000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,9E6F3DC381C520C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,DD710000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,95020000
+--|--
+void type=4,06000000
+--|--
+void variant=4,01000000
+--|--
+void position=8,0000A443000085C4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,FA6D0000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,D3020000
+--|--
+void type=4,03000000
+--|--
+void variant=4,00000000
+--|--
+void position=8,524002C4FE341CC4
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,00000000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,01
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--
+void id=4,AF050000
+--|--
+void type=4,06000000
+--|--
+void variant=4,02000000
+--|--
+void position=8,E75B41C4028BE9C3
+--|--
+void rotation=4,00000000
+--|--
+void velo=8,0000000000000000
+--|--
+void accel=8,0000000000000000
+--|--
+void hp=4,00000000
+--|--
+void energy=4,00000000
+--|--
+void tick=4,DD710000
+--|--
+void unkillable=1,00
+--|--
+void denTimeTillNextSpawn=4,00000000
+--|--
+void isSpawner=1,00
+--|--
+void hasSpawned=1,00
+--|--
+void wasSpawned=1,00
+--|--
+void srcSpawner=4,00000000
+--|--
+void targetActor=4,00000000
+--|--
+void homeDen=4,00000000
+--|--
+void hitAggroById=4,00000000
+--|--
+void buildAmount=4,00000000
+--|--

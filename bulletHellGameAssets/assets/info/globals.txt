@@ -1,0 +1,54 @@
+void playerHitRadius=4,00004040
+--|--
+void playerFireRate=4,04000000
+--|--
+void poc=4,B4000000
+--|--
+void bombsPerLife=4,03000000
+--|--
+void invTimeOnDeath=4,00004040
+--|--
+void binsWide=4,0A000000
+--|--
+void binsHigh=4,0A000000
+--|--
+void grazePad=4,0F000000
+--|--
+void spellDisplayTime=4,28000000
+--|--
+void backgroundDistance=4,00004040
+--|--
+void backgroundSpawnDepth=4,9A99AF42
+--|--
+void backgroundFrontClip=4,000018C1
+--|--
+void cameraFov=4,0000F041
+--|--
+void backgroundSpeed=4,3333333F
+--|--
+void backgroundTreeSpread=4,0000F041
+--|--
+void treeSpawnTimeMinMax=8,000000000AD7A33B
+--|--
+void cameraPosition=12,000000000000000000008041
+--|--
+void cameraRotation=12,0000803F0000000000000000
+--|--
+void sunPosition=12,CDCC2643000048C30000C842
+--|--
+void ambientLight=12,CDCCCC3DCDCCCC3DCDCCCC3D
+--|--
+void diffuseLight=12,0000003F0000003F0000003F
+--|--
+void specularLight=12,0000803F0000803F0000803F
+--|--
+void showSyncString=1,00
+--|--
+void forestGroundFreq=4,00004040
+--|--
+void forestGroundDepth=4,02000000
+--|--
+void forestGroundMulti=4,00004040
+--|--
+void force2d=1,00
+--|--
