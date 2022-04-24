@@ -1178,15 +1178,6 @@ void updateGame() {
 		if (game->inEditor) { /// Editor update
 			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-			{
-				static float points[5] = {0.950f, 0.050f, 0.795f, 0.035f};
-
-				if (ImGui::Bezier("Curve", points))
-				{
-					// stuff
-				}
-			}
-
 			if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Checkbox("Always show wireframes", &game->debugAlwaysShowWireframes);
 				ImGui::Checkbox("No 3d", &game->debugNo3d);

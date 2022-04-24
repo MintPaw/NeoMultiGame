@@ -51,8 +51,6 @@ namespace Raylib {
 #include "imgui_tables.cpp"
 #include "imgui_demo.cpp"
 #endif
-// #include "curve-editor-lumix.hpp"
-#include "bezier.cpp"
 
 #ifndef STB_SPRINTF_OBJ
 # define STB_SPRINTF_IMPLEMENTATION
