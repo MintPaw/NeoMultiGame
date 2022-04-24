@@ -434,7 +434,8 @@ void drawPixelArtFilterTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec
 void drawPixelArtFilterTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1));
 void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
-void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size=v2(), Rect source=makeRect(), int tint=0xFFFFFFFF);
+void drawBillboard(Raylib::Camera3D raylibCamera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
+void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, int tint, float alpha, int flags);
 
 void pushTargetTexture(RenderTexture *renderTexture);
@@ -759,7 +760,15 @@ void drawCircle(Vec2 position, float radius, int color) {
 	drawRaylibTexture(renderer->circleTexture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, color, alpha, flags);
 }
 
-void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size, Rect source, int tint) {
+void drawBillboard(Raylib::Camera3D raylibCamera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
+	Texture texture;
+	texture.width = renderTexture->width;
+	texture.height = renderTexture->height;
+	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
+	drawBillboard(raylibCamera, &texture, position, size, tint, source);
+}
+
+void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
 	Raylib::BeginShaderMode(renderer->alphaDiscardShader);
 
 	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);

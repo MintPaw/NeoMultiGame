@@ -495,6 +495,19 @@ struct Effect {
 	char text[EFFECT_TEXT_MAX_LEN];
 };
 
+enum ParticleType {
+	PARTICLE_DUST,
+	PARTICLE_BLOOD,
+};
+struct Particle {
+	ParticleType type;
+	Vec3 position;
+	Vec3 velo;
+	int tint;
+	float time;
+	float maxTime;
+};
+
 enum GameState {
 	GAME_NONE,
 	GAME_PLAY,
@@ -511,6 +524,7 @@ struct Game {
 	Globals globals;
 	bool inEditor;
 	float timeScale;
+	float prevTime;
 	float time;
 	Vec2 size;
 	float sizeScale;
@@ -575,6 +589,10 @@ struct Game {
 #define EFFECTS_MAX 128
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
+
+	Particle *particles;
+	int particlesNum;
+	int particlesMax;
 
 	/// Editor/debug
 	int selectedActorId;
@@ -649,6 +667,7 @@ void drawAABB2d(AABB aabb, int lineThickness, int color);
 
 int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
+Particle *createParticle(ParticleType type);
 
 void saveMap(Map *map, int mapFileIndex);
 void loadMap(Map *map, int mapFileIndex);
@@ -872,6 +891,9 @@ void updateGame() {
 			info->price = 120;
 			info->actionType = ACTION_STICKY_NAPALM;
 		}
+
+		game->particlesMax = 128;
+		game->particles = (Particle *)zalloc(sizeof(Particle) * game->particlesMax);
 
 		game->timeScale = 1;
 		// game->debugDrawPlayerBox = true;
@@ -1835,6 +1857,19 @@ void updateGame() {
 				actor->isBlocking = true;
 				if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
 
+				if (actor->isRunningLeft || actor->isRunningRight) {
+					if (fmod(game->time, 0.2) < fmod(game->prevTime, 0.2)) {
+						Particle *particle = createParticle(PARTICLE_DUST);
+						particle->position = actor->position + v3(0, 0, 5);
+						particle->position.y -= 0.01*i;
+						particle->velo.x = rndFloat(0, 5);
+						if (actor->facingLeft) particle->velo.x *= -1;
+						particle->velo.z = rndFloat(2, 3);
+						particle->maxTime = rndFloat(0.5, 1);
+						particle->tint = 0xFFDEA404;
+					}
+				}
+
 				if (actor->playerControlled) {
 					if (!game->inEditor) game->cameraTarget = actor->position;
 
@@ -2612,7 +2647,7 @@ void updateGame() {
 					continue;
 				}
 			}
-		}
+		} ///
 
 		{ /// Update map
 			game->timeTillNextCityTick -= elapsed;
@@ -3361,7 +3396,6 @@ void updateGame() {
 					Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(cube->color));
 				}
 
-#if 1
 				Raylib::Ray raylibScreenRay = {};
 				{//@copyPastedRaylib::GetMouseRay
 					Raylib::Vector2 mouse = {game->mouse.x, game->mouse.y};
@@ -3412,9 +3446,7 @@ void updateGame() {
 					// Apply calculated vectors to ray
 					raylibScreenRay.direction = direction;
 				}
-#else
-				Raylib::Ray raylibScreenRay = Raylib::GetMouseRay({platform->mouse.x, platform->mouse.y}, raylibCamera);
-#endif
+
 				game->mouseRayPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
 				game->mouseRayDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
 				// logf("%f %f %f | %f %f %f\n", ray.position.x, ray.position.y, ray.position.z, ray.direction.x, ray.direction.y, ray.direction.z);
@@ -3520,41 +3552,13 @@ void updateGame() {
 								if (flipped) size.x *= -1;
 								size *= scale;
 
-								Texture texture;
-								texture.width = frame->texture->width;
-								texture.height = frame->texture->height;
-								texture.raylibTexture = frame->texture->raylibRenderTexture.texture;
-
 								// position.x += frame->destOffX;
 								// position.y += frame->destOffY;
 
-								drawBillboard(raylibCamera, &texture, position, size, source, boxColor);
+								drawBillboard(raylibCamera, frame->texture, position, size, boxColor, source);
 							} else {
 								showBox = true;
 							}
-
-#if 0
-							Texture *texture = getTexture("assets/images/guy_standing.png");
-							Vec2 size = v2(texture->width, texture->height);
-							drawBillboard(v3(raylibCamera.position), v3(raylibCamera.target), v3(raylibCamera.up), texture, getCenter(aabb), size);
-#endif
-#if 0
-							Frame *frame = getFrame("Unit/idle_000.png");
-							Rect source;
-							source.x = frame->srcX;
-							source.y = frame->srcY;
-							source.width = frame->width;
-							source.height = frame->height;
-
-							Vec2 size = v2(frame->width, frame->width);
-
-							Texture texture;
-							texture.width = frame->texture->width;
-							texture.height = frame->texture->height;
-							texture.raylibTexture = frame->texture->raylibRenderTexture.texture;
-
-							drawBillboard(v3(raylibCamera.position), v3(raylibCamera.target), v3(raylibCamera.up), &texture, getCenter(aabb), size, source);
-#endif
 						}
 					} else if (actor->type == ACTOR_GROUND) {
 						showBox = true;
@@ -3584,6 +3588,56 @@ void updateGame() {
 						Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(boxColor));
 					}
 				}
+
+				{ /// Update and render particles
+					for (int i = 0; i < game->particlesNum; i++) {
+						Particle *particle = &game->particles[i];
+
+						bool complete = false;
+
+						float fadeInPerc = 0.10;
+						float fadeOutPerc = 0.10;
+
+						if (particle->type == PARTICLE_DUST) {
+						} else if (particle->type == PARTICLE_BLOOD) {
+						}
+
+						float alpha =
+							clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
+							* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
+
+						// particle->velo.z -= 0.98; // grav
+
+						particle->position += particle->velo;
+						particle->velo *= 0.95;
+
+						{
+							RenderTexture *texture = renderer->circleTexture;
+							Vec2 size = v2(32, 32);
+							Rect source = makeRect(texture);
+
+							int tint = particle->tint;
+							Vec4 tintVec = hexToArgbFloat(particle->tint);
+							tintVec *= alpha;
+
+							tint = argbToHex(tintVec);
+
+							// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
+
+							drawBillboard(raylibCamera, texture, particle->position, size, tint, source);
+						}
+
+						particle->time += elapsed;
+						if (particle->time > particle->maxTime) complete = true;
+
+						if (complete) {
+							game->particles[i] = game->particles[game->particlesNum-1];
+							game->particlesNum--;
+							i--;
+							continue;
+						}
+					}
+				} ///
 			}
 			game->debugCubesNum = 0;
 
@@ -3620,6 +3674,7 @@ void updateGame() {
 	guiDraw();
 	drawOnScreenLog();
 
+	game->prevTime = game->time;
 	game->time += elapsed;
 }
 
@@ -4119,6 +4174,19 @@ Effect *createEffect(EffectType type, Vec3 position) {
 	effect->type = type;
 	effect->position = position;
 	return effect;
+}
+
+Particle *createParticle(ParticleType type) {
+	if (game->particlesNum > game->particlesMax-1) {
+		game->particlesNum = game->particlesMax-1;
+		logf("Too many particles! (should self expand)\n");
+	}
+
+	Particle *particle = &game->particles[game->particlesNum++];
+	memset(particle, 0, sizeof(Particle));
+	particle->type = type;
+	particle->tint = 0xFFFFFFFF;
+	return particle;
 }
 
 void saveMap(Map *map, int mapFileIndex) {

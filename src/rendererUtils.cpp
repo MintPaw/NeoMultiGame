@@ -8,6 +8,7 @@ void drawRect(float x, float y, float width, float height, int color, int flags=
 void drawCircle(Circle circle, int color) { drawCircle(circle.position, circle.radius, color); }
 Vec2 getSize(RenderTexture *renderTexture);
 Vec2 getSize(Texture *texture);
+Rect makeRect(RenderTexture *renderTexture);
 Rect makeRect(Texture *texture);
 
 void initRendererUtils();
@@ -82,6 +83,11 @@ Vec2 getSize(Texture *texture) {
 Rect makeRect(Texture *texture) {
 	if (!texture) Panic("makeRect of NULL texture");
 	return makeRect(0, 0, texture->width, texture->height);
+}
+
+Rect makeRect(RenderTexture *renderTexture) {
+	if (!renderTexture) Panic("makeRect of NULL renderTexture");
+	return makeRect(0, 0, renderTexture->width, renderTexture->height);
 }
 
 void drawCapsule(Capsule2 cap, int color);

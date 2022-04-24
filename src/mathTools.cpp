@@ -390,8 +390,9 @@ struct Vec4 {
 		if (this->distance(other) < 0.001) return true;
 		return false;
 	}
-};
 
+	Vec4 operator*= (float b);
+};
 Vec4 operator+ (Vec4 a, Vec4 b) { return { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w }; }
 Vec4 operator+ (Vec4 a, float b) { return { a.x + b, a.y + b, a.z + b, a.w + b }; }
 Vec4 operator+ (float a, Vec4 b) { return { a + b.x, a + b.y, a + b.z, a + b.w }; }
@@ -401,6 +402,7 @@ Vec4 operator- (Vec4 a, Vec4 b) { return { a.x - b.x, a.y - b.y, a.z - b.z, a.w 
 Vec4 operator* (Vec4 a, Vec4 b) { return { a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w }; }
 Vec4 operator* (Vec4 a, float b) { return { a.x * b, a.y * b, a.z * b, a.w * b }; }
 Vec4 operator* (float a, Vec4 b) { return { a * b.x, a * b.y, a * b.z, a * b.w }; }
+Vec4 Vec4::operator*= (float b) { *this = (*this) * b; return *this; }
 
 Vec4 operator/ (Vec4 a, Vec4 b) { return { a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w }; }
 Vec4 operator/ (Vec4 a, float b) { return { a.x / b, a.y / b, a.z / b, a.w / b }; }
