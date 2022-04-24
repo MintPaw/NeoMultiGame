@@ -502,6 +502,7 @@ enum GameState {
 };
 struct Game {
 	Font *defaultFont;
+	Font *particleFont;
 	Font *simpleStatsFont;
 	RenderTexture *gameTexture;
 	RenderTexture *debugTexture;
@@ -689,6 +690,7 @@ void updateGame() {
 		logf("Game runtime memory is %dmb btw\n", sizeof(Game) / Megabytes(1));
 		game = (Game *)zalloc(sizeof(Game));
 		game->defaultFont = createFont("assets/common/arial.ttf", 40);
+		game->particleFont = createFont("assets/common/arial.ttf", 25);
 		game->simpleStatsFont = createFont("assets/common/arial.ttf", 18);
 
 		animSys->loopsByDefault = true;
@@ -1717,7 +1719,7 @@ void updateGame() {
 											otherActor->stamina -= damage;
 											if (otherActor->stamina < 0) otherActor->stamina -= damage;
 
-											Effect *effect = createEffect(EFFECT_BLOCK_DAMAGE, otherActor->position + v3(0, 0, otherActor->size.z));
+											Effect *effect = createEffect(EFFECT_BLOCK_DAMAGE, otherActor->position + v3(0, 0, otherActor->size.z*0.5));
 											effect->value = damage;
 
 											Vec3 blockVelo = action->info->blockVelo;
@@ -1740,7 +1742,7 @@ void updateGame() {
 
 											Effect *effect = createEffect(
 												otherActor == player ? EFFECT_PLAYER_DAMAGE: EFFECT_ENEMY_DAMAGE,
-												otherActor->position + v3(0, 0, otherActor->size.z)
+												otherActor->position + v3(0, 0, otherActor->size.z*0.5)
 											);
 											effect->value = damage;
 
@@ -2163,7 +2165,7 @@ void updateGame() {
 							player->money += actor->itemAmount;
 							actor->markedForDeletion = true;
 
-							Effect *effect = createEffect(EFFECT_MONEY, player->position + v3(0, 0, player->size.z));
+							Effect *effect = createEffect(EFFECT_MONEY, player->position + v3(0, 0, player->size.z*0.5));
 							effect->value = actor->itemAmount;
 						} else {
 							if (giveItem(player, actor->itemType, actor->itemAmount)) {
@@ -2578,23 +2580,35 @@ void updateGame() {
 				char *effectText = NULL;
 				int effectTextColor = 0;
 				if (effect->type == EFFECT_ENEMY_DAMAGE) {
-					effectText = frameSprintf("-%.0f\n", effect->value);
+					effectText = frameSprintf("-%.0f", effect->value);
 					effectTextColor = 0xFFFF8000;
 				} else if (effect->type == EFFECT_PLAYER_DAMAGE) {
-					effectText = frameSprintf("-%.0f\n", effect->value);
+					effectText = frameSprintf("-%.0f", effect->value);
 					effectTextColor = 0xFFFF0000;
 				} else if (effect->type == EFFECT_BLOCK_DAMAGE) {
-					effectText = frameSprintf("-%.0f\n", effect->value);
+					effectText = frameSprintf("-%.0f", effect->value);
 					effectTextColor = 0xFF0000FF;
 				} else if (effect->type == EFFECT_MONEY) {
-					effectText = frameSprintf("+$%.2f\n", effect->value);
+					effectText = frameSprintf("+$%.2f", effect->value);
 					effectTextColor = 0xFF00FF00;
 				}
 
 				if (effectText) {
-					Vec2 size = getTextSize(game->defaultFont, effectText);
+					Vec2 size = getTextSize(game->particleFont, effectText);
 					Vec2 pos = position2 - size/2;
-					drawText(game->defaultFont, effectText, pos, effectTextColor);
+
+					float alpha =
+						clampMap(effect->time, 0, maxTime*0.05, 0, 1)
+						* clampMap(effect->time, maxTime*0.95, maxTime, 1, 0);
+
+					pos.y += clampMap(effect->time, 0, maxTime*0.5, -20, 0, BOUNCE_OUT);
+
+					Rect rect = makeRect(pos, size);
+
+					pushAlpha(alpha);
+					drawRect(inflate(rect, 2), 0x30000000);
+					drawText(game->particleFont, effectText, pos, effectTextColor);
+					popAlpha();
 				}
 
 				effect->time += elapsed;

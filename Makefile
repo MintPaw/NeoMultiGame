@@ -868,7 +868,29 @@ shipConcreteJungleGameToLen:
 		cd pack; \
 		cp /c/bin/*.exe .; \
 		cp /c/bin/*.dll .; \
-		cp -r /c/bin/pack/* "/c/Dropbox/concreteJungle/bin"
+
+devShipConcreteJungleGameToSelf:
+	-$(MAKE) clean
+	cmd /c "\
+		set GAME_NAME=concreteJungleGame&& \
+		set DEBUG_MODE=1&& \
+		set INTERNAL_MODE=1&& \
+		set OPTIMIZED_MODE=1&& \
+		buildSystem\$(WIN_BUILD_BAT).bat\
+		"
+	cd /c/bin; \
+		rm -rf pack; \
+		mkdir pack; \
+		cd pack; \
+		cp /c/bin/*.exe .; \
+		cp /c/bin/*.dll .; \
+		rsync -at --exclude '__*' --exclude '*.psd' --exclude '*.blend' --exclude '*.blend1' /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets .; \
+		rsync -a /c/bin/pack/* /c/bin/selfShip
+	
+	cd /c/bin; \
+		$(SEVEN_ZIP) a -tzip selfShip.zip selfShip; \
+		mv selfShip.zip /c/Dropbox/Archive/devVersions/concreteJungle_$$(date +"%Y_%m_%d_%I_%M_%p").zip
+
 
 shipButt2GoToRc:
 	-$(MAKE) clean
