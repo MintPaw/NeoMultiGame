@@ -1,10 +1,11 @@
-// AN FPS WHERE YOU CAN ONLY LOCK ON
-//
 // We need healing
+// Count units in room on map
 // Do a ghost that is the base speed
 // Make running punch more like streak
 // Make money counter add up
+// Grenade enemy
 // Guys that have less hitstun?
+// Don't block backwards?
 
 /*
 
@@ -413,7 +414,10 @@ struct Actor {
 	AiState aiState;
 	float aiStateTime;
 	int aiTarget;
-	Vec2 xyAiStandoffOffset;
+	Vec2 aiCurrentXyTarget;
+	Vec2 aiCurrentXy;
+	Vec2 aiCurrentXyOffset;
+	float aiStateLength;
 	float allianceCost;
 
 	bool doorPlayerSpawnedOver;
@@ -661,6 +665,7 @@ AABB getAABBAtPosition(Actor *actor, Vec3 position);
 bool overlaps(Actor *actor0, Actor *actor1);
 float distance(Actor *actor0, Actor *actor1);
 AABB getAABB(Actor *actor);
+AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
 void drawAABB3d(AABB aabb, int lineThickness, int color);
 void drawAABB2d(AABB aabb, int lineThickness, int color);
@@ -1726,8 +1731,13 @@ void updateGame() {
 
 										float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
 
+										int particleColor;
+										int particlesAmount = 0;
+
 										if (otherActor->isBlocking) {
 											playWorldSound("assets/audio/block.ogg", getCenter(otherActorAABB));
+											particleColor = 0x80606060;
+											particlesAmount = damage;
 
 											otherActor->stamina -= damage;
 											if (otherActor->stamina < 0) otherActor->stamina -= damage;
@@ -1745,6 +1755,9 @@ void updateGame() {
 											newAction->actionCustomLength = action->info->blockstunTime;
 											if (newAction->actionCustomLength == 0) newAction->actionCustomLength = action->info->hitstunTime;
 										} else {
+											particleColor = 0x80FF0000;
+											particlesAmount = damage;
+
 											if (damage >= 20) playWorldSound("assets/audio/hit/4.ogg", getCenter(otherActorAABB));
 											else if (damage >= 10) playWorldSound("assets/audio/hit/3.ogg", getCenter(otherActorAABB));
 											else if (damage >= 5) playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
@@ -1777,6 +1790,17 @@ void updateGame() {
 											newAction->actionCustomLength = action->info->hitstunTime;
 
 											if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
+										}
+
+										for (int i = 0; i < particlesAmount; i++) {
+											Particle *particle = createParticle(PARTICLE_DUST);
+											particle->position = getCenter(getAABB(otherActor));
+											particle->position.y -= 0.01*i;
+											particle->velo.x = rndFloat(0, 10);
+											if (otherActor->position.x < actor->position.x) particle->velo.x *= -1;
+											particle->velo.z = rndFloat(-5, 5);
+											particle->maxTime = rndFloat(0.1, 0.25);
+											particle->tint = particleColor;
 										}
 
 										hitboxUsed = true;
@@ -2007,6 +2031,8 @@ void updateGame() {
 					actor->timeSinceLastRightPress += elapsed;
 				} else {
 					{ /// Do enemy AI @todo factor this out
+						float aggression = 0.5;
+
 						if (actor->aiType == AI_NORMAL) {
 							auto getAttackers = [](Actor *src, int *attackersNumOut)->int * {
 								Map *map = &game->maps[game->currentMapIndex];
@@ -2065,63 +2091,49 @@ void updateGame() {
 
 								Vec2 xyPosition = v2(actor->position);
 								Vec2 xyTarget = v2();
-								Vec2 xyTargetLeftPoint = v2();
-								Vec2 xyTargetRightPoint = v2();
-								if (target) {
-									xyTarget = v2(target->position);
-
-									xyTargetLeftPoint = xyTarget;
-									xyTargetLeftPoint.x -= target->size.x/2 + actor->size.x/2;
-
-									xyTargetRightPoint = xyTarget;
-									xyTargetRightPoint.x += target->size.x/2 + actor->size.x/2;
-								}
-								float leftTargetXDist = distance(xyPosition, xyTargetLeftPoint);
-								float rightTargetXDist = distance(xyPosition, xyTargetRightPoint);
-								float lowestTargetXDist = MinNum(leftTargetXDist, rightTargetXDist);
+								if (target) xyTarget = v2(target->position);
 
 								if (actor->aiState == AI_IDLE) {
 									if (target) actor->aiState = AI_STAND_NEAR_TARGET;
 								} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
 									if (actor->aiStateTime == 0) {
-										actor->xyAiStandoffOffset = v2(0, rndFloat(-100, 100));
+										float dist = rndFloat(100, 200);
+										actor->aiStateLength = clampMap(dist, 0, 300, 0.1, 4);
+
+										Vec2 dir = normalize(v2(rndFloat(-1, 1), rndFloat(-1, 1)));
+										actor->aiCurrentXyOffset = (dir*2 - 1) * dist;
+										if (actor->position.x < target->position.x) actor->aiCurrentXyOffset -= 200;
+										else actor->aiCurrentXyOffset += 200;
 									}
 
-									Vec2 xyDest = xyTarget;
-
-									float standoffDist = 200;
-
-									Vec2 leftStandoffPoint = xyTargetLeftPoint - v2(standoffDist, 0);
-									Vec2 rightStandoffPoint = xyTargetRightPoint + v2(standoffDist, 0);
-
-									float leftStandoffDist = distance(xyPosition, leftStandoffPoint);
-									float rightStandoffDist = distance(xyPosition, rightStandoffPoint);
-									if (leftStandoffDist < rightStandoffDist) {
-										xyDest = leftStandoffPoint;
-									} else {
-										xyDest = rightStandoffPoint;
+									if (actor->aiStateTime == 0 || distance(actor->aiCurrentXyTarget, xyTarget) > 300) {
+										//@incomplete Make sure this is in bounds
+										actor->aiCurrentXyTarget = xyTarget;
+										actor->aiCurrentXy = actor->aiCurrentXyTarget + actor->aiCurrentXyOffset;
 									}
 
-									xyDest += actor->xyAiStandoffOffset;
+									Vec2 dir = normalize(actor->aiCurrentXy - xyPosition);
 
-									Vec2 dir = (xyDest - xyPosition).normalize();
-
-									if (distance(xyDest, xyPosition) > 100) {
-										actor->movementAccel.x += dir.x * speed.x*0.5;
-										actor->movementAccel.y += dir.y * speed.y*0.5;
+									float dist = distance(actor->aiCurrentXy, xyPosition);
+									if (distance(actor->aiCurrentXy, xyPosition) > 10) {
+										float speedMulti = clampMap(dist, 50, 100, 0.1, 1);
+										actor->movementAccel += v3(dir * speed.x*speedMulti);
 									}
 
-									if (actor->aiStateTime > 3) {
-										actor->aiState = AI_APPROACH_FOR_ATTACH;
+									if (actor->aiStateTime > actor->aiStateLength) {
+										if (rndPerc(aggression)) {
+											actor->aiState = AI_APPROACH_FOR_ATTACH;
+										} else {
+											actor->prevAiState = AI_IDLE; // Reset ai state
+										}
 									}
 								} else if (actor->aiState == AI_APPROACH_FOR_ATTACH) {
 									Vec2 xyDest = xyTarget;
 
 									Vec2 dir = (xyDest - xyPosition).normalize();
-									actor->movementAccel.x += dir.x * speed.y;
-									actor->movementAccel.y += dir.y * speed.y;
+									actor->movementAccel += v3(dir * speed);
 
-									if (distance(actor, target) < 10) {
+									if (distance(actor, target) < 100 && fabs(actor->position.y - target->position.y) < 100) {
 										const int AI_CHOICE_1 = 0;
 										const int AI_CHOICE_2 = 1;
 										const int AI_CHOICE_3 = 2;
@@ -4105,13 +4117,13 @@ AABB getAABB(Actor *actor) {
 	return getAABBAtPosition(actor, actor->position);
 }
 
-void bringWithinBounds(Map *map, Actor *actor) {
+AABB bringWithinBounds(Map *map, AABB aabb) {
 	Actor *ground = getActorOfType(map, ACTOR_GROUND);
 	if (!ground) {
 		logf("No ground??? (bringWithinBounds)\n");
-		return;
+		return aabb;
 	}
-	AABB aabb = getAABB(actor);
+
 	AABB groundAABB = getAABB(ground);
 	Vec3 minOff = groundAABB.min - aabb.min;
 	Vec3 maxOff = aabb.max - groundAABB.max;
@@ -4119,6 +4131,12 @@ void bringWithinBounds(Map *map, Actor *actor) {
 	if (maxOff.x > 0) aabb -= v3(maxOff.x+0.1, 0, 0);
 	if (minOff.y > 0) aabb += v3(0, minOff.y+0.1, 0);
 	if (maxOff.y > 0) aabb -= v3(0, maxOff.y+0.1, 0);
+
+	return aabb;
+}
+
+void bringWithinBounds(Map *map, Actor *actor) {
+	AABB aabb = bringWithinBounds(map, getAABB(actor));
 
 	Vec3 newPos = getCenter(aabb);
 	newPos.z -= getSize(aabb).z/2;

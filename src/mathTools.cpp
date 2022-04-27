@@ -314,6 +314,11 @@ Vec3 v3(float x, float y, float z) {
 	Vec3 vec = {x, y, z};
 	return vec;
 }
+Vec3 v3(Vec2 inPoint, float z=0);
+Vec3 v3(Vec2 inPoint, float z) {
+	Vec3 vec = {inPoint.x, inPoint.y, z};
+	return vec;
+}
 
 
 Vec3 operator+ (Vec3 a, Vec3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
