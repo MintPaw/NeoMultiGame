@@ -271,7 +271,7 @@ struct Action {
 
 	float prevTime;
 	float time;
-	float actionCustomLength;
+	float customLength;
 };
 
 enum ActorType {
@@ -1588,10 +1588,10 @@ void updateGame() {
 					if (actor->actionsNum > 0) {
 						Action *action = &actor->actions[0];
 						if (action->type == ACTION_HITSTUN) {
-							float timeLeft = action->actionCustomLength - action->time;
+							float timeLeft = action->customLength - action->time;
 							actor->actionsNum = 0;
 							Action *knockdownAction = addAction(actor, ACTION_KNOCKDOWN);
-							knockdownAction->actionCustomLength = timeLeft;
+							knockdownAction->customLength = timeLeft;
 							playWorldSound("assets/audio/fallThump.ogg", getCenter(getAABB(actor)));
 						} else if (action->type == ACTION_KNOCKDOWN) {
 							// Nothing...
@@ -1752,8 +1752,8 @@ void updateGame() {
 
 											otherActor->actionsNum = 0;
 											Action *newAction = addAction(otherActor, ACTION_BLOCKSTUN);
-											newAction->actionCustomLength = action->info->blockstunTime;
-											if (newAction->actionCustomLength == 0) newAction->actionCustomLength = action->info->hitstunTime;
+											newAction->customLength = action->info->blockstunTime;
+											if (newAction->customLength == 0) newAction->customLength = action->info->hitstunTime;
 										} else {
 											particleColor = 0x80FF0000;
 											particlesAmount = damage;
@@ -1787,7 +1787,7 @@ void updateGame() {
 
 											otherActor->actionsNum = 0;
 											Action *newAction = addAction(otherActor, ACTION_HITSTUN);
-											newAction->actionCustomLength = action->info->hitstunTime;
+											newAction->customLength = action->info->hitstunTime;
 
 											if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
 										}
@@ -1823,7 +1823,7 @@ void updateGame() {
 
 					float maxTime;
 					if (usesCustomLength) {
-						maxTime = action->actionCustomLength;
+						maxTime = action->customLength;
 					} else {
 						maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames) / 60.0;
 					}
@@ -2881,7 +2881,7 @@ void updateGame() {
 						bringWithinBounds(map, newActor);
 						if (!spawnAtDoor) {
 							Action *action = addAction(newActor, ACTION_FORCED_IDLE);
-							action->actionCustomLength = rndFloat(2, 3);
+							action->customLength = rndFloat(2, 3);
 						}
 
 					}
@@ -3563,6 +3563,18 @@ void updateGame() {
 								Vec2 size = v2(frame->width, frame->height);
 								if (flipped) size.x *= -1;
 								size *= scale;
+
+								if (actor->actionsNum > 0) {
+									Action *action = &actor->actions[0];
+									if (action->type == ACTION_BLOCKSTUN) { // Vibration
+										float amount = clampMap(action->time, 0, action->customLength, 10, 0, QUAD_IN);
+										if (platform->frameCount % 2) {
+											position.x += amount;
+										} else {
+											position.x -= amount;
+										}
+									}
+								}
 
 								// position.x += frame->destOffX;
 								// position.y += frame->destOffY;
