@@ -125,6 +125,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "swf.cpp"
 #include "skia.cpp"
 #endif
+#include "utils.cpp"
 
 #else
 
@@ -314,6 +315,8 @@ char exeDir[PATH_MAX_LEN] = {};
 #include "swf.cpp"
 #include "skia.cpp"
 #endif
+
+#include "utils.cpp"
 
 #endif // RAYLIB_MODE
 

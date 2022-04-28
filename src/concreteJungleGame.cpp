@@ -907,8 +907,6 @@ void updateGame() {
 		game->debugDrawHitboxes = true;
 
 		maximizeWindow();
-
-		rndTest();
 	}
 
 	static int degs1 = 75; //@todo Move these
