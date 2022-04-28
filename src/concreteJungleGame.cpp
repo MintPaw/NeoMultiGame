@@ -95,10 +95,11 @@ Upgrades:
 *raising = 3
 *running punch = 3
 *running kick = 3
-*idleStanding
-*idleTalking
-att3 = 3
-
+idleStanding (hands in pocket)
+idleTalking (hand forward)
+idleTalking
+alerted
+alertedPointing
 
 */
 
@@ -2714,7 +2715,7 @@ void updateGame() {
 							int surroundingAtMaxCount = 0;
 							if (i == strongestTeam && map->alliances[i] > 0.9) {
 								surroundingAtMaxCount = getSurroundingAtMaxAlliance(v2i(x, y), i);
-								if (map->fortifiedPerc < 0.1 && surroundingAtMaxCount >= 7) {
+								if (map->fortifiedPerc < 0.1 && surroundingAtMaxCount >= 8) {
 									map->fortifiedByTeam = i;
 									map->fortifiedPerc += 0.001;
 								}
@@ -4107,17 +4108,16 @@ float getStatPoints(Actor *actor, StatType stat) {
 
 int getSurroundingAtMaxAlliance(Vec2i startingIndex, int team) {
 	int count = 0;
-	for (int i = 0; i < 9; i++) {
+	for (int i = 0; i < 8; i++) {
 		Vec2 offset = v2();
 		if (i == 0) offset = v2(-1, -1);
 		if (i == 1) offset = v2(-1, 0);
 		if (i == 2) offset = v2(-1, 1);
 		if (i == 3) offset = v2(0, -1);
-		if (i == 4) offset = v2(0, 0);
-		if (i == 5) offset = v2(0, 1);
-		if (i == 6) offset = v2(1, -1);
-		if (i == 7) offset = v2(1, 0);
-		if (i == 8) offset = v2(1, 1);
+		if (i == 4) offset = v2(0, 1);
+		if (i == 5) offset = v2(1, -1);
+		if (i == 6) offset = v2(1, 0);
+		if (i == 7) offset = v2(1, 1);
 		Map *adjMap = getCityMapByCoords(startingIndex.x+offset.x, startingIndex.y+offset.y);
 		if (!adjMap) continue;
 		if (adjMap->alliances[team] >= 0.99) count++;
