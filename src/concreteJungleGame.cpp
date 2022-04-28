@@ -2107,16 +2107,27 @@ void updateGame() {
 									}
 
 									if (actor->aiStateTime == 0 || distance(actor->aiCurrentXyTarget, xyTarget) > 300) {
-										//@incomplete Make sure this is in bounds
 										actor->aiCurrentXyTarget = xyTarget;
 										actor->aiCurrentXy = actor->aiCurrentXyTarget + actor->aiCurrentXyOffset;
-									}
 
-									Vec2 dir = normalize(actor->aiCurrentXy - xyPosition);
+										Vec2 position = actor->aiCurrentXy;
+										Vec3 size = actor->size;
+										{ // bringActorPoisitionWithinBounds
+											AABB groundAABB = getAABB(ground);
+											if (position.x < groundAABB.min.x + size.x/2) position.x = groundAABB.min.x + size.x/2;
+											if (position.x > groundAABB.max.x - size.x/2) position.x = groundAABB.max.x - size.x/2;
+											if (position.y < groundAABB.min.y + size.y/2) position.y = groundAABB.min.y + size.y/2;
+											if (position.y > groundAABB.max.y - size.y/2) position.y = groundAABB.max.y - size.y/2;
+										}
+
+										actor->aiCurrentXy = position;
+									}
 
 									float dist = distance(actor->aiCurrentXy, xyPosition);
 									if (distance(actor->aiCurrentXy, xyPosition) > 10) {
-										float speedMulti = clampMap(dist, 50, 100, 0.1, 1);
+										float speedMulti = clampMap(dist, 50, 100, 0.2, 1);
+
+										Vec2 dir = normalize(actor->aiCurrentXy - xyPosition);
 										actor->movementAccel += v3(dir * speed.x*speedMulti);
 									}
 

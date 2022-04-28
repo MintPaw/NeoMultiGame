@@ -2058,6 +2058,14 @@ AABB makeAABB(Vec3 min, Vec3 max) {
 	return bounds;
 }
 
+AABB makeCenteredAABBOfSize(Vec3 center, Vec3 size);
+AABB makeCenteredAABBOfSize(Vec3 center, Vec3 size) {
+	AABB bounds;
+	bounds.min = center - size/2;
+	bounds.max = center + size/2;
+	return bounds;
+}
+
 AABB inflate(AABB bounds, float amount) {
 	bounds.min.x -= amount/2.0;
 	bounds.min.y -= amount/2.0;
