@@ -636,6 +636,7 @@ void updateGame();
 void updateStore(Actor *player, Actor *storeActor, float elapsed);
 Map *getMapByName(char *mapName);
 Map *getCityMapByCoords(int x, int y);
+Vec2i getCoordsByCityMap(Map *map);
 Actor *createActor(Map *map, ActorType type);
 void deleteActor(Map *map, Actor *actor);
 Actor *getActor(int id);
@@ -2704,7 +2705,7 @@ void updateGame() {
 							float normalizedAlliance = map->alliances[i] / totalAlliance;
 							if (totalAlliance == 0) normalizedAlliance = 0;
 
-							map->alliances[i] += clampMap(normalizedAlliance, 0, 1, 0, 0.0001); // Self growth
+							// map->alliances[i] += clampMap(normalizedAlliance, 0, 1, 0, 0.0001); // Self growth
 
 							float currentSpreadAmount = 0;
 							currentSpreadAmount += clampMap(normalizedAlliance, 0, 1, 0, spreadAmount);
@@ -2736,17 +2737,17 @@ void updateGame() {
 								int possibleMapsNum = 0;
 								Map *adjMap;
 
-								adjMap = getCityMapByCoords(x-1, y-1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+								// adjMap = getCityMapByCoords(x-1, y-1);
+								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
 
-								adjMap = getCityMapByCoords(x+1, y+1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+								// adjMap = getCityMapByCoords(x+1, y+1);
+								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
 
-								adjMap = getCityMapByCoords(x-1, y+1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+								// adjMap = getCityMapByCoords(x-1, y+1);
+								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
 
-								adjMap = getCityMapByCoords(x+1, y-1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+								// adjMap = getCityMapByCoords(x+1, y-1);
+								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
 
 								adjMap = getCityMapByCoords(x, y-1);
 								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
@@ -2772,7 +2773,13 @@ void updateGame() {
 								}
 
 								if (possibleMapsNum > 0) {
-									possibleMaps[rndInt(0, possibleMapsNum-1)]->alliances[i] += currentSpreadAmount * 8;
+									int choice = rndInt(0, possibleMapsNum-1);
+									if (x == 6 && y == 1) {
+										int k=5;
+										logf("[%d, %d] %d\n", 0, possibleMapsNum-1, choice);
+									}
+
+									possibleMaps[choice]->alliances[i] += currentSpreadAmount * 8;
 								}
 							}
 						}
@@ -3012,6 +3019,10 @@ void updateGame() {
 								game->cityTicks += (60.0*5)/SECS_PER_CITY_TICK;
 								game->cityTime += 60*5;
 							}
+							ImGui::Separator();
+
+							Vec2i coords = getCoordsByCityMap(map);
+							ImGui::Text("%d, %d", coords.x, coords.y);
 							if (ImGui::TreeNode("Base alliances")) {
 								if (ImGui::Button("Copy from current")) memcpy(map->baseAlliances, map->alliances, sizeof(float) * TEAMS_MAX);
 								for (int i = 0; i < TEAMS_MAX; i++) {
@@ -3245,7 +3256,11 @@ void updateGame() {
 				rect.y = game->size.y * 0.01;
 
 				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
-				drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
+				if (h > 0) {
+					drawTextInRect(frameSprintf("%02d:%02d:%02d", h, m, s), props, rect);
+				} else {
+					drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
+				}
 			}
 
 			popCamera2d();
@@ -3802,6 +3817,22 @@ Map *getCityMapByCoords(int x, int y) {
 	int mapIndex = cityIndex + CITY_START_INDEX;
 	Map *map = &game->maps[mapIndex];
 	return map;
+}
+
+Vec2i getCoordsByCityMap(Map *map) {
+	int mapIndex = -1;
+	for (int i = 0; i < MAPS_MAX; i++) {
+		if (&game->maps[i] == map) {
+			mapIndex = i;
+			break;
+		}
+	}
+	if (mapIndex == -1) return v2i(-1, -1);
+	if (mapIndex < CITY_START_INDEX) return v2i(-1, -1);
+	mapIndex -= CITY_START_INDEX;
+	int x = mapIndex % CITY_COLS;
+	int y = mapIndex / CITY_COLS;
+	return v2i(x, y);
 }
 
 Actor *createActor(Map *map, ActorType type) {
