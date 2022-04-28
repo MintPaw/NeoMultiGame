@@ -907,6 +907,8 @@ void updateGame() {
 		game->debugDrawHitboxes = true;
 
 		maximizeWindow();
+
+		rndTest();
 	}
 
 	static int degs1 = 75; //@todo Move these
@@ -2776,7 +2778,7 @@ void updateGame() {
 									int choice = rndInt(0, possibleMapsNum-1);
 									if (x == 6 && y == 1) {
 										int k=5;
-										logf("[%d, %d] %d\n", 0, possibleMapsNum-1, choice);
+										// logf("[%d, %d] %d\n", 0, possibleMapsNum-1, choice);
 									}
 
 									possibleMaps[choice]->alliances[i] += currentSpreadAmount * 8;

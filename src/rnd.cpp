@@ -6,6 +6,7 @@ int FORCE_INLINE rndInt(int min, int max);
 bool FORCE_INLINE rndBool();
 bool FORCE_INLINE rndPerc(float perc);
 int rndPick(int *weights, int weightsNum);
+void rndTest();
 
 #define LCG_SEED_STACK_MAX 4096
 u32 lcgSeedStack[LCG_SEED_STACK_MAX];
@@ -88,4 +89,42 @@ int rndPick(float *weights, int weightsNum) {
 
 	logf("rndPick(float) failed horribly");
 	return 0;
+}
+
+void rndTest() {
+	logf("Running rng test\n");
+	int iterationsPerTest = 100;
+	bool doDistribution = false;
+
+	int *values = (int *)frameMalloc(sizeof(int) * iterationsPerTest);
+	int valuesNum = 0;
+
+	for (int min = 0; min < 10; min++) { 
+		for (int max = 0; max < 10; max++) { 
+			if (min > max) continue;
+
+			valuesNum = 0;
+			for (int i = 0; i < iterationsPerTest; i++) {
+				int value = rndInt(min, max);
+				if (value < min || value > max) logf("Failed, got %d [%d, %d]\n", value, min, max);
+				values[valuesNum++] = value;
+			}
+
+			for (int i = min; i <= max; i++) {
+				int testValue = i;
+				int count = 0;
+				for (int i = 0; i < iterationsPerTest; i++) {
+					if (values[i] == testValue) count++;
+				}
+
+				if (count == 0) logf("Failed, didn't get any %d's [%d, %d]\n", testValue, min, max);
+				float distribution = count / (float)iterationsPerTest;
+				float correctDistribution = 1 / (float)((max - min) + 1);
+				float change = fabs(correctDistribution - distribution);
+				float percChange = change / correctDistribution;
+				if (doDistribution && percChange > 0.1) logf("Failed, bad distribution %d [%d, %d], %f should be %f\n", testValue, min, max, distribution, correctDistribution);
+			}
+
+		}
+	}
 }
