@@ -960,7 +960,7 @@ void updateGame() {
 
 	bool shouldDraw3d = true;
 
-	int steps = 1;
+	int steps = 5;
 
 	for (int i = 0; i < steps; i++) {
 		bool lastStepOfFrame = i == (steps-1);
@@ -1301,11 +1301,9 @@ void updateGame() {
 					}
 				}
 
-				{ /// Update and render particles
+				{ /// Render particles
 					for (int i = 0; i < game->particlesNum; i++) {
 						Particle *particle = &game->particles[i];
-
-						bool complete = false;
 
 						float fadeInPerc = 0.10;
 						float fadeOutPerc = 0.10;
@@ -1317,11 +1315,6 @@ void updateGame() {
 						float alpha =
 							clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
 							* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
-
-						// particle->velo.z -= 0.98; // grav
-
-						particle->position += particle->velo;
-						particle->velo *= 0.95;
 
 						{
 							RenderTexture *texture = renderer->circleTexture;
@@ -1337,16 +1330,6 @@ void updateGame() {
 							// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
 
 							drawBillboard(raylibCamera, texture, particle->position, size, tint, source);
-						}
-
-						particle->time += elapsed;
-						if (particle->time > particle->maxTime) complete = true;
-
-						if (complete) {
-							game->particles[i] = game->particles[game->particlesNum-1];
-							game->particlesNum--;
-							i--;
-							continue;
 						}
 					}
 				} ///
@@ -2820,6 +2803,28 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		actor->aiStateTime += elapsed;
 	} ///
+
+	{ /// Update particles
+		for (int i = 0; i < game->particlesNum; i++) {
+			Particle *particle = &game->particles[i];
+			bool complete = false;
+
+			particle->time += elapsed;
+			if (particle->time > particle->maxTime) complete = true;
+
+			// particle->velo.z -= 0.98; // grav
+
+			particle->position += particle->velo;
+			particle->velo *= 0.95;
+
+			if (complete) {
+				game->particles[i] = game->particles[game->particlesNum-1];
+				game->particlesNum--;
+				i--;
+				continue;
+			}
+		}
+	}
 
 	pushTargetTexture(game->debugTexture);
 	{ /// Draw actors (debug/overlay)
