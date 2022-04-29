@@ -110,6 +110,7 @@ alertedPointing
 
 #define BLOCKING_STAMINA_THRESHOLD 5
 #define SECS_PER_CITY_TICK 1
+Vec3 UNIT_SIZE = v3(150, 150, 300);
 
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
@@ -638,6 +639,7 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed);
 Map *getMapByName(char *mapName);
 Map *getCityMapByCoords(int x, int y);
 Vec2i getCoordsByCityMap(Map *map);
+int getIndexByMap(Map *map);
 Actor *createActor(Map *map, ActorType type);
 void deleteActor(Map *map, Actor *actor);
 Actor *getActor(int id);
@@ -664,9 +666,12 @@ int getTeamWithMostAlliance(Map *map);
 
 Rect getBounds(AABB aabb);
 AABB getAABBAtPosition(Actor *actor, Vec3 position);
+AABB getAABBFromSizePosition(Vec3 size, Vec3 position);
 bool overlaps(Actor *actor0, Actor *actor1);
+bool overlaps(Actor *actor, AABB aabb);
 float distance(Actor *actor0, Actor *actor1);
 AABB getAABB(Actor *actor);
+AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
 void drawAABB3d(AABB aabb, int lineThickness, int color);
@@ -1092,15 +1097,15 @@ void updateGame() {
 					for (int i = 0; i < destMap->actorsNum; i++) {
 						Actor *actor = &destMap->actors[i];
 						AABB spawnPointAABB = getAABB(actor);
-						if (actor->type == ACTOR_UNIT_SPAWNER) {
-							for (int i = 0; i < actor->unitsToSpawn; i++) {
-								Actor *newActor = createActor(destMap, ACTOR_UNIT);
-								newActor->position.x = rndFloat(spawnPointAABB.min.x, spawnPointAABB.max.x);
-								newActor->position.y = rndFloat(spawnPointAABB.min.y, spawnPointAABB.max.y);
-								newActor->position.z = spawnPointAABB.max.z;
-								newActor->team = rndInt(1, TEAMS_MAX);
-							}
-						}
+						// if (actor->type == ACTOR_UNIT_SPAWNER) {
+						// 	for (int i = 0; i < actor->unitsToSpawn; i++) {
+						// 		Actor *newActor = createActor(destMap, ACTOR_UNIT);
+						// 		newActor->position.x = rndFloat(spawnPointAABB.min.x, spawnPointAABB.max.x);
+						// 		newActor->position.y = rndFloat(spawnPointAABB.min.y, spawnPointAABB.max.y);
+						// 		newActor->position.z = spawnPointAABB.max.z;
+						// 		newActor->team = rndInt(1, TEAMS_MAX);
+						// 	}
+						// }
 					}
 
 					game->currentMapIndex = game->nextMapIndex;
@@ -1118,6 +1123,7 @@ void updateGame() {
 
 		Actor *player = NULL;
 		Actor *ground = NULL;
+		AABB groundAABB;
 		AABB *walls = (AABB *)frameMalloc(sizeof(AABB) * (ACTORS_MAX+4)); // +4 because of edge walls
 		int wallsNum = 0;
 		{ /// Initial iteration
@@ -1149,11 +1155,12 @@ void updateGame() {
 				ground->size = v3(2000, 1800, 100);
 				logf("Ground created\n");
 			}
+
+			groundAABB = getAABB(ground);
 		} ///
 
 		{ /// Add extra walls outside ground
 			float wallThickness = 20;
-			AABB groundAABB = getAABB(ground);
 
 			AABB backWall = makeAABB();
 			backWall.min.x = groundAABB.min.x;
@@ -1554,6 +1561,8 @@ void updateGame() {
 				if (actor->type == ACTOR_UNIT_SPAWNER) {
 					ImGui::InputInt("Unit to spawn", &actor->unitsToSpawn);
 				}
+
+				if (ImGui::Button("bringWithinBounds")) bringWithinBounds(map, actor);
 
 				ImGui::Separator();
 			}
@@ -2052,7 +2061,7 @@ void updateGame() {
 
 							if (actor->actionsNum == 0) { // This is the same as canInput
 								Actor *target = getActor(actor->aiTarget);
-								if (!target) {
+								if (!target) { // Find target
 									int bestOtherId = 0;
 
 									int currentAttackersNum;
@@ -2115,7 +2124,6 @@ void updateGame() {
 										Vec2 position = actor->aiCurrentXy;
 										Vec3 size = actor->size;
 										{ // bringActorPoisitionWithinBounds
-											AABB groundAABB = getAABB(ground);
 											if (position.x < groundAABB.min.x + size.x/2) position.x = groundAABB.min.x + size.x/2;
 											if (position.x > groundAABB.max.x - size.x/2) position.x = groundAABB.max.x - size.x/2;
 											if (position.y < groundAABB.min.y + size.y/2) position.y = groundAABB.min.y + size.y/2;
@@ -2840,6 +2848,22 @@ void updateGame() {
 			} ///
 
 			{ /// Spawn enemies // Spawn npcs
+				auto createNpcUnit = [](Map *map)->Actor *{
+					Actor *actor = createActor(map, ACTOR_UNIT);
+
+					actor->team = rndPick(map->alliances, TEAMS_MAX);
+					Vec2 allianceMinMax = v2(0.05, 0.1);
+					actor->allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
+
+					int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 0, 20);
+					for (int i = 0; i < extraPoints; i++) {
+						actor->stats[rndInt(0, STATS_MAX-1)]++;
+						actor->level++;
+					}
+
+					return actor;
+				};
+
 				int currentNpcs = 0;
 				for (int i = 0; i < map->actorsNum; i++) {
 					Actor *actor = &map->actors[i];
@@ -2847,62 +2871,112 @@ void updateGame() {
 				}
 
 				float totalAlliance = 0;
-				for (int i = 0; i < TEAMS_MAX; i++) {
-					totalAlliance += map->alliances[i];
-				}
-
+				for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
 				int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 20);
 
-				int startingNpcs = 3;
+				int startingNpcs = maxNpcs * 0.8;
+				if (game->mapTime == 0 && startingNpcs > 0) {
+					auto generatePoissonPoints = [](AABB surface, Vec2 cellSize, int *outPointsNum)->Vec3 *{
+						Vec3 surfaceSize = getSize(surface);
 
-				bool spawnThisFrame = false;
-				bool spawnAtDoor = true;
-				if (rndPerc(0.01)) spawnThisFrame = true;
-				if (game->mapTime < 0.2) {
-					spawnAtDoor = false;
-					if (currentNpcs < startingNpcs) spawnThisFrame = true;
+						int cellsWide = surfaceSize.x / cellSize.x;
+						int cellsHigh = surfaceSize.y / cellSize.y;
+
+						Vec3 *points = (Vec3 *)frameMalloc(sizeof(Vec3) * (cellsWide * cellsHigh));
+						int pointsNum = 0;
+						for (int y = 0; y < cellsHigh; y++) {
+							for (int x = 0; x < cellsWide; x++) {
+								Rect cell = makeRect(v2(), cellSize);
+								cell.x = surface.min.x + (x * cellSize.x);
+								cell.y = surface.min.y + (y * cellSize.y);
+								Vec2 pos;
+								pos.x = rndFloat(cell.x, cell.x+cell.width);
+								pos.y = rndFloat(cell.y, cell.y+cell.height);
+
+								points[pointsNum++] = v3(pos, surface.max.z + 1);
+							}
+						}
+
+						*outPointsNum = pointsNum;
+						return points;
+					};
+
+					auto removeInvalidSpawnPoints = [](Map *map, Vec3 *points, int pointsNum)->int {
+						for (int i = 0; i < pointsNum; i++) {
+							Vec3 point = points[i];
+							AABB aabb = getAABBFromSizePosition(UNIT_SIZE, point);
+							bool shouldRemove = false;
+							Actor *ground = getActorOfType(map, ACTOR_GROUND);
+							if (!equal(aabb, bringWithinBounds(getAABB(ground), aabb))) shouldRemove = true;
+							for (int i = 0; i < map->actorsNum; i++) {
+								Actor *actor = &map->actors[i];
+								if (overlaps(actor, aabb)) {
+									shouldRemove = true;
+									break;
+								}
+							}
+
+							if (shouldRemove) {
+								arraySpliceIndex(points, pointsNum, sizeof(Vec3), i);
+								pointsNum--;
+								i--;
+								continue;
+							}
+						}
+
+						return pointsNum;
+					};
+
+					Vec2 cellSize = v2(getSize(groundAABB)) / 2;
+
+					Vec3 *points;
+					int pointsNum;
+					for (int i = 0; ; i++) {
+						if (i > 100) {
+							logf("Failed 100 times to spawn units...\n");
+							pointsNum = 0;
+							break;
+						}
+
+						points = generatePoissonPoints(groundAABB, cellSize, &pointsNum);
+						pointsNum = removeInvalidSpawnPoints(map, points, pointsNum);
+
+						if (pointsNum >= startingNpcs) {
+							break;
+						} else {
+							cellSize.x *= 0.01;
+							cellSize.y *= 0.01;
+						}
+					}
+
+					if (pointsNum > 0) {
+						for (int i = 0; i < startingNpcs; i++) {
+							int pointIndex = rndInt(0, pointsNum-1);
+							Vec3 point = points[pointIndex];
+							arraySpliceIndex(points, pointsNum, sizeof(Vec3), pointIndex);
+							pointsNum--;
+
+							Actor *newActor = createNpcUnit(map);
+							newActor->position = point;
+						}
+					}
 				}
 
+				bool spawnThisFrame = false;
+				if (rndPerc(0.01)) spawnThisFrame = true;
+
 				if (currentNpcs < maxNpcs && spawnThisFrame) {
-					Actor *spawner;
-					if (spawnAtDoor) {
-						spawner = getRandomActorOfType(map, ACTOR_DOOR);
-					} else {
-						spawner = getRandomActorOfType(map, ACTOR_UNIT_SPAWNER);
-					}
-					if (spawner) {
-						AABB spawnerAABB = getAABB(spawner);
+					Actor *door = getRandomActorOfType(map, ACTOR_DOOR);
+					if (door) {
+						AABB doorAABB = getAABB(door);
 
-						float spawnChances[TEAMS_MAX] = {};
-						for (int i = 0; i < TEAMS_MAX; i++) spawnChances[i] = map->alliances[i];
-						int team = rndPick(spawnChances, TEAMS_MAX);
-
-						Vec2 allianceMinMax = v2(0.05, 0.1);
-						float allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
-						if (allianceCost > map->alliances[team]) allianceCost = map->alliances[team];
-
-						Actor *newActor = createActor(map, ACTOR_UNIT);
-						newActor->position.x = rndFloat(spawnerAABB.min.x, spawnerAABB.max.x);
-						newActor->position.y = rndFloat(spawnerAABB.min.y, spawnerAABB.max.y);
-						newActor->position.z = spawnerAABB.min.z;
-						if (newActor->position.z < getAABB(ground).min.z) newActor->position.z = getAABB(ground).min.z - 1;
-						newActor->team = team;
-						newActor->allianceCost = allianceCost;
-						map->alliances[newActor->team] -= newActor->allianceCost;
-
-						int extraPoints = clampMap(newActor->allianceCost, allianceMinMax.x, allianceMinMax.y, 0, 20);
-						// logf("%d %f\n", extraPoints, allianceCost);
-						for (int i = 0; i < extraPoints; i++) {
-							newActor->stats[rndInt(0, STATS_MAX-1)]++;
-							newActor->level++;
-						}
+						Actor *newActor = createNpcUnit(map);
+						newActor->position.x = rndFloat(doorAABB.min.x, doorAABB.max.x);
+						newActor->position.y = rndFloat(doorAABB.min.y, doorAABB.max.y);
+						newActor->position.z = doorAABB.min.z;
+						if (newActor->position.z < getAABB(ground).max.z) newActor->position.z = getAABB(ground).max.z + 1;
 
 						bringWithinBounds(map, newActor);
-						if (!spawnAtDoor) {
-							Action *action = addAction(newActor, ACTION_FORCED_IDLE);
-							action->customLength = rndFloat(2, 3);
-						}
-
 					}
 				}
 			} ///
@@ -3024,6 +3098,7 @@ void updateGame() {
 
 							Vec2i coords = getCoordsByCityMap(map);
 							ImGui::Text("%d, %d", coords.x, coords.y);
+							if (ImGui::Button("Go")) game->nextMapIndex = getIndexByMap(map);
 							if (ImGui::TreeNode("Base alliances")) {
 								if (ImGui::Button("Copy from current")) memcpy(map->baseAlliances, map->alliances, sizeof(float) * TEAMS_MAX);
 								for (int i = 0; i < TEAMS_MAX; i++) {
@@ -3836,6 +3911,16 @@ Vec2i getCoordsByCityMap(Map *map) {
 	return v2i(x, y);
 }
 
+int getIndexByMap(Map *map) {
+	for (int i = 0; i < MAPS_MAX; i++) {
+		if (&game->maps[i] == map) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 Actor *createActor(Map *map, ActorType type) {
 	if (map->actorsNum > ACTORS_MAX-1) {
 		for (int i = 0; i < map->actorsNum; i++) {
@@ -3858,7 +3943,7 @@ Actor *createActor(Map *map, ActorType type) {
 	actor->info = &game->actorTypeInfos[actor->type];
 	actor->size = v3(100, 100, 100);
 	if (actor->type == ACTOR_UNIT) {
-		actor->size = v3(150, 150, 300);
+		actor->size = UNIT_SIZE;
 
 		actor->itemsMax = 128;
 		actor->items = (Item *)zalloc(sizeof(Item) * actor->itemsMax);
@@ -4146,17 +4231,26 @@ Rect getBounds(AABB aabb) {
 	return bounds;
 }
 
-AABB getAABBAtPosition(Actor *actor, Vec3 position) {
-	AABB aabb = makeAABB(position - actor->size/2, position + actor->size/2);
-	aabb.min.z += actor->size.z/2;
-	aabb.max.z += actor->size.z/2;
+AABB getAABBFromSizePosition(Vec3 size, Vec3 position) {
+	AABB aabb = makeAABB(position - size/2, position + size/2);
+	aabb.min.z += size.z/2;
+	aabb.max.z += size.z/2;
 	return aabb;
+}
+
+AABB getAABBAtPosition(Actor *actor, Vec3 position) {
+	return getAABBFromSizePosition(actor->size, position);
 }
 
 bool overlaps(Actor *actor0, Actor *actor1) {
 	AABB aabb0 = getAABB(actor0);
 	AABB aabb1 = getAABB(actor1);
 	bool ret = intersects(aabb0, aabb1);
+	return ret;
+}
+
+bool overlaps(Actor *actor, AABB aabb) {
+	bool ret = intersects(getAABB(actor), aabb);
 	return ret;
 }
 
@@ -4171,6 +4265,14 @@ AABB getAABB(Actor *actor) {
 	return getAABBAtPosition(actor, actor->position);
 }
 
+AABB bringWithinBounds(AABB groundAABB, AABB aabb) {
+	if (aabb.min.x < groundAABB.min.x) aabb += v3(groundAABB.min.x - aabb.min.x + 1, 0, 0);
+	if (aabb.max.x > groundAABB.max.x) aabb -= v3(aabb.max.x - groundAABB.max.x + 1, 0, 0);
+	if (aabb.min.y < groundAABB.min.y) aabb += v3(0, groundAABB.min.y - aabb.min.y + 1, 0);
+	if (aabb.max.y > groundAABB.max.y) aabb -= v3(0, aabb.max.y - groundAABB.max.y + 1, 0);
+	return aabb;
+}
+
 AABB bringWithinBounds(Map *map, AABB aabb) {
 	Actor *ground = getActorOfType(map, ACTOR_GROUND);
 	if (!ground) {
@@ -4178,15 +4280,7 @@ AABB bringWithinBounds(Map *map, AABB aabb) {
 		return aabb;
 	}
 
-	AABB groundAABB = getAABB(ground);
-	Vec3 minOff = groundAABB.min - aabb.min;
-	Vec3 maxOff = aabb.max - groundAABB.max;
-	if (minOff.x > 0) aabb += v3(minOff.x+0.1, 0, 0);
-	if (maxOff.x > 0) aabb -= v3(maxOff.x+0.1, 0, 0);
-	if (minOff.y > 0) aabb += v3(0, minOff.y+0.1, 0);
-	if (maxOff.y > 0) aabb -= v3(0, maxOff.y+0.1, 0);
-
-	return aabb;
+	return bringWithinBounds(getAABB(ground), aabb);
 }
 
 void bringWithinBounds(Map *map, Actor *actor) {

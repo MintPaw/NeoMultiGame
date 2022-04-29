@@ -342,6 +342,18 @@ bool isZero(Vec3 vec) {
 	return vec.x == 0 && vec.y == 0 && vec.z == 0;
 }
 
+bool equal(Vec3 a, Vec3 b);
+bool equal(Vec3 a, Vec3 b) {
+	float dx = b.x - a.x;
+	float dy = b.y - a.y;
+	float dz = b.z - a.z;
+	float distCubed = dx*dx + dy*dy + dz*dz;
+
+	if (distCubed < 0.0001) return true;
+	return false;
+}
+
+
 float distance(Vec3 a, Vec3 b);
 float distance(Vec3 a, Vec3 b) {
 	return a.distance(b);
@@ -815,6 +827,7 @@ AABB toAABB(Tri tri);
 bool isZero(AABB bounds);
 AABB expand(AABB bounds, AABB otherBounds);
 AABB expand(AABB bounds, Vec3 point);
+bool equal(AABB bounds1, AABB bounds2);
 
 struct Line2 {
 	Vec2 start;
@@ -2058,8 +2071,8 @@ AABB makeAABB(Vec3 min, Vec3 max) {
 	return bounds;
 }
 
-AABB makeCenteredAABBOfSize(Vec3 center, Vec3 size);
-AABB makeCenteredAABBOfSize(Vec3 center, Vec3 size) {
+AABB makeCenteredAABB(Vec3 center, Vec3 size);
+AABB makeCenteredAABB(Vec3 center, Vec3 size) {
 	AABB bounds;
 	bounds.min = center - size/2;
 	bounds.max = center + size/2;
@@ -3700,6 +3713,10 @@ AABB expand(AABB bounds, Vec3 point) {
 	if (bounds.max.y < point.y) bounds.max.y = point.y;
 	if (bounds.max.z < point.z) bounds.max.z = point.z;
 	return bounds;
+}
+
+bool equal(AABB bounds1, AABB bounds2) {
+	return equal(bounds1.min, bounds2.min) && equal(bounds2.min, bounds2.min);
 }
 
 Vec3 calculateTriangleNormal(Tri tri) {
