@@ -517,7 +517,6 @@ struct Particle {
 enum GameState {
 	GAME_NONE,
 	GAME_PLAY,
-	GAME_DEAD,
 };
 struct Game {
 	Font *defaultFont;
@@ -620,6 +619,7 @@ struct Game {
 	Map *editorSelectedCityMap;
 
 	/// 3D
+	Vec2i cameraAngleDegrees;
 #define DEBUG_CUBES_MAX 1024
 	DebugCube debugCubes[DEBUG_CUBES_MAX];
 	int debugCubesNum;
@@ -635,6 +635,7 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
+void stepGame(bool lastStepOfFrame, float elapsed, float timeScale);
 void updateStore(Actor *player, Actor *storeActor, float elapsed);
 Map *getMapByName(char *mapName);
 Map *getCityMapByCoords(int x, int y);
@@ -912,11 +913,11 @@ void updateGame() {
 		game->debugDrawBillboards = true;
 		game->debugDrawHitboxes = true;
 
+		game->cameraAngleDegrees.x = 75;
+		game->cameraAngleDegrees.y = 3;
+
 		maximizeWindow();
 	}
-
-	static int degs1 = 75; //@todo Move these
-	static int degs2 = 3;
 
 	Globals *globals = &game->globals;
 
@@ -988,2411 +989,11 @@ void updateGame() {
 	} else if (game->state == GAME_PLAY) {
 		shouldDraw3d = true;
 
-		auto getActionType = [](Actor *actor, int actionIndex)->ActionType {
-			Globals *globals = &game->globals;
-			Style *style = &actor->styles[actor->styleIndex];
-
-			Item *item = NULL;
-			if (actionIndex == 0) item = getItem(actor, style->activeItem0);
-			if (actionIndex == 1) item = getItem(actor, style->activeItem1);
-			if (!item) return ACTION_NONE;
-			Assert(item->info);
-
-			ActionTypeInfo *atInfo = &globals->actionTypeInfos[item->info->actionType];
-			if (actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_ON_GROUND)) return ACTION_NONE;
-			if (!actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_IN_AIR)) return ACTION_NONE;
-			return item->info->actionType;
-		};
-
-		{ /// Init city (and maps)
-			if (!game->cityInited) {
-				game->cityInited = true;
-				loadAndRefreshMaps();
-				game->currentMapIndex = 0;
-				game->mapTime = 0;
-				game->timeTillNextCityTick = 0;
-				game->cityTime = 0;
-				game->cityTicks = 0;
-				game->inStore = false;
-				game->inInventory = false;
-				game->lookingAtMap = false;
-			}
-		} ///
-
-		{ /// Set up matrices
-			game->visualCameraTarget = lerp(game->visualCameraTarget, game->cameraTarget, 0.5);
-			if (distance(game->visualCameraTarget, game->cameraTarget) > 100) game->visualCameraTarget = game->cameraTarget;
-
-			game->cameraMatrix = mat3(); // More like cameraInvMatrix?
-			game->cameraMatrix.TRANSLATE(game->size/2);
-			game->cameraMatrix.SCALE(game->sizeScale);
-			game->cameraMatrix.TRANSLATE(-v2(game->isoMatrix3 * game->visualCameraTarget));
-			pushCamera2d(game->cameraMatrix);
-			game->worldMouse = game->cameraMatrix.invert() * game->mouse;
-
-			Matrix3 matrix = mat3();
-			matrix.ROTATE_X(degs1);
-			matrix.ROTATE(degs2);
-			matrix.SCALE(1, -1); // Fix my coordinate system
-			game->isoMatrix3 = matrix;
-		} ///
-
-		{ /// Change map
-			if (game->nextMapIndex != game->currentMapIndex) {
-				bool changeMaps = false;
-				if (game->nextMap_t <= 0) game->lookingAtMap = true;
-				game->nextMap_t += 0.03;
-				if (game->nextMap_t > 1) changeMaps = true;
-
-				if (changeMaps) {
-					Map *srcMap = &game->maps[game->currentMapIndex];
-					Map *destMap = &game->maps[game->nextMapIndex];
-					// infof("%s\n", destMap->name);
-
-					Actor *player = NULL;
-					int playerSrcIndex = 0;
-					for (int i = 0; srcMap->actorsNum; i++) {
-						Actor *actor = &srcMap->actors[i];
-						if (actor->type == ACTOR_UNIT && actor->playerControlled) {
-							playerSrcIndex = i;
-							player = actor;
-							break;
-						}
-					}
-
-					if (player) {
-						Actor *newActor = createActor(destMap, ACTOR_UNIT); // Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird
-						int id = newActor->id;
-						Item *itemsPtr = newActor->items;
-						memcpy(itemsPtr, player->items, sizeof(Item) * player->itemsNum);
-						*newActor = *player;
-						newActor->id = id;
-						newActor->items = itemsPtr;
-						removeActorByIndex(srcMap, playerSrcIndex);
-
-						Vec3 playerSpawnPos = v3();
-						Actor *door = findDoorWithDestMapName(destMap, srcMap->name);
-						if (!door) door = findDoorWithDestMapName(destMap, NULL);
-
-						if (door) {
-							playerSpawnPos = door->position + v3(0, 0, 1);
-							door->doorPlayerSpawnedOver = true;
-						}
-
-						newActor->position = playerSpawnPos;
-
-						bringWithinBounds(destMap, newActor);
-					}
-
-					for (int i = 0; i < srcMap->actorsNum; i++) {
-						Actor *actor = &srcMap->actors[i];
-						if (actor->type == ACTOR_UNIT && !actor->playerControlled) {
-							deleteActor(srcMap, actor);
-							i--;
-							continue;
-						}
-					}
-
-					for (int i = 0; i < destMap->actorsNum; i++) {
-						Actor *actor = &destMap->actors[i];
-						AABB spawnPointAABB = getAABB(actor);
-						// if (actor->type == ACTOR_UNIT_SPAWNER) {
-						// 	for (int i = 0; i < actor->unitsToSpawn; i++) {
-						// 		Actor *newActor = createActor(destMap, ACTOR_UNIT);
-						// 		newActor->position.x = rndFloat(spawnPointAABB.min.x, spawnPointAABB.max.x);
-						// 		newActor->position.y = rndFloat(spawnPointAABB.min.y, spawnPointAABB.max.y);
-						// 		newActor->position.z = spawnPointAABB.max.z;
-						// 		newActor->team = rndInt(1, TEAMS_MAX);
-						// 	}
-						// }
-					}
-
-					game->currentMapIndex = game->nextMapIndex;
-					game->mapTime = 0;
-				}
-			} else {
-				float prevNextMap_t = game->nextMap_t;
-				game->nextMap_t -= 0.03;
-				if (prevNextMap_t > 0 && game->nextMap_t <= 0) game->lookingAtMap = false;
-			}
-			game->nextMap_t = Clamp01(game->nextMap_t);
-		} ///
-
-		Map *map = &game->maps[game->currentMapIndex];
-
-		Actor *player = NULL;
-		Actor *ground = NULL;
-		AABB groundAABB;
-		AABB *walls = (AABB *)frameMalloc(sizeof(AABB) * (ACTORS_MAX+4)); // +4 because of edge walls
-		int wallsNum = 0;
-		{ /// Initial iteration
-			for (int i = 0; i < map->actorsNum; i++) {
-				Actor *actor = &map->actors[i];
-				// actor->info = &game->actorTypeInfos[actor->type]; // I don't think I need this anymore
-				if (actor->type == ACTOR_UNIT && actor->playerControlled) {
-					if (player) logf("Multiple players!?\n");
-					player = actor;
-				} else if (actor->type == ACTOR_GROUND) {
-					if (ground) logf("Multiple grounds!?\n");
-					ground = actor;
-				}
-
-				if (actor->info->isWall) walls[wallsNum++] = getAABB(actor);
-			}
-
-			if (!player) {
-				player = createActor(map, ACTOR_UNIT);
-				player->playerControlled = true;
-
-				player->position = v3(0, 0, 2);
-				logf("Player created\n");
-			}
-
-			if (!ground) {
-				ground = createActor(map, ACTOR_GROUND);
-				ground->position = v3(0, 0, -100);
-				ground->size = v3(2000, 1800, 100);
-				logf("Ground created\n");
-			}
-
-			groundAABB = getAABB(ground);
-		} ///
-
-		{ /// Add extra walls outside ground
-			float wallThickness = 20;
-
-			AABB backWall = makeAABB();
-			backWall.min.x = groundAABB.min.x;
-			backWall.max.x = groundAABB.max.x;
-
-			backWall.min.y = groundAABB.max.y;
-			backWall.max.y = backWall.min.y + wallThickness;
-
-			backWall.min.z = groundAABB.min.z;
-			backWall.max.z = backWall.min.z + 1000;
-			walls[wallsNum++] = backWall;
-			// drawAABB3d(backWall, 4, 0xFFFF0000);
-
-			AABB frontWall = makeAABB();
-			frontWall.min.x = groundAABB.min.x;
-			frontWall.max.x = groundAABB.max.x;
-
-			frontWall.min.y = groundAABB.min.y - wallThickness;
-			frontWall.max.y = frontWall.min.y + wallThickness;
-
-			frontWall.min.z = groundAABB.min.z;
-			frontWall.max.z = frontWall.min.z + 1000;
-			walls[wallsNum++] = frontWall;
-			// drawAABB3d(frontWall, 4, 0xFFFF0000);
-
-			AABB leftWall = makeAABB();
-			leftWall.min.x = groundAABB.min.x - wallThickness;
-			leftWall.max.x = leftWall.min.x + wallThickness;
-
-			leftWall.min.y = groundAABB.min.y;
-			leftWall.max.y = groundAABB.max.y;
-
-			leftWall.min.z = groundAABB.min.z;
-			leftWall.max.z = leftWall.min.z + 1000;
-			walls[wallsNum++] = leftWall;
-			// drawAABB3d(leftWall, 4, 0xFFFF0000);
-
-			AABB rightWall = makeAABB();
-			rightWall.min.x = groundAABB.max.x;
-			rightWall.max.x = rightWall.min.x + wallThickness;
-
-			rightWall.min.y = groundAABB.min.y;
-			rightWall.max.y = groundAABB.max.y;
-
-			rightWall.min.z = groundAABB.min.z;
-			rightWall.max.z = rightWall.min.z + 1000;
-			walls[wallsNum++] = rightWall;
-			// drawAABB3d(rightWall, 4, 0xFFFF0000);
-		} ///
-
-		if (game->inEditor) { /// Editor update
-			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
-			if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::Checkbox("Always show wireframes", &game->debugAlwaysShowWireframes);
-				ImGui::Checkbox("No 3d", &game->debugNo3d);
-				ImGui::Checkbox("Show player box", &game->debugDrawPlayerBox);
-				ImGui::Checkbox("Draw hitboxes", &game->debugDrawHitboxes);
-				ImGui::Checkbox("Draw actor status", &game->debugDrawActorStatus);
-				ImGui::Checkbox("Draw actor action", &game->debugDrawActorAction);
-				ImGui::Checkbox("Draw actor stats", &game->debugDrawActorStats);
-				ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
-				ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
-				ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
-				ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
-
-				ImGui::SliderInt("Degs1", &degs1, 0, 90);
-				ImGui::SliderInt("Degs2", &degs2, -90, 90);
-
-				ImGui::Text("timeSinceLastLeftPress: %f", player->timeSinceLastLeftPress);
-				ImGui::Text("timeSinceLastRightPress: %f", player->timeSinceLastRightPress);
-				ImGui::Text("isRunningLeft: %d", player->isRunningLeft);
-				ImGui::Text("isRunningRight: %d", player->isRunningRight);
-
-				if (ImGui::Button("Spawn enemy")) {
-					Actor *actor = createActor(map, ACTOR_UNIT);
-					actor->team = 1;
-					actor->position = v3(0, 0, 10);
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Spawn dummy")) {
-					Actor *actor = createActor(map, ACTOR_UNIT);
-					actor->team = 1;
-					actor->position = v3(0, 0, 10);
-					actor->aiType = AI_DUMMY;
-				}
-
-				if (ImGui::Button("Kill enemies")) {
-					for (int i = 0; i < map->actorsNum; i++) {
-						Actor *actor = &map->actors[i];
-						if (actor->type == ACTOR_UNIT && actor->team != player->team) actor->hp = 0;
-					}
-				}
-
-				if (ImGui::Button("Give all items")) {
-					for (int i = 1; i < ITEM_TYPES_MAX; i++) {
-						giveItem(player, (ItemType)i, 1);
-					}
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Give $100")) {
-					player->money += 100;
-				}
-
-				if (ImGui::Button("Force restock")) {
-					game->debugForceRestock = true;
-				}
-
-				if (ImGui::Button("Set all hps to 1")) {
-					for (int i = 0; i < map->actorsNum; i++) {
-						Actor *actor = &map->actors[i];
-						if (actor->type == ACTOR_UNIT) actor->hp = 1;
-					}
-				}
-
-				ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNodeEx("City", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::Button("Reapply templates to all")) {
-					Map *basicTemplate = getMapByName("#basicTemplate");
-					if (!basicTemplate) Panic("Bad");
-
-					if (CITY_START_INDEX + (CITY_ROWS * CITY_COLS) > MAPS_MAX-1) Panic("Not enough maps...\n");
-					for (int y = 0; y < CITY_ROWS; y++) {
-						for (int x = 0; x < CITY_COLS; x++) {
-							int cityIndex = y * CITY_COLS + x;
-							int mapIndex = cityIndex + CITY_START_INDEX;
-							Map *map = &game->maps[mapIndex];
-							if (!map->isTemplatized) continue;
-
-							float baseAlliances[TEAMS_MAX];
-							memcpy(baseAlliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
-							*map = *basicTemplate;
-
-							strcpy(map->name, frameSprintf("city%d-%d", x, y));
-							map->isTemplatized = true;
-							memcpy(map->baseAlliances, baseAlliances, sizeof(float) * TEAMS_MAX);
-
-							{ /// Fix doors
-								Actor *door;
-								door = getActorByName(map, "leftDoor");
-								if (x > 0) {
-									strcpy(door->destMapName, frameSprintf("city%d-%d", x-1, y));
-								} else {
-									deleteActor(map, door);
-								}
-
-								door = getActorByName(map, "rightDoor");
-								if (x < CITY_COLS-1) {
-									strcpy(door->destMapName, frameSprintf("city%d-%d", x+1, y));
-								} else {
-									deleteActor(map, door);
-								}
-
-								door = getActorByName(map, "topDoor");
-								if (y > 0) {
-									strcpy(door->destMapName, frameSprintf("city%d-%d", x, y-1));
-								} else {
-									deleteActor(map, door);
-								}
-
-								door = getActorByName(map, "bottomDoor");
-								if (y < CITY_ROWS-1) {
-									strcpy(door->destMapName, frameSprintf("city%d-%d", x, y+1));
-								} else {
-									deleteActor(map, door);
-								}
-							} ///
-
-							saveMap(map, mapIndex);
-						}
-					}
-					logf("Maps templatized\n");
-				}
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNodeEx("Map", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::Button("Change map")) ImGui::OpenPopup("changeMapPopup");
-				if (ImGui::BeginPopup("changeMapPopup")) {
-					for (int i = 0; i < MAPS_MAX; i++) {
-						Map *map = &game->maps[i];
-						ImGui::Text("%d: %s", i, map->name);
-						// if (ImGui::ImageButton((ImTextureID)(intptr_t)map->thumbnail->id, ImVec2(map->thumbnail->width, map->thumbnail->height), ImVec2(0, 1), ImVec2(1, 0)))
-						if (ImGui::Button(frameSprintf("%d: %s", i, map->name))) {
-							if (game->currentMapIndex != i) {
-								game->nextMapIndex = i;
-								ImGui::CloseCurrentPopup();
-							}
-						}
-					}
-					ImGui::EndPopup();
-				}
-
-				if (keyPressed('S') && ImGui::Button("Save all maps")) {
-					for (int i = 0; i < MAPS_MAX; i++) saveMap(&game->maps[i], i);
-				}
-				ImGui::Checkbox("Templatized", &map->isTemplatized);
-				if (!map->isTemplatized) {
-					if (ImGui::Button("Save map")) saveMap(map, game->currentMapIndex);
-					ImGui::SameLine();
-					if (ImGui::Button("Load map")) {
-						loadMap(map, game->currentMapIndex);
-						// game->nextMapIndex = game->currentMapIndex;
-					}
-				}
-				ImGui::InputText("Name", map->name, MAP_NAME_MAX_LEN);
-
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNode("Past actions")) {
-				for (int i = 0; i < player->pastActionsNum; i++) {
-					Action *action = &player->pastActions[i];
-					ImGui::Text("%d: %s", i, action->info->name);
-				}
-
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNode("Globals")) {
-				if (ImGui::Button("Save globals")) saveGlobals();
-				ImGui::SameLine();
-				if (ImGui::Button("Load globals")) loadGlobals();
-				if (ImGui::TreeNode("Action type infos")) {
-					if (ImGui::Button("Remove player actions")) player->actionsNum = 0;
-					for (int i = 0; i < ACTION_TYPES_MAX; i++) {
-						if (i >= ACTION_EXTRA_5 && i <= ACTION_EXTRA_8) continue;
-						ActionTypeInfo *info = &globals->actionTypeInfos[i];
-						if (ImGui::TreeNode(frameSprintf("%s###%d", info->name, i))) {
-							guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(0xFF000000|stringHash32(info->name), 0xFF000000, 0.5));
-
-							ImGui::InputText("Name", info->name, ACTION_NAME_MAX_LEN);
-							ImGui::CheckboxFlags("Allowed on ground", &info->flags, _F_AT_ALLOWED_ON_GROUND);
-							ImGui::SameLine();
-							ImGui::CheckboxFlags("Allowed in air", &info->flags, _F_AT_ALLOWED_IN_AIR);
-							ImGui::InputInt("Startup frames", &info->startupFrames);
-							ImGui::InputInt("Active frames", &info->activeFrames);
-							ImGui::InputInt("Recovery frames", &info->recoveryFrames);
-							ImGui::PushItemWidth(100);
-							ImGui::InputText("Animation name", info->animationName, PATH_MAX_LEN);
-							ImGui::PopItemWidth();
-							ImGui::SameLine();
-							ImGui::Checkbox("Loops", &info->animationLoops);
-
-							for (int i = 0; i < info->hitboxesNum; i++) {
-								ImGui::DragFloat3(frameSprintf("Hitbox %d min", i), &info->hitboxes[i].min.x);
-								// {
-								// 	ImGui::SameLine();
-								// 	Vec3 size = getSize(info->hitboxes[i]);
-								// 	ImGui::Text("(%.0fx%.0f px in 2d space)", size.x, size.z);
-								// }
-								ImGui::DragFloat3(frameSprintf("Hitbox %d max", i), &info->hitboxes[i].max.x);
-							}
-							ImGui::InputInt("Hitboxes num", &info->hitboxesNum);
-							info->hitboxesNum = mathClamp(info->hitboxesNum, 0, HITBOXES_MAX);
-
-							if (ImGui::TreeNode("Velos")) {
-								ImGui::DragFloat3("Hit velo", &info->hitVelo.x);
-								ImGui::DragFloat3("Block velo", &info->blockVelo.x);
-								ImGui::DragFloat3("Thrust", &info->thrust.x);
-								ImGui::InputInt("Thrust frame", &info->thrustFrame);
-								ImGui::TreePop();
-							}
-							if (ImGui::TreeNode("Times")) {
-								ImGui::DragFloat("Hitsun time", &info->hitstunTime, 0.1);
-								ImGui::DragFloat("Blocksun time", &info->blockstunTime, 0.1);
-								ImGui::TreePop();
-							}
-							ImGui::InputFloat("Damage", &info->damage);
-							ImGui::InputFloat("Stamina usage", &info->staminaUsage);
-							if (ImGui::TreeNode("Buffs")) {
-								ImGui::Combo("Buff to get", (int *)&info->buffToGet, buffTypeStrings, ArrayLength(buffTypeStrings));
-								if (info->buffToGet) ImGui::InputFloat("Buff to get time", &info->buffToGetTime, 0);
-								ImGui::Combo("Buff to give", (int *)&info->buffToGive, buffTypeStrings, ArrayLength(buffTypeStrings));
-								if (info->buffToGive) ImGui::InputFloat("Buff to give time", &info->buffToGiveTime, 0);
-							}
-
-							if (ImGui::Button("Do action")) addAction(player, (ActionType)i);
-
-							if (keyPressed(KEY_SHIFT) && keyPressed(KEY_CTRL) && ImGui::Button("Copy from punch")) {
-								char *name = frameStringClone(info->name);
-								*info = globals->actionTypeInfos[ACTION_PUNCH];
-								strcpy(info->name, name);
-							}
-
-							guiPopStyleColor();
-							ImGui::TreePop();
-						}
-					}
-					ImGui::TreePop();
-				}
-
-				ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
-				ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
-				ImGui::TreePop();
-			}
-			ImGui::End();
-
-			ImGui::SetNextWindowPos(ImVec2(platform->windowWidth, 0), ImGuiCond_Always, ImVec2(1, 0));
-			ImGui::Begin("Actors", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-			ImGui::BeginChild("ActorListChild", ImVec2(300, 200));
-			for (int i = 0; i < map->actorsNum; i++) {
-				Actor *actor = &map->actors[i];
-				char *name = frameSprintf("%s###%d", actorTypeStrings[actor->type], i);
-				if (ImGui::Selectable(name, game->selectedActorId == actor->id)) {
-					game->selectedActorId = actor->id;
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::Text("Create:");
-			if (ImGui::Button("Spawn point")) {
-				Actor *actor = createActor(map, ACTOR_UNIT_SPAWNER);
-				actor->position = game->cameraTarget;
-				game->selectedActorId = actor->id;
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Wall")) {
-				Actor *actor = createActor(map, ACTOR_WALL);
-				actor->position = game->cameraTarget;
-				game->selectedActorId = actor->id;
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Door")) {
-				Actor *actor = createActor(map, ACTOR_DOOR);
-				actor->position = game->cameraTarget;
-				game->selectedActorId = actor->id;
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Store")) {
-				Actor *actor = createActor(map, ACTOR_STORE);
-				actor->position = game->cameraTarget;
-				game->selectedActorId = actor->id;
-			}
-
-			ImGui::Separator();
-			ImGui::Separator();
-
-			Actor *actor = getActor(game->selectedActorId);
-			if (actor) {
-				// if (ImGui::Button("Delete actor")) actor->markedForDeletion = true;
-				if (ImGui::Button("Duplicate actor")) {
-					Actor *newActor = createActor(map, actor->type);
-					int id = newActor->id;
-					*newActor = *actor;
-					newActor->id = id;
-					game->selectedActorId = newActor->id;
-					logf("Dupped\n");
-				}
-
-				ImGui::Combo("Actor type", (int *)&actor->type, actorTypeStrings, ArrayLength(actorTypeStrings));
-				// ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
-				// ImGui::SameLine();
-				ImGui::Text("Id: %d", actor->id);
-				ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
-				ImGui::DragFloat3("Position", &actor->position.x);
-				ImGui::DragFloat3("Size", &actor->size.x);
-
-				if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
-					ImGui::InputInt("Team", &actor->team);
-					if (ImGui::TreeNode("Stats")) {
-						for (int i = 0; i < STATS_MAX; i++) {
-							ImGui::InputFloat(statStrings[i], &actor->stats[i], 1);
-						}
-						ImGui::TreePop();
-					}
-
-					if (ImGui::TreeNode(frameSprintf("Items (%d)###itemTree", actor->itemsNum))) {
-						char **itemTypeStrings = (char **)frameMalloc(sizeof(char *) * ITEM_TYPES_MAX);
-						for (int i = 0; i < ITEM_TYPES_MAX; i++) itemTypeStrings[i] = frameStringClone(game->itemTypeInfos[i].name);
-
-						for (int i = 0; i < actor->itemsNum; i++) {
-							Item *item = &actor->items[i];
-							ImGui::PushID(i);
-							if (ImGui::Combo("Type", (int *)&item->type, itemTypeStrings, ITEM_TYPES_MAX)) {
-								item->info = &game->itemTypeInfos[item->type];
-							}
-							ImGui::InputInt("Amount", &item->amount);
-							ImGui::PopID();
-						}
-						if (ImGui::Button("Give item")) {
-							giveItem(actor, ITEM_NONE, 1);
-						}
-						ImGui::TreePop();
-					}
-				}
-
-				if (actor->type == ACTOR_DOOR) {
-					ImGui::InputText("Destination map", actor->destMapName, MAP_NAME_MAX_LEN);
-				}
-
-				if (actor->type == ACTOR_UNIT_SPAWNER) {
-					ImGui::InputInt("Unit to spawn", &actor->unitsToSpawn);
-				}
-
-				if (ImGui::Button("bringWithinBounds")) bringWithinBounds(map, actor);
-
-				ImGui::Separator();
-			}
-			ImGui::End();
-
-			bool selectedSomething = false;
-			for (int i = 0; i < map->actorsNum; i++) {
-				Actor *actor = &map->actors[i];
-				AABB aabb = getAABB(actor);
-				Rect bounds = getBounds(aabb);
-
-				if (platform->mouseJustUp && contains(bounds, game->worldMouse)) {
-					game->selectedActorId = actor->id;
-					selectedSomething = true;
-				}
-			}
-
-			if (platform->mouseJustUp && !selectedSomething) {
-				game->selectedActorId = 0;
-			}
-
-			float scrollSpeed = 10;
-			if (keyPressed(KEY_LEFT) || keyPressed('A')) game->cameraTarget.x -= scrollSpeed;
-			if (keyPressed(KEY_RIGHT) || keyPressed('D')) game->cameraTarget.x += scrollSpeed;
-			if (keyPressed(KEY_UP) || keyPressed('W')) game->cameraTarget.y += scrollSpeed;
-			if (keyPressed(KEY_DOWN) || keyPressed('S')) game->cameraTarget.y -= scrollSpeed;
-		} /// 
-
-		for (int i = 0; i < map->actorsNum; i++) { /// Update actors
-			Actor *actor = &map->actors[i];
-			if (actor->prevIsOnGround != actor->isOnGround) { // Landing on the ground
-				actor->prevIsOnGround = actor->isOnGround;
-				if (actor->isOnGround) {
-					if (actor->actionsNum > 0) {
-						Action *action = &actor->actions[0];
-						if (action->type == ACTION_HITSTUN) {
-							float timeLeft = action->customLength - action->time;
-							actor->actionsNum = 0;
-							Action *knockdownAction = addAction(actor, ACTION_KNOCKDOWN);
-							knockdownAction->customLength = timeLeft;
-							playWorldSound("assets/audio/fallThump.ogg", getCenter(getAABB(actor)));
-						} else if (action->type == ACTION_KNOCKDOWN) {
-							// Nothing...
-						} else if (action->info->activeFrames) { // Cancel attacks upon landing, but not other actions
-							actor->actionsNum = 0;
-						}
-					}
-				}
-			}
-
-			bool canInput = true;
-			{ /// Update action
-				if (actor->actionsNum > 0) { 
-					Action *action = &actor->actions[0];
-					canInput = false;
-					if (action->type != ACTION_BLOCKSTUN) actor->isBlocking = false;
-
-					bool actionDone = false;
-					bool canDoAction = true;
-
-					if (action->time == 0) {
-						actor->stamina -= action->info->staminaUsage;
-						if (actor->stamina <= 0 && action->info->staminaUsage) {
-							canDoAction = false;
-							actionDone = true;
-						}
-
-						if (action->info->buffToGet != BUFF_NONE) {
-							addBuff(actor, action->info->buffToGet, action->info->buffToGetTime);
-						}
-					}
-
-					float activeMin = action->info->startupFrames / 60.0;
-					float activeMax = activeMin + (action->info->activeFrames / 60.0);
-
-					bool inActiveTime = true;
-					if (canDoAction) {
-						int justHitFrame = -1;
-						{ // Compute justHitFrame
-							int currentFrame = action->time * 60.0;
-							int prevFrame = action->prevTime * 60.0;
-							if (currentFrame == prevFrame+1) {
-								justHitFrame = currentFrame;
-							}
-							if (action->time == 0) justHitFrame = 0;
-						}
-
-						if (justHitFrame == action->info->thrustFrame) {
-							Vec3 velo = action->info->thrust;
-							if (actor->facingLeft) velo.x *= -1;
-							actor->velo += velo;
-						}
-
-						if (justHitFrame == action->info->startupFrames+1) {
-							if (action->type == ACTION_SHADOW_STEP) {
-								Actor *closestActor = NULL;
-								float closestDist = 0;
-								for (int i = 0; i < map->actorsNum; i++) {
-									Actor *otherActor = &map->actors[i];
-									bool onCorrectSide = false;
-									if (otherActor->position.x < actor->position.x && actor->facingLeft) onCorrectSide = true;
-									if (otherActor->position.x > actor->position.x && !actor->facingLeft) onCorrectSide = true;
-									if (!onCorrectSide) continue;
-									if (otherActor->team == actor->team) continue;
-									float dist = distance(otherActor->position, actor->position);
-									if (!closestActor || dist < closestDist) {
-										closestActor = otherActor;
-										closestDist = dist;
-									}
-								}
-
-								if (closestActor) {
-									Vec3 dir = normalize(closestActor->position - actor->position);
-									float edgeDist = closestDist - actor->size.x/2 - closestActor->size.x/2;
-									Vec3 newPosition = actor->position + (dir*(edgeDist*0.99));
-									AABB newAABB = getAABBAtPosition(actor, newPosition);
-
-									bool onWall = false;
-									for (int i = 0; i < wallsNum; i++) {
-										AABB wallAABB = walls[i];
-										if (intersects(wallAABB, newAABB)) {
-											onWall = true;
-											break;
-										}
-									}
-
-									if (!onWall) {
-										actor->position = newPosition;
-									}
-								}
-							}
-						}
-
-						if (action->info->activeFrames && action->time >= activeMin && action->time <= activeMax) {
-							inActiveTime = true;
-							AABB actorAABB = getAABB(actor);
-							Vec3 actorCenter = getCenter(actorAABB);
-
-							if (action->prevTime < activeMin) playWorldSound("assets/audio/attack.ogg", actorCenter);
-
-							AABB worldSpaceHitboxs[HITBOXES_MAX];
-							int worldSpaceHitboxesNum = 0;
-							for (int i = 0; i < action->info->hitboxesNum; i++) {
-								AABB hitbox = action->info->hitboxes[i];
-								if (actor->facingLeft) {
-									Vec3 center = getCenter(hitbox);
-									hitbox -= v3(center.x, 0, 0)*2;
-								}
-								hitbox += actorCenter;
-								if (game->debugDrawHitboxes) drawAABB3d(hitbox, 2, 0xFFFF0000);
-								worldSpaceHitboxs[worldSpaceHitboxesNum++] = hitbox;
-							}
-
-							for (int i = 0; i < map->actorsNum; i++) {
-								Actor *otherActor = &map->actors[i];
-								if (!otherActor->info->canBeHit) continue;
-								if (otherActor->team == actor->team) continue;
-								ActionType otherActorActionType = ACTION_NONE;
-								if (otherActor->actionsNum != 0) otherActorActionType = otherActor->actions[0].type;
-
-								if (otherActorActionType == ACTION_KNOCKDOWN) continue;
-
-								bool alreadyBeenHit = false;
-								for (int i = 0; i < ACTION_IDS_HIT_BY_MAX; i++) {
-									if (otherActor->actionIdsHitBy[i] == action->id) alreadyBeenHit = true;
-								}
-								if (alreadyBeenHit) continue;
-
-								bool hitboxUsed = false;
-								AABB otherActorAABB = getAABB(otherActor);
-								for (int i = 0; i < worldSpaceHitboxesNum; i++) {
-									AABB hitbox = worldSpaceHitboxs[i];
-									if (intersects(otherActorAABB, hitbox)) {
-
-										memmove(&otherActor->actionIdsHitBy[1], &otherActor->actionIdsHitBy[0], sizeof(int) * (ACTION_IDS_HIT_BY_MAX-1));
-										otherActor->actionIdsHitBy[0] = action->id;
-
-										float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
-
-										int particleColor;
-										int particlesAmount = 0;
-
-										if (otherActor->isBlocking) {
-											playWorldSound("assets/audio/block.ogg", getCenter(otherActorAABB));
-											particleColor = 0x80606060;
-											particlesAmount = damage;
-
-											otherActor->stamina -= damage;
-											if (otherActor->stamina < 0) otherActor->stamina -= damage;
-
-											Effect *effect = createEffect(EFFECT_BLOCK_DAMAGE, otherActor->position + v3(0, 0, otherActor->size.z*0.5));
-											effect->value = damage;
-
-											Vec3 blockVelo = action->info->blockVelo;
-											if (isZero(blockVelo)) blockVelo = action->info->hitVelo * 0.25;
-											if (actor->facingLeft) blockVelo.x *= -1;
-											otherActor->velo += blockVelo;
-
-											otherActor->actionsNum = 0;
-											Action *newAction = addAction(otherActor, ACTION_BLOCKSTUN);
-											newAction->customLength = action->info->blockstunTime;
-											if (newAction->customLength == 0) newAction->customLength = action->info->hitstunTime;
-										} else {
-											particleColor = 0x80FF0000;
-											particlesAmount = damage;
-
-											if (damage >= 20) playWorldSound("assets/audio/hit/4.ogg", getCenter(otherActorAABB));
-											else if (damage >= 10) playWorldSound("assets/audio/hit/3.ogg", getCenter(otherActorAABB));
-											else if (damage >= 5) playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
-											else playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
-
-											if (actor->playerControlled || otherActor->playerControlled) game->hitPauseFrames = action->info->damage;
-											otherActor->hp -= damage;
-
-											Effect *effect = createEffect(
-												otherActor == player ? EFFECT_PLAYER_DAMAGE: EFFECT_ENEMY_DAMAGE,
-												otherActor->position + v3(0, 0, otherActor->size.z*0.5)
-											);
-											effect->value = damage;
-
-											if (action->type == ACTION_BRAIN_SAP) {
-												actor->hp += damage;
-											} else if (action->type == ACTION_CULLING_BLADE) {
-												float cullPerc = 0.5;
-												if (otherActor->hp/otherActor->maxHp < cullPerc) otherActor->hp = 0;
-											} else if (action->type == ACTION_STICKY_NAPALM) {
-												addBuff(otherActor, BUFF_STICKY_NAPALM_STACK, 5);
-											}
-
-											Vec3 hitVelo = action->info->hitVelo;
-											if (actor->facingLeft) hitVelo.x *= -1;
-											otherActor->velo += hitVelo;
-
-											otherActor->actionsNum = 0;
-											Action *newAction = addAction(otherActor, ACTION_HITSTUN);
-											newAction->customLength = action->info->hitstunTime;
-
-											if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
-										}
-
-										for (int i = 0; i < particlesAmount; i++) {
-											Particle *particle = createParticle(PARTICLE_DUST);
-											particle->position = getCenter(getAABB(otherActor));
-											particle->position.y -= 0.01*i;
-											particle->velo.x = rndFloat(0, 10);
-											if (otherActor->position.x < actor->position.x) particle->velo.x *= -1;
-											particle->velo.z = rndFloat(-5, 5);
-											particle->maxTime = rndFloat(0.1, 0.25);
-											particle->tint = particleColor;
-										}
-
-										hitboxUsed = true;
-										break;
-									}
-								}
-
-								if (hitboxUsed) break;
-							}
-						}
-					}
-
-					bool usesCustomLength = false;
-					if (
-						action->type == ACTION_HITSTUN ||
-						action->type == ACTION_KNOCKDOWN ||
-						action->type == ACTION_BLOCKSTUN ||
-						action->type == ACTION_FORCED_IDLE
-					) usesCustomLength = true;
-
-					float maxTime;
-					if (usesCustomLength) {
-						maxTime = action->customLength;
-					} else {
-						maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames) / 60.0;
-					}
-					if (action->time >= maxTime) actionDone = true;
-					if (actionDone) {
-						if (actor->pastActionsNum > ACTIONS_MAX-1) {
-							memmove(&actor->pastActions[0], &actor->pastActions[1], sizeof(Action) * ACTIONS_MAX-1);
-							actor->pastActionsNum--;
-						} 
-						actor->pastActions[actor->pastActionsNum++] = actor->actions[0];
-
-						if (action->type == ACTION_KNOCKDOWN) addAction(actor, ACTION_RAISING);
-
-						arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
-						actor->actionsNum--;
-					}
-
-					float actionTimeScale = getStatPoints(actor, STAT_ATTACK_SPEED)*0.1;
-					if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
-					if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
-
-					action->prevTime = action->time;
-					action->time += elapsed * actionTimeScale;
-
-					actor->timeWithoutAction = 0;
-				} else { 
-					actor->timeWithoutAction += elapsed;
-					if (actor->timeWithoutAction > 0.5) actor->pastActionsNum = 0;
-				}
-			} ///
-
-			{ /// Update buffs
-				for (int i = 0; i < actor->buffsNum; i++) {
-					Buff *buff = &actor->buffs[i];
-					bool buffDone = false;
-
-					if (buff->time > buff->maxTime) buffDone = true;
-
-					buff->time += elapsed;
-
-					if (buffDone) {
-						arraySpliceIndex(actor->buffs, actor->buffsNum, sizeof(Buff), i);
-						actor->buffsNum--;
-						i--;
-					}
-				}
-			} ///
-
-			if (actor->type == ACTOR_UNIT) {
-				float baseSpeed = getStatPoints(actor, STAT_MOVEMENT_SPEED) * 0.2;
-				Vec2 speed = v2(baseSpeed, baseSpeed);
-				if (actor->isRunningLeft || actor->isRunningRight) speed *= 2;
-				for (int i = 0; i < getBuffCount(actor, BUFF_BUDDHA_PALM_SLOW); i++) speed *= 0.5;
-				for (int i = 0; i < getBuffCount(actor, BUFF_STICKY_NAPALM_STACK); i++) speed *= 0.8;
-				actor->isBlocking = true;
-				if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
-
-				if (actor->isRunningLeft || actor->isRunningRight) {
-					if (fmod(game->time, 0.2) < fmod(game->prevTime, 0.2)) {
-						Particle *particle = createParticle(PARTICLE_DUST);
-						particle->position = actor->position + v3(0, 0, 5);
-						particle->position.y -= 0.01*i;
-						particle->velo.x = rndFloat(0, 5);
-						if (actor->facingLeft) particle->velo.x *= -1;
-						particle->velo.z = rndFloat(2, 3);
-						particle->maxTime = rndFloat(0.5, 1);
-						particle->tint = 0xFFDEA404;
-					}
-				}
-
-				if (actor->playerControlled) {
-					if (!game->inEditor) game->cameraTarget = actor->position;
-
-					Vec2 inputVec = v2();
-					bool jumpPressed = false;
-					bool punchPressed = false;
-					bool kickPressed = false;
-					bool special1Pressed = false;
-					bool special2Pressed = false;
-					bool changeStyle1Pressed = false;
-					bool changeStyle2Pressed = false;
-					bool changeStyle3Pressed = false;
-					bool changeStyle4Pressed = false;
-					if (!game->inEditor && canInput && actor->stamina > 0) {
-						if (keyPressed('W') || keyPressed(KEY_UP)) inputVec.y++;
-						if (keyPressed('S') || keyPressed(KEY_DOWN)) inputVec.y--;
-						if (keyPressed('A') || keyPressed(KEY_LEFT)) inputVec.x--;
-						if (keyPressed('D') || keyPressed(KEY_RIGHT)) inputVec.x++;
-						inputVec = inputVec.normalize();
-						if (keyJustPressed(' ')) jumpPressed = true;
-						if (keyJustPressed('J')) punchPressed = true;
-						if (keyJustPressed('K')) kickPressed = true;
-						if (keyJustPressed('U')) special1Pressed = true;
-						if (keyJustPressed('I')) special2Pressed = true;
-						if (keyJustPressed('1')) changeStyle1Pressed = true;
-						if (keyJustPressed('2')) changeStyle2Pressed = true;
-						if (keyJustPressed('3')) changeStyle3Pressed = true;
-						if (keyJustPressed('4')) changeStyle4Pressed = true;
-					}
-
-					{ // Figure out running
-						if (inputVec.x < -0.5) {
-							if (actor->prevInputVec.x >= -0.5) {
-								if (actor->timeSinceLastLeftPress < 0.25) {
-									actor->isRunningLeft = true;
-								}
-								actor->timeSinceLastLeftPress = 0;
-							}
-						} else {
-							actor->isRunningLeft = false;
-						}
-
-						if (inputVec.x > 0.5) {
-							if (actor->prevInputVec.x <= 0.5) {
-								if (actor->timeSinceLastRightPress < 0.25) {
-									actor->isRunningRight = true;
-								}
-								actor->timeSinceLastRightPress = 0;
-							}
-						} else {
-							actor->isRunningRight = false;
-						}
-					}
-
-					actor->movementAccel.x += inputVec.x * speed.x;
-					actor->movementAccel.y += inputVec.y * speed.y;
-
-					actor->prevInputVec = inputVec;
-
-					if (jumpPressed && actor->isOnGround) actor->movementAccel.z += 20;
-
-					if (punchPressed) {
-						if (actor->isOnGround) {
-							bool didAttack = false;
-
-							if (actor->isRunningLeft || actor->isRunningRight) {
-								addAction(actor, ACTION_RUNNING_PUNCH);
-								didAttack = true;
-							}
-
-							if (!didAttack && actor->pastActionsNum >= 2) {
-								bool arePunches = true;
-								for (int i = actor->pastActionsNum-2; i < actor->pastActionsNum; i++) {
-									Action *action = &actor->pastActions[i];
-									if (action->type != ACTION_PUNCH) arePunches = false;
-								}
-
-								if (arePunches) {
-									addAction(actor, ACTION_UPPERCUT);
-									didAttack = true;
-								}
-							}
-							if (!didAttack) addAction(actor, ACTION_PUNCH);
-						} else {
-							addAction(actor, ACTION_AIR_PUNCH);
-						}
-					}
-
-					if (kickPressed) {
-						if (actor->isOnGround) {
-							bool didAttack = false;
-
-							if (actor->isRunningLeft || actor->isRunningRight) {
-								addAction(actor, ACTION_RUNNING_KICK);
-								didAttack = true;
-							}
-
-							if (!didAttack) addAction(actor, ACTION_KICK);
-						} else {
-							addAction(actor, ACTION_AIR_KICK);
-						}
-					}
-
-					if (special1Pressed) {
-						ActionType actionType = getActionType(actor, 0);
-						if (actionType != ACTION_NONE) addAction(actor, actionType);
-					}
-
-					if (special2Pressed) {
-						ActionType actionType = getActionType(actor, 1);
-						if (actionType != ACTION_NONE) addAction(actor, actionType);
-					}
-
-					if (changeStyle1Pressed) {
-						infof("Style 1\n");
-						actor->styleIndex = 0;
-					}
-
-					if (changeStyle2Pressed) {
-						infof("Style 2\n");
-						actor->styleIndex = 1;
-					}
-
-					if (changeStyle3Pressed) {
-						infof("Style 3\n");
-						actor->styleIndex = 2;
-					}
-
-					if (changeStyle4Pressed) {
-						infof("Style 4\n");
-						actor->styleIndex = 3;
-					}
-
-					actor->timeSinceLastLeftPress += elapsed;
-					actor->timeSinceLastRightPress += elapsed;
-				} else {
-					{ /// Do enemy AI @todo factor this out
-						float aggression = 0.5;
-
-						if (actor->aiType == AI_NORMAL) {
-							auto getAttackers = [](Actor *src, int *attackersNumOut)->int * {
-								Map *map = &game->maps[game->currentMapIndex];
-
-								int *ids = (int *)frameMalloc(sizeof(int) * ACTORS_MAX);
-								int idsNum = 0;
-								for (int i = 0; i < map->actorsNum; i++) {
-									Actor *otherActor = &map->actors[i];
-									if (otherActor->aiTarget == src->id) ids[idsNum++] = otherActor->id;
-								}
-
-								*attackersNumOut = idsNum;
-								return ids;
-							};
-
-							if (actor->actionsNum == 0) { // This is the same as canInput
-								Actor *target = getActor(actor->aiTarget);
-								if (!target) { // Find target
-									int bestOtherId = 0;
-
-									int currentAttackersNum;
-									int *currentAttackers = getAttackers(actor, &currentAttackersNum);
-									if (currentAttackersNum > 0) {
-										bestOtherId = currentAttackers[0];
-									}
-
-									if (!bestOtherId) {
-										int lowestOtherAttackers = 0;
-										for (int i = 0; i < map->actorsNum; i++) {
-											Actor *otherActor = &map->actors[i];
-											if (otherActor->type != ACTOR_UNIT) continue;
-											if (otherActor->team == actor->team) continue;
-
-											int otherAttackersNum;
-											int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
-
-											if (!bestOtherId || otherAttackersNum < lowestOtherAttackers) {
-												bestOtherId = otherActor->id;
-												lowestOtherAttackers = otherAttackersNum;
-											}
-										}
-									}
-
-									if (bestOtherId) actor->aiTarget = bestOtherId;
-								}
-
-								if (!target) {
-									if (actor->aiState == AI_STAND_NEAR_TARGET) actor->aiState = AI_IDLE;
-									if (actor->aiState == AI_APPROACH_FOR_ATTACH) actor->aiState = AI_IDLE;
-								}
-
-								if (actor->prevAiState != actor->aiState) {
-									actor->prevAiState = actor->aiState;
-									actor->aiStateTime = 0;
-								}
-
-								Vec2 xyPosition = v2(actor->position);
-								Vec2 xyTarget = v2();
-								if (target) xyTarget = v2(target->position);
-
-								if (actor->aiState == AI_IDLE) {
-									if (target) actor->aiState = AI_STAND_NEAR_TARGET;
-								} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
-									if (actor->aiStateTime == 0) {
-										float dist = rndFloat(100, 200);
-										actor->aiStateLength = clampMap(dist, 0, 300, 0.1, 4);
-
-										Vec2 dir = normalize(v2(rndFloat(-1, 1), rndFloat(-1, 1)));
-										actor->aiCurrentXyOffset = (dir*2 - 1) * dist;
-										if (actor->position.x < target->position.x) actor->aiCurrentXyOffset -= 200;
-										else actor->aiCurrentXyOffset += 200;
-									}
-
-									if (actor->aiStateTime == 0 || distance(actor->aiCurrentXyTarget, xyTarget) > 300) {
-										actor->aiCurrentXyTarget = xyTarget;
-										actor->aiCurrentXy = actor->aiCurrentXyTarget + actor->aiCurrentXyOffset;
-
-										Vec2 position = actor->aiCurrentXy;
-										Vec3 size = actor->size;
-										{ // bringActorPoisitionWithinBounds
-											if (position.x < groundAABB.min.x + size.x/2) position.x = groundAABB.min.x + size.x/2;
-											if (position.x > groundAABB.max.x - size.x/2) position.x = groundAABB.max.x - size.x/2;
-											if (position.y < groundAABB.min.y + size.y/2) position.y = groundAABB.min.y + size.y/2;
-											if (position.y > groundAABB.max.y - size.y/2) position.y = groundAABB.max.y - size.y/2;
-										}
-
-										actor->aiCurrentXy = position;
-									}
-
-									float dist = distance(actor->aiCurrentXy, xyPosition);
-									if (distance(actor->aiCurrentXy, xyPosition) > 10) {
-										float speedMulti = clampMap(dist, 50, 100, 0.2, 1);
-
-										Vec2 dir = normalize(actor->aiCurrentXy - xyPosition);
-										actor->movementAccel += v3(dir * speed.x*speedMulti);
-									}
-
-									if (actor->aiStateTime > actor->aiStateLength) {
-										if (rndPerc(aggression)) {
-											actor->aiState = AI_APPROACH_FOR_ATTACH;
-										} else {
-											actor->prevAiState = AI_IDLE; // Reset ai state
-										}
-									}
-								} else if (actor->aiState == AI_APPROACH_FOR_ATTACH) {
-									Vec2 xyDest = xyTarget;
-
-									Vec2 dir = (xyDest - xyPosition).normalize();
-									actor->movementAccel += v3(dir * speed);
-
-									if (distance(actor, target) < 100 && fabs(actor->position.y - target->position.y) < 100) {
-										const int AI_CHOICE_1 = 0;
-										const int AI_CHOICE_2 = 1;
-										const int AI_CHOICE_3 = 2;
-										const int AI_CHOICES_MAX = 3;
-										float choiceBuckets[AI_CHOICES_MAX] = {};
-										choiceBuckets[AI_CHOICE_1] += 1;
-										choiceBuckets[AI_CHOICE_2] += 1;
-										choiceBuckets[AI_CHOICE_3] += 0.5;
-
-										int choice = rndPick(choiceBuckets, AI_CHOICES_MAX);
-										if (choice == AI_CHOICE_1) {
-											addAction(actor, ACTION_PUNCH);
-											addAction(actor, ACTION_PUNCH);
-											addAction(actor, ACTION_UPPERCUT);
-										} else if (choice == AI_CHOICE_2) {
-											addAction(actor, ACTION_PUNCH);
-											addAction(actor, ACTION_KICK);
-										} else if (choice == AI_CHOICE_3) {
-											addAction(actor, ACTION_KICK);
-										}
-										actor->aiState = AI_STAND_NEAR_TARGET;
-									}
-								}
-							}
-						} else if (actor->aiType == AI_DUMMY) {
-						}
-					} ///
-				}
-
-				bool doRefill = false;
-				if (actor->maxHp == 0) doRefill = true;
-				actor->maxHp = getStatPoints(actor, STAT_HP) * 10;
-				actor->maxStamina = getStatPoints(actor, STAT_MAX_STAMINA) * 10;
-				if (doRefill) {
-					actor->hp = actor->maxHp;
-					actor->stamina = actor->maxStamina;
-				}
-			} else if (actor->type == ACTOR_GROUND) {
-			} else if (actor->type == ACTOR_WALL) {
-			} else if (actor->type == ACTOR_DUMMY) {
-				actor->team = 1;
-			} else if (actor->type == ACTOR_DOOR) {
-				if (overlaps(actor, player)) {
-					if (!actor->doorPlayerSpawnedOver) {
-						for (int i = 0; i < MAPS_MAX; i++) {
-							Map *possibleMap = &game->maps[i];
-							if (streq(possibleMap->name, actor->destMapName)) {
-								game->nextMapIndex = i;
-								break;
-							}
-						}
-					}
-				} else {
-					actor->doorPlayerSpawnedOver = false;
-				}
-			} else if (actor->type == ACTOR_ITEM) {
-				if (actor->isOnGround) {
-					if (getEquippedItemCount(player, ITEM_MAGNET) > 0) {
-						if (distance(player, actor) < 100) {
-							Vec3 dir = normalize(getCenter(getAABB(player)) - getCenter(getAABB(actor)));
-							actor->accel += dir * 5;
-						}
-					}
-
-					if (overlaps(actor, player)) {
-						if (actor->itemType == ITEM_MONEY) {
-							player->money += actor->itemAmount;
-							actor->markedForDeletion = true;
-
-							Effect *effect = createEffect(EFFECT_MONEY, player->position + v3(0, 0, player->size.z*0.5));
-							effect->value = actor->itemAmount;
-						} else {
-							if (giveItem(player, actor->itemType, actor->itemAmount)) {
-								actor->markedForDeletion = true;
-							} else {
-								if (platform->frameCount % 60 == 0) infof("Too many items to pick up %s\n", game->itemTypeInfos[actor->itemType].name);
-							}
-						}
-					}
-				}
-			} else if (actor->type == ACTOR_STORE) {
-				bool overlappingStore = overlaps(actor, player);
-
-				if (!game->inStore && overlappingStore && !game->ignoreStoreOverlap) {
-					game->inStore = true;
-					game->ignoreStoreOverlap = true;
-				}
-
-				if (!overlappingStore) game->ignoreStoreOverlap = false;
-			}
-
-			if (actor->isOnGround) {
-				actor->timeInAir = 0;
-				if (actor->movementAccel.length() > 0.1) { // This has to happen before physics update
-					actor->timeMoving += elapsed;
-					actor->timeNotMoving = 0;
-				} else {
-					actor->timeMoving = 0;
-					actor->timeNotMoving += elapsed;
-				}
-			} else {
-				actor->timeInAir += elapsed;
-				actor->timeMoving = 0;
-				actor->timeNotMoving = 0;
-			}
-
-			if (actor->info->hasPhysics && timeScale > 0.1) {
-				{ // Bump other actors
-					for (int i = 0; i < map->actorsNum; i++) {
-						Actor *otherActor = &map->actors[i];
-						if (actor->playerControlled) break;
-						if (otherActor->playerControlled) continue;
-						if (!otherActor->info->hasPhysics) continue;
-						if (actor == otherActor) continue;
-
-						float dist = distance(actor->position, otherActor->position);
-						if (actor->size.x != actor->size.y) logf("Phyics with non uniform scale actor\n");
-						dist -= actor->size.x/2;
-						dist -= otherActor->size.x/2;
-						if (dist <= 0) {
-							Vec3 dir = otherActor->position - actor->position;
-							float force = clampMap(dist, -50, 0, 0.01, 0);
-							actor->accel -= dir * force;
-							otherActor->accel += dir * force;
-						}
-					}
-				}
-
-				if (actor->movementAccel.x < -0.1) actor->facingLeft = true;
-				if (actor->movementAccel.x > 0.1) actor->facingLeft = false;
-				if (actor->isOnGround) actor->accel += actor->movementAccel;
-				if (!isZero(actor->movementAccel)) {
-					actor->movementAccel = v3();
-					actor->isBlocking = false;
-				}
-
-				float grav = 1;
-				for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
-
-				actor->accel.z -= grav;
-
-				actor->velo += actor->accel;
-				actor->accel = v3();
-
-				{ // AABB collision
-					bool bouncedOffSideWall = false;
-
-					AABB oldAABB = getAABB(actor);
-					AABB newAABB = oldAABB + actor->velo;
-					actor->isOnGround = false;
-					for (int i = 0; i < wallsNum; i++) {
-						AABB wallAABB = walls[i];
-						if (!intersects(newAABB, wallAABB)) continue;
-
-						if (newAABB.min.z <= wallAABB.max.z && oldAABB.min.z > wallAABB.max.z) { // Bot
-							float dist = wallAABB.max.z - newAABB.min.z;
-							newAABB += v3(0, 0, dist+0.1);
-							actor->velo.z = 0;
-							actor->isOnGround = true;
-						}
-
-						// if (newAABB.min.z >= wallAABB.min.z && oldAABB.max.z < wallAABB.max.z) { // Top
-						// 	float dist = wallAABB.min.z - newAABB.max.z;
-						// 	newAABB += v3(0, 0, dist-0.1);
-						// 	actor->velo.z = 0;
-						// }
-
-						float restitution = 0.5;
-
-						if (newAABB.min.x <= wallAABB.max.x && oldAABB.min.x > wallAABB.max.x) { // left
-							float dist = wallAABB.max.x - newAABB.min.x;
-							newAABB += v3(dist+0.1, 0, 0);
-							if (actor->velo.x < 0) {
-								bouncedOffSideWall = true;
-								actor->velo.x *= -restitution;
-							}
-						}
-
-						if (newAABB.max.x >= wallAABB.min.x && oldAABB.max.x < wallAABB.min.x) { // right
-							float dist = wallAABB.min.x - newAABB.max.x;
-							newAABB += v3(dist-0.1, 0, 0);
-							if (actor->velo.x > 0) {
-								bouncedOffSideWall = true;
-								actor->velo.x *= -restitution;
-							}
-						}
-
-						if (newAABB.min.y <= wallAABB.max.y && oldAABB.min.y > wallAABB.max.y) {
-							float dist = wallAABB.max.y - newAABB.min.y;
-							newAABB += v3(0, dist+0.1, 0);
-							if (actor->velo.y < 0) {
-								bouncedOffSideWall = true;
-								actor->velo.y *= -restitution;
-							}
-						}
-
-						if (newAABB.max.y >= wallAABB.min.y && oldAABB.max.y < wallAABB.min.y) {
-							float dist = wallAABB.min.y - newAABB.max.y;
-							newAABB += v3(0, dist-0.1, 0);
-							if (actor->velo.y > 0) {
-								bouncedOffSideWall = true;
-								actor->velo.y *= -restitution;
-							}
-						}
-					}
-
-					Vec3 newPos = getCenter(newAABB);
-					newPos.z -= getSize(newAABB).z/2;
-					actor->position = newPos;
-
-					if (bouncedOffSideWall) {
-						if (actor->type == ACTOR_UNIT && actor->actionsNum > 0 && actor->actions[0].type == ACTION_HITSTUN) {
-							playWorldSound("assets/audio/wallThump.ogg", getCenter(newAABB));
-						}
-					}
-				}
-
-				if (actor->isOnGround) {
-					actor->velo.x *= 0.8;
-					actor->velo.y *= 0.8;
-				}
-				actor->velo.z *= 0.98;
-			}
-
-			if (actor->type == ACTOR_UNIT && !actor->playerControlled) { //We have to flip around ai actors here because physics flips them if they're moving slightly backwards
-				Actor *target = getActor(actor->aiTarget);
-				if (target) {
-					Vec3 dir = target->position - actor->position;
-					if (dir.x <= 0) {
-						actor->facingLeft = true;
-					} else {
-						actor->facingLeft = false;
-					}
-				}
-			}
-
-			if (actor->hp < 20 && getEquippedItemCount(actor, ITEM_HEALTH_PACK) > 0) {
-				infof("Health pack used\n");
-				actor->hp += 100;
-				removeItem(actor, ITEM_HEALTH_PACK, 1);
-			}
-			if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
-			if (actor->hp <= 0 && actor->maxHp > 0) {
-				actor->markedForDeletion = true;
-				if (actor->type == ACTOR_UNIT) {
-					if (actor->playerControlled) {
-						game->nextMapIndex = CITY_START_INDEX;
-						logf("You died (-$%.2f)\n", player->money*0.5);
-						player->money *= 0.5;
-						// game->nextState = GAME_DEAD;
-					} else {
-						map->alliances[actor->team] -= actor->allianceCost;
-					}
-				}
-			}
-			actor->hp = mathClamp(actor->hp, 0, actor->maxHp);
-			actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03;
-			actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
-
-			actor->aiStateTime += elapsed;
-		} ///
-
-		pushTargetTexture(game->debugTexture);
-		{ /// Draw actors (debug/overlay)
-			for (int i = 0; i < map->actorsNum; i++) {
-				Actor *actor = &map->actors[i];
-
-				AABB aabb = getAABB(actor);
-				Rect bounds = getBounds(aabb);
-
-				Vec2 position2 = v2(game->isoMatrix3 * actor->position);
-				Vec2 positionCenter2 = v2(game->isoMatrix3 * getCenter(aabb));
-				Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
-
-				// drawRectOutline(bounds, 2, 0xFFFF0000);
-
-				bool hasHpBar = false;
-				bool hasStaminaBar = false;
-				if (actor->type == ACTOR_UNIT) hasHpBar = hasStaminaBar = true;
-				Rect hpBgRect;
-				if (hasHpBar) {
-					hpBgRect = makeRect(0, 0, actor->size.x, 10);
-					hpBgRect.x = positionTop2.x - hpBgRect.width/2;
-					hpBgRect.y = positionTop2.y - hpBgRect.height/2;
-					drawRect(hpBgRect, 0xFFFF0000);
-
-					Rect rect = hpBgRect;
-					rect.width *= actor->hp/actor->maxHp;
-
-					int color = 0xFF44AA44;
-					if (actor->playerControlled) color = 0xFFF5EE2A;
-					drawRect(rect, color);
-				}
-
-				if (hasStaminaBar) {
-					Rect staminaBgRect = hpBgRect;
-					staminaBgRect.y += hpBgRect.height;
-					drawRect(staminaBgRect, 0xFF000070);
-
-					Rect rect = staminaBgRect;
-					rect.width *= actor->stamina/actor->maxStamina;
-					drawRect(rect, actor->stamina < 0 ? 0xFFF00000 : 0xFF0000F0);
-				}
-
-				if (game->debugDrawActorTargets) {
-					Actor *target = getActor(actor->aiTarget);
-					if (target) {
-						AABB targetAABB = getAABB(target);
-						Vec2 targetPositionCenter2 = v2(game->isoMatrix3 * getCenter(targetAABB));
-						drawLine(positionCenter2, targetPositionCenter2, 4, 0xFFFF0000);
-					}
-				}
-
-				if (game->inEditor) {
-					if (contains(bounds, game->worldMouse) || game->debugAlwaysShowWireframes) drawAABB2d(aabb, 2, 0xFFFFFFFF);
-
-					if (game->selectedActorId == actor->id) {
-						drawAABB2d(aabb, 2, lerpColor(0xFFFFFF80, 0xFFFFFF00, secondPhase));
-
-						if (game->inEditor) {
-							Line3 lineX = makeLine3(actor->position, actor->position + v3(64, 0, 0));
-							Line3 lineY = makeLine3(actor->position, actor->position + v3(0, 64, 0));
-							Line3 lineZ = makeLine3(actor->position, actor->position + v3(0, 0, 64));
-							drawLine(v2(game->isoMatrix3 * lineX.start), v2(game->isoMatrix3 * lineX.end), 4, 0xFFFF0000);
-							drawLine(v2(game->isoMatrix3 * lineY.start), v2(game->isoMatrix3 * lineY.end), 4, 0xFF00FF00);
-							drawLine(v2(game->isoMatrix3 * lineZ.start), v2(game->isoMatrix3 * lineZ.end), 4, 0xFF0000FF);
-						}
-					}
-				}
-
-				{ // Status lines
-					if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
-						const int TEXT_LINES_MAX = 8;
-						char *textLines[TEXT_LINES_MAX];
-						int textLinesNum = 0;
-
-						if (game->debugDrawActorStatus) {
-							if (actor->timeInAir > 0) textLines[textLinesNum++] = frameSprintf("In air (%.1f)", actor->timeInAir);
-							if (actor->timeMoving > 0) textLines[textLinesNum++] = frameSprintf("Moving (%.1f)", actor->timeMoving);
-							if (actor->timeNotMoving > 0) textLines[textLinesNum++] = frameSprintf("Not moving (%.1f)", actor->timeNotMoving);
-						}
-
-						if (game->debugDrawActorAction) {
-							if (actor->actionsNum > 0) {
-								Action *action = &actor->actions[0];
-								textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", action->info->name, action->time);
-							}
-						}
-
-						if (game->debugDrawActorStats) {
-							textLines[textLinesNum++] = frameSprintf(
-								"atk:%.0f hp:%.0f sGen:%.0f\nmaxS:%.0f move:%.0f aSpeed:%.0f",
-								getStatPoints(actor, STAT_DAMAGE),
-								getStatPoints(actor, STAT_HP),
-								getStatPoints(actor, STAT_STAMINA_REGEN),
-								getStatPoints(actor, STAT_MAX_STAMINA),
-								getStatPoints(actor, STAT_MOVEMENT_SPEED),
-								getStatPoints(actor, STAT_ATTACK_SPEED)
-							);
-						}
-
-						if (game->debugDrawActorStatsSimple) {
-							textLines[textLinesNum++] = "SIMPLE_STATS";
-							// textLines[textLinesNum++] = frameSprintf(
-							// 	"%.0f %.0f %.0f %.0f %.0f %.0f",
-							// 	getStatPoints(actor, STAT_DAMAGE),
-							// 	getStatPoints(actor, STAT_HP),
-							// 	getStatPoints(actor, STAT_STAMINA_REGEN),
-							// 	getStatPoints(actor, STAT_MAX_STAMINA),
-							// 	getStatPoints(actor, STAT_MOVEMENT_SPEED),
-							// 	getStatPoints(actor, STAT_ATTACK_SPEED)
-							// );
-						}
-
-						if (game->debugDrawActorFacingDirection) {
-							textLines[textLinesNum++] = frameSprintf("%s", actor->facingLeft ? "Facing left" : "Facing right");
-						}
-
-						Vec2 cursor = positionTop2;
-						for (int i = 0; i < textLinesNum; i++) {
-							if (streq(textLines[i], "SIMPLE_STATS")) {
-								char *statTextStrs[STATS_MAX];
-								Vec2 statTextSizes[STATS_MAX];
-								Vec2 size = v2();
-								for (int i = 0; i < STATS_MAX; i++) {
-									statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
-									statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
-									size.x += statTextSizes[i].x;
-									size.y = MaxNum(size.y, statTextSizes[i].y);
-								}
-								Vec2 position;
-								position.x = cursor.x - size.x/2;
-								position.y = cursor.y - size.y;
-
-								for (int i = 0; i < STATS_MAX; i++) {
-									drawText(game->simpleStatsFont, statTextStrs[i], position, statTypeColors[i]);
-									position.x += statTextSizes[i].x;
-								}
-
-								cursor.y -= size.y;
-							} else {
-								Vec2 size = getTextSize(game->defaultFont, textLines[i]);
-								Vec2 position;
-								position.x = cursor.x - size.x/2;
-								position.y = cursor.y - size.y;
-
-								Rect rect = inflate(makeRect(position, size), 5);
-								drawRect(rect, 0x80000000);
-								drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
-
-								cursor.y -= size.y;
-							}
-						}
-					}
-				}
-
-				{ // Status icons
-					if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
-						struct Icon {
-							Texture *texture;
-							bool flipped;
-						};
-
-						const int ICONS_MAX = 128;
-						Icon *icons = (Icon *)zalloc(sizeof(Icon) * ICONS_MAX);
-						int iconsNum = 0;
-
-						// {
-						// 	Icon *icon = &icons[iconsNum++];
-						// 	icon->texture = getTexture("assets/images/statusIcons/arrowRight.png");
-						// 	if (actor->facingLeft) icon->flipped = true;
-						// }
-
-						for (int i = 0; i < actor->buffsNum; i++) {
-							Buff *buff = &actor->buffs[i];
-
-							if (buff->type == BUFF_HEAVEN_STEP_GRAVITY) {
-								Icon *icon = &icons[iconsNum++];
-								icon->texture = getTexture("assets/images/statusIcons/heavenStep.png");
-							} else if (buff->type == BUFF_BUDDHA_PALM_SLOW) {
-								Icon *icon = &icons[iconsNum++];
-								icon->texture = getTexture("assets/images/statusIcons/buddhaPalm.png");
-							} else {
-								Icon *icon = &icons[iconsNum++];
-								icon->texture = renderer->whiteTexture;
-							}
-
-						}
-
-						Vec2 cursor = position2 - v2(0, 50);
-						for (int i = 0; i < iconsNum; i++) {
-							Icon *icon = &icons[i];
-							Texture *texture = icon->texture;
-
-							Rect rect = makeCenteredSquare(cursor, 64);
-							Matrix3 mat = mat3();
-							mat.TRANSLATE(rect.x, rect.y);
-							mat.SCALE(rect.width, rect.height);
-							Vec2 uv0 = v2(0, 0);
-							Vec2 uv1 = v2(1, 1);
-
-							if (icon->flipped) {
-								uv0 = v2(1, 0);
-								uv1 = v2(0, 1);
-							}
-
-							drawRect(rect, 0x40000000);
-							drawSimpleTexture(icon->texture, mat, uv0, uv1);
-
-							cursor.y -= rect.height + 8;
-						}
-					}
-				}
-
-			}
-		} ///
-
-		{ /// Update effects
-			for (int i = 0; i < game->effectsNum; i++) {
-				Effect *effect = &game->effects[i];
-
-				bool complete = false;
-				float maxTime = 1;
-				Vec2 position2 = v2(game->isoMatrix3 * effect->position);
-
-				char *effectText = NULL;
-				int effectTextColor = 0;
-				if (effect->type == EFFECT_ENEMY_DAMAGE) {
-					effectText = frameSprintf("-%.0f", effect->value);
-					effectTextColor = 0xFFFF8000;
-				} else if (effect->type == EFFECT_PLAYER_DAMAGE) {
-					effectText = frameSprintf("-%.0f", effect->value);
-					effectTextColor = 0xFFFF0000;
-				} else if (effect->type == EFFECT_BLOCK_DAMAGE) {
-					effectText = frameSprintf("-%.0f", effect->value);
-					effectTextColor = 0xFF0000FF;
-				} else if (effect->type == EFFECT_MONEY) {
-					effectText = frameSprintf("+$%.2f", effect->value);
-					effectTextColor = 0xFF00FF00;
-				}
-
-				if (effectText) {
-					Vec2 size = getTextSize(game->particleFont, effectText);
-					Vec2 pos = position2 - size/2;
-
-					float alpha =
-						clampMap(effect->time, 0, maxTime*0.05, 0, 1)
-						* clampMap(effect->time, maxTime*0.95, maxTime, 1, 0);
-
-					pos.y += clampMap(effect->time, 0, maxTime*0.5, -20, 0, BOUNCE_OUT);
-
-					Rect rect = makeRect(pos, size);
-
-					pushAlpha(alpha);
-					drawRect(inflate(rect, 2), 0x30000000);
-					drawText(game->particleFont, effectText, pos, effectTextColor);
-					popAlpha();
-				}
-
-				effect->time += elapsed;
-				if (effect->time > maxTime) complete = true;
-
-				if (complete) {
-					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
-					game->effectsNum--;
-					i--;
-					continue;
-				}
-			}
-		} ///
-
-		{ /// Update map
-			game->timeTillNextCityTick -= elapsed;
-			float prevCityTime = game->cityTime;
-			game->cityTime += elapsed;
-			if (game->timeTillNextCityTick <= 0) {
-				// logf("Tick %d %f\n", game->cityTicks, game->cityTime); //@todo Maybe make this so time controls ticks
-				game->cityTicks++;
-				game->timeTillNextCityTick = SECS_PER_CITY_TICK;
-			}
-
-			float spreadAmount = 0.0005;
-			while (game->cityTicks > 0) {
-				game->cityTicks--;
-
-				for (int y = 0; y < CITY_ROWS; y++) {
-					for (int x = 0; x < CITY_COLS; x++) {
-						Map *map = getCityMapByCoords(x, y);
-
-						float totalAlliance = 0;
-						int teamsPresent = 0;
-
-						float highestTeamAlliance = 0;
-						for (int i = 0; i < TEAMS_MAX; i++) {
-							totalAlliance += map->alliances[i];
-							if (map->alliances[i] > 0) teamsPresent++;
-							if (highestTeamAlliance < map->alliances[i]) highestTeamAlliance = map->alliances[i];
-						}
-
-						for (int i = 0; i < TEAMS_MAX; i++) {
-							float normalizedAlliance = map->alliances[i] / totalAlliance;
-							if (totalAlliance == 0) normalizedAlliance = 0;
-
-							// map->alliances[i] += clampMap(normalizedAlliance, 0, 1, 0, 0.0001); // Self growth
-
-							float currentSpreadAmount = 0;
-							currentSpreadAmount += clampMap(normalizedAlliance, 0, 1, 0, spreadAmount);
-
-							int strongestTeam = getTeamWithMostAlliance(map);
-							int surroundingAtMaxCount = 0;
-							if (i == strongestTeam && map->alliances[i] > 0.9) {
-								surroundingAtMaxCount = getSurroundingAtMaxAlliance(v2i(x, y), i);
-								if (map->fortifiedPerc < 0.1 && surroundingAtMaxCount >= 8) {
-									map->fortifiedByTeam = i;
-									map->fortifiedPerc += 0.001;
-								}
-							}
-
-							if (map->fortifiedByTeam == i) {
-								if (map->fortifiedPerc > 0) {
-									float fortLerp = 0.01;
-									// if (map->fortifiedPerc < map->alliances[i]) fortLerp = 0.01;
-
-									map->fortifiedPerc = lerp(map->fortifiedPerc, normalizedAlliance, fortLerp);
-									map->alliances[i] += clampMap(map->fortifiedPerc, 0, 1, 0, 0.001);
-								}
-								map->fortifiedPerc = Clamp01(map->fortifiedPerc);
-								currentSpreadAmount *= clampMap(map->fortifiedPerc, 0, 1, 1, 1.5);
-							}
-
-							{ // Spread alliance
-								Map *possibleMaps[8] = {};
-								int possibleMapsNum = 0;
-								Map *adjMap;
-
-								// adjMap = getCityMapByCoords(x-1, y-1);
-								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								// adjMap = getCityMapByCoords(x+1, y+1);
-								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								// adjMap = getCityMapByCoords(x-1, y+1);
-								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								// adjMap = getCityMapByCoords(x+1, y-1);
-								// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								adjMap = getCityMapByCoords(x, y-1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								adjMap = getCityMapByCoords(x, y+1);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								adjMap = getCityMapByCoords(x-1, y);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								adjMap = getCityMapByCoords(x+1, y);
-								if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
-
-								int team = i;
-								for (int i = 0; i < possibleMapsNum; i++) {
-									Map *map = possibleMaps[i];
-									if (map->alliances[i] >= 1) {
-										arraySpliceIndex(possibleMaps, possibleMapsNum, sizeof(Map *), i);
-										possibleMapsNum--;
-										i--;
-										continue;
-									}
-								}
-
-								if (possibleMapsNum > 0) {
-									int choice = rndInt(0, possibleMapsNum-1);
-									if (x == 6 && y == 1) {
-										int k=5;
-										// logf("[%d, %d] %d\n", 0, possibleMapsNum-1, choice);
-									}
-
-									possibleMaps[choice]->alliances[i] += currentSpreadAmount * 8;
-								}
-							}
-						}
-
-						for (int i = 0; i < TEAMS_MAX; i++) {
-							float lossToGive = highestTeamAlliance - 1;
-							if (teamsPresent > 1 && lossToGive > 0) {
-								map->alliances[i] -= lossToGive*2;
-							}
-							map->alliances[i] = Clamp01(map->alliances[i]); // Probably not needed
-						}
-
-					}
-				}
-			}
-
-			{ /// Update maps (stores)
-				float prevMod = fmod(prevCityTime, 120);
-				float currentMod = fmod(game->cityTime, 120);
-				if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
-					logf("Stores have restocked\n");
-					game->debugForceRestock = false;
-
-					Item *possibleItems = (Item *)frameMalloc(sizeof(Item) * ITEM_TYPES_MAX);
-					int possibleItemsNum = 0;
-					for (int i = 0; i < ITEM_TYPES_MAX; i++) {
-						ItemTypeInfo *info = &game->itemTypeInfos[i];
-
-						if (getStashedItemCount(player, (ItemType)i) >= info->maxAmountFromStore) continue;
-						//@todo prereqs
-
-						initItem(&possibleItems[possibleItemsNum], (ItemType)i, 1);
-						possibleItemsNum++;
-					}
-
-					game->storeItemsNum = 0;
-					for (int i = 0; i < 3; i++) {
-						if (possibleItemsNum <= 0) break;
-
-						int itemIndex = rndInt(0, possibleItemsNum-1);
-						game->storeItems[game->storeItemsNum] = possibleItems[itemIndex];
-						game->storeItemsNum++;
-						arraySpliceIndex(possibleItems, possibleItemsNum, sizeof(Item), itemIndex);
-						possibleItemsNum--;
-					}
-
-					// for (int i = 0; i < MAPS_MAX; i++) {
-					// 	Map *map = &game->maps[i];
-					// 	for (int i = 0; i < map->actorsNum; i++) {
-					// 		Actor *actor = &map->actors[i];
-					// 		if (actor->type == ACTOR_STORE) {
-					// 			actor->itemsNum = 0;
-					// 		}
-					// 	}
-					// }
-				}
-			} ///
-
-			{ /// Spawn enemies // Spawn npcs
-				auto createNpcUnit = [](Map *map)->Actor *{
-					Actor *actor = createActor(map, ACTOR_UNIT);
-
-					actor->team = rndPick(map->alliances, TEAMS_MAX);
-					Vec2 allianceMinMax = v2(0.05, 0.1);
-					actor->allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
-
-					int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 0, 20);
-					for (int i = 0; i < extraPoints; i++) {
-						actor->stats[rndInt(0, STATS_MAX-1)]++;
-						actor->level++;
-					}
-
-					return actor;
-				};
-
-				int currentNpcs = 0;
-				for (int i = 0; i < map->actorsNum; i++) {
-					Actor *actor = &map->actors[i];
-					if (actor->type == ACTOR_UNIT && !actor->playerControlled) currentNpcs++;
-				}
-
-				float totalAlliance = 0;
-				for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
-				int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 20);
-
-				int startingNpcs = maxNpcs * 0.8;
-				if (game->mapTime == 0 && startingNpcs > 0) {
-					auto generatePoissonPoints = [](AABB surface, Vec2 cellSize, int *outPointsNum)->Vec3 *{
-						Vec3 surfaceSize = getSize(surface);
-
-						int cellsWide = surfaceSize.x / cellSize.x;
-						int cellsHigh = surfaceSize.y / cellSize.y;
-
-						Vec3 *points = (Vec3 *)frameMalloc(sizeof(Vec3) * (cellsWide * cellsHigh));
-						int pointsNum = 0;
-						for (int y = 0; y < cellsHigh; y++) {
-							for (int x = 0; x < cellsWide; x++) {
-								Rect cell = makeRect(v2(), cellSize);
-								cell.x = surface.min.x + (x * cellSize.x);
-								cell.y = surface.min.y + (y * cellSize.y);
-								Vec2 pos;
-								pos.x = rndFloat(cell.x, cell.x+cell.width);
-								pos.y = rndFloat(cell.y, cell.y+cell.height);
-
-								points[pointsNum++] = v3(pos, surface.max.z + 1);
-							}
-						}
-
-						*outPointsNum = pointsNum;
-						return points;
-					};
-
-					auto removeInvalidSpawnPoints = [](Map *map, Vec3 *points, int pointsNum)->int {
-						for (int i = 0; i < pointsNum; i++) {
-							Vec3 point = points[i];
-							AABB aabb = getAABBFromSizePosition(UNIT_SIZE, point);
-							bool shouldRemove = false;
-							Actor *ground = getActorOfType(map, ACTOR_GROUND);
-							if (!equal(aabb, bringWithinBounds(getAABB(ground), aabb))) shouldRemove = true;
-							for (int i = 0; i < map->actorsNum; i++) {
-								Actor *actor = &map->actors[i];
-								if (overlaps(actor, aabb)) {
-									shouldRemove = true;
-									break;
-								}
-							}
-
-							if (shouldRemove) {
-								arraySpliceIndex(points, pointsNum, sizeof(Vec3), i);
-								pointsNum--;
-								i--;
-								continue;
-							}
-						}
-
-						return pointsNum;
-					};
-
-					Vec2 cellSize = v2(getSize(groundAABB)) / 2;
-
-					Vec3 *points;
-					int pointsNum;
-					for (int i = 0; ; i++) {
-						if (i > 100) {
-							logf("Failed 100 times to spawn units...\n");
-							pointsNum = 0;
-							break;
-						}
-
-						points = generatePoissonPoints(groundAABB, cellSize, &pointsNum);
-						pointsNum = removeInvalidSpawnPoints(map, points, pointsNum);
-
-						if (pointsNum >= startingNpcs) {
-							break;
-						} else {
-							cellSize.x *= 0.01;
-							cellSize.y *= 0.01;
-						}
-					}
-
-					if (pointsNum > 0) {
-						for (int i = 0; i < startingNpcs; i++) {
-							int pointIndex = rndInt(0, pointsNum-1);
-							Vec3 point = points[pointIndex];
-							arraySpliceIndex(points, pointsNum, sizeof(Vec3), pointIndex);
-							pointsNum--;
-
-							Actor *newActor = createNpcUnit(map);
-							newActor->position = point;
-						}
-					}
-				}
-
-				bool spawnThisFrame = false;
-				if (rndPerc(0.01)) spawnThisFrame = true;
-
-				if (currentNpcs < maxNpcs && spawnThisFrame) {
-					Actor *randomDoor = getRandomActorOfType(map, ACTOR_DOOR);
-					if (randomDoor) {
-						Actor *newActor = createNpcUnit(map);
-
-						int team = newActor->team;
-						float bestDoorAlliance = 0;
-						Actor *bestDoor = NULL;
-						for (int i = 0; i < map->actorsNum; i++) {
-							Actor *actor = &map->actors[i];
-							if (actor->type != ACTOR_DOOR) continue;
-							Map *destMap = getMapByName(actor->destMapName);
-							if (!bestDoor || destMap->alliances[team] > bestDoorAlliance) {
-								bestDoor = actor;
-								bestDoorAlliance = destMap->alliances[team];
-							}
-						}
-
-						AABB doorAABB = getAABB(bestDoor);
-						newActor->position.x = rndFloat(doorAABB.min.x, doorAABB.max.x);
-						newActor->position.y = rndFloat(doorAABB.min.y, doorAABB.max.y);
-						newActor->position.z = doorAABB.min.z;
-						if (newActor->position.z < getAABB(ground).max.z) newActor->position.z = getAABB(ground).max.z + 1;
-
-						bringWithinBounds(map, newActor);
-					}
-				}
-			} ///
-		} ///
-
-		{ /// Draw hud
-			pushCamera2d(renderer->currentCameraMatrix.invert());
-
-			{ /// Draw map
-				pushTargetTexture(game->mapTexture);
-				clearRenderer();
-				if (keyJustPressed('M')) game->lookingAtMap = !game->lookingAtMap;
-				if (game->lookingAtMap) {
-					Vec2 mapTileSize = v2(100, 100) * game->sizeScale;
-					Vec2 totalSize = v2(CITY_COLS, CITY_ROWS) * mapTileSize;
-
-					Vec2 startCursor = game->size/2 - totalSize/2;
-					Vec2 cursor = startCursor;
-					for (int y = 0; y < CITY_ROWS; y++) {
-						for (int x = 0; x < CITY_COLS; x++) {
-							Map *map = getCityMapByCoords(x, y);
-
-							Rect rect = makeRect(cursor, mapTileSize);
-							drawRect(rect, 0xA0000000);
-
-							float totalAlliance = 0;
-							for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
-							if (totalAlliance < 1) totalAlliance = 1;
-
-							if (game->mapVisualization == MAP_VISUALIZATION_SLICES) {
-								Vec2 sliceCursor = cursor;
-								for (int i = 0; i < TEAMS_MAX; i++) {
-									float slicePerc = map->alliances[i] / totalAlliance;
-									Rect sliceRect = makeRect(sliceCursor, mapTileSize*v2(1, slicePerc));
-									drawRect(sliceRect, teamColors[i]);
-									sliceCursor.y += sliceRect.height;
-								}
-							} else if (game->mapVisualization == MAP_VISUALIZATION_BARS) {
-								for (int i = 0; i < TEAMS_MAX; i++) {
-									Rect bar = makeRect(cursor, mapTileSize);
-									bar.width *= 1.0/TEAMS_MAX;
-									bar.x += bar.width * i;
-
-									float oldHeight = bar.height;
-									bar.height *= Clamp01(map->alliances[i]);
-									bar.y += oldHeight - bar.height;
-									drawRect(bar, teamColors[i]);
-								}
-							} else if (game->mapVisualization == MAP_VISUALIZATION_LOCKED_IN) {
-								bool anyOver = false;
-								for (int i = 0; i < TEAMS_MAX; i++) {
-									if (map->alliances[i] > 0.5) anyOver = true;
-								}
-
-								Rect rect = makeRect(cursor, mapTileSize);
-								if (anyOver && map->alliances[player->team] < 0.5) {
-									drawRect(rect, 0xFF800000);
-								} else {
-									drawRect(rect, 0xFF008000);
-								}
-							} else if (game->mapVisualization == MAP_VISUALIZATION_MAX_ALLIANCE_SURROUNDING) {
-								Rect rect = makeRect(cursor, mapTileSize);
-								DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-
-								int team = getTeamWithMostAlliance(map);
-								if (map->alliances[team] > 0.9) {
-									int count = getSurroundingAtMaxAlliance(v2i(x, y), team);
-									drawRect(rect, lerpColor(0xFF00FF00, 0xFFFF0000, (float)count/(TEAMS_MAX-1)));
-									drawTextInRect(frameSprintf("%d", count), props, inflatePerc(rect, -0.1));
-								}
-							}
-
-							if (map == &game->maps[game->currentMapIndex]) {
-								drawRect(rect, lerpColor(0x60FFFF00, 0xC0FFFF00, timePhase(game->time)));
-							}
-
-							if (game->nextMapIndex != game->currentMapIndex && map == &game->maps[game->nextMapIndex]) {
-								drawRect(rect, lerpColor(0x60FFFFFF, 0xC0FFFFFF, timePhase(game->time * 5)));
-							}
-
-							drawRectOutline(rect, 5, 0xFF000000);
-
-							if (map->fortifiedPerc > 0.1) {
-								DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFF444444);
-								drawTextInRect(frameSprintf("%.0f%% fortied", map->fortifiedPerc*100), props, inflatePerc(rect, -0.1));
-							}
-
-							if (game->inEditor) {
-								if (contains(rect, game->mouse)) {
-									drawRectOutline(rect, 4, 0xFFFF0000);
-									if (platform->mouseJustDown) game->editorSelectedCityMap = map;
-								}
-							}
-
-							cursor.x += rect.width;
-							if (x == CITY_COLS-1) {
-								cursor.x = startCursor.x;
-								cursor.y += rect.height;
-							}
-						}
-					}
-
-					if (game->inEditor) {
-						Map *map = game->editorSelectedCityMap;
-						if (map) {
-							ImGui::Begin("Map data", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-							ImGui::Combo("Visual", (int *)&game->mapVisualization, mapVisualizationStrings, ArrayLength(mapVisualizationStrings));
-							ImGui::Separator();
-
-							if (ImGui::Button("Advance 60 seconds")) {
-								game->cityTicks += 60.0/SECS_PER_CITY_TICK;
-								game->cityTime += 60;
-							}
-							if (ImGui::Button("Advance 5 min")) {
-								game->cityTicks += (60.0*5)/SECS_PER_CITY_TICK;
-								game->cityTime += 60*5;
-							}
-							ImGui::Separator();
-
-							Vec2i coords = getCoordsByCityMap(map);
-							ImGui::Text("%d, %d", coords.x, coords.y);
-							if (ImGui::Button("Go")) game->nextMapIndex = getIndexByMap(map);
-							if (ImGui::TreeNode("Base alliances")) {
-								if (ImGui::Button("Copy from current")) memcpy(map->baseAlliances, map->alliances, sizeof(float) * TEAMS_MAX);
-								for (int i = 0; i < TEAMS_MAX; i++) {
-									guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(teamColors[i], 0xFF000000, 0.5));
-									ImGui::SliderFloat(frameSprintf("Alliance %d", i), &map->baseAlliances[i], 0, 1);
-									guiPopStyleColor();
-								}
-								ImGui::TreePop();
-							}
-
-							if (ImGui::TreeNode("Current alliances")) {
-								for (int i = 0; i < TEAMS_MAX; i++) {
-									ImGui::PushID(i);
-									guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(teamColors[i], 0xFF000000, 0.5));
-									ImGui::SliderFloat(frameSprintf("Alliance %d", i), &map->alliances[i], 0, 1);
-									ImGui::SameLine();
-									if (ImGui::Button("+10%")) {
-										map->alliances[i] += 0.1;
-									}
-									guiPopStyleColor();
-									ImGui::PopID();
-								}
-								ImGui::TreePop();
-							}
-							ImGui::End();
-						}
-					}
-				}
-
-				popTargetTexture(); // game->mapTexture
-			} ///
-
-			{ /// Update inventory
-				if (keyJustPressed('N')) game->inInventory = !game->inInventory;
-				if (game->inInventory) {
-					auto drawItemIcon = [](Item *item, Rect rect) {
-						drawRect(rect, 0xFF444444);
-
-						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
-						drawTextInRect(game->itemTypeInfos[item->type].name, props, rect);
-					};
-
-					Rect bg;
-					bg.width = game->size.x * 0.8;
-					bg.height = game->size.y * 0.8;
-					bg.x = game->size.x/2 - bg.width/2;
-					bg.y = game->size.y/2 - bg.height/2;
-					drawRect(bg, 0xDD555555);
-
-					{
-						Rect itemContainer = bg;
-						itemContainer.width *= 0.5;
-						itemContainer = inflatePerc(itemContainer, -0.1);
-						drawRect(itemContainer, 0xFF222222);
-
-						int cols = 6;
-						Vec2 cellSize = v2(itemContainer.width/8, itemContainer.width/8);
-						Vec2 cursor = getPosition(itemContainer);
-						for (int i = 0; i < player->itemsNum; i++) {
-							Item *item = &player->items[i];
-
-							bool inUse = false;
-							for (int i = 0; i < STYLES_MAX; i++) {
-								Style *style = &player->styles[i];
-								for (int i = 0; i < 3; i++) {
-									int *slotPtr = NULL;
-									if (i == 0) slotPtr = &style->passiveItem;
-									if (i == 1) slotPtr = &style->activeItem0;
-									if (i == 2) slotPtr = &style->activeItem1;
-
-									if (item->id == *slotPtr) {
-										inUse = true;
-										break;
-									}
-								}
-							}
-
-							if (game->draggingItemId == item->id || inUse) pushAlpha(0.5);
-
-							Rect iconRect = makeRect(cursor, cellSize);
-							drawItemIcon(item, inflatePerc(iconRect, -0.1));
-
-							if (game->draggingItemId == item->id || inUse) popAlpha();
-
-							if (platform->mouseJustDown && contains(iconRect, game->mouse) && !game->draggingItemId && !inUse) {
-								game->draggingItemId = item->id;
-							}
-
-							cursor.x += iconRect.width;
-							if (cursor.x + cellSize.x > itemContainer.x + itemContainer.width) {
-								cursor.x = itemContainer.x;
-								cursor.y += cellSize.y;
-							}
-						}
-					}
-
-					bool itemDropped = game->draggingItemId && !platform->mouseDown;
-					Rect draggingRect = makeCenteredSquare(game->mouse, game->size.y * 0.05);
-
-					{
-						Rect stylesContainer = bg;
-						stylesContainer.width *= 0.5;
-						stylesContainer.x += stylesContainer.width;
-						stylesContainer = inflatePerc(stylesContainer, -0.1);
-						drawRect(stylesContainer, 0xFF444444);
-
-						int stylesMax = 4;
-						for (int i = 0; i < stylesMax; i++) {
-							Style *style = &player->styles[i];
-
-							Rect styleContainer = stylesContainer;
-							styleContainer.height /= stylesMax;
-							styleContainer.y += styleContainer.height * i;
-							styleContainer = inflatePerc(styleContainer, -0.1);
-							drawRect(styleContainer, 0xFF333333);
-
-							int slotsMax = 3;
-							for (int i = 0; i < slotsMax; i++) {
-								bool isActiveSlot = false;
-								int *slotPtr = NULL;
-								if (i == 0) {
-									slotPtr = &style->passiveItem;
-								} else if (i == 1) {
-									slotPtr = &style->activeItem0;
-									isActiveSlot = true;
-								} else if (i == 2) {
-									slotPtr = &style->activeItem1;
-									isActiveSlot = true;
-								} else {
-									logf("Invalid slot\n");
-								}
-
-								Rect slotRect = styleContainer;
-								slotRect.width /= slotsMax;
-								slotRect.x += slotRect.width * i;
-								slotRect = inflatePerc(slotRect, -0.2);
-								Item *item = getItem(player, *slotPtr);
-								if (item) {
-									drawItemIcon(item, slotRect);
-									Circle xCircle = makeCircle(v2(slotRect.x + slotRect.width, slotRect.y), game->size.y*0.02);
-									drawCircle(xCircle, 0xFFFF0000);
-									if (platform->mouseJustUp && contains(xCircle, game->mouse)) *slotPtr = 0;
-								} else {
-									int color = 0xFF111111;
-									if (!isActiveSlot) color = lerpColor(color, 0xFF0000FF, 0.1);
-									drawRect(slotRect, color);
-								}
-
-								bool canDropItemHere = false;
-								Item *draggingItem = getItem(player, game->draggingItemId);
-								if (draggingItem && isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_ACTIVE) canDropItemHere = true;
-								if (draggingItem && !isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_PASSIVE) canDropItemHere = true;
-
-								if (itemDropped && overlaps(slotRect, draggingRect)) {
-									if (canDropItemHere) {
-										*slotPtr = game->draggingItemId;
-										game->draggingItemId = 0; // Drop instantly to avoid putting in multiple slots on the same frame
-									} else {
-										logf("Can't put item in this slot...\n");
-									}
-								}
-							}
-						}
-					}
-
-					if (game->draggingItemId) {
-						Item *item = getItem(player, game->draggingItemId);
-						drawItemIcon(item, draggingRect);
-						if (!platform->mouseDown) game->draggingItemId = 0;
-					}
-				}
-			} ///
-
-			{ /// Corner text
-				const int TEXT_LINES_MAX = 32;
-				char *textLines[TEXT_LINES_MAX];
-				int textLinesNum = 0;
-
-				textLines[textLinesNum++] = "J - Punch";
-				textLines[textLinesNum++] = "K - Kick";
-
-				Style *style = &player->styles[player->styleIndex];
-				Item *item0 = getItem(player, style->activeItem0);
-				Item *item1 = getItem(player, style->activeItem1);
-				ActionTypeInfo *info0 = &globals->actionTypeInfos[item0 ? item0->info->actionType : ACTION_NONE];
-				ActionTypeInfo *info1 = &globals->actionTypeInfos[item1 ? item1->info->actionType : ACTION_NONE];
-
-				textLines[textLinesNum++] = frameSprintf("U - %s", info0->name);
-				textLines[textLinesNum++] = frameSprintf("I - %s", info1->name);
-
-				Vec2 cursor = v2(3, game->size.y);
-				for (int i = textLinesNum-1; i >= 0; i--) {
-					Vec2 size = getTextSize(game->defaultFont, textLines[i]);
-					Vec2 position;
-					position.x = cursor.x;
-					position.y = cursor.y - size.y;
-
-					Rect rect = makeRect(position, size);
-					drawRect(rect, 0x80000000);
-					drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
-
-					cursor.y -= size.y;
-				}
-			} ///
-
-			{ /// Xp bar
-#if 1
-				drawText(game->defaultFont, frameSprintf("Money: $%.2f\n", player->money), v2(), 0xFFEEEEEE);
-#else
-				float maxXp = 100;
-
-				Rect bgRect = makeRect(v2(), v2(0.3, 0.1)*game->size);
-				drawRect(bgRect, 0xFF000000);
-				Rect rect = inflate(bgRect, -0.01*game->size.y);
-				rect.width *= player->money / maxXp;
-				drawRect(rect, 0xFF808000);
-#endif
-			} ///
-
-			{ /// Store
-				updateStore(player, NULL, elapsed);
-			} ///
-
-			{ /// Time
-				int h, m, s;
-				secsToHMS(&h, &m, &s, game->cityTime);
-				Rect rect;
-				rect.width = game->size.x * 0.1;
-				rect.height = game->size.y * 0.05;
-				rect.x = game->size.x/2 - rect.width/2;
-				rect.y = game->size.y * 0.01;
-
-				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
-				if (h > 0) {
-					drawTextInRect(frameSprintf("%02d:%02d:%02d", h, m, s), props, rect);
-				} else {
-					drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
-				}
-			}
-
-			popCamera2d();
-		} ///
-		popTargetTexture(); // game->debugTexture
-
-		for (int i = 0; i < map->actorsNum; i++) { /// Removed marked actors
-			Actor *actor = &map->actors[i];
-			if (actor->markedForDeletion) {
-				if (actor->type == ACTOR_UNIT && actor->team != player->team) {
-					int xpToGive = actor->level;
-					for (;;) {
-						int chunkSize = rndInt(1, 3);
-						if (chunkSize > xpToGive) chunkSize = xpToGive;
-
-						Actor *xp = createActor(map, ACTOR_ITEM);
-						xp->position = actor->position;
-						xp->itemType = ITEM_MONEY;
-						xp->itemAmount = chunkSize;
-						xp->velo.x = rndFloat(-1, 1);
-						xp->velo.y = rndFloat(-1, 1);
-						xp->velo.z = rndFloat(0.2, 1)*2;
-						xp->velo *= v3(7, 7, 12);
-
-						xpToGive -= chunkSize;
-						if (xpToGive <= 0) break;
-					}
-				}
-				removeActorByIndex(map, i);
-				i--;
-				continue;
-			}
-		} ///
-
-		popCamera2d();
-	} else if (game->state == GAME_DEAD) {
-		if (game->stateTime == 0) infof("You died\n");
-		if (game->stateTime > 1) {
-			game->cityInited = false;
-			game->nextState = GAME_PLAY;
+		int steps = 1;
+
+		for (int i = 0; i < steps; i++) {
+			bool lastStepOfFrame = i == (steps-1);
+			stepGame(lastStepOfFrame, elapsed, timeScale);
 		}
 	}
 
@@ -3436,8 +1037,8 @@ void updateGame() {
 	{ /// Draw 3d
 		if (shouldDraw3d) {
 			Matrix3 matrix = mat3();
-			matrix.ROTATE(degs2);
-			matrix.ROTATE_X(degs1);
+			matrix.ROTATE(game->cameraAngleDegrees.y);
+			matrix.ROTATE_X(game->cameraAngleDegrees.x);
 
 			Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
 
@@ -3818,6 +1419,2411 @@ void updateGame() {
 
 	game->prevTime = game->time;
 	game->time += elapsed;
+}
+
+void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) { 
+	Globals *globals = &game->globals;
+	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
+
+	auto getActionType = [](Actor *actor, int actionIndex)->ActionType {
+		Globals *globals = &game->globals;
+		Style *style = &actor->styles[actor->styleIndex];
+
+		Item *item = NULL;
+		if (actionIndex == 0) item = getItem(actor, style->activeItem0);
+		if (actionIndex == 1) item = getItem(actor, style->activeItem1);
+		if (!item) return ACTION_NONE;
+		Assert(item->info);
+
+		ActionTypeInfo *atInfo = &globals->actionTypeInfos[item->info->actionType];
+		if (actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_ON_GROUND)) return ACTION_NONE;
+		if (!actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_IN_AIR)) return ACTION_NONE;
+		return item->info->actionType;
+	};
+
+	{ /// Init city (and maps)
+		if (!game->cityInited) {
+			game->cityInited = true;
+			loadAndRefreshMaps();
+			game->currentMapIndex = 0;
+			game->mapTime = 0;
+			game->timeTillNextCityTick = 0;
+			game->cityTime = 0;
+			game->cityTicks = 0;
+			game->inStore = false;
+			game->inInventory = false;
+			game->lookingAtMap = false;
+		}
+	} ///
+
+	{ /// Set up matrices
+		game->visualCameraTarget = lerp(game->visualCameraTarget, game->cameraTarget, 0.5);
+		if (distance(game->visualCameraTarget, game->cameraTarget) > 100) game->visualCameraTarget = game->cameraTarget;
+
+		game->cameraMatrix = mat3(); // More like cameraInvMatrix?
+		game->cameraMatrix.TRANSLATE(game->size/2);
+		game->cameraMatrix.SCALE(game->sizeScale);
+		game->cameraMatrix.TRANSLATE(-v2(game->isoMatrix3 * game->visualCameraTarget));
+		pushCamera2d(game->cameraMatrix);
+		game->worldMouse = game->cameraMatrix.invert() * game->mouse;
+
+		Matrix3 matrix = mat3();
+		matrix.ROTATE_X(game->cameraAngleDegrees.x);
+		matrix.ROTATE(game->cameraAngleDegrees.y);
+		matrix.SCALE(1, -1); // Fix my coordinate system
+		game->isoMatrix3 = matrix;
+	} ///
+
+	{ /// Change map
+		if (game->nextMapIndex != game->currentMapIndex) {
+			bool changeMaps = false;
+			if (game->nextMap_t <= 0) game->lookingAtMap = true;
+			game->nextMap_t += 0.03;
+			if (game->nextMap_t > 1) changeMaps = true;
+
+			if (changeMaps) {
+				Map *srcMap = &game->maps[game->currentMapIndex];
+				Map *destMap = &game->maps[game->nextMapIndex];
+				// infof("%s\n", destMap->name);
+
+				Actor *player = NULL;
+				int playerSrcIndex = 0;
+				for (int i = 0; srcMap->actorsNum; i++) {
+					Actor *actor = &srcMap->actors[i];
+					if (actor->type == ACTOR_UNIT && actor->playerControlled) {
+						playerSrcIndex = i;
+						player = actor;
+						break;
+					}
+				}
+
+				if (player) {
+					Actor *newActor = createActor(destMap, ACTOR_UNIT); // Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird
+					int id = newActor->id;
+					Item *itemsPtr = newActor->items;
+					memcpy(itemsPtr, player->items, sizeof(Item) * player->itemsNum);
+					*newActor = *player;
+					newActor->id = id;
+					newActor->items = itemsPtr;
+					removeActorByIndex(srcMap, playerSrcIndex);
+
+					Vec3 playerSpawnPos = v3();
+					Actor *door = findDoorWithDestMapName(destMap, srcMap->name);
+					if (!door) door = findDoorWithDestMapName(destMap, NULL);
+
+					if (door) {
+						playerSpawnPos = door->position + v3(0, 0, 1);
+						door->doorPlayerSpawnedOver = true;
+					}
+
+					newActor->position = playerSpawnPos;
+
+					bringWithinBounds(destMap, newActor);
+				}
+
+				for (int i = 0; i < srcMap->actorsNum; i++) {
+					Actor *actor = &srcMap->actors[i];
+					if (actor->type == ACTOR_UNIT && !actor->playerControlled) {
+						deleteActor(srcMap, actor);
+						i--;
+						continue;
+					}
+				}
+
+				for (int i = 0; i < destMap->actorsNum; i++) {
+					Actor *actor = &destMap->actors[i];
+					AABB spawnPointAABB = getAABB(actor);
+					// if (actor->type == ACTOR_UNIT_SPAWNER) {
+					// 	for (int i = 0; i < actor->unitsToSpawn; i++) {
+					// 		Actor *newActor = createActor(destMap, ACTOR_UNIT);
+					// 		newActor->position.x = rndFloat(spawnPointAABB.min.x, spawnPointAABB.max.x);
+					// 		newActor->position.y = rndFloat(spawnPointAABB.min.y, spawnPointAABB.max.y);
+					// 		newActor->position.z = spawnPointAABB.max.z;
+					// 		newActor->team = rndInt(1, TEAMS_MAX);
+					// 	}
+					// }
+				}
+
+				game->currentMapIndex = game->nextMapIndex;
+				game->mapTime = 0;
+			}
+		} else {
+			float prevNextMap_t = game->nextMap_t;
+			game->nextMap_t -= 0.03;
+			if (prevNextMap_t > 0 && game->nextMap_t <= 0) game->lookingAtMap = false;
+		}
+		game->nextMap_t = Clamp01(game->nextMap_t);
+	} ///
+
+	Map *map = &game->maps[game->currentMapIndex];
+
+	Actor *player = NULL;
+	Actor *ground = NULL;
+	AABB groundAABB;
+	AABB *walls = (AABB *)frameMalloc(sizeof(AABB) * (ACTORS_MAX+4)); // +4 because of edge walls
+	int wallsNum = 0;
+	{ /// Initial iteration
+		for (int i = 0; i < map->actorsNum; i++) {
+			Actor *actor = &map->actors[i];
+			// actor->info = &game->actorTypeInfos[actor->type]; // I don't think I need this anymore
+			if (actor->type == ACTOR_UNIT && actor->playerControlled) {
+				if (player) logf("Multiple players!?\n");
+				player = actor;
+			} else if (actor->type == ACTOR_GROUND) {
+				if (ground) logf("Multiple grounds!?\n");
+				ground = actor;
+			}
+
+			if (actor->info->isWall) walls[wallsNum++] = getAABB(actor);
+		}
+
+		if (!player) {
+			player = createActor(map, ACTOR_UNIT);
+			player->playerControlled = true;
+
+			player->position = v3(0, 0, 2);
+			logf("Player created\n");
+		}
+
+		if (!ground) {
+			ground = createActor(map, ACTOR_GROUND);
+			ground->position = v3(0, 0, -100);
+			ground->size = v3(2000, 1800, 100);
+			logf("Ground created\n");
+		}
+
+		groundAABB = getAABB(ground);
+	} ///
+
+	{ /// Add extra walls outside ground
+		float wallThickness = 20;
+
+		AABB backWall = makeAABB();
+		backWall.min.x = groundAABB.min.x;
+		backWall.max.x = groundAABB.max.x;
+
+		backWall.min.y = groundAABB.max.y;
+		backWall.max.y = backWall.min.y + wallThickness;
+
+		backWall.min.z = groundAABB.min.z;
+		backWall.max.z = backWall.min.z + 1000;
+		walls[wallsNum++] = backWall;
+		// drawAABB3d(backWall, 4, 0xFFFF0000);
+
+		AABB frontWall = makeAABB();
+		frontWall.min.x = groundAABB.min.x;
+		frontWall.max.x = groundAABB.max.x;
+
+		frontWall.min.y = groundAABB.min.y - wallThickness;
+		frontWall.max.y = frontWall.min.y + wallThickness;
+
+		frontWall.min.z = groundAABB.min.z;
+		frontWall.max.z = frontWall.min.z + 1000;
+		walls[wallsNum++] = frontWall;
+		// drawAABB3d(frontWall, 4, 0xFFFF0000);
+
+		AABB leftWall = makeAABB();
+		leftWall.min.x = groundAABB.min.x - wallThickness;
+		leftWall.max.x = leftWall.min.x + wallThickness;
+
+		leftWall.min.y = groundAABB.min.y;
+		leftWall.max.y = groundAABB.max.y;
+
+		leftWall.min.z = groundAABB.min.z;
+		leftWall.max.z = leftWall.min.z + 1000;
+		walls[wallsNum++] = leftWall;
+		// drawAABB3d(leftWall, 4, 0xFFFF0000);
+
+		AABB rightWall = makeAABB();
+		rightWall.min.x = groundAABB.max.x;
+		rightWall.max.x = rightWall.min.x + wallThickness;
+
+		rightWall.min.y = groundAABB.min.y;
+		rightWall.max.y = groundAABB.max.y;
+
+		rightWall.min.z = groundAABB.min.z;
+		rightWall.max.z = rightWall.min.z + 1000;
+		walls[wallsNum++] = rightWall;
+		// drawAABB3d(rightWall, 4, 0xFFFF0000);
+	} ///
+
+	if (lastStepOfFrame && game->inEditor) { /// Editor update
+		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+		if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Checkbox("Always show wireframes", &game->debugAlwaysShowWireframes);
+			ImGui::Checkbox("No 3d", &game->debugNo3d);
+			ImGui::Checkbox("Show player box", &game->debugDrawPlayerBox);
+			ImGui::Checkbox("Draw hitboxes", &game->debugDrawHitboxes);
+			ImGui::Checkbox("Draw actor status", &game->debugDrawActorStatus);
+			ImGui::Checkbox("Draw actor action", &game->debugDrawActorAction);
+			ImGui::Checkbox("Draw actor stats", &game->debugDrawActorStats);
+			ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
+			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
+			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
+			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
+
+			ImGui::SliderInt("Degs1", &game->cameraAngleDegrees.x, 0, 90);
+			ImGui::SliderInt("Degs2", &game->cameraAngleDegrees.y, -90, 90);
+
+			ImGui::Text("timeSinceLastLeftPress: %f", player->timeSinceLastLeftPress);
+			ImGui::Text("timeSinceLastRightPress: %f", player->timeSinceLastRightPress);
+			ImGui::Text("isRunningLeft: %d", player->isRunningLeft);
+			ImGui::Text("isRunningRight: %d", player->isRunningRight);
+
+			if (ImGui::Button("Spawn enemy")) {
+				Actor *actor = createActor(map, ACTOR_UNIT);
+				actor->team = 1;
+				actor->position = v3(0, 0, 10);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Spawn dummy")) {
+				Actor *actor = createActor(map, ACTOR_UNIT);
+				actor->team = 1;
+				actor->position = v3(0, 0, 10);
+				actor->aiType = AI_DUMMY;
+			}
+
+			if (ImGui::Button("Kill enemies")) {
+				for (int i = 0; i < map->actorsNum; i++) {
+					Actor *actor = &map->actors[i];
+					if (actor->type == ACTOR_UNIT && actor->team != player->team) actor->hp = 0;
+				}
+			}
+
+			if (ImGui::Button("Give all items")) {
+				for (int i = 1; i < ITEM_TYPES_MAX; i++) {
+					giveItem(player, (ItemType)i, 1);
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Give $100")) {
+				player->money += 100;
+			}
+
+			if (ImGui::Button("Force restock")) {
+				game->debugForceRestock = true;
+			}
+
+			if (ImGui::Button("Set all hps to 1")) {
+				for (int i = 0; i < map->actorsNum; i++) {
+					Actor *actor = &map->actors[i];
+					if (actor->type == ACTOR_UNIT) actor->hp = 1;
+				}
+			}
+
+			ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNodeEx("City", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::Button("Reapply templates to all")) {
+				Map *basicTemplate = getMapByName("#basicTemplate");
+				if (!basicTemplate) Panic("Bad");
+
+				if (CITY_START_INDEX + (CITY_ROWS * CITY_COLS) > MAPS_MAX-1) Panic("Not enough maps...\n");
+				for (int y = 0; y < CITY_ROWS; y++) {
+					for (int x = 0; x < CITY_COLS; x++) {
+						int cityIndex = y * CITY_COLS + x;
+						int mapIndex = cityIndex + CITY_START_INDEX;
+						Map *map = &game->maps[mapIndex];
+						if (!map->isTemplatized) continue;
+
+						float baseAlliances[TEAMS_MAX];
+						memcpy(baseAlliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
+						*map = *basicTemplate;
+
+						strcpy(map->name, frameSprintf("city%d-%d", x, y));
+						map->isTemplatized = true;
+						memcpy(map->baseAlliances, baseAlliances, sizeof(float) * TEAMS_MAX);
+
+						{ /// Fix doors
+							Actor *door;
+							door = getActorByName(map, "leftDoor");
+							if (x > 0) {
+								strcpy(door->destMapName, frameSprintf("city%d-%d", x-1, y));
+							} else {
+								deleteActor(map, door);
+							}
+
+							door = getActorByName(map, "rightDoor");
+							if (x < CITY_COLS-1) {
+								strcpy(door->destMapName, frameSprintf("city%d-%d", x+1, y));
+							} else {
+								deleteActor(map, door);
+							}
+
+							door = getActorByName(map, "topDoor");
+							if (y > 0) {
+								strcpy(door->destMapName, frameSprintf("city%d-%d", x, y-1));
+							} else {
+								deleteActor(map, door);
+							}
+
+							door = getActorByName(map, "bottomDoor");
+							if (y < CITY_ROWS-1) {
+								strcpy(door->destMapName, frameSprintf("city%d-%d", x, y+1));
+							} else {
+								deleteActor(map, door);
+							}
+						} ///
+
+						saveMap(map, mapIndex);
+					}
+				}
+				logf("Maps templatized\n");
+			}
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNodeEx("Map", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::Button("Change map")) ImGui::OpenPopup("changeMapPopup");
+			if (ImGui::BeginPopup("changeMapPopup")) {
+				for (int i = 0; i < MAPS_MAX; i++) {
+					Map *map = &game->maps[i];
+					ImGui::Text("%d: %s", i, map->name);
+					// if (ImGui::ImageButton((ImTextureID)(intptr_t)map->thumbnail->id, ImVec2(map->thumbnail->width, map->thumbnail->height), ImVec2(0, 1), ImVec2(1, 0)))
+					if (ImGui::Button(frameSprintf("%d: %s", i, map->name))) {
+						if (game->currentMapIndex != i) {
+							game->nextMapIndex = i;
+							ImGui::CloseCurrentPopup();
+						}
+					}
+				}
+				ImGui::EndPopup();
+			}
+
+			if (keyPressed('S') && ImGui::Button("Save all maps")) {
+				for (int i = 0; i < MAPS_MAX; i++) saveMap(&game->maps[i], i);
+			}
+			ImGui::Checkbox("Templatized", &map->isTemplatized);
+			if (!map->isTemplatized) {
+				if (ImGui::Button("Save map")) saveMap(map, game->currentMapIndex);
+				ImGui::SameLine();
+				if (ImGui::Button("Load map")) {
+					loadMap(map, game->currentMapIndex);
+					// game->nextMapIndex = game->currentMapIndex;
+				}
+			}
+			ImGui::InputText("Name", map->name, MAP_NAME_MAX_LEN);
+
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Past actions")) {
+			for (int i = 0; i < player->pastActionsNum; i++) {
+				Action *action = &player->pastActions[i];
+				ImGui::Text("%d: %s", i, action->info->name);
+			}
+
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Globals")) {
+			if (ImGui::Button("Save globals")) saveGlobals();
+			ImGui::SameLine();
+			if (ImGui::Button("Load globals")) loadGlobals();
+			if (ImGui::TreeNode("Action type infos")) {
+				if (ImGui::Button("Remove player actions")) player->actionsNum = 0;
+				for (int i = 0; i < ACTION_TYPES_MAX; i++) {
+					if (i >= ACTION_EXTRA_5 && i <= ACTION_EXTRA_8) continue;
+					ActionTypeInfo *info = &globals->actionTypeInfos[i];
+					if (ImGui::TreeNode(frameSprintf("%s###%d", info->name, i))) {
+						guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(0xFF000000|stringHash32(info->name), 0xFF000000, 0.5));
+
+						ImGui::InputText("Name", info->name, ACTION_NAME_MAX_LEN);
+						ImGui::CheckboxFlags("Allowed on ground", &info->flags, _F_AT_ALLOWED_ON_GROUND);
+						ImGui::SameLine();
+						ImGui::CheckboxFlags("Allowed in air", &info->flags, _F_AT_ALLOWED_IN_AIR);
+						ImGui::InputInt("Startup frames", &info->startupFrames);
+						ImGui::InputInt("Active frames", &info->activeFrames);
+						ImGui::InputInt("Recovery frames", &info->recoveryFrames);
+						ImGui::PushItemWidth(100);
+						ImGui::InputText("Animation name", info->animationName, PATH_MAX_LEN);
+						ImGui::PopItemWidth();
+						ImGui::SameLine();
+						ImGui::Checkbox("Loops", &info->animationLoops);
+
+						for (int i = 0; i < info->hitboxesNum; i++) {
+							ImGui::DragFloat3(frameSprintf("Hitbox %d min", i), &info->hitboxes[i].min.x);
+							// {
+							// 	ImGui::SameLine();
+							// 	Vec3 size = getSize(info->hitboxes[i]);
+							// 	ImGui::Text("(%.0fx%.0f px in 2d space)", size.x, size.z);
+							// }
+							ImGui::DragFloat3(frameSprintf("Hitbox %d max", i), &info->hitboxes[i].max.x);
+						}
+						ImGui::InputInt("Hitboxes num", &info->hitboxesNum);
+						info->hitboxesNum = mathClamp(info->hitboxesNum, 0, HITBOXES_MAX);
+
+						if (ImGui::TreeNode("Velos")) {
+							ImGui::DragFloat3("Hit velo", &info->hitVelo.x);
+							ImGui::DragFloat3("Block velo", &info->blockVelo.x);
+							ImGui::DragFloat3("Thrust", &info->thrust.x);
+							ImGui::InputInt("Thrust frame", &info->thrustFrame);
+							ImGui::TreePop();
+						}
+						if (ImGui::TreeNode("Times")) {
+							ImGui::DragFloat("Hitsun time", &info->hitstunTime, 0.1);
+							ImGui::DragFloat("Blocksun time", &info->blockstunTime, 0.1);
+							ImGui::TreePop();
+						}
+						ImGui::InputFloat("Damage", &info->damage);
+						ImGui::InputFloat("Stamina usage", &info->staminaUsage);
+						if (ImGui::TreeNode("Buffs")) {
+							ImGui::Combo("Buff to get", (int *)&info->buffToGet, buffTypeStrings, ArrayLength(buffTypeStrings));
+							if (info->buffToGet) ImGui::InputFloat("Buff to get time", &info->buffToGetTime, 0);
+							ImGui::Combo("Buff to give", (int *)&info->buffToGive, buffTypeStrings, ArrayLength(buffTypeStrings));
+							if (info->buffToGive) ImGui::InputFloat("Buff to give time", &info->buffToGiveTime, 0);
+						}
+
+						if (ImGui::Button("Do action")) addAction(player, (ActionType)i);
+
+						if (keyPressed(KEY_SHIFT) && keyPressed(KEY_CTRL) && ImGui::Button("Copy from punch")) {
+							char *name = frameStringClone(info->name);
+							*info = globals->actionTypeInfos[ACTION_PUNCH];
+							strcpy(info->name, name);
+						}
+
+						guiPopStyleColor();
+						ImGui::TreePop();
+					}
+				}
+				ImGui::TreePop();
+			}
+
+			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
+			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
+			ImGui::TreePop();
+		}
+		ImGui::End();
+
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth, 0), ImGuiCond_Always, ImVec2(1, 0));
+		ImGui::Begin("Actors", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::BeginChild("ActorListChild", ImVec2(300, 200));
+		for (int i = 0; i < map->actorsNum; i++) {
+			Actor *actor = &map->actors[i];
+			char *name = frameSprintf("%s###%d", actorTypeStrings[actor->type], i);
+			if (ImGui::Selectable(name, game->selectedActorId == actor->id)) {
+				game->selectedActorId = actor->id;
+			}
+		}
+		ImGui::EndChild();
+
+		ImGui::Text("Create:");
+		if (ImGui::Button("Spawn point")) {
+			Actor *actor = createActor(map, ACTOR_UNIT_SPAWNER);
+			actor->position = game->cameraTarget;
+			game->selectedActorId = actor->id;
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Wall")) {
+			Actor *actor = createActor(map, ACTOR_WALL);
+			actor->position = game->cameraTarget;
+			game->selectedActorId = actor->id;
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Door")) {
+			Actor *actor = createActor(map, ACTOR_DOOR);
+			actor->position = game->cameraTarget;
+			game->selectedActorId = actor->id;
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Store")) {
+			Actor *actor = createActor(map, ACTOR_STORE);
+			actor->position = game->cameraTarget;
+			game->selectedActorId = actor->id;
+		}
+
+		ImGui::Separator();
+		ImGui::Separator();
+
+		Actor *actor = getActor(game->selectedActorId);
+		if (actor) {
+			// if (ImGui::Button("Delete actor")) actor->markedForDeletion = true;
+			if (ImGui::Button("Duplicate actor")) {
+				Actor *newActor = createActor(map, actor->type);
+				int id = newActor->id;
+				*newActor = *actor;
+				newActor->id = id;
+				game->selectedActorId = newActor->id;
+				logf("Dupped\n");
+			}
+
+			ImGui::Combo("Actor type", (int *)&actor->type, actorTypeStrings, ArrayLength(actorTypeStrings));
+			// ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
+			// ImGui::SameLine();
+			ImGui::Text("Id: %d", actor->id);
+			ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
+			ImGui::DragFloat3("Position", &actor->position.x);
+			ImGui::DragFloat3("Size", &actor->size.x);
+
+			if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+				ImGui::InputInt("Team", &actor->team);
+				if (ImGui::TreeNode("Stats")) {
+					for (int i = 0; i < STATS_MAX; i++) {
+						ImGui::InputFloat(statStrings[i], &actor->stats[i], 1);
+					}
+					ImGui::TreePop();
+				}
+
+				if (ImGui::TreeNode(frameSprintf("Items (%d)###itemTree", actor->itemsNum))) {
+					char **itemTypeStrings = (char **)frameMalloc(sizeof(char *) * ITEM_TYPES_MAX);
+					for (int i = 0; i < ITEM_TYPES_MAX; i++) itemTypeStrings[i] = frameStringClone(game->itemTypeInfos[i].name);
+
+					for (int i = 0; i < actor->itemsNum; i++) {
+						Item *item = &actor->items[i];
+						ImGui::PushID(i);
+						if (ImGui::Combo("Type", (int *)&item->type, itemTypeStrings, ITEM_TYPES_MAX)) {
+							item->info = &game->itemTypeInfos[item->type];
+						}
+						ImGui::InputInt("Amount", &item->amount);
+						ImGui::PopID();
+					}
+					if (ImGui::Button("Give item")) {
+						giveItem(actor, ITEM_NONE, 1);
+					}
+					ImGui::TreePop();
+				}
+			}
+
+			if (actor->type == ACTOR_DOOR) {
+				ImGui::InputText("Destination map", actor->destMapName, MAP_NAME_MAX_LEN);
+			}
+
+			if (actor->type == ACTOR_UNIT_SPAWNER) {
+				ImGui::InputInt("Unit to spawn", &actor->unitsToSpawn);
+			}
+
+			if (ImGui::Button("bringWithinBounds")) bringWithinBounds(map, actor);
+
+			ImGui::Separator();
+		}
+		ImGui::End();
+
+		bool selectedSomething = false;
+		for (int i = 0; i < map->actorsNum; i++) {
+			Actor *actor = &map->actors[i];
+			AABB aabb = getAABB(actor);
+			Rect bounds = getBounds(aabb);
+
+			if (platform->mouseJustUp && contains(bounds, game->worldMouse)) {
+				game->selectedActorId = actor->id;
+				selectedSomething = true;
+			}
+		}
+
+		if (platform->mouseJustUp && !selectedSomething) {
+			game->selectedActorId = 0;
+		}
+
+		float scrollSpeed = 10;
+		if (keyPressed(KEY_LEFT) || keyPressed('A')) game->cameraTarget.x -= scrollSpeed;
+		if (keyPressed(KEY_RIGHT) || keyPressed('D')) game->cameraTarget.x += scrollSpeed;
+		if (keyPressed(KEY_UP) || keyPressed('W')) game->cameraTarget.y += scrollSpeed;
+		if (keyPressed(KEY_DOWN) || keyPressed('S')) game->cameraTarget.y -= scrollSpeed;
+	} /// 
+
+	for (int i = 0; i < map->actorsNum; i++) { /// Update actors
+		Actor *actor = &map->actors[i];
+		if (actor->prevIsOnGround != actor->isOnGround) { // Landing on the ground
+			actor->prevIsOnGround = actor->isOnGround;
+			if (actor->isOnGround) {
+				if (actor->actionsNum > 0) {
+					Action *action = &actor->actions[0];
+					if (action->type == ACTION_HITSTUN) {
+						float timeLeft = action->customLength - action->time;
+						actor->actionsNum = 0;
+						Action *knockdownAction = addAction(actor, ACTION_KNOCKDOWN);
+						knockdownAction->customLength = timeLeft;
+						playWorldSound("assets/audio/fallThump.ogg", getCenter(getAABB(actor)));
+					} else if (action->type == ACTION_KNOCKDOWN) {
+						// Nothing...
+					} else if (action->info->activeFrames) { // Cancel attacks upon landing, but not other actions
+						actor->actionsNum = 0;
+					}
+				}
+			}
+		}
+
+		bool canInput = true;
+		{ /// Update action
+			if (actor->actionsNum > 0) { 
+				Action *action = &actor->actions[0];
+				canInput = false;
+				if (action->type != ACTION_BLOCKSTUN) actor->isBlocking = false;
+
+				bool actionDone = false;
+				bool canDoAction = true;
+
+				if (action->time == 0) {
+					actor->stamina -= action->info->staminaUsage;
+					if (actor->stamina <= 0 && action->info->staminaUsage) {
+						canDoAction = false;
+						actionDone = true;
+					}
+
+					if (action->info->buffToGet != BUFF_NONE) {
+						addBuff(actor, action->info->buffToGet, action->info->buffToGetTime);
+					}
+				}
+
+				float activeMin = action->info->startupFrames / 60.0;
+				float activeMax = activeMin + (action->info->activeFrames / 60.0);
+
+				bool inActiveTime = true;
+				if (canDoAction) {
+					int justHitFrame = -1;
+					{ // Compute justHitFrame
+						int currentFrame = action->time * 60.0;
+						int prevFrame = action->prevTime * 60.0;
+						if (currentFrame == prevFrame+1) {
+							justHitFrame = currentFrame;
+						}
+						if (action->time == 0) justHitFrame = 0;
+					}
+
+					if (justHitFrame == action->info->thrustFrame) {
+						Vec3 velo = action->info->thrust;
+						if (actor->facingLeft) velo.x *= -1;
+						actor->velo += velo;
+					}
+
+					if (justHitFrame == action->info->startupFrames+1) {
+						if (action->type == ACTION_SHADOW_STEP) {
+							Actor *closestActor = NULL;
+							float closestDist = 0;
+							for (int i = 0; i < map->actorsNum; i++) {
+								Actor *otherActor = &map->actors[i];
+								bool onCorrectSide = false;
+								if (otherActor->position.x < actor->position.x && actor->facingLeft) onCorrectSide = true;
+								if (otherActor->position.x > actor->position.x && !actor->facingLeft) onCorrectSide = true;
+								if (!onCorrectSide) continue;
+								if (otherActor->team == actor->team) continue;
+								float dist = distance(otherActor->position, actor->position);
+								if (!closestActor || dist < closestDist) {
+									closestActor = otherActor;
+									closestDist = dist;
+								}
+							}
+
+							if (closestActor) {
+								Vec3 dir = normalize(closestActor->position - actor->position);
+								float edgeDist = closestDist - actor->size.x/2 - closestActor->size.x/2;
+								Vec3 newPosition = actor->position + (dir*(edgeDist*0.99));
+								AABB newAABB = getAABBAtPosition(actor, newPosition);
+
+								bool onWall = false;
+								for (int i = 0; i < wallsNum; i++) {
+									AABB wallAABB = walls[i];
+									if (intersects(wallAABB, newAABB)) {
+										onWall = true;
+										break;
+									}
+								}
+
+								if (!onWall) {
+									actor->position = newPosition;
+								}
+							}
+						}
+					}
+
+					if (action->info->activeFrames && action->time >= activeMin && action->time <= activeMax) {
+						inActiveTime = true;
+						AABB actorAABB = getAABB(actor);
+						Vec3 actorCenter = getCenter(actorAABB);
+
+						if (action->prevTime < activeMin) playWorldSound("assets/audio/attack.ogg", actorCenter);
+
+						AABB worldSpaceHitboxs[HITBOXES_MAX];
+						int worldSpaceHitboxesNum = 0;
+						for (int i = 0; i < action->info->hitboxesNum; i++) {
+							AABB hitbox = action->info->hitboxes[i];
+							if (actor->facingLeft) {
+								Vec3 center = getCenter(hitbox);
+								hitbox -= v3(center.x, 0, 0)*2;
+							}
+							hitbox += actorCenter;
+							if (game->debugDrawHitboxes) drawAABB3d(hitbox, 2, 0xFFFF0000);
+							worldSpaceHitboxs[worldSpaceHitboxesNum++] = hitbox;
+						}
+
+						for (int i = 0; i < map->actorsNum; i++) {
+							Actor *otherActor = &map->actors[i];
+							if (!otherActor->info->canBeHit) continue;
+							if (otherActor->team == actor->team) continue;
+							ActionType otherActorActionType = ACTION_NONE;
+							if (otherActor->actionsNum != 0) otherActorActionType = otherActor->actions[0].type;
+
+							if (otherActorActionType == ACTION_KNOCKDOWN) continue;
+
+							bool alreadyBeenHit = false;
+							for (int i = 0; i < ACTION_IDS_HIT_BY_MAX; i++) {
+								if (otherActor->actionIdsHitBy[i] == action->id) alreadyBeenHit = true;
+							}
+							if (alreadyBeenHit) continue;
+
+							bool hitboxUsed = false;
+							AABB otherActorAABB = getAABB(otherActor);
+							for (int i = 0; i < worldSpaceHitboxesNum; i++) {
+								AABB hitbox = worldSpaceHitboxs[i];
+								if (intersects(otherActorAABB, hitbox)) {
+
+									memmove(&otherActor->actionIdsHitBy[1], &otherActor->actionIdsHitBy[0], sizeof(int) * (ACTION_IDS_HIT_BY_MAX-1));
+									otherActor->actionIdsHitBy[0] = action->id;
+
+									float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
+
+									int particleColor;
+									int particlesAmount = 0;
+
+									if (otherActor->isBlocking) {
+										playWorldSound("assets/audio/block.ogg", getCenter(otherActorAABB));
+										particleColor = 0x80606060;
+										particlesAmount = damage;
+
+										otherActor->stamina -= damage;
+										if (otherActor->stamina < 0) otherActor->stamina -= damage;
+
+										Effect *effect = createEffect(EFFECT_BLOCK_DAMAGE, otherActor->position + v3(0, 0, otherActor->size.z*0.5));
+										effect->value = damage;
+
+										Vec3 blockVelo = action->info->blockVelo;
+										if (isZero(blockVelo)) blockVelo = action->info->hitVelo * 0.25;
+										if (actor->facingLeft) blockVelo.x *= -1;
+										otherActor->velo += blockVelo;
+
+										otherActor->actionsNum = 0;
+										Action *newAction = addAction(otherActor, ACTION_BLOCKSTUN);
+										newAction->customLength = action->info->blockstunTime;
+										if (newAction->customLength == 0) newAction->customLength = action->info->hitstunTime;
+									} else {
+										particleColor = 0x80FF0000;
+										particlesAmount = damage;
+
+										if (damage >= 20) playWorldSound("assets/audio/hit/4.ogg", getCenter(otherActorAABB));
+										else if (damage >= 10) playWorldSound("assets/audio/hit/3.ogg", getCenter(otherActorAABB));
+										else if (damage >= 5) playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
+										else playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
+
+										if (actor->playerControlled || otherActor->playerControlled) game->hitPauseFrames = action->info->damage;
+										otherActor->hp -= damage;
+
+										Effect *effect = createEffect(
+											otherActor == player ? EFFECT_PLAYER_DAMAGE: EFFECT_ENEMY_DAMAGE,
+											otherActor->position + v3(0, 0, otherActor->size.z*0.5)
+										);
+										effect->value = damage;
+
+										if (action->type == ACTION_BRAIN_SAP) {
+											actor->hp += damage;
+										} else if (action->type == ACTION_CULLING_BLADE) {
+											float cullPerc = 0.5;
+											if (otherActor->hp/otherActor->maxHp < cullPerc) otherActor->hp = 0;
+										} else if (action->type == ACTION_STICKY_NAPALM) {
+											addBuff(otherActor, BUFF_STICKY_NAPALM_STACK, 5);
+										}
+
+										Vec3 hitVelo = action->info->hitVelo;
+										if (actor->facingLeft) hitVelo.x *= -1;
+										otherActor->velo += hitVelo;
+
+										otherActor->actionsNum = 0;
+										Action *newAction = addAction(otherActor, ACTION_HITSTUN);
+										newAction->customLength = action->info->hitstunTime;
+
+										if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
+									}
+
+									for (int i = 0; i < particlesAmount; i++) {
+										Particle *particle = createParticle(PARTICLE_DUST);
+										particle->position = getCenter(getAABB(otherActor));
+										particle->position.y -= 0.01*i;
+										particle->velo.x = rndFloat(0, 10);
+										if (otherActor->position.x < actor->position.x) particle->velo.x *= -1;
+										particle->velo.z = rndFloat(-5, 5);
+										particle->maxTime = rndFloat(0.1, 0.25);
+										particle->tint = particleColor;
+									}
+
+									hitboxUsed = true;
+									break;
+								}
+							}
+
+							if (hitboxUsed) break;
+						}
+					}
+				}
+
+				bool usesCustomLength = false;
+				if (
+					action->type == ACTION_HITSTUN ||
+					action->type == ACTION_KNOCKDOWN ||
+					action->type == ACTION_BLOCKSTUN ||
+					action->type == ACTION_FORCED_IDLE
+				) usesCustomLength = true;
+
+				float maxTime;
+				if (usesCustomLength) {
+					maxTime = action->customLength;
+				} else {
+					maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames) / 60.0;
+				}
+				if (action->time >= maxTime) actionDone = true;
+				if (actionDone) {
+					if (actor->pastActionsNum > ACTIONS_MAX-1) {
+						memmove(&actor->pastActions[0], &actor->pastActions[1], sizeof(Action) * ACTIONS_MAX-1);
+						actor->pastActionsNum--;
+					} 
+					actor->pastActions[actor->pastActionsNum++] = actor->actions[0];
+
+					if (action->type == ACTION_KNOCKDOWN) addAction(actor, ACTION_RAISING);
+
+					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
+					actor->actionsNum--;
+				}
+
+				float actionTimeScale = getStatPoints(actor, STAT_ATTACK_SPEED)*0.1;
+				if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
+				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
+
+				action->prevTime = action->time;
+				action->time += elapsed * actionTimeScale;
+
+				actor->timeWithoutAction = 0;
+			} else { 
+				actor->timeWithoutAction += elapsed;
+				if (actor->timeWithoutAction > 0.5) actor->pastActionsNum = 0;
+			}
+		} ///
+
+		{ /// Update buffs
+			for (int i = 0; i < actor->buffsNum; i++) {
+				Buff *buff = &actor->buffs[i];
+				bool buffDone = false;
+
+				if (buff->time > buff->maxTime) buffDone = true;
+
+				buff->time += elapsed;
+
+				if (buffDone) {
+					arraySpliceIndex(actor->buffs, actor->buffsNum, sizeof(Buff), i);
+					actor->buffsNum--;
+					i--;
+				}
+			}
+		} ///
+
+		if (actor->type == ACTOR_UNIT) {
+			float baseSpeed = getStatPoints(actor, STAT_MOVEMENT_SPEED) * 0.2;
+			Vec2 speed = v2(baseSpeed, baseSpeed);
+			if (actor->isRunningLeft || actor->isRunningRight) speed *= 2;
+			for (int i = 0; i < getBuffCount(actor, BUFF_BUDDHA_PALM_SLOW); i++) speed *= 0.5;
+			for (int i = 0; i < getBuffCount(actor, BUFF_STICKY_NAPALM_STACK); i++) speed *= 0.8;
+			actor->isBlocking = true;
+			if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
+
+			if (actor->isRunningLeft || actor->isRunningRight) {
+				if (fmod(game->time, 0.2) < fmod(game->prevTime, 0.2)) {
+					Particle *particle = createParticle(PARTICLE_DUST);
+					particle->position = actor->position + v3(0, 0, 5);
+					particle->position.y -= 0.01*i;
+					particle->velo.x = rndFloat(0, 5);
+					if (actor->facingLeft) particle->velo.x *= -1;
+					particle->velo.z = rndFloat(2, 3);
+					particle->maxTime = rndFloat(0.5, 1);
+					particle->tint = 0xFFDEA404;
+				}
+			}
+
+			if (actor->playerControlled) {
+				if (!game->inEditor) game->cameraTarget = actor->position;
+
+				Vec2 inputVec = v2();
+				bool jumpPressed = false;
+				bool punchPressed = false;
+				bool kickPressed = false;
+				bool special1Pressed = false;
+				bool special2Pressed = false;
+				bool changeStyle1Pressed = false;
+				bool changeStyle2Pressed = false;
+				bool changeStyle3Pressed = false;
+				bool changeStyle4Pressed = false;
+				if (!game->inEditor && canInput && actor->stamina > 0) {
+					if (keyPressed('W') || keyPressed(KEY_UP)) inputVec.y++;
+					if (keyPressed('S') || keyPressed(KEY_DOWN)) inputVec.y--;
+					if (keyPressed('A') || keyPressed(KEY_LEFT)) inputVec.x--;
+					if (keyPressed('D') || keyPressed(KEY_RIGHT)) inputVec.x++;
+					inputVec = inputVec.normalize();
+					if (keyJustPressed(' ')) jumpPressed = true;
+					if (keyJustPressed('J')) punchPressed = true;
+					if (keyJustPressed('K')) kickPressed = true;
+					if (keyJustPressed('U')) special1Pressed = true;
+					if (keyJustPressed('I')) special2Pressed = true;
+					if (keyJustPressed('1')) changeStyle1Pressed = true;
+					if (keyJustPressed('2')) changeStyle2Pressed = true;
+					if (keyJustPressed('3')) changeStyle3Pressed = true;
+					if (keyJustPressed('4')) changeStyle4Pressed = true;
+				}
+
+				{ // Figure out running
+					if (inputVec.x < -0.5) {
+						if (actor->prevInputVec.x >= -0.5) {
+							if (actor->timeSinceLastLeftPress < 0.25) {
+								actor->isRunningLeft = true;
+							}
+							actor->timeSinceLastLeftPress = 0;
+						}
+					} else {
+						actor->isRunningLeft = false;
+					}
+
+					if (inputVec.x > 0.5) {
+						if (actor->prevInputVec.x <= 0.5) {
+							if (actor->timeSinceLastRightPress < 0.25) {
+								actor->isRunningRight = true;
+							}
+							actor->timeSinceLastRightPress = 0;
+						}
+					} else {
+						actor->isRunningRight = false;
+					}
+				}
+
+				actor->movementAccel.x += inputVec.x * speed.x;
+				actor->movementAccel.y += inputVec.y * speed.y;
+
+				actor->prevInputVec = inputVec;
+
+				if (jumpPressed && actor->isOnGround) actor->movementAccel.z += 20;
+
+				if (punchPressed) {
+					if (actor->isOnGround) {
+						bool didAttack = false;
+
+						if (actor->isRunningLeft || actor->isRunningRight) {
+							addAction(actor, ACTION_RUNNING_PUNCH);
+							didAttack = true;
+						}
+
+						if (!didAttack && actor->pastActionsNum >= 2) {
+							bool arePunches = true;
+							for (int i = actor->pastActionsNum-2; i < actor->pastActionsNum; i++) {
+								Action *action = &actor->pastActions[i];
+								if (action->type != ACTION_PUNCH) arePunches = false;
+							}
+
+							if (arePunches) {
+								addAction(actor, ACTION_UPPERCUT);
+								didAttack = true;
+							}
+						}
+						if (!didAttack) addAction(actor, ACTION_PUNCH);
+					} else {
+						addAction(actor, ACTION_AIR_PUNCH);
+					}
+				}
+
+				if (kickPressed) {
+					if (actor->isOnGround) {
+						bool didAttack = false;
+
+						if (actor->isRunningLeft || actor->isRunningRight) {
+							addAction(actor, ACTION_RUNNING_KICK);
+							didAttack = true;
+						}
+
+						if (!didAttack) addAction(actor, ACTION_KICK);
+					} else {
+						addAction(actor, ACTION_AIR_KICK);
+					}
+				}
+
+				if (special1Pressed) {
+					ActionType actionType = getActionType(actor, 0);
+					if (actionType != ACTION_NONE) addAction(actor, actionType);
+				}
+
+				if (special2Pressed) {
+					ActionType actionType = getActionType(actor, 1);
+					if (actionType != ACTION_NONE) addAction(actor, actionType);
+				}
+
+				if (changeStyle1Pressed) {
+					infof("Style 1\n");
+					actor->styleIndex = 0;
+				}
+
+				if (changeStyle2Pressed) {
+					infof("Style 2\n");
+					actor->styleIndex = 1;
+				}
+
+				if (changeStyle3Pressed) {
+					infof("Style 3\n");
+					actor->styleIndex = 2;
+				}
+
+				if (changeStyle4Pressed) {
+					infof("Style 4\n");
+					actor->styleIndex = 3;
+				}
+
+				actor->timeSinceLastLeftPress += elapsed;
+				actor->timeSinceLastRightPress += elapsed;
+			} else {
+				{ /// Do enemy AI @todo factor this out
+					float aggression = 0.5;
+
+					if (actor->aiType == AI_NORMAL) {
+						auto getAttackers = [](Actor *src, int *attackersNumOut)->int * {
+							Map *map = &game->maps[game->currentMapIndex];
+
+							int *ids = (int *)frameMalloc(sizeof(int) * ACTORS_MAX);
+							int idsNum = 0;
+							for (int i = 0; i < map->actorsNum; i++) {
+								Actor *otherActor = &map->actors[i];
+								if (otherActor->aiTarget == src->id) ids[idsNum++] = otherActor->id;
+							}
+
+							*attackersNumOut = idsNum;
+							return ids;
+						};
+
+						if (actor->actionsNum == 0) { // This is the same as canInput
+							Actor *target = getActor(actor->aiTarget);
+							if (!target) { // Find target
+								int bestOtherId = 0;
+
+								int currentAttackersNum;
+								int *currentAttackers = getAttackers(actor, &currentAttackersNum);
+								if (currentAttackersNum > 0) {
+									bestOtherId = currentAttackers[0];
+								}
+
+								if (!bestOtherId) {
+									int lowestOtherAttackers = 0;
+									for (int i = 0; i < map->actorsNum; i++) {
+										Actor *otherActor = &map->actors[i];
+										if (otherActor->type != ACTOR_UNIT) continue;
+										if (otherActor->team == actor->team) continue;
+
+										int otherAttackersNum;
+										int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
+
+										if (!bestOtherId || otherAttackersNum < lowestOtherAttackers) {
+											bestOtherId = otherActor->id;
+											lowestOtherAttackers = otherAttackersNum;
+										}
+									}
+								}
+
+								if (bestOtherId) actor->aiTarget = bestOtherId;
+							}
+
+							if (!target) {
+								if (actor->aiState == AI_STAND_NEAR_TARGET) actor->aiState = AI_IDLE;
+								if (actor->aiState == AI_APPROACH_FOR_ATTACH) actor->aiState = AI_IDLE;
+							}
+
+							if (actor->prevAiState != actor->aiState) {
+								actor->prevAiState = actor->aiState;
+								actor->aiStateTime = 0;
+							}
+
+							Vec2 xyPosition = v2(actor->position);
+							Vec2 xyTarget = v2();
+							if (target) xyTarget = v2(target->position);
+
+							if (actor->aiState == AI_IDLE) {
+								if (target) actor->aiState = AI_STAND_NEAR_TARGET;
+							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
+								if (actor->aiStateTime == 0) {
+									float dist = rndFloat(100, 200);
+									actor->aiStateLength = clampMap(dist, 0, 300, 0.1, 4);
+
+									Vec2 dir = normalize(v2(rndFloat(-1, 1), rndFloat(-1, 1)));
+									actor->aiCurrentXyOffset = (dir*2 - 1) * dist;
+									if (actor->position.x < target->position.x) actor->aiCurrentXyOffset -= 200;
+									else actor->aiCurrentXyOffset += 200;
+								}
+
+								if (actor->aiStateTime == 0 || distance(actor->aiCurrentXyTarget, xyTarget) > 300) {
+									actor->aiCurrentXyTarget = xyTarget;
+									actor->aiCurrentXy = actor->aiCurrentXyTarget + actor->aiCurrentXyOffset;
+
+									Vec2 position = actor->aiCurrentXy;
+									Vec3 size = actor->size;
+									{ // bringActorPoisitionWithinBounds
+										if (position.x < groundAABB.min.x + size.x/2) position.x = groundAABB.min.x + size.x/2;
+										if (position.x > groundAABB.max.x - size.x/2) position.x = groundAABB.max.x - size.x/2;
+										if (position.y < groundAABB.min.y + size.y/2) position.y = groundAABB.min.y + size.y/2;
+										if (position.y > groundAABB.max.y - size.y/2) position.y = groundAABB.max.y - size.y/2;
+									}
+
+									actor->aiCurrentXy = position;
+								}
+
+								float dist = distance(actor->aiCurrentXy, xyPosition);
+								if (distance(actor->aiCurrentXy, xyPosition) > 10) {
+									float speedMulti = clampMap(dist, 50, 100, 0.2, 1);
+
+									Vec2 dir = normalize(actor->aiCurrentXy - xyPosition);
+									actor->movementAccel += v3(dir * speed.x*speedMulti);
+								}
+
+								if (actor->aiStateTime > actor->aiStateLength) {
+									if (rndPerc(aggression)) {
+										actor->aiState = AI_APPROACH_FOR_ATTACH;
+									} else {
+										actor->prevAiState = AI_IDLE; // Reset ai state
+									}
+								}
+							} else if (actor->aiState == AI_APPROACH_FOR_ATTACH) {
+								Vec2 xyDest = xyTarget;
+
+								Vec2 dir = (xyDest - xyPosition).normalize();
+								actor->movementAccel += v3(dir * speed);
+
+								if (distance(actor, target) < 100 && fabs(actor->position.y - target->position.y) < 100) {
+									const int AI_CHOICE_1 = 0;
+									const int AI_CHOICE_2 = 1;
+									const int AI_CHOICE_3 = 2;
+									const int AI_CHOICES_MAX = 3;
+									float choiceBuckets[AI_CHOICES_MAX] = {};
+									choiceBuckets[AI_CHOICE_1] += 1;
+									choiceBuckets[AI_CHOICE_2] += 1;
+									choiceBuckets[AI_CHOICE_3] += 0.5;
+
+									int choice = rndPick(choiceBuckets, AI_CHOICES_MAX);
+									if (choice == AI_CHOICE_1) {
+										addAction(actor, ACTION_PUNCH);
+										addAction(actor, ACTION_PUNCH);
+										addAction(actor, ACTION_UPPERCUT);
+									} else if (choice == AI_CHOICE_2) {
+										addAction(actor, ACTION_PUNCH);
+										addAction(actor, ACTION_KICK);
+									} else if (choice == AI_CHOICE_3) {
+										addAction(actor, ACTION_KICK);
+									}
+									actor->aiState = AI_STAND_NEAR_TARGET;
+								}
+							}
+						}
+					} else if (actor->aiType == AI_DUMMY) {
+					}
+				} ///
+			}
+
+			bool doRefill = false;
+			if (actor->maxHp == 0) doRefill = true;
+			actor->maxHp = getStatPoints(actor, STAT_HP) * 10;
+			actor->maxStamina = getStatPoints(actor, STAT_MAX_STAMINA) * 10;
+			if (doRefill) {
+				actor->hp = actor->maxHp;
+				actor->stamina = actor->maxStamina;
+			}
+		} else if (actor->type == ACTOR_GROUND) {
+		} else if (actor->type == ACTOR_WALL) {
+		} else if (actor->type == ACTOR_DUMMY) {
+			actor->team = 1;
+		} else if (actor->type == ACTOR_DOOR) {
+			if (overlaps(actor, player)) {
+				if (!actor->doorPlayerSpawnedOver) {
+					for (int i = 0; i < MAPS_MAX; i++) {
+						Map *possibleMap = &game->maps[i];
+						if (streq(possibleMap->name, actor->destMapName)) {
+							game->nextMapIndex = i;
+							break;
+						}
+					}
+				}
+			} else {
+				actor->doorPlayerSpawnedOver = false;
+			}
+		} else if (actor->type == ACTOR_ITEM) {
+			if (actor->isOnGround) {
+				if (getEquippedItemCount(player, ITEM_MAGNET) > 0) {
+					if (distance(player, actor) < 100) {
+						Vec3 dir = normalize(getCenter(getAABB(player)) - getCenter(getAABB(actor)));
+						actor->accel += dir * 5;
+					}
+				}
+
+				if (overlaps(actor, player)) {
+					if (actor->itemType == ITEM_MONEY) {
+						player->money += actor->itemAmount;
+						actor->markedForDeletion = true;
+
+						Effect *effect = createEffect(EFFECT_MONEY, player->position + v3(0, 0, player->size.z*0.5));
+						effect->value = actor->itemAmount;
+					} else {
+						if (giveItem(player, actor->itemType, actor->itemAmount)) {
+							actor->markedForDeletion = true;
+						} else {
+							if (platform->frameCount % 60 == 0) infof("Too many items to pick up %s\n", game->itemTypeInfos[actor->itemType].name);
+						}
+					}
+				}
+			}
+		} else if (actor->type == ACTOR_STORE) {
+			bool overlappingStore = overlaps(actor, player);
+
+			if (!game->inStore && overlappingStore && !game->ignoreStoreOverlap) {
+				game->inStore = true;
+				game->ignoreStoreOverlap = true;
+			}
+
+			if (!overlappingStore) game->ignoreStoreOverlap = false;
+		}
+
+		if (actor->isOnGround) {
+			actor->timeInAir = 0;
+			if (actor->movementAccel.length() > 0.1) { // This has to happen before physics update
+				actor->timeMoving += elapsed;
+				actor->timeNotMoving = 0;
+			} else {
+				actor->timeMoving = 0;
+				actor->timeNotMoving += elapsed;
+			}
+		} else {
+			actor->timeInAir += elapsed;
+			actor->timeMoving = 0;
+			actor->timeNotMoving = 0;
+		}
+
+		if (actor->info->hasPhysics && timeScale > 0.1) {
+			{ // Bump other actors
+				for (int i = 0; i < map->actorsNum; i++) {
+					Actor *otherActor = &map->actors[i];
+					if (actor->playerControlled) break;
+					if (otherActor->playerControlled) continue;
+					if (!otherActor->info->hasPhysics) continue;
+					if (actor == otherActor) continue;
+
+					float dist = distance(actor->position, otherActor->position);
+					if (actor->size.x != actor->size.y) logf("Phyics with non uniform scale actor\n");
+					dist -= actor->size.x/2;
+					dist -= otherActor->size.x/2;
+					if (dist <= 0) {
+						Vec3 dir = otherActor->position - actor->position;
+						float force = clampMap(dist, -50, 0, 0.01, 0);
+						actor->accel -= dir * force;
+						otherActor->accel += dir * force;
+					}
+				}
+			}
+
+			if (actor->movementAccel.x < -0.1) actor->facingLeft = true;
+			if (actor->movementAccel.x > 0.1) actor->facingLeft = false;
+			if (actor->isOnGround) actor->accel += actor->movementAccel;
+			if (!isZero(actor->movementAccel)) {
+				actor->movementAccel = v3();
+				actor->isBlocking = false;
+			}
+
+			float grav = 1;
+			for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
+
+			actor->accel.z -= grav;
+
+			actor->velo += actor->accel;
+			actor->accel = v3();
+
+			{ // AABB collision
+				bool bouncedOffSideWall = false;
+
+				AABB oldAABB = getAABB(actor);
+				AABB newAABB = oldAABB + actor->velo;
+				actor->isOnGround = false;
+				for (int i = 0; i < wallsNum; i++) {
+					AABB wallAABB = walls[i];
+					if (!intersects(newAABB, wallAABB)) continue;
+
+					if (newAABB.min.z <= wallAABB.max.z && oldAABB.min.z > wallAABB.max.z) { // Bot
+						float dist = wallAABB.max.z - newAABB.min.z;
+						newAABB += v3(0, 0, dist+0.1);
+						actor->velo.z = 0;
+						actor->isOnGround = true;
+					}
+
+					// if (newAABB.min.z >= wallAABB.min.z && oldAABB.max.z < wallAABB.max.z) { // Top
+					// 	float dist = wallAABB.min.z - newAABB.max.z;
+					// 	newAABB += v3(0, 0, dist-0.1);
+					// 	actor->velo.z = 0;
+					// }
+
+					float restitution = 0.5;
+
+					if (newAABB.min.x <= wallAABB.max.x && oldAABB.min.x > wallAABB.max.x) { // left
+						float dist = wallAABB.max.x - newAABB.min.x;
+						newAABB += v3(dist+0.1, 0, 0);
+						if (actor->velo.x < 0) {
+							bouncedOffSideWall = true;
+							actor->velo.x *= -restitution;
+						}
+					}
+
+					if (newAABB.max.x >= wallAABB.min.x && oldAABB.max.x < wallAABB.min.x) { // right
+						float dist = wallAABB.min.x - newAABB.max.x;
+						newAABB += v3(dist-0.1, 0, 0);
+						if (actor->velo.x > 0) {
+							bouncedOffSideWall = true;
+							actor->velo.x *= -restitution;
+						}
+					}
+
+					if (newAABB.min.y <= wallAABB.max.y && oldAABB.min.y > wallAABB.max.y) {
+						float dist = wallAABB.max.y - newAABB.min.y;
+						newAABB += v3(0, dist+0.1, 0);
+						if (actor->velo.y < 0) {
+							bouncedOffSideWall = true;
+							actor->velo.y *= -restitution;
+						}
+					}
+
+					if (newAABB.max.y >= wallAABB.min.y && oldAABB.max.y < wallAABB.min.y) {
+						float dist = wallAABB.min.y - newAABB.max.y;
+						newAABB += v3(0, dist-0.1, 0);
+						if (actor->velo.y > 0) {
+							bouncedOffSideWall = true;
+							actor->velo.y *= -restitution;
+						}
+					}
+				}
+
+				Vec3 newPos = getCenter(newAABB);
+				newPos.z -= getSize(newAABB).z/2;
+				actor->position = newPos;
+
+				if (bouncedOffSideWall) {
+					if (actor->type == ACTOR_UNIT && actor->actionsNum > 0 && actor->actions[0].type == ACTION_HITSTUN) {
+						playWorldSound("assets/audio/wallThump.ogg", getCenter(newAABB));
+					}
+				}
+			}
+
+			if (actor->isOnGround) {
+				actor->velo.x *= 0.8;
+				actor->velo.y *= 0.8;
+			}
+			actor->velo.z *= 0.98;
+		}
+
+		if (actor->type == ACTOR_UNIT && !actor->playerControlled) { //We have to flip around ai actors here because physics flips them if they're moving slightly backwards
+			Actor *target = getActor(actor->aiTarget);
+			if (target) {
+				Vec3 dir = target->position - actor->position;
+				if (dir.x <= 0) {
+					actor->facingLeft = true;
+				} else {
+					actor->facingLeft = false;
+				}
+			}
+		}
+
+		if (actor->hp < 20 && getEquippedItemCount(actor, ITEM_HEALTH_PACK) > 0) {
+			infof("Health pack used\n");
+			actor->hp += 100;
+			removeItem(actor, ITEM_HEALTH_PACK, 1);
+		}
+		if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
+		if (actor->hp <= 0 && actor->maxHp > 0) {
+			actor->markedForDeletion = true;
+			if (actor->type == ACTOR_UNIT) {
+				if (actor->playerControlled) {
+					game->nextMapIndex = CITY_START_INDEX;
+					logf("You died (-$%.2f)\n", player->money*0.5);
+					player->money *= 0.5;
+				} else {
+					map->alliances[actor->team] -= actor->allianceCost;
+				}
+			}
+		}
+		actor->hp = mathClamp(actor->hp, 0, actor->maxHp);
+		actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03;
+		actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
+
+		actor->aiStateTime += elapsed;
+	} ///
+
+	pushTargetTexture(game->debugTexture);
+	{ /// Draw actors (debug/overlay)
+		for (int i = 0; i < map->actorsNum; i++) {
+			Actor *actor = &map->actors[i];
+
+			AABB aabb = getAABB(actor);
+			Rect bounds = getBounds(aabb);
+
+			Vec2 position2 = v2(game->isoMatrix3 * actor->position);
+			Vec2 positionCenter2 = v2(game->isoMatrix3 * getCenter(aabb));
+			Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
+
+			// drawRectOutline(bounds, 2, 0xFFFF0000);
+
+			bool hasHpBar = false;
+			bool hasStaminaBar = false;
+			if (actor->type == ACTOR_UNIT) hasHpBar = hasStaminaBar = true;
+			Rect hpBgRect;
+			if (hasHpBar) {
+				hpBgRect = makeRect(0, 0, actor->size.x, 10);
+				hpBgRect.x = positionTop2.x - hpBgRect.width/2;
+				hpBgRect.y = positionTop2.y - hpBgRect.height/2;
+				drawRect(hpBgRect, 0xFFFF0000);
+
+				Rect rect = hpBgRect;
+				rect.width *= actor->hp/actor->maxHp;
+
+				int color = 0xFF44AA44;
+				if (actor->playerControlled) color = 0xFFF5EE2A;
+				drawRect(rect, color);
+			}
+
+			if (hasStaminaBar) {
+				Rect staminaBgRect = hpBgRect;
+				staminaBgRect.y += hpBgRect.height;
+				drawRect(staminaBgRect, 0xFF000070);
+
+				Rect rect = staminaBgRect;
+				rect.width *= actor->stamina/actor->maxStamina;
+				drawRect(rect, actor->stamina < 0 ? 0xFFF00000 : 0xFF0000F0);
+			}
+
+			if (game->debugDrawActorTargets) {
+				Actor *target = getActor(actor->aiTarget);
+				if (target) {
+					AABB targetAABB = getAABB(target);
+					Vec2 targetPositionCenter2 = v2(game->isoMatrix3 * getCenter(targetAABB));
+					drawLine(positionCenter2, targetPositionCenter2, 4, 0xFFFF0000);
+				}
+			}
+
+			if (game->inEditor) {
+				if (contains(bounds, game->worldMouse) || game->debugAlwaysShowWireframes) drawAABB2d(aabb, 2, 0xFFFFFFFF);
+
+				if (game->selectedActorId == actor->id) {
+					drawAABB2d(aabb, 2, lerpColor(0xFFFFFF80, 0xFFFFFF00, secondPhase));
+
+					if (game->inEditor) {
+						Line3 lineX = makeLine3(actor->position, actor->position + v3(64, 0, 0));
+						Line3 lineY = makeLine3(actor->position, actor->position + v3(0, 64, 0));
+						Line3 lineZ = makeLine3(actor->position, actor->position + v3(0, 0, 64));
+						drawLine(v2(game->isoMatrix3 * lineX.start), v2(game->isoMatrix3 * lineX.end), 4, 0xFFFF0000);
+						drawLine(v2(game->isoMatrix3 * lineY.start), v2(game->isoMatrix3 * lineY.end), 4, 0xFF00FF00);
+						drawLine(v2(game->isoMatrix3 * lineZ.start), v2(game->isoMatrix3 * lineZ.end), 4, 0xFF0000FF);
+					}
+				}
+			}
+
+			{ // Status lines
+				if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+					const int TEXT_LINES_MAX = 8;
+					char *textLines[TEXT_LINES_MAX];
+					int textLinesNum = 0;
+
+					if (game->debugDrawActorStatus) {
+						if (actor->timeInAir > 0) textLines[textLinesNum++] = frameSprintf("In air (%.1f)", actor->timeInAir);
+						if (actor->timeMoving > 0) textLines[textLinesNum++] = frameSprintf("Moving (%.1f)", actor->timeMoving);
+						if (actor->timeNotMoving > 0) textLines[textLinesNum++] = frameSprintf("Not moving (%.1f)", actor->timeNotMoving);
+					}
+
+					if (game->debugDrawActorAction) {
+						if (actor->actionsNum > 0) {
+							Action *action = &actor->actions[0];
+							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", action->info->name, action->time);
+						}
+					}
+
+					if (game->debugDrawActorStats) {
+						textLines[textLinesNum++] = frameSprintf(
+							"atk:%.0f hp:%.0f sGen:%.0f\nmaxS:%.0f move:%.0f aSpeed:%.0f",
+							getStatPoints(actor, STAT_DAMAGE),
+							getStatPoints(actor, STAT_HP),
+							getStatPoints(actor, STAT_STAMINA_REGEN),
+							getStatPoints(actor, STAT_MAX_STAMINA),
+							getStatPoints(actor, STAT_MOVEMENT_SPEED),
+							getStatPoints(actor, STAT_ATTACK_SPEED)
+						);
+					}
+
+					if (game->debugDrawActorStatsSimple) {
+						textLines[textLinesNum++] = "SIMPLE_STATS";
+						// textLines[textLinesNum++] = frameSprintf(
+						// 	"%.0f %.0f %.0f %.0f %.0f %.0f",
+						// 	getStatPoints(actor, STAT_DAMAGE),
+						// 	getStatPoints(actor, STAT_HP),
+						// 	getStatPoints(actor, STAT_STAMINA_REGEN),
+						// 	getStatPoints(actor, STAT_MAX_STAMINA),
+						// 	getStatPoints(actor, STAT_MOVEMENT_SPEED),
+						// 	getStatPoints(actor, STAT_ATTACK_SPEED)
+						// );
+					}
+
+					if (game->debugDrawActorFacingDirection) {
+						textLines[textLinesNum++] = frameSprintf("%s", actor->facingLeft ? "Facing left" : "Facing right");
+					}
+
+					Vec2 cursor = positionTop2;
+					for (int i = 0; i < textLinesNum; i++) {
+						if (streq(textLines[i], "SIMPLE_STATS")) {
+							char *statTextStrs[STATS_MAX];
+							Vec2 statTextSizes[STATS_MAX];
+							Vec2 size = v2();
+							for (int i = 0; i < STATS_MAX; i++) {
+								statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
+								statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
+								size.x += statTextSizes[i].x;
+								size.y = MaxNum(size.y, statTextSizes[i].y);
+							}
+							Vec2 position;
+							position.x = cursor.x - size.x/2;
+							position.y = cursor.y - size.y;
+
+							for (int i = 0; i < STATS_MAX; i++) {
+								drawText(game->simpleStatsFont, statTextStrs[i], position, statTypeColors[i]);
+								position.x += statTextSizes[i].x;
+							}
+
+							cursor.y -= size.y;
+						} else {
+							Vec2 size = getTextSize(game->defaultFont, textLines[i]);
+							Vec2 position;
+							position.x = cursor.x - size.x/2;
+							position.y = cursor.y - size.y;
+
+							Rect rect = inflate(makeRect(position, size), 5);
+							drawRect(rect, 0x80000000);
+							drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
+
+							cursor.y -= size.y;
+						}
+					}
+				}
+			}
+
+			{ // Status icons
+				if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+					struct Icon {
+						Texture *texture;
+						bool flipped;
+					};
+
+					const int ICONS_MAX = 128;
+					Icon *icons = (Icon *)zalloc(sizeof(Icon) * ICONS_MAX);
+					int iconsNum = 0;
+
+					// {
+					// 	Icon *icon = &icons[iconsNum++];
+					// 	icon->texture = getTexture("assets/images/statusIcons/arrowRight.png");
+					// 	if (actor->facingLeft) icon->flipped = true;
+					// }
+
+					for (int i = 0; i < actor->buffsNum; i++) {
+						Buff *buff = &actor->buffs[i];
+
+						if (buff->type == BUFF_HEAVEN_STEP_GRAVITY) {
+							Icon *icon = &icons[iconsNum++];
+							icon->texture = getTexture("assets/images/statusIcons/heavenStep.png");
+						} else if (buff->type == BUFF_BUDDHA_PALM_SLOW) {
+							Icon *icon = &icons[iconsNum++];
+							icon->texture = getTexture("assets/images/statusIcons/buddhaPalm.png");
+						} else {
+							Icon *icon = &icons[iconsNum++];
+							icon->texture = renderer->whiteTexture;
+						}
+
+					}
+
+					Vec2 cursor = position2 - v2(0, 50);
+					for (int i = 0; i < iconsNum; i++) {
+						Icon *icon = &icons[i];
+						Texture *texture = icon->texture;
+
+						Rect rect = makeCenteredSquare(cursor, 64);
+						Matrix3 mat = mat3();
+						mat.TRANSLATE(rect.x, rect.y);
+						mat.SCALE(rect.width, rect.height);
+						Vec2 uv0 = v2(0, 0);
+						Vec2 uv1 = v2(1, 1);
+
+						if (icon->flipped) {
+							uv0 = v2(1, 0);
+							uv1 = v2(0, 1);
+						}
+
+						drawRect(rect, 0x40000000);
+						drawSimpleTexture(icon->texture, mat, uv0, uv1);
+
+						cursor.y -= rect.height + 8;
+					}
+				}
+			}
+
+		}
+	} ///
+
+	{ /// Update effects
+		for (int i = 0; i < game->effectsNum; i++) {
+			Effect *effect = &game->effects[i];
+
+			bool complete = false;
+			float maxTime = 1;
+			Vec2 position2 = v2(game->isoMatrix3 * effect->position);
+
+			char *effectText = NULL;
+			int effectTextColor = 0;
+			if (effect->type == EFFECT_ENEMY_DAMAGE) {
+				effectText = frameSprintf("-%.0f", effect->value);
+				effectTextColor = 0xFFFF8000;
+			} else if (effect->type == EFFECT_PLAYER_DAMAGE) {
+				effectText = frameSprintf("-%.0f", effect->value);
+				effectTextColor = 0xFFFF0000;
+			} else if (effect->type == EFFECT_BLOCK_DAMAGE) {
+				effectText = frameSprintf("-%.0f", effect->value);
+				effectTextColor = 0xFF0000FF;
+			} else if (effect->type == EFFECT_MONEY) {
+				effectText = frameSprintf("+$%.2f", effect->value);
+				effectTextColor = 0xFF00FF00;
+			}
+
+			if (effectText) {
+				Vec2 size = getTextSize(game->particleFont, effectText);
+				Vec2 pos = position2 - size/2;
+
+				float alpha =
+					clampMap(effect->time, 0, maxTime*0.05, 0, 1)
+					* clampMap(effect->time, maxTime*0.95, maxTime, 1, 0);
+
+				pos.y += clampMap(effect->time, 0, maxTime*0.5, -20, 0, BOUNCE_OUT);
+
+				Rect rect = makeRect(pos, size);
+
+				pushAlpha(alpha);
+				drawRect(inflate(rect, 2), 0x30000000);
+				drawText(game->particleFont, effectText, pos, effectTextColor);
+				popAlpha();
+			}
+
+			effect->time += elapsed;
+			if (effect->time > maxTime) complete = true;
+
+			if (complete) {
+				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+				game->effectsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
+
+	{ /// Update map
+		game->timeTillNextCityTick -= elapsed;
+		float prevCityTime = game->cityTime;
+		game->cityTime += elapsed;
+		if (game->timeTillNextCityTick <= 0) {
+			// logf("Tick %d %f\n", game->cityTicks, game->cityTime); //@todo Maybe make this so time controls ticks
+			game->cityTicks++;
+			game->timeTillNextCityTick = SECS_PER_CITY_TICK;
+		}
+
+		float spreadAmount = 0.0005;
+		while (game->cityTicks > 0) {
+			game->cityTicks--;
+
+			for (int y = 0; y < CITY_ROWS; y++) {
+				for (int x = 0; x < CITY_COLS; x++) {
+					Map *map = getCityMapByCoords(x, y);
+
+					float totalAlliance = 0;
+					int teamsPresent = 0;
+
+					float highestTeamAlliance = 0;
+					for (int i = 0; i < TEAMS_MAX; i++) {
+						totalAlliance += map->alliances[i];
+						if (map->alliances[i] > 0) teamsPresent++;
+						if (highestTeamAlliance < map->alliances[i]) highestTeamAlliance = map->alliances[i];
+					}
+
+					for (int i = 0; i < TEAMS_MAX; i++) {
+						float normalizedAlliance = map->alliances[i] / totalAlliance;
+						if (totalAlliance == 0) normalizedAlliance = 0;
+
+						// map->alliances[i] += clampMap(normalizedAlliance, 0, 1, 0, 0.0001); // Self growth
+
+						float currentSpreadAmount = 0;
+						currentSpreadAmount += clampMap(normalizedAlliance, 0, 1, 0, spreadAmount);
+
+						int strongestTeam = getTeamWithMostAlliance(map);
+						int surroundingAtMaxCount = 0;
+						if (i == strongestTeam && map->alliances[i] > 0.9) {
+							surroundingAtMaxCount = getSurroundingAtMaxAlliance(v2i(x, y), i);
+							if (map->fortifiedPerc < 0.1 && surroundingAtMaxCount >= 8) {
+								map->fortifiedByTeam = i;
+								map->fortifiedPerc += 0.001;
+							}
+						}
+
+						if (map->fortifiedByTeam == i) {
+							if (map->fortifiedPerc > 0) {
+								float fortLerp = 0.01;
+								// if (map->fortifiedPerc < map->alliances[i]) fortLerp = 0.01;
+
+								map->fortifiedPerc = lerp(map->fortifiedPerc, normalizedAlliance, fortLerp);
+								map->alliances[i] += clampMap(map->fortifiedPerc, 0, 1, 0, 0.001);
+							}
+							map->fortifiedPerc = Clamp01(map->fortifiedPerc);
+							currentSpreadAmount *= clampMap(map->fortifiedPerc, 0, 1, 1, 1.5);
+						}
+
+						{ // Spread alliance
+							Map *possibleMaps[8] = {};
+							int possibleMapsNum = 0;
+							Map *adjMap;
+
+							// adjMap = getCityMapByCoords(x-1, y-1);
+							// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							// adjMap = getCityMapByCoords(x+1, y+1);
+							// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							// adjMap = getCityMapByCoords(x-1, y+1);
+							// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							// adjMap = getCityMapByCoords(x+1, y-1);
+							// if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							adjMap = getCityMapByCoords(x, y-1);
+							if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							adjMap = getCityMapByCoords(x, y+1);
+							if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							adjMap = getCityMapByCoords(x-1, y);
+							if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							adjMap = getCityMapByCoords(x+1, y);
+							if (adjMap) possibleMaps[possibleMapsNum++] = adjMap;
+
+							int team = i;
+							for (int i = 0; i < possibleMapsNum; i++) {
+								Map *map = possibleMaps[i];
+								if (map->alliances[i] >= 1) {
+									arraySpliceIndex(possibleMaps, possibleMapsNum, sizeof(Map *), i);
+									possibleMapsNum--;
+									i--;
+									continue;
+								}
+							}
+
+							if (possibleMapsNum > 0) {
+								int choice = rndInt(0, possibleMapsNum-1);
+								if (x == 6 && y == 1) {
+									int k=5;
+									// logf("[%d, %d] %d\n", 0, possibleMapsNum-1, choice);
+								}
+
+								possibleMaps[choice]->alliances[i] += currentSpreadAmount * 8;
+							}
+						}
+					}
+
+					for (int i = 0; i < TEAMS_MAX; i++) {
+						float lossToGive = highestTeamAlliance - 1;
+						if (teamsPresent > 1 && lossToGive > 0) {
+							map->alliances[i] -= lossToGive*2;
+						}
+						map->alliances[i] = Clamp01(map->alliances[i]); // Probably not needed
+					}
+
+				}
+			}
+		}
+
+		{ /// Update maps (stores)
+			float prevMod = fmod(prevCityTime, 120);
+			float currentMod = fmod(game->cityTime, 120);
+			if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
+				logf("Stores have restocked\n");
+				game->debugForceRestock = false;
+
+				Item *possibleItems = (Item *)frameMalloc(sizeof(Item) * ITEM_TYPES_MAX);
+				int possibleItemsNum = 0;
+				for (int i = 0; i < ITEM_TYPES_MAX; i++) {
+					ItemTypeInfo *info = &game->itemTypeInfos[i];
+
+					if (getStashedItemCount(player, (ItemType)i) >= info->maxAmountFromStore) continue;
+					//@todo prereqs
+
+					initItem(&possibleItems[possibleItemsNum], (ItemType)i, 1);
+					possibleItemsNum++;
+				}
+
+				game->storeItemsNum = 0;
+				for (int i = 0; i < 3; i++) {
+					if (possibleItemsNum <= 0) break;
+
+					int itemIndex = rndInt(0, possibleItemsNum-1);
+					game->storeItems[game->storeItemsNum] = possibleItems[itemIndex];
+					game->storeItemsNum++;
+					arraySpliceIndex(possibleItems, possibleItemsNum, sizeof(Item), itemIndex);
+					possibleItemsNum--;
+				}
+
+				// for (int i = 0; i < MAPS_MAX; i++) {
+				// 	Map *map = &game->maps[i];
+				// 	for (int i = 0; i < map->actorsNum; i++) {
+				// 		Actor *actor = &map->actors[i];
+				// 		if (actor->type == ACTOR_STORE) {
+				// 			actor->itemsNum = 0;
+				// 		}
+				// 	}
+				// }
+			}
+		} ///
+
+		{ /// Spawn enemies // Spawn npcs
+			auto createNpcUnit = [](Map *map)->Actor *{
+				Actor *actor = createActor(map, ACTOR_UNIT);
+
+				actor->team = rndPick(map->alliances, TEAMS_MAX);
+				Vec2 allianceMinMax = v2(0.05, 0.1);
+				actor->allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
+
+				int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 0, 20);
+				for (int i = 0; i < extraPoints; i++) {
+					actor->stats[rndInt(0, STATS_MAX-1)]++;
+					actor->level++;
+				}
+
+				return actor;
+			};
+
+			int currentNpcs = 0;
+			for (int i = 0; i < map->actorsNum; i++) {
+				Actor *actor = &map->actors[i];
+				if (actor->type == ACTOR_UNIT && !actor->playerControlled) currentNpcs++;
+			}
+
+			float totalAlliance = 0;
+			for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
+			int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 20);
+
+			int startingNpcs = maxNpcs * 0.8;
+			if (game->mapTime == 0 && startingNpcs > 0) {
+				auto generatePoissonPoints = [](AABB surface, Vec2 cellSize, int *outPointsNum)->Vec3 *{
+					Vec3 surfaceSize = getSize(surface);
+
+					int cellsWide = surfaceSize.x / cellSize.x;
+					int cellsHigh = surfaceSize.y / cellSize.y;
+
+					Vec3 *points = (Vec3 *)frameMalloc(sizeof(Vec3) * (cellsWide * cellsHigh));
+					int pointsNum = 0;
+					for (int y = 0; y < cellsHigh; y++) {
+						for (int x = 0; x < cellsWide; x++) {
+							Rect cell = makeRect(v2(), cellSize);
+							cell.x = surface.min.x + (x * cellSize.x);
+							cell.y = surface.min.y + (y * cellSize.y);
+							Vec2 pos;
+							pos.x = rndFloat(cell.x, cell.x+cell.width);
+							pos.y = rndFloat(cell.y, cell.y+cell.height);
+
+							points[pointsNum++] = v3(pos, surface.max.z + 1);
+						}
+					}
+
+					*outPointsNum = pointsNum;
+					return points;
+				};
+
+				auto removeInvalidSpawnPoints = [](Map *map, Vec3 *points, int pointsNum)->int {
+					for (int i = 0; i < pointsNum; i++) {
+						Vec3 point = points[i];
+						AABB aabb = getAABBFromSizePosition(UNIT_SIZE, point);
+						bool shouldRemove = false;
+						Actor *ground = getActorOfType(map, ACTOR_GROUND);
+						if (!equal(aabb, bringWithinBounds(getAABB(ground), aabb))) shouldRemove = true;
+						for (int i = 0; i < map->actorsNum; i++) {
+							Actor *actor = &map->actors[i];
+							if (overlaps(actor, aabb)) {
+								shouldRemove = true;
+								break;
+							}
+						}
+
+						if (shouldRemove) {
+							arraySpliceIndex(points, pointsNum, sizeof(Vec3), i);
+							pointsNum--;
+							i--;
+							continue;
+						}
+					}
+
+					return pointsNum;
+				};
+
+				Vec2 cellSize = v2(getSize(groundAABB)) / 2;
+
+				Vec3 *points;
+				int pointsNum;
+				for (int i = 0; ; i++) {
+					if (i > 100) {
+						logf("Failed 100 times to spawn units...\n");
+						pointsNum = 0;
+						break;
+					}
+
+					points = generatePoissonPoints(groundAABB, cellSize, &pointsNum);
+					pointsNum = removeInvalidSpawnPoints(map, points, pointsNum);
+
+					if (pointsNum >= startingNpcs) {
+						break;
+					} else {
+						cellSize.x *= 0.01;
+						cellSize.y *= 0.01;
+					}
+				}
+
+				if (pointsNum > 0) {
+					for (int i = 0; i < startingNpcs; i++) {
+						int pointIndex = rndInt(0, pointsNum-1);
+						Vec3 point = points[pointIndex];
+						arraySpliceIndex(points, pointsNum, sizeof(Vec3), pointIndex);
+						pointsNum--;
+
+						Actor *newActor = createNpcUnit(map);
+						newActor->position = point;
+					}
+				}
+			}
+
+			bool spawnThisFrame = false;
+			if (rndPerc(0.01)) spawnThisFrame = true;
+
+			if (currentNpcs < maxNpcs && spawnThisFrame) {
+				Actor *randomDoor = getRandomActorOfType(map, ACTOR_DOOR);
+				if (randomDoor) {
+					Actor *newActor = createNpcUnit(map);
+
+					int team = newActor->team;
+					float bestDoorAlliance = 0;
+					Actor *bestDoor = NULL;
+					for (int i = 0; i < map->actorsNum; i++) {
+						Actor *actor = &map->actors[i];
+						if (actor->type != ACTOR_DOOR) continue;
+						Map *destMap = getMapByName(actor->destMapName);
+						if (!bestDoor || destMap->alliances[team] > bestDoorAlliance) {
+							bestDoor = actor;
+							bestDoorAlliance = destMap->alliances[team];
+						}
+					}
+
+					AABB doorAABB = getAABB(bestDoor);
+					newActor->position.x = rndFloat(doorAABB.min.x, doorAABB.max.x);
+					newActor->position.y = rndFloat(doorAABB.min.y, doorAABB.max.y);
+					newActor->position.z = doorAABB.min.z;
+					if (newActor->position.z < getAABB(ground).max.z) newActor->position.z = getAABB(ground).max.z + 1;
+
+					bringWithinBounds(map, newActor);
+				}
+			}
+		} ///
+	} ///
+
+	{ /// Draw hud
+		pushCamera2d(renderer->currentCameraMatrix.invert());
+
+		{ /// Draw map
+			pushTargetTexture(game->mapTexture);
+			clearRenderer();
+			if (keyJustPressed('M')) game->lookingAtMap = !game->lookingAtMap;
+			if (game->lookingAtMap) {
+				Vec2 mapTileSize = v2(100, 100) * game->sizeScale;
+				Vec2 totalSize = v2(CITY_COLS, CITY_ROWS) * mapTileSize;
+
+				Vec2 startCursor = game->size/2 - totalSize/2;
+				Vec2 cursor = startCursor;
+				for (int y = 0; y < CITY_ROWS; y++) {
+					for (int x = 0; x < CITY_COLS; x++) {
+						Map *map = getCityMapByCoords(x, y);
+
+						Rect rect = makeRect(cursor, mapTileSize);
+						drawRect(rect, 0xA0000000);
+
+						float totalAlliance = 0;
+						for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
+						if (totalAlliance < 1) totalAlliance = 1;
+
+						if (game->mapVisualization == MAP_VISUALIZATION_SLICES) {
+							Vec2 sliceCursor = cursor;
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								float slicePerc = map->alliances[i] / totalAlliance;
+								Rect sliceRect = makeRect(sliceCursor, mapTileSize*v2(1, slicePerc));
+								drawRect(sliceRect, teamColors[i]);
+								sliceCursor.y += sliceRect.height;
+							}
+						} else if (game->mapVisualization == MAP_VISUALIZATION_BARS) {
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								Rect bar = makeRect(cursor, mapTileSize);
+								bar.width *= 1.0/TEAMS_MAX;
+								bar.x += bar.width * i;
+
+								float oldHeight = bar.height;
+								bar.height *= Clamp01(map->alliances[i]);
+								bar.y += oldHeight - bar.height;
+								drawRect(bar, teamColors[i]);
+							}
+						} else if (game->mapVisualization == MAP_VISUALIZATION_LOCKED_IN) {
+							bool anyOver = false;
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								if (map->alliances[i] > 0.5) anyOver = true;
+							}
+
+							Rect rect = makeRect(cursor, mapTileSize);
+							if (anyOver && map->alliances[player->team] < 0.5) {
+								drawRect(rect, 0xFF800000);
+							} else {
+								drawRect(rect, 0xFF008000);
+							}
+						} else if (game->mapVisualization == MAP_VISUALIZATION_MAX_ALLIANCE_SURROUNDING) {
+							Rect rect = makeRect(cursor, mapTileSize);
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+
+							int team = getTeamWithMostAlliance(map);
+							if (map->alliances[team] > 0.9) {
+								int count = getSurroundingAtMaxAlliance(v2i(x, y), team);
+								drawRect(rect, lerpColor(0xFF00FF00, 0xFFFF0000, (float)count/(TEAMS_MAX-1)));
+								drawTextInRect(frameSprintf("%d", count), props, inflatePerc(rect, -0.1));
+							}
+						}
+
+						if (map == &game->maps[game->currentMapIndex]) {
+							drawRect(rect, lerpColor(0x60FFFF00, 0xC0FFFF00, timePhase(game->time)));
+						}
+
+						if (game->nextMapIndex != game->currentMapIndex && map == &game->maps[game->nextMapIndex]) {
+							drawRect(rect, lerpColor(0x60FFFFFF, 0xC0FFFFFF, timePhase(game->time * 5)));
+						}
+
+						drawRectOutline(rect, 5, 0xFF000000);
+
+						if (map->fortifiedPerc > 0.1) {
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFF444444);
+							drawTextInRect(frameSprintf("%.0f%% fortied", map->fortifiedPerc*100), props, inflatePerc(rect, -0.1));
+						}
+
+						if (game->inEditor) {
+							if (contains(rect, game->mouse)) {
+								drawRectOutline(rect, 4, 0xFFFF0000);
+								if (platform->mouseJustDown) game->editorSelectedCityMap = map;
+							}
+						}
+
+						cursor.x += rect.width;
+						if (x == CITY_COLS-1) {
+							cursor.x = startCursor.x;
+							cursor.y += rect.height;
+						}
+					}
+				}
+
+				if (lastStepOfFrame && game->inEditor) {
+					Map *map = game->editorSelectedCityMap;
+					if (map) {
+						ImGui::Begin("Map data", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+						ImGui::Combo("Visual", (int *)&game->mapVisualization, mapVisualizationStrings, ArrayLength(mapVisualizationStrings));
+						ImGui::Separator();
+
+						if (ImGui::Button("Advance 60 seconds")) {
+							game->cityTicks += 60.0/SECS_PER_CITY_TICK;
+							game->cityTime += 60;
+						}
+						if (ImGui::Button("Advance 5 min")) {
+							game->cityTicks += (60.0*5)/SECS_PER_CITY_TICK;
+							game->cityTime += 60*5;
+						}
+						ImGui::Separator();
+
+						Vec2i coords = getCoordsByCityMap(map);
+						ImGui::Text("%d, %d", coords.x, coords.y);
+						if (ImGui::Button("Go")) game->nextMapIndex = getIndexByMap(map);
+						if (ImGui::TreeNode("Base alliances")) {
+							if (ImGui::Button("Copy from current")) memcpy(map->baseAlliances, map->alliances, sizeof(float) * TEAMS_MAX);
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(teamColors[i], 0xFF000000, 0.5));
+								ImGui::SliderFloat(frameSprintf("Alliance %d", i), &map->baseAlliances[i], 0, 1);
+								guiPopStyleColor();
+							}
+							ImGui::TreePop();
+						}
+
+						if (ImGui::TreeNode("Current alliances")) {
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								ImGui::PushID(i);
+								guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(teamColors[i], 0xFF000000, 0.5));
+								ImGui::SliderFloat(frameSprintf("Alliance %d", i), &map->alliances[i], 0, 1);
+								ImGui::SameLine();
+								if (ImGui::Button("+10%")) {
+									map->alliances[i] += 0.1;
+								}
+								guiPopStyleColor();
+								ImGui::PopID();
+							}
+							ImGui::TreePop();
+						}
+						ImGui::End();
+					}
+				}
+			}
+
+			popTargetTexture(); // game->mapTexture
+		} ///
+
+		{ /// Update inventory
+			if (keyJustPressed('N')) game->inInventory = !game->inInventory;
+			if (game->inInventory) {
+				auto drawItemIcon = [](Item *item, Rect rect) {
+					drawRect(rect, 0xFF444444);
+
+					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
+					drawTextInRect(game->itemTypeInfos[item->type].name, props, rect);
+				};
+
+				Rect bg;
+				bg.width = game->size.x * 0.8;
+				bg.height = game->size.y * 0.8;
+				bg.x = game->size.x/2 - bg.width/2;
+				bg.y = game->size.y/2 - bg.height/2;
+				drawRect(bg, 0xDD555555);
+
+				{
+					Rect itemContainer = bg;
+					itemContainer.width *= 0.5;
+					itemContainer = inflatePerc(itemContainer, -0.1);
+					drawRect(itemContainer, 0xFF222222);
+
+					int cols = 6;
+					Vec2 cellSize = v2(itemContainer.width/8, itemContainer.width/8);
+					Vec2 cursor = getPosition(itemContainer);
+					for (int i = 0; i < player->itemsNum; i++) {
+						Item *item = &player->items[i];
+
+						bool inUse = false;
+						for (int i = 0; i < STYLES_MAX; i++) {
+							Style *style = &player->styles[i];
+							for (int i = 0; i < 3; i++) {
+								int *slotPtr = NULL;
+								if (i == 0) slotPtr = &style->passiveItem;
+								if (i == 1) slotPtr = &style->activeItem0;
+								if (i == 2) slotPtr = &style->activeItem1;
+
+								if (item->id == *slotPtr) {
+									inUse = true;
+									break;
+								}
+							}
+						}
+
+						if (game->draggingItemId == item->id || inUse) pushAlpha(0.5);
+
+						Rect iconRect = makeRect(cursor, cellSize);
+						drawItemIcon(item, inflatePerc(iconRect, -0.1));
+
+						if (game->draggingItemId == item->id || inUse) popAlpha();
+
+						if (platform->mouseJustDown && contains(iconRect, game->mouse) && !game->draggingItemId && !inUse) {
+							game->draggingItemId = item->id;
+						}
+
+						cursor.x += iconRect.width;
+						if (cursor.x + cellSize.x > itemContainer.x + itemContainer.width) {
+							cursor.x = itemContainer.x;
+							cursor.y += cellSize.y;
+						}
+					}
+				}
+
+				bool itemDropped = game->draggingItemId && !platform->mouseDown;
+				Rect draggingRect = makeCenteredSquare(game->mouse, game->size.y * 0.05);
+
+				{
+					Rect stylesContainer = bg;
+					stylesContainer.width *= 0.5;
+					stylesContainer.x += stylesContainer.width;
+					stylesContainer = inflatePerc(stylesContainer, -0.1);
+					drawRect(stylesContainer, 0xFF444444);
+
+					int stylesMax = 4;
+					for (int i = 0; i < stylesMax; i++) {
+						Style *style = &player->styles[i];
+
+						Rect styleContainer = stylesContainer;
+						styleContainer.height /= stylesMax;
+						styleContainer.y += styleContainer.height * i;
+						styleContainer = inflatePerc(styleContainer, -0.1);
+						drawRect(styleContainer, 0xFF333333);
+
+						int slotsMax = 3;
+						for (int i = 0; i < slotsMax; i++) {
+							bool isActiveSlot = false;
+							int *slotPtr = NULL;
+							if (i == 0) {
+								slotPtr = &style->passiveItem;
+							} else if (i == 1) {
+								slotPtr = &style->activeItem0;
+								isActiveSlot = true;
+							} else if (i == 2) {
+								slotPtr = &style->activeItem1;
+								isActiveSlot = true;
+							} else {
+								logf("Invalid slot\n");
+							}
+
+							Rect slotRect = styleContainer;
+							slotRect.width /= slotsMax;
+							slotRect.x += slotRect.width * i;
+							slotRect = inflatePerc(slotRect, -0.2);
+							Item *item = getItem(player, *slotPtr);
+							if (item) {
+								drawItemIcon(item, slotRect);
+								Circle xCircle = makeCircle(v2(slotRect.x + slotRect.width, slotRect.y), game->size.y*0.02);
+								drawCircle(xCircle, 0xFFFF0000);
+								if (platform->mouseJustUp && contains(xCircle, game->mouse)) *slotPtr = 0;
+							} else {
+								int color = 0xFF111111;
+								if (!isActiveSlot) color = lerpColor(color, 0xFF0000FF, 0.1);
+								drawRect(slotRect, color);
+							}
+
+							bool canDropItemHere = false;
+							Item *draggingItem = getItem(player, game->draggingItemId);
+							if (draggingItem && isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_ACTIVE) canDropItemHere = true;
+							if (draggingItem && !isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_PASSIVE) canDropItemHere = true;
+
+							if (itemDropped && overlaps(slotRect, draggingRect)) {
+								if (canDropItemHere) {
+									*slotPtr = game->draggingItemId;
+									game->draggingItemId = 0; // Drop instantly to avoid putting in multiple slots on the same frame
+								} else {
+									logf("Can't put item in this slot...\n");
+								}
+							}
+						}
+					}
+				}
+
+				if (game->draggingItemId) {
+					Item *item = getItem(player, game->draggingItemId);
+					drawItemIcon(item, draggingRect);
+					if (!platform->mouseDown) game->draggingItemId = 0;
+				}
+			}
+		} ///
+
+		{ /// Corner text
+			const int TEXT_LINES_MAX = 32;
+			char *textLines[TEXT_LINES_MAX];
+			int textLinesNum = 0;
+
+			textLines[textLinesNum++] = "J - Punch";
+			textLines[textLinesNum++] = "K - Kick";
+
+			Style *style = &player->styles[player->styleIndex];
+			Item *item0 = getItem(player, style->activeItem0);
+			Item *item1 = getItem(player, style->activeItem1);
+			ActionTypeInfo *info0 = &globals->actionTypeInfos[item0 ? item0->info->actionType : ACTION_NONE];
+			ActionTypeInfo *info1 = &globals->actionTypeInfos[item1 ? item1->info->actionType : ACTION_NONE];
+
+			textLines[textLinesNum++] = frameSprintf("U - %s", info0->name);
+			textLines[textLinesNum++] = frameSprintf("I - %s", info1->name);
+
+			Vec2 cursor = v2(3, game->size.y);
+			for (int i = textLinesNum-1; i >= 0; i--) {
+				Vec2 size = getTextSize(game->defaultFont, textLines[i]);
+				Vec2 position;
+				position.x = cursor.x;
+				position.y = cursor.y - size.y;
+
+				Rect rect = makeRect(position, size);
+				drawRect(rect, 0x80000000);
+				drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
+
+				cursor.y -= size.y;
+			}
+		} ///
+
+		{ /// Xp bar
+#if 1
+			drawText(game->defaultFont, frameSprintf("Money: $%.2f\n", player->money), v2(), 0xFFEEEEEE);
+#else
+			float maxXp = 100;
+
+			Rect bgRect = makeRect(v2(), v2(0.3, 0.1)*game->size);
+			drawRect(bgRect, 0xFF000000);
+			Rect rect = inflate(bgRect, -0.01*game->size.y);
+			rect.width *= player->money / maxXp;
+			drawRect(rect, 0xFF808000);
+#endif
+		} ///
+
+		{ /// Store
+			updateStore(player, NULL, elapsed);
+		} ///
+
+		{ /// Time
+			int h, m, s;
+			secsToHMS(&h, &m, &s, game->cityTime);
+			Rect rect;
+			rect.width = game->size.x * 0.1;
+			rect.height = game->size.y * 0.05;
+			rect.x = game->size.x/2 - rect.width/2;
+			rect.y = game->size.y * 0.01;
+
+			DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
+			if (h > 0) {
+				drawTextInRect(frameSprintf("%02d:%02d:%02d", h, m, s), props, rect);
+			} else {
+				drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
+			}
+		}
+
+		popCamera2d();
+	} ///
+	popTargetTexture(); // game->debugTexture
+
+	for (int i = 0; i < map->actorsNum; i++) { /// Removed marked actors
+		Actor *actor = &map->actors[i];
+		if (actor->markedForDeletion) {
+			if (actor->type == ACTOR_UNIT && actor->team != player->team) {
+				int xpToGive = actor->level;
+				for (;;) {
+					int chunkSize = rndInt(1, 3);
+					if (chunkSize > xpToGive) chunkSize = xpToGive;
+
+					Actor *xp = createActor(map, ACTOR_ITEM);
+					xp->position = actor->position;
+					xp->itemType = ITEM_MONEY;
+					xp->itemAmount = chunkSize;
+					xp->velo.x = rndFloat(-1, 1);
+					xp->velo.y = rndFloat(-1, 1);
+					xp->velo.z = rndFloat(0.2, 1)*2;
+					xp->velo *= v3(7, 7, 12);
+
+					xpToGive -= chunkSize;
+					if (xpToGive <= 0) break;
+				}
+			}
+			removeActorByIndex(map, i);
+			i--;
+			continue;
+		}
+	} ///
+
+	popCamera2d();
 }
 
 void updateStore(Actor *player, Actor *storeActor, float elapsed) {
