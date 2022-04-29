@@ -2969,11 +2969,24 @@ void updateGame() {
 				if (rndPerc(0.01)) spawnThisFrame = true;
 
 				if (currentNpcs < maxNpcs && spawnThisFrame) {
-					Actor *door = getRandomActorOfType(map, ACTOR_DOOR);
-					if (door) {
-						AABB doorAABB = getAABB(door);
-
+					Actor *randomDoor = getRandomActorOfType(map, ACTOR_DOOR);
+					if (randomDoor) {
 						Actor *newActor = createNpcUnit(map);
+
+						int team = newActor->team;
+						float bestDoorAlliance = 0;
+						Actor *bestDoor = NULL;
+						for (int i = 0; i < map->actorsNum; i++) {
+							Actor *actor = &map->actors[i];
+							if (actor->type != ACTOR_DOOR) continue;
+							Map *destMap = getMapByName(actor->destMapName);
+							if (!bestDoor || destMap->alliances[team] > bestDoorAlliance) {
+								bestDoor = actor;
+								bestDoorAlliance = destMap->alliances[team];
+							}
+						}
+
+						AABB doorAABB = getAABB(bestDoor);
 						newActor->position.x = rndFloat(doorAABB.min.x, doorAABB.max.x);
 						newActor->position.y = rndFloat(doorAABB.min.y, doorAABB.max.y);
 						newActor->position.z = doorAABB.min.z;
