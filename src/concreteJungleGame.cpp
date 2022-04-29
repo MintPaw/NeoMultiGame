@@ -1087,7 +1087,6 @@ void updateGame() {
 					for (int i = 0; i < srcMap->actorsNum; i++) {
 						Actor *actor = &srcMap->actors[i];
 						if (actor->type == ACTOR_UNIT && !actor->playerControlled) {
-							srcMap->alliances[actor->team] += actor->allianceCost;
 							deleteActor(srcMap, actor);
 							i--;
 							continue;
@@ -2399,11 +2398,15 @@ void updateGame() {
 			if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
 			if (actor->hp <= 0 && actor->maxHp > 0) {
 				actor->markedForDeletion = true;
-				if (actor->type == ACTOR_UNIT && actor->playerControlled) {
-					game->nextMapIndex = CITY_START_INDEX;
-					logf("You died (-$%.2f)\n", player->money*0.5);
-					player->money *= 0.5;
-					// game->nextState = GAME_DEAD;
+				if (actor->type == ACTOR_UNIT) {
+					if (actor->playerControlled) {
+						game->nextMapIndex = CITY_START_INDEX;
+						logf("You died (-$%.2f)\n", player->money*0.5);
+						player->money *= 0.5;
+						// game->nextState = GAME_DEAD;
+					} else {
+						map->alliances[actor->team] -= actor->allianceCost;
+					}
 				}
 			}
 			actor->hp = mathClamp(actor->hp, 0, actor->maxHp);
