@@ -514,10 +514,6 @@ struct Particle {
 	float maxTime;
 };
 
-enum GameState {
-	GAME_NONE,
-	GAME_PLAY,
-};
 struct Game {
 	Font *defaultFont;
 	Font *particleFont;
@@ -538,12 +534,6 @@ struct Game {
 
 	Vec2 screenOverlayOffset;
 	Vec2 screenOverlaySize;
-
-	GameState state;
-	GameState prevState;
-	GameState nextState;
-	float stateTransition_t;
-	float stateTime;
 
 	int hitPauseFrames;
 
@@ -968,33 +958,13 @@ void updateGame() {
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	// platform->disableGui = !game->inEditor;
 
-	if (game->state != game->nextState) {
-		game->stateTransition_t += 0.05;
-		if (game->stateTransition_t >= 1) game->state = game->nextState;
-	} else {
-		game->stateTransition_t -= 0.05;
-	}
-	game->stateTransition_t = Clamp01(game->stateTransition_t);
+	bool shouldDraw3d = true;
 
-	if (game->prevState != game->state) {
-		game->prevState = game->state;
-		game->stateTime = 0;
-	}
+	int steps = 1;
 
-	bool shouldDraw3d = false;
-	if (game->state == GAME_NONE) {
-		if (game->stateTime == 0) {
-			game->nextState = GAME_PLAY;
-		}
-	} else if (game->state == GAME_PLAY) {
-		shouldDraw3d = true;
-
-		int steps = 1;
-
-		for (int i = 0; i < steps; i++) {
-			bool lastStepOfFrame = i == (steps-1);
-			stepGame(lastStepOfFrame, elapsed, timeScale);
-		}
+	for (int i = 0; i < steps; i++) {
+		bool lastStepOfFrame = i == (steps-1);
+		stepGame(lastStepOfFrame, elapsed, timeScale);
 	}
 
 	{ /// Update world channels
@@ -1019,7 +989,6 @@ void updateGame() {
 	} ///
 
 	game->mapTime += elapsed;
-	game->stateTime += elapsed;
 
 	popTargetTexture(); // game->gameTexture
 
@@ -1397,7 +1366,7 @@ void updateGame() {
 		drawSimpleTexture(texture, matrix);
 	}
 
-	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, Clamp01(game->stateTransition_t+game->nextMap_t)));
+	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, Clamp01(game->nextMap_t)));
 
 	{
 		RenderTexture *texture = game->mapTexture;
