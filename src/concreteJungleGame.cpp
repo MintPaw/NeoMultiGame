@@ -6,6 +6,7 @@
 // Grenade enemy
 // Guys that have less hitstun?
 // Don't block backwards?
+// Make it so you can't get hit during prewarm
 
 /*
 
@@ -1682,9 +1683,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		if (ImGui::TreeNodeEx("City", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::Button("Reapply templates to all")) {
-				Map *basicTemplate = getMapByName("#basicTemplate");
-				if (!basicTemplate) Panic("Bad");
-
 				if (CITY_START_INDEX + (CITY_ROWS * CITY_COLS) > MAPS_MAX-1) Panic("Not enough maps...\n");
 				for (int y = 0; y < CITY_ROWS; y++) {
 					for (int x = 0; x < CITY_COLS; x++) {
@@ -1693,13 +1691,39 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						Map *map = &game->maps[mapIndex];
 						if (!map->isTemplatized) continue;
 
+						Map *templateMap = NULL;
+						char *choices[] = {
+							"#basicTemplate",
+							"#cornerBuildings",
+							"#longRoom",
+						};
+						templateMap = getMapByName(choices[rndInt(0, ArrayLength(choices)-1)]);
+
 						float baseAlliances[TEAMS_MAX];
 						memcpy(baseAlliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
-						*map = *basicTemplate;
+						*map = *templateMap;
 
 						strcpy(map->name, frameSprintf("city%d-%d", x, y));
 						map->isTemplatized = true;
 						memcpy(map->baseAlliances, baseAlliances, sizeof(float) * TEAMS_MAX);
+
+						if (streq(templateMap->name, "#cornerBuildings")) {
+							Actor *building = NULL;
+
+							building = getActorByName(map, "leftBuilding");
+							building->size.x *= rndFloat(0.5, 1);
+							building->size.y *= rndFloat(0.5, 1);
+							building->position.x -= 2000;
+							building->position.y += 2000;
+							bringWithinBounds(map, building);
+
+							building = getActorByName(map, "rightBuilding");
+							building->size.x *= rndFloat(0.5, 1);
+							building->size.y *= rndFloat(0.5, 1);
+							building->position.x += 2000;
+							building->position.y += 2000;
+							bringWithinBounds(map, building);
+						}
 
 						{ /// Fix doors
 							Actor *door;
@@ -1907,7 +1931,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		Actor *actor = getActor(game->selectedActorId);
 		if (actor) {
-			// if (ImGui::Button("Delete actor")) actor->markedForDeletion = true;
+			if (ImGui::Button("Delete actor")) actor->markedForDeletion = true;
 			if (ImGui::Button("Duplicate actor")) {
 				Actor *newActor = createActor(map, actor->type);
 				int id = newActor->id;
@@ -2815,6 +2839,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
 
 		actor->aiStateTime += elapsed;
+		if (actor->position.z < -10000) actor->position = v3(0, 0, 500);
 	} ///
 
 	{ /// Update particles
@@ -3298,7 +3323,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 			float totalAlliance = 0;
 			for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
-			int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 20);
+			int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 10);
 
 			int startingNpcs = maxNpcs * 0.8;
 			if (game->mapTime == 0 && startingNpcs > 0) {
