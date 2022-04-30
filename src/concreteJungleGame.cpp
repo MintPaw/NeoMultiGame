@@ -111,6 +111,7 @@ alertedPointing
 #define BLOCKING_STAMINA_THRESHOLD 5
 #define SECS_PER_CITY_TICK 1
 Vec3 UNIT_SIZE = v3(150, 150, 300);
+#define ROOM_PREWARM_TIME 5
 
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
@@ -544,6 +545,7 @@ struct Game {
 	int currentMapIndex;
 	int nextMapIndex;
 	float nextMap_t;
+	float prevMapTime;
 	float mapTime;
 
 	Vec3 cameraTarget;
@@ -607,6 +609,7 @@ struct Game {
 	bool debugNeverTakeDamage;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
+	bool debugSkipPrewarm;
 
 	/// 3D
 	Vec2i cameraAngleDegrees;
@@ -960,7 +963,11 @@ void updateGame() {
 
 	bool shouldDraw3d = true;
 
-	int steps = 5;
+	int steps = 1;
+
+	if (!game->debugSkipPrewarm && game->mapTime < ROOM_PREWARM_TIME) {
+		steps = 5;
+	}
 
 	for (int i = 0; i < steps; i++) {
 		bool lastStepOfFrame = i == (steps-1);
@@ -987,8 +994,6 @@ void updateGame() {
 			channel->pan = pan;
 		}
 	} ///
-
-	game->mapTime += elapsed;
 
 	popTargetTexture(); // game->gameTexture
 
@@ -1349,7 +1354,10 @@ void updateGame() {
 		drawSimpleTexture(texture, matrix);
 	}
 
-	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, Clamp01(game->nextMap_t)));
+	float fadeOutPerc = game->nextMap_t;
+	if (!game->debugSkipPrewarm) fadeOutPerc += clampMap(game->mapTime, ROOM_PREWARM_TIME, ROOM_PREWARM_TIME+0.25, 1, 0);
+	fadeOutPerc = Clamp01(fadeOutPerc);
+	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, fadeOutPerc));
 
 	{
 		RenderTexture *texture = game->mapTexture;
@@ -1368,12 +1376,9 @@ void updateGame() {
 
 	guiDraw();
 	drawOnScreenLog();
-
-	game->prevTime = game->time;
-	game->time += elapsed;
 }
 
-void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) { 
+void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 	Globals *globals = &game->globals;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
@@ -1426,11 +1431,12 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		game->isoMatrix3 = matrix;
 	} ///
 
+	bool inRoomPrewarm = false;
 	{ /// Change map
 		if (game->nextMapIndex != game->currentMapIndex) {
 			bool changeMaps = false;
 			if (game->nextMap_t <= 0) game->lookingAtMap = true;
-			game->nextMap_t += 0.03;
+			game->nextMap_t += 0.1;
 			if (game->nextMap_t > 1) changeMaps = true;
 
 			if (changeMaps) {
@@ -1501,10 +1507,15 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			}
 		} else {
 			float prevNextMap_t = game->nextMap_t;
-			game->nextMap_t -= 0.03;
-			if (prevNextMap_t > 0 && game->nextMap_t <= 0) game->lookingAtMap = false;
+			game->nextMap_t -= 0.1;
+			if (game->debugSkipPrewarm && prevNextMap_t > 0 && game->nextMap_t <= 0) game->lookingAtMap = false;
 		}
 		game->nextMap_t = Clamp01(game->nextMap_t);
+
+		if (game->mapTime < ROOM_PREWARM_TIME) inRoomPrewarm = true;
+		if (game->debugSkipPrewarm) inRoomPrewarm = false;
+
+		if (game->prevMapTime < ROOM_PREWARM_TIME && game->mapTime >= ROOM_PREWARM_TIME) game->lookingAtMap = false;
 	} ///
 
 	Map *map = &game->maps[game->currentMapIndex];
@@ -1614,6 +1625,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
+			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 
 			ImGui::SliderInt("Degs1", &game->cameraAngleDegrees.x, 0, 90);
 			ImGui::SliderInt("Degs2", &game->cameraAngleDegrees.y, -90, 90);
@@ -2306,7 +2318,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				bool changeStyle2Pressed = false;
 				bool changeStyle3Pressed = false;
 				bool changeStyle4Pressed = false;
-				if (!game->inEditor && canInput && actor->stamina > 0) {
+				if (!game->inEditor && !inRoomPrewarm && canInput && actor->stamina > 0) {
 					if (keyPressed('W') || keyPressed(KEY_UP)) inputVec.y++;
 					if (keyPressed('S') || keyPressed(KEY_DOWN)) inputVec.y--;
 					if (keyPressed('A') || keyPressed(KEY_LEFT)) inputVec.x--;
@@ -2464,6 +2476,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 										Actor *otherActor = &map->actors[i];
 										if (otherActor->type != ACTOR_UNIT) continue;
 										if (otherActor->team == actor->team) continue;
+										if (otherActor->playerControlled && inRoomPrewarm) continue;
 
 										int otherAttackersNum;
 										int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
@@ -3798,6 +3811,12 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 	} ///
 
 	popCamera2d();
+
+	game->prevMapTime = game->mapTime;
+	game->mapTime += elapsed;
+
+	game->prevTime = game->time;
+	game->time += elapsed;
 }
 
 void updateStore(Actor *player, Actor *storeActor, float elapsed) {
@@ -4311,6 +4330,8 @@ void drawAABB2d(AABB aabb, int lineThickness, int color) {
 }
 
 int playWorldSound(char *path, Vec3 worldPosition) {
+	if (!game->debugSkipPrewarm && game->mapTime < ROOM_PREWARM_TIME) return 0;
+
 	Sound *sound = getSound(path);
 	if (!sound) {
 		logf("No sound called %s\n", path);
