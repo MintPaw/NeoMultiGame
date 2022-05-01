@@ -185,6 +185,8 @@ struct ActionTypeInfo {
 	int startupFrames;
 	int activeFrames;
 	int recoveryFrames;
+	int hitstunFrames;
+	int blockstunFrames;
 	char animationName[PATH_MAX_LEN];
 	bool animationLoops;
 
@@ -194,8 +196,6 @@ struct ActionTypeInfo {
 
 	Vec3 hitVelo;
 	Vec3 blockVelo;
-	float hitstunTime;
-	float blockstunTime;
 	float damage;
 
 	Vec3 thrust;
@@ -1708,9 +1708,15 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						ImGui::CheckboxFlags("Allowed on ground", &info->flags, _F_AT_ALLOWED_ON_GROUND);
 						ImGui::SameLine();
 						ImGui::CheckboxFlags("Allowed in air", &info->flags, _F_AT_ALLOWED_IN_AIR);
-						ImGui::InputInt("Startup frames", &info->startupFrames);
-						ImGui::InputInt("Active frames", &info->activeFrames);
-						ImGui::InputInt("Recovery frames", &info->recoveryFrames);
+						if (ImGui::TreeNode("Frame data")) {
+							ImGui::InputInt("Startup frames", &info->startupFrames);
+							ImGui::InputInt("Active frames", &info->activeFrames);
+							ImGui::InputInt("Recovery frames", &info->recoveryFrames);
+							ImGui::InputInt("Hitstun frames", &info->hitstunFrames);
+							ImGui::InputInt("Blockstun frames", &info->blockstunFrames);
+							ImGui::Text("Adv: %d/%d", info->hitstunFrames - info->recoveryFrames, info->blockstunFrames - info->recoveryFrames);
+							ImGui::TreePop();
+						}
 						ImGui::PushItemWidth(100);
 						ImGui::InputText("Animation name", info->animationName, PATH_MAX_LEN);
 						ImGui::PopItemWidth();
@@ -1734,11 +1740,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 							ImGui::DragFloat3("Block velo", &info->blockVelo.x);
 							ImGui::DragFloat3("Thrust", &info->thrust.x);
 							ImGui::InputInt("Thrust frame", &info->thrustFrame);
-							ImGui::TreePop();
-						}
-						if (ImGui::TreeNode("Times")) {
-							ImGui::DragFloat("Hitsun time", &info->hitstunTime, 0.1);
-							ImGui::DragFloat("Blocksun time", &info->blockstunTime, 0.1);
 							ImGui::TreePop();
 						}
 						ImGui::InputFloat("Damage", &info->damage);
@@ -2072,8 +2073,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 										otherActor->actionsNum = 0;
 										Action *newAction = addAction(otherActor, ACTION_BLOCKSTUN);
-										newAction->customLength = action->info->blockstunTime;
-										if (newAction->customLength == 0) newAction->customLength = action->info->hitstunTime;
+										newAction->customLength = action->info->blockstunFrames/60.0;
+										if (newAction->customLength == 0) newAction->customLength = action->info->hitstunFrames/60.0;
 									} else {
 										particleColor = 0x80FF0000;
 										particlesAmount = damage;
@@ -2107,7 +2108,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 										otherActor->actionsNum = 0;
 										Action *newAction = addAction(otherActor, ACTION_HITSTUN);
-										newAction->customLength = action->info->hitstunTime;
+										newAction->customLength = action->info->hitstunFrames/60.0;
 
 										if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
 									}
@@ -4393,7 +4394,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 8;
+	int globalsVersion = 9;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -4403,14 +4404,14 @@ void saveGlobals() {
 		writeU32(stream, info->startupFrames);
 		writeU32(stream, info->activeFrames);
 		writeU32(stream, info->recoveryFrames);
+		writeU32(stream, info->hitstunFrames);
+		writeU32(stream, info->blockstunFrames);
 		writeString(stream, info->animationName);
 		writeU8(stream, info->animationLoops);
 		for (int i = 0; i < HITBOXES_MAX; i++) writeAABB(stream, info->hitboxes[i]);
 		writeU32(stream, info->hitboxesNum);
 		writeVec3(stream, info->hitVelo);
 		writeVec3(stream, info->blockVelo);
-		writeFloat(stream, info->hitstunTime);
-		writeFloat(stream, info->blockstunTime);
 		writeFloat(stream, info->damage);
 		writeVec3(stream, info->thrust);
 		writeU32(stream, info->thrustFrame);
@@ -4442,34 +4443,30 @@ void loadGlobals() {
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
 		ActionTypeInfo *info = &globals->actionTypeInfos[i];
 		readStringInto(stream, info->name, ACTION_NAME_MAX_LEN);
-		if (globalsVersion >= 5) info->flags = readU32(stream);
+		info->flags = readU32(stream);
 		info->startupFrames = readU32(stream);
 		info->activeFrames = readU32(stream);
 		info->recoveryFrames = readU32(stream);
-		if (globalsVersion >= 6) readStringInto(stream, info->animationName, PATH_MAX_LEN);
-		if (globalsVersion >= 7) info->animationLoops = readU8(stream);
+		info->hitstunFrames = readU32(stream);
+		info->blockstunFrames = readU32(stream);
+		readStringInto(stream, info->animationName, PATH_MAX_LEN);
+		info->animationLoops = readU8(stream);
 		for (int i = 0; i < HITBOXES_MAX; i++) info->hitboxes[i] = readAABB(stream);
 		info->hitboxesNum = readU32(stream);
 		info->hitVelo = readVec3(stream);
-		if (globalsVersion >= 4) info->blockVelo = readVec3(stream);
-		info->hitstunTime = readFloat(stream);
-		if (globalsVersion >= 4) info->blockstunTime = readFloat(stream);
+		info->blockVelo = readVec3(stream);
 		info->damage = readFloat(stream);
 		info->thrust = readVec3(stream);
 		info->thrustFrame = readU32(stream);
-		if (globalsVersion >= 2) info->staminaUsage = readFloat(stream);
-		if (globalsVersion >= 3) {
-			info->buffToGet = (BuffType)readU32(stream);
-			info->buffToGetTime = readFloat(stream);
-			info->buffToGive = (BuffType)readU32(stream);
-			info->buffToGiveTime = readFloat(stream);
-		}
+		info->staminaUsage = readFloat(stream);
+		info->buffToGet = (BuffType)readU32(stream);
+		info->buffToGetTime = readFloat(stream);
+		info->buffToGive = (BuffType)readU32(stream);
+		info->buffToGiveTime = readFloat(stream);
 	}
 
-	if (globalsVersion >= 8) {
-		globals->actorSpriteOffset = readVec3(stream);
-		globals->actorSpriteScale = readFloat(stream);
-	}
+	globals->actorSpriteOffset = readVec3(stream);
+	globals->actorSpriteScale = readFloat(stream);
 
 	destroyDataStream(stream);
 }
