@@ -29,12 +29,14 @@ def exportUnitGeneral(armature):
     unitName = armature.name[4:];
     outPath = "C:/bin/frames/spriteDump/"+unitName+"/params.vars"
 
+    subSteps = world["subSteps"];
+
     outString = ""
     for action in bpy.data.actions:
         for i in range(0, len(action.pose_markers)):
             marker = action.pose_markers[i]
             outString += action.name + " "
-            outString += str(marker.frame) + " "
+            outString += str(marker.frame*subSteps) + " "
             outString += marker.name
             outString += "\n";
 
@@ -84,14 +86,17 @@ def exportAction(armature, action, outPath):
 
     print("Exporting action "+realAction.name+" to "+outPath)
     dopeSheetArea.action = realAction
+    subSteps = world["subSteps"];
 
     for i in range(int(realAction.frame_range.x), int(realAction.frame_range.y)):
-        scn.frame_set(i)
+        frameIndex = i
+        for i in range(0, subSteps):
+            scn.frame_set(frameIndex, subframe=i/subSteps)
 
-        animFileName = realAction.name
-        animFileName += "_"
-        animFileName += str(i).zfill(3)
-        exportImage(outPath, animFileName)
+            animFileName = realAction.name
+            animFileName += "_"
+            animFileName += str(frameIndex*subSteps + i).zfill(3)
+            exportImage(outPath, animFileName)
 
 class MESH_OP_generate_all(bpy.types.Operator):
     bl_idname = "mesh.generate_all"
@@ -103,6 +108,10 @@ class MESH_OP_generate_all(bpy.types.Operator):
         setupFileFunc()
         scn = bpy.data.scenes[0]
         world = bpy.data.worlds["World"]
+
+        if world.get("subSteps") is None:
+            world["subSteps"] = 1
+
         unitName = None
         for obj in scn.objects:
             if "ARM_" in obj.name:
