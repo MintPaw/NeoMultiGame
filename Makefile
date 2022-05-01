@@ -891,6 +891,8 @@ devShipConcreteJungleGameToSelf:
 		$(SEVEN_ZIP) a -tzip selfShip.zip selfShip; \
 		mv selfShip.zip /c/Dropbox/Archive/devVersions/concreteJungle_$$(date +"%Y_%m_%d_%I_%M_%p").zip
 
+optimizeConcreteJunglePng:
+	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets -iname *.png -print0 | xargs -0 -P 8 -n 4 optipng -o0
 
 shipButt2GoToRc:
 	-$(MAKE) clean

@@ -648,7 +648,7 @@ bool readFileDirect(const char *fileName, u8 *outData, int outDataSize, int *out
 	fseek(filePtr, 0, SEEK_SET);
 
 	if (fileSize+1 > outDataSize) {
-		*outSize = fileSize+1;
+		logf("readFileDirect failed, need %d bytes, but only have a max of %d", fileSize, outDataSize);
 		return false;
 	}
 

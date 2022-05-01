@@ -1,12 +1,14 @@
-// We need healing
 // Count units in room on map
+// Make it so you can't get hit during prewarm
+// Distance based walking frames
+
+// We need healing
 // Do a ghost that is the base speed
 // Make running punch more like streak
 // Make money counter add up
 // Grenade enemy
 // Guys that have less hitstun?
 // Don't block backwards?
-// Make it so you can't get hit during prewarm
 
 /*
 
@@ -213,6 +215,7 @@ struct Globals {
 	ActionTypeInfo actionTypeInfos[ACTION_TYPES_MAX];
 	Vec3 actorSpriteOffset;
 	float actorSpriteScale;
+	float actorSpriteScaleMultiplier;
 };
 
 enum ItemType {
@@ -1132,7 +1135,7 @@ void updateGame() {
 								}
 
 								bool flipped = false;
-								float scale = globals->actorSpriteScale;
+								float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
 								Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
 								if (actor->facingLeft) flipped = true;
 								if (frame) {
@@ -1768,6 +1771,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
 			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
+			ImGui::DragFloat("Actor sprite scale multiplier", &globals->actorSpriteScaleMultiplier, 0.01);
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -4394,7 +4398,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 9;
+	int globalsVersion = 10;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -4424,6 +4428,7 @@ void saveGlobals() {
 
 	writeVec3(stream, globals->actorSpriteOffset);
 	writeFloat(stream, globals->actorSpriteScale);
+	writeFloat(stream, globals->actorSpriteScaleMultiplier);
 
 	writeDataStream("assets/info/globals.bin", stream);
 	destroyDataStream(stream);
@@ -4467,6 +4472,7 @@ void loadGlobals() {
 
 	globals->actorSpriteOffset = readVec3(stream);
 	globals->actorSpriteScale = readFloat(stream);
+	if (globalsVersion >= 10) globals->actorSpriteScaleMultiplier = readFloat(stream);
 
 	destroyDataStream(stream);
 }

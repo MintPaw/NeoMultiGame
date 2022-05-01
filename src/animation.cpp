@@ -303,10 +303,10 @@ void packSpriteSheet(const char *dirName) {
 }
 
 void spriteLoadThread(void *threadStruct) {
-	int maxWidth = 1024;
+	int maxWidth = 8192+1;
 	u8 *tempRow = (u8 *)malloc(maxWidth * 4);
 
-	int pngDataMax = Megabytes(2);
+	int pngDataMax = Megabytes(5);
 	u8 *pngData = (u8 *)malloc(pngDataMax);
 	int pngDataSize = 0;
 
@@ -326,7 +326,7 @@ void spriteLoadThread(void *threadStruct) {
 		stbi_set_flip_vertically_on_load(true);
 		u8 *img = stbi_load_from_memory((unsigned char *)pngData, pngDataSize, &width, &height, &channels, 4);
 
-		if (width >= maxWidth) logf("Max with too small %d needs to be at least %d\n", maxWidth, width);
+		if (width >= maxWidth) logf("Max width too small %d needs to be at least %d\n", maxWidth, width);
 
 		// {
 		// 	for (int y = 0; y < height; y++) {
