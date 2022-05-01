@@ -713,7 +713,15 @@ void updateGame() {
 
 		animSys->loopsByDefault = true;
 		animSys->frameRate = 60;
-		packSpriteSheet("assets/frames");
+
+		if (fileExists("assets/sheets/sheetData.bin")) {
+			loadSpriteSheet("assets/sheets/sheetData.bin");
+		} else {
+			packSpriteSheet("assets/frames");
+
+			if (!directoryExists("assets/sheets")) createDirectory("assets/sheets");
+			saveSpriteSheets("assets/sheets");
+		}
 
 		loadGlobals();
 

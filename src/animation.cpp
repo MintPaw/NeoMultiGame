@@ -23,13 +23,6 @@ struct Frame {
 	int width;
 	int height;
 
-#define TARGETS_PER_FRAME_MAX 4
-#define TARGET_NAME_MAX_LEN 32
-	char targetNames[TARGETS_PER_FRAME_MAX][TARGET_NAME_MAX_LEN];
-	u16 targetXPositions[TARGETS_PER_FRAME_MAX];
-	u16 targetYPositions[TARGETS_PER_FRAME_MAX];
-	// u8 targetOccluded[TARGETS_PER_FRAME_MAX];
-
 /// Unserialized
 	RenderTexture *texture;
 	int indexInAnim;
@@ -51,9 +44,6 @@ struct AnimationSystem {
 #define FRAMES_PER_SHEET_LIMIT 32768
 	Frame frames[FRAMES_PER_SHEET_LIMIT];
 	int framesNum;
-
-	Frame origFrames[FRAMES_PER_SHEET_LIMIT];
-	int origFramesNum;
 
 #define ANIMS_LIMIT 2048
 	Animation anims[ANIMS_LIMIT];
@@ -83,17 +73,12 @@ struct AnimationSystem {
 		char path[PATH_MAX_LEN];
 	};
 
-	NanoTime packNano;
-	NanoTime loadNano;
-
 	ThreadSafeQueue *pngIn;
 	ThreadSafeQueue *bitmapDataOut;
 	int pngsToDecode;
 
 	ThreadSafeQueue *spritePathsQueue;
 	ThreadSafeQueue *spriteBitmapsOut;
-
-	ThreadSafeQueue *sheetsToCache;
 
 	float currentScale;
 };
@@ -113,20 +98,6 @@ void spriteLoadThread(void *threadStruct);
 /// FUNCTIONS ^
 
 void initAnimations() {
-	RegMem(Frame, name);
-	RegMem(Frame, textureNumber);
-	RegMem(Frame, srcX);
-	RegMem(Frame, srcY);
-	RegMem(Frame, srcWidth);
-	RegMem(Frame, srcHeight);
-	RegMem(Frame, destOffX);
-	RegMem(Frame, destOffY);
-	RegMem(Frame, width);
-	RegMem(Frame, height);
-	RegMem(Frame, targetNames);
-	RegMem(Frame, targetXPositions);
-	RegMem(Frame, targetYPositions);
-
 	animSys = (AnimationSystem *)zalloc(sizeof(AnimationSystem));
 	animSys->frameRate = 10.0;
 	animSys->currentScale = 1;
@@ -139,7 +110,6 @@ void initAnimations() {
 
 void packSpriteSheet(const char *dirName) {
 	if (!animSys) initAnimations();
-	animSys->packNano = getNanoTime();
 	if (animSys->pngsToDecode) {
 		logf("Can't cache while loading...\n");
 		return;
@@ -231,8 +201,6 @@ void packSpriteSheet(const char *dirName) {
 		rpRect->h = frame->height + padding*2;
 	}
 
-	regenerateSheetAnimations();
-
 	for (int i = 0; ; i++) {
 		stbrp_context context;
 		stbrp_node nodes[FRAMES_PER_SHEET_LIMIT] = {};
@@ -282,7 +250,7 @@ void packSpriteSheet(const char *dirName) {
 		for (int i = 0; i < rectsNum; i++) {
 			stbrp_rect *rpRect = &rects[i];
 			Frame *frame = &animSys->frames[rpRect->id];
-			// frame->textureNumber = animSys->sheetTexturesNum-1;
+			frame->textureNumber = animSys->sheetTexturesNum-1;
 			frame->texture = texture;
 		}
 
@@ -297,8 +265,7 @@ void packSpriteSheet(const char *dirName) {
 		}
 	}
 
-	memcpy(animSys->origFrames, animSys->frames, sizeof(Frame) * animSys->framesNum);
-	animSys->origFramesNum = animSys->framesNum;
+	regenerateSheetAnimations();
 	// logf("Time to pack sprites: %f\n", getMsPassed(nano)); nano = getNanoTime();
 }
 
@@ -497,6 +464,14 @@ void regenerateSheetAnimations() {
 			anim->loops = true;
 		}
 	}
+}
+
+void saveSpriteSheets(char *dir);
+void saveSpriteSheets(char *dir) {
+}
+
+void loadSpriteSheet(char *sheetDataPath);
+void loadSpriteSheet(char *sheetDataPath) {
 }
 
 Animation *getAnimation(const char *animName) {
