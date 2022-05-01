@@ -1426,9 +1426,14 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		game->worldMouse = game->cameraMatrix.invert() * game->mouse;
 
 		Matrix3 matrix = mat3();
-		matrix.ROTATE_X(game->cameraAngleDegrees.x);
 		matrix.ROTATE(game->cameraAngleDegrees.y);
-		matrix.SCALE(1, -1); // Fix my coordinate system
+		matrix.ROTATE_X(game->cameraAngleDegrees.x);
+
+		{ // Fix my 2d coordinate system
+			matrix.SCALE(1, -1);
+			matrix = matrix.transpose();
+		}
+
 		game->isoMatrix3 = matrix;
 	} ///
 

@@ -1021,20 +1021,14 @@ void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, 
 		uvs[i] = uvMatrix * uvs[i];
 	}
 
-#if 1
 	int a, r, g, b;
 	hexToArgb(tint, &a, &r, &g, &b);
 	a *= alpha;
 	r *= a/255.0;
 	g *= a/255.0;
 	b *= a/255.0;
-	// logf("%f\n", alpha);
 	tint = argbToHex(a, r, g, b);
 	Raylib::Color raylibTint = toRaylibColor(tint);
-#else
-	tint = lerpColor(0xFFFFFFFF, tint, getAofArgb(tint)/255.0);
-	Raylib::Color raylibTint = toRaylibColor(setAofArgb(tint, 255*alpha));
-#endif
 
 	int raylibPointCount = 4;
 

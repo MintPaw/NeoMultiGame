@@ -268,8 +268,10 @@ void updateGame() {
 	drawText(fontSys->defaultFont, str, v2(), 0xFF808080);
 #endif
 
-	void testGame();
-	testGame();
+	// void testGame();
+	// testGame();
+	printf("Frame %d\n", platform->frameCount);
+	drawRect(0, 10, 256, 256, 0xFFFF0000);
 
 	game->time += elapsed;
 
