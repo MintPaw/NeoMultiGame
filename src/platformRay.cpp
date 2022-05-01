@@ -363,6 +363,14 @@ struct RenderProps {
 	Matrix3 uvMatrix;
 };
 
+struct Camera {
+	Vec3 position;
+	Vec3 target;
+	Vec3 up;
+	float fovy;
+	bool isOrtho;
+};
+
 #define _F_TD_FLIP_Y           (1 << 1)
 #define _F_TD_SKIP_PREMULTIPLY (1 << 2)
 struct Renderer {
@@ -392,6 +400,9 @@ struct Renderer {
 
 	Texture *whiteTexture;
 	RenderTexture *circleTexture;
+
+	Raylib::Light lights[MAX_LIGHTS];
+	Raylib::Model cubeModel;
 
 	void *tempTextureBuffer;
 	int tempTextureBufferSize;
@@ -435,8 +446,8 @@ void drawPixelArtFilterTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec
 void drawPixelArtFilterTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1));
 void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
-void drawBillboard(Raylib::Camera3D raylibCamera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
-void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
+void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
+void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, int tint, float alpha, int flags);
 
 void pushTargetTexture(RenderTexture *renderTexture);
@@ -456,6 +467,8 @@ void popAlpha();
 void setRendererBlendMode(BlendMode blendMode);
 void setDepthMask(bool enabled);
 
+void updateLightingShader();
+
 void resetRenderContext();
 
 #include "rendererUtils.cpp"
@@ -470,12 +483,40 @@ void initRenderer(int width, int height) {
 	pushAlpha(1);
 	setRendererBlendMode(BLEND_NORMAL);
 
-	{
-		if (usesAlphaDiscard) { // This is dumb
-			char *fs = (char *)readFile("assets/common/shaders/raylib/glsl330/alphaDiscard.fs");
-			renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
-			free(fs);
-		}
+	{ /// Setup shaders
+#ifdef __EMSCRIPTEN__
+    char *glslFolder = "glsl100";
+#else
+    char *glslFolder = "glsl330";
+#endif
+
+		char *vs;
+		char *fs;
+
+		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/alphaDiscard.fs", glslFolder));
+		renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
+		free(fs);
+
+
+		vs = (char *)readFile("assets/common/shaders/raylib/glsl330/base_lighting.vs");
+		fs = (char *)readFile("assets/common/shaders/raylib/glsl330/lighting.fs");
+		renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
+		free(vs);
+		free(fs);
+
+		renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
+
+		int ambientLoc = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
+		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
+		Raylib::SetShaderValue(renderer->lightingShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+
+		// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+		// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+		renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
 	}
 
 	Raylib::SetTraceLogLevel(Raylib::LOG_WARNING);
@@ -487,6 +528,9 @@ void initRenderer(int width, int height) {
 	pushTargetTexture(renderer->circleTexture);
 	Raylib::DrawCircle(renderer->circleTexture->width/2, renderer->circleTexture->height/2, renderer->circleTexture->width/2, toRaylibColor(0xFFFFFFFF));
 	popTargetTexture();
+
+	renderer->cubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
+	renderer->cubeModel.materials[0].shader = renderer->lightingShader;
 
 	initRendererUtils();
 }
@@ -762,15 +806,15 @@ void drawCircle(Vec2 position, float radius, int color) {
 	drawRaylibTexture(renderer->circleTexture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, color, alpha, flags);
 }
 
-void drawBillboard(Raylib::Camera3D raylibCamera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
+void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
 	Texture texture;
 	texture.width = renderTexture->width;
 	texture.height = renderTexture->height;
 	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
-	drawBillboard(raylibCamera, &texture, position, size, tint, source);
+	drawBillboard(camera, &texture, position, size, tint, source);
 }
 
-void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
+void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
 	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
 	if (isZero(size)) size = v2(texture->width, texture->height);
 
@@ -798,7 +842,7 @@ void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 positio
 	size.x = size.y;
 	size.y = temp;
 
-	Raylib::Matrix matView = Raylib::GetCameraMatrix(raylibCamera);
+	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
 	Raylib::Vector3 right = { matView.m0, matView.m4, matView.m8 };
 	Raylib::Vector3 left = { -matView.m0, -matView.m4, -matView.m8 };
@@ -1150,6 +1194,14 @@ void setDepthMask(bool enabled) {
 	else Raylib::rlDisableDepthMask();
 }
 
+void updateLightingShader(Camera camera) {
+	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[0]);
+	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[1]);
+	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[2]);
+	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[3]);
+	Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+}
+
 void resetRenderContext() {
 	Raylib::rlDrawRenderBatchActive();
 	setRendererBlendMode(BLEND_NORMAL);
@@ -1160,17 +1212,12 @@ void resetRenderContext() {
 
 ///- 3d Renderer
 
-struct Camera {
-	Vec3 position;
-	Vec3 target;
-	Vec3 up;
-	float fovy;
-	bool isOrtho;
-};
-
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
 void end3d();
+void startShader(Raylib::Shader shader);
+void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
+void drawAABB(AABB aabb, int color);
 
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::rlDrawRenderBatchActive();
@@ -1195,6 +1242,14 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 }
 
 void end3d() {
+	Raylib::EndMode3D();
+}
+
+void startShader(Raylib::Shader shader) {
+	Raylib::BeginShaderMode(shader);
+}
+void endShader() {
+	Raylib::EndShaderMode();
 }
 
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
@@ -1220,6 +1275,12 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 
 	*outPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
 	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
+}
+
+void drawAABB(AABB aabb, int color) {
+	Vec3 size = getSize(aabb);
+	Vec3 pos = aabb.min + size/2;
+	Raylib::DrawModelEx(renderer->cubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
 }
 
 ///- Gui

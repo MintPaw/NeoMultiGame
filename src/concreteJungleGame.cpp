@@ -436,8 +436,6 @@ struct Actor {
 #define STYLES_MAX 4
 	Style styles[STYLES_MAX];
 	int styleIndex;
-
-	Vec2 overlayPosition; // From raylib 3d
 };
 
 struct Map {
@@ -612,9 +610,6 @@ struct Game {
 #define DEBUG_CUBES_MAX 1024
 	DebugCube debugCubes[DEBUG_CUBES_MAX];
 	int debugCubesNum;
-
-	Raylib::Model raylibCubeModel;
-	Raylib::Light raylibLights[MAX_LIGHTS];
 
 	Vec3 mouseRayPos;
 	Vec3 mouseRayDir;
@@ -1003,13 +998,6 @@ void updateGame() {
 
 			Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
 
-			Raylib::Camera3D raylibCamera = {};
-			raylibCamera.position = toRaylib(cameraPos);
-			raylibCamera.target = toRaylib(game->visualCameraTarget);
-			raylibCamera.up = toRaylib(v3(0, 0, 1));
-			raylibCamera.fovy = 10;
-			raylibCamera.projection = Raylib::CAMERA_ORTHOGRAPHIC;
-
 			Camera camera = {};
 			camera.position = cameraPos;
 			camera.target = game->visualCameraTarget;
@@ -1019,52 +1007,20 @@ void updateGame() {
 
 			start3d(camera, game->size, -10000, 10000);
 
-			if (!renderer->lightingShader.locs) {
-				char *vs = (char *)readFile("assets/common/shaders/raylib/glsl330/base_lighting.vs");
-				char *fs = (char *)readFile("assets/common/shaders/raylib/glsl330/lighting.fs");
-				renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
-				free(vs);
-				free(fs);
-
-				renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
-
-				int ambientLoc = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
-				float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-				Raylib::SetShaderValue(renderer->lightingShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
-
-				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-				game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
-
-				game->raylibCubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
-				game->raylibCubeModel.materials[0].shader = renderer->lightingShader;
-			}
-
 #if 1
 			Vec3 sunPosition = v3(104.000, -134.000, 66.000);
 #else
 			static Vec3 sunPosition = v3(104.000, -134.000, 66.000);
 			ImGui::DragFloat3("sunPosition", &sunPosition.x, 1);
 #endif
-			game->raylibLights[0].position.x = sunPosition.x;
-			game->raylibLights[0].position.y = sunPosition.y;
-			game->raylibLights[0].position.z = sunPosition.z;
+			renderer->lights[0].position.x = sunPosition.x;
+			renderer->lights[0].position.y = sunPosition.y;
+			renderer->lights[0].position.z = sunPosition.z;
+			updateLightingShader(camera);
 
-			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[0]);
-			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[1]);
-			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[2]);
-			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[3]);
-			Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &cameraPos.x, Raylib::SHADER_UNIFORM_VEC3);
+			getMouseRay(camera, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
 
 			{ // Really draw 3d
-				getMouseRay(camera, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
-				// logf("%f %f %f | %f %f %f\n", ray.position.x, ray.position.y, ray.position.z, ray.direction.x, ray.direction.y, ray.direction.z);
-
-				/// Draw actors 3d
 				Map *map = &game->maps[game->currentMapIndex];
 
 				Actor **actors = (Actor **)frameMalloc(sizeof(Actor *) * map->actorsNum);
@@ -1087,14 +1043,12 @@ void updateGame() {
 
 				for (int pass = 0; pass < 2; pass++) {
 					if (pass == 1) {
-						Raylib::BeginShaderMode(renderer->lightingShader);
+						startShader(renderer->lightingShader);
 						for (int i = 0; i < game->debugCubesNum; i++) {
 							DebugCube *cube = &game->debugCubes[i];
-							Vec3 size = getSize(cube->aabb);
-							Vec3 pos = cube->aabb.min + size/2;
-							Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(cube->color));
+							drawAABB(cube->aabb, cube->color);
 						}
-						Raylib::EndShaderMode();
+						endShader();
 					}
 
 					for (int i = 0; i < actorsNum; i++) {
@@ -1207,7 +1161,7 @@ void updateGame() {
 									// position.x += frame->destOffX;
 									// position.y += frame->destOffY;
 
-									drawBillboard(raylibCamera, frame->texture, position, size, boxColor, source);
+									drawBillboard(camera, frame->texture, position, size, boxColor, source);
 								} else {
 									showBox = true;
 								}
@@ -1265,14 +1219,14 @@ void updateGame() {
 
 							// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
 
-							drawBillboard(raylibCamera, texture, particle->position, size, tint, source);
+							drawBillboard(camera, texture, particle->position, size, tint, source);
 						}
 					}
 				} ///
 			}
 			game->debugCubesNum = 0;
 
-			Raylib::EndMode3D();
+			end3d();
 		}
 	} ///
 
