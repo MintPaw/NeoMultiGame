@@ -1024,6 +1024,15 @@ void updateGame() {
 			raylibCamera.fovy = 10;
 			raylibCamera.projection = Raylib::CAMERA_ORTHOGRAPHIC;
 
+			Camera camera = {};
+			camera.position = cameraPos;
+			camera.target = game->visualCameraTarget;
+			camera.up = v3(0, 0, 1);
+			camera.fovy = 10;
+			camera.isOrtho = true;
+
+			// Vec3 cameraPosition, Vec3 cameraTarget, Vec3 cameraUp, Vec3 camerafovy, bool isOrtho
+
 			// Raylib::BeginMode3D(raylibCamera);
 			{ //@copyPastedRaylib::BeginMode3D
 				Raylib::rlDrawRenderBatchActive();
@@ -1134,7 +1143,6 @@ void updateGame() {
 					matProj = Raylib::MatrixMultiply(matProj, scale1);
 					matProj = Raylib::MatrixMultiply(matProj, scale2);
 
-
 					// Unproject far/near points
 					Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
 					Raylib::Vector3 farPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 1.0f }, matProj, matView);
@@ -1159,8 +1167,27 @@ void updateGame() {
 
 				/// Draw actors 3d
 				Map *map = &game->maps[game->currentMapIndex];
-				for (int i = 0; i < map->actorsNum; i++) {
-					Actor *actor = &map->actors[i];
+
+				Actor **actors = (Actor **)frameMalloc(sizeof(Actor *) * map->actorsNum);
+				int actorsNum = map->actorsNum;
+				for (int i = 0; i < map->actorsNum; i++) actors[i] = &map->actors[i];
+
+				auto qsortActors = [](const void *ptrA, const void *ptrB)->int {
+					Actor *actorA = *(Actor **)ptrA;
+					Actor *actorB = *(Actor **)ptrB;
+					if (actorA->position.z < actorB->position.z) {
+						return 1;
+					} else if (actorA->position.z > actorB->position.z) {
+						return -1;
+					} else {
+						return 0;
+					}
+
+				};
+				// qsort(actors, actorsNum, sizeof(Actor *), qsortActors);
+
+				for (int i = 0; i < actorsNum; i++) {
+					Actor *actor = actors[i];
 					AABB aabb = getAABB(actor);
 
 					// Raylib::Vector2 screenPos = Raylib::GetWorldToScreen({actor->position.x, actor->position.y, actor->position.z}, raylibCamera);

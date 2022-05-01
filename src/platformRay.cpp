@@ -453,6 +453,7 @@ void pushAlpha(float alpha);
 void popAlpha();
 
 void setRendererBlendMode(BlendMode blendMode);
+void setDepthMask(bool enabled);
 
 void resetRenderContext();
 
@@ -769,8 +770,6 @@ void drawBillboard(Raylib::Camera3D raylibCamera, RenderTexture *renderTexture, 
 }
 
 void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
-	Raylib::BeginShaderMode(renderer->alphaDiscardShader);
-
 	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
 	if (isZero(size)) size = v2(texture->width, texture->height);
 
@@ -835,6 +834,10 @@ void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 positio
 	bottomRight = Raylib::Vector3Add(bottomRight, toRaylib(position));
 	bottomLeft = Raylib::Vector3Add(bottomLeft, toRaylib(position));
 
+	Raylib::BeginShaderMode(renderer->alphaDiscardShader);
+	// Raylib::rlDisableDepthMask();
+	// Raylib::rlEnableColorBlend();
+
 	Raylib::rlCheckRenderBatchLimit(4);
 
 	Raylib::rlSetTexture(texture->raylibTexture.id);
@@ -863,6 +866,7 @@ void drawBillboard(Raylib::Camera3D raylibCamera, Texture *texture, Vec3 positio
 
 	Raylib::rlSetTexture(0);
 
+	// Raylib::rlEnableDepthMask();
 	Raylib::EndShaderMode();
 }
 
@@ -1140,6 +1144,11 @@ void setRendererBlendMode(BlendMode blendMode) {
 	}
 }
 
+void setDepthMask(bool enabled) {
+	if (enabled) Raylib::rlEnableDepthMask();
+	else Raylib::rlDisableDepthMask();
+}
+
 void resetRenderContext() {
 	Raylib::rlDrawRenderBatchActive();
 	setRendererBlendMode(BLEND_NORMAL);
@@ -1147,6 +1156,50 @@ void resetRenderContext() {
 	glBindSampler(0, 0);
 #endif
 }
+
+///- 3d Renderer
+
+struct Camera {
+	Vec3 position;
+	Vec3 target;
+	Vec3 up;
+	float fovy;
+	bool isOrtho;
+};
+
+void start3d(Camera camera);
+void end3d();
+
+void start3d(Raylib::Camera3D raylibCamera) {
+	// Raylib::rlDrawRenderBatchActive();
+
+	// Raylib::rlMatrixMode(RL_PROJECTION);
+	// Raylib::rlPushMatrix();
+	// Raylib::rlLoadIdentity();
+
+	// float aspect = 16.0/9.0;
+
+	// if (raylibCamera.projection == Raylib::CAMERA_PERSPECTIVE) logf("No persp allowed\n");
+	// double top = game->size.y/2;
+	// double right = game->size.x/2;
+	// float nearCull = -10000;
+	// float farCull = 10000;
+
+	// Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
+	// Raylib::rlScalef(game->size.x/(float)platform->windowWidth, game->size.y/(float)platform->windowHeight, 1);
+	// Raylib::rlScalef(game->sizeScale, game->sizeScale, 1);
+
+	// Raylib::rlMatrixMode(RL_MODELVIEW);
+	// Raylib::rlLoadIdentity();
+
+	// Raylib::Matrix matView = Raylib::MatrixLookAt(raylibCamera.position, raylibCamera.target, raylibCamera.up);
+	// Raylib::rlMultMatrixf(MatrixToFloat(matView));
+
+	// Raylib::rlEnableDepthTest(); 
+}
+void end3d() {
+}
+
 
 ///- Gui
 
