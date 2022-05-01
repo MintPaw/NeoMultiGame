@@ -497,9 +497,8 @@ void initRenderer(int width, int height) {
 		renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
 		free(fs);
 
-
-		vs = (char *)readFile("assets/common/shaders/raylib/glsl330/base_lighting.vs");
-		fs = (char *)readFile("assets/common/shaders/raylib/glsl330/lighting.fs");
+		vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/base_lighting.vs", glslFolder));
+		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lighting.fs", glslFolder));
 		renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
 		free(vs);
 		free(fs);

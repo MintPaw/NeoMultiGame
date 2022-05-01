@@ -19,11 +19,11 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=zooBoundGame
 # GAME_NAME=horseGame
 # GAME_NAME=gladiators2Game
-GAME_NAME=concreteJungleGame
+# GAME_NAME=concreteJungleGame
 # GAME_NAME=animationToolsGame
 # GAME_NAME=rayGame
 # GAME_NAME=rollerGame
-# GAME_NAME=butt2GoGame
+GAME_NAME=butt2GoGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
