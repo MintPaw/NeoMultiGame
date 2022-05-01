@@ -369,6 +369,7 @@ struct Renderer {
 	bool disabled;
 	int maxTextureUnits; // Does nothing
 
+	Raylib::Shader lightingShader;
 	Raylib::Shader alphaDiscardShader;
 
 	int width;
@@ -1167,39 +1168,59 @@ struct Camera {
 	bool isOrtho;
 };
 
-void start3d(Camera camera);
+void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
 void end3d();
+void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 
-void start3d(Raylib::Camera3D raylibCamera) {
-	// Raylib::rlDrawRenderBatchActive();
+void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
+	Raylib::rlDrawRenderBatchActive();
 
-	// Raylib::rlMatrixMode(RL_PROJECTION);
-	// Raylib::rlPushMatrix();
-	// Raylib::rlLoadIdentity();
+	Raylib::rlMatrixMode(RL_PROJECTION);
+	Raylib::rlPushMatrix();
+	Raylib::rlLoadIdentity();
 
-	// float aspect = 16.0/9.0;
+	if (!camera.isOrtho) logf("No perspective camera allowed\n");
+	double top = size.y/2;
+	double right = size.x/2;
 
-	// if (raylibCamera.projection == Raylib::CAMERA_PERSPECTIVE) logf("No persp allowed\n");
-	// double top = game->size.y/2;
-	// double right = game->size.x/2;
-	// float nearCull = -10000;
-	// float farCull = 10000;
+	Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
 
-	// Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
-	// Raylib::rlScalef(game->size.x/(float)platform->windowWidth, game->size.y/(float)platform->windowHeight, 1);
-	// Raylib::rlScalef(game->sizeScale, game->sizeScale, 1);
+	Raylib::rlMatrixMode(RL_MODELVIEW);
+	Raylib::rlLoadIdentity();
 
-	// Raylib::rlMatrixMode(RL_MODELVIEW);
-	// Raylib::rlLoadIdentity();
+	Raylib::Matrix raylibLookAt = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+	Raylib::rlMultMatrixf(MatrixToFloat(raylibLookAt));
 
-	// Raylib::Matrix matView = Raylib::MatrixLookAt(raylibCamera.position, raylibCamera.target, raylibCamera.up);
-	// Raylib::rlMultMatrixf(MatrixToFloat(matView));
-
-	// Raylib::rlEnableDepthTest(); 
+	Raylib::rlEnableDepthTest(); 
 }
+
 void end3d() {
 }
 
+void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
+	float x = (2.0f*mouse.x)/platform->windowWidth - 1.0f;
+	float y = 1.0f - (2.0f*mouse.y)/platform->windowHeight;
+	float z = 1.0f;
+
+	Raylib::Vector3 deviceCoords = { x, y, z };
+
+	Raylib::Matrix matProj = Raylib::rlGetMatrixProjection();
+	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+
+	Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
+	Raylib::Vector3 farPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 1.0f }, matProj, matView);
+
+	Raylib::Vector3 cameraPlanePointerPos = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, -1.0f }, matProj, matView);
+
+	Raylib::Vector3 direction = Raylib::Vector3Normalize(Raylib::Vector3Subtract(farPoint, nearPoint));
+
+	Raylib::Ray raylibScreenRay = {};
+	raylibScreenRay.position = cameraPlanePointerPos;
+	raylibScreenRay.direction = direction;
+
+	*outPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
+	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
+}
 
 ///- Gui
 

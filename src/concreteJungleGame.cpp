@@ -530,12 +530,8 @@ struct Game {
 	float prevTime;
 	float time;
 	Vec2 size;
-	float sizeScale;
 	Vec2 mouse;
 	Vec2 worldMouse;
-
-	Vec2 screenOverlayOffset;
-	Vec2 screenOverlaySize;
 
 	int hitPauseFrames;
 
@@ -598,7 +594,6 @@ struct Game {
 	bool debugShowFrameTimes;
 	bool debugAlwaysShowWireframes;
 	bool debugDrawPlayerBox;
-	bool debugNo3d;
 	bool debugDrawHitboxes;
 	bool debugDrawActorStatus;
 	bool debugDrawActorAction;
@@ -618,7 +613,6 @@ struct Game {
 	DebugCube debugCubes[DEBUG_CUBES_MAX];
 	int debugCubesNum;
 
-	Raylib::Shader raylibShader;
 	Raylib::Model raylibCubeModel;
 	Raylib::Light raylibLights[MAX_LIGHTS];
 
@@ -669,7 +663,7 @@ AABB getAABB(Actor *actor);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
-void drawAABB3d(AABB aabb, int lineThickness, int color);
+void drawAABB3d(AABB aabb, int color);
 void drawAABB2d(AABB aabb, int lineThickness, int color);
 
 int playWorldSound(char *path, Vec3 worldPosition);
@@ -925,13 +919,10 @@ void updateGame() {
 	float elapsed = platform->elapsed * timeScale;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
-	game->mouse = (platform->mouse - game->screenOverlayOffset) * (game->size/game->screenOverlaySize);
+	game->mouse = platform->mouse;
 
 	{ /// Resizing
-		Vec2 ratio = v2(1600.0, 900.0);
-		game->sizeScale = MinNum(platform->windowWidth/ratio.x, platform->windowHeight/ratio.y);
-		Vec2 newSize = ratio * game->sizeScale;
-
+		Vec2 newSize = v2(platform->windowWidth, platform->windowHeight);
 		if (!equal(game->size, newSize)) {
 			game->size = newSize;
 
@@ -941,11 +932,7 @@ void updateGame() {
 			game->debugTexture = NULL;
 			if (game->mapTexture) destroyTexture(game->mapTexture);
 			game->mapTexture = NULL;
-
-			game->screenOverlaySize = game->size;
 		}
-		game->screenOverlayOffset.x = (float)platform->windowWidth/2 - game->size.x/2;
-		game->screenOverlayOffset.y = (float)platform->windowHeight/2 - game->size.y/2;
 	} ///
 
 	if (!game->gameTexture) game->gameTexture = createRenderTexture(game->size.x, game->size.y);
@@ -1003,8 +990,7 @@ void updateGame() {
 	{
 		RenderTexture *texture = game->gameTexture;
 		Matrix3 matrix = mat3();
-		matrix.TRANSLATE(game->screenOverlayOffset);
-		matrix.SCALE(game->screenOverlaySize);
+		matrix.SCALE(game->size);
 
 		drawSimpleTexture(texture, matrix);
 	}
@@ -1031,60 +1017,31 @@ void updateGame() {
 			camera.fovy = 10;
 			camera.isOrtho = true;
 
-			// Vec3 cameraPosition, Vec3 cameraTarget, Vec3 cameraUp, Vec3 camerafovy, bool isOrtho
+			start3d(camera, game->size, -10000, 10000);
 
-			// Raylib::BeginMode3D(raylibCamera);
-			{ //@copyPastedRaylib::BeginMode3D
-				Raylib::rlDrawRenderBatchActive();
-
-				Raylib::rlMatrixMode(RL_PROJECTION);
-				Raylib::rlPushMatrix();
-				Raylib::rlLoadIdentity();
-
-				float aspect = 16.0/9.0;
-
-				if (raylibCamera.projection == Raylib::CAMERA_PERSPECTIVE) logf("No persp allowed\n");
-				double top = game->size.y/2;
-				double right = game->size.x/2;
-				float nearCull = -10000;
-				float farCull = 10000;
-
-				Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
-				Raylib::rlScalef(game->size.x/(float)platform->windowWidth, game->size.y/(float)platform->windowHeight, 1);
-				Raylib::rlScalef(game->sizeScale, game->sizeScale, 1);
-
-				Raylib::rlMatrixMode(RL_MODELVIEW);
-				Raylib::rlLoadIdentity();
-
-				Raylib::Matrix matView = Raylib::MatrixLookAt(raylibCamera.position, raylibCamera.target, raylibCamera.up);
-				Raylib::rlMultMatrixf(MatrixToFloat(matView));
-
-				Raylib::rlEnableDepthTest(); 
-			}
-
-			if (!game->raylibShader.locs) {
+			if (!renderer->lightingShader.locs) {
 				char *vs = (char *)readFile("assets/common/shaders/raylib/glsl330/base_lighting.vs");
 				char *fs = (char *)readFile("assets/common/shaders/raylib/glsl330/lighting.fs");
-				game->raylibShader = Raylib::LoadShaderFromMemory(vs, fs);
+				renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
 				free(vs);
 				free(fs);
 
-				game->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(game->raylibShader, "viewPos");
+				renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
 
-				int ambientLoc = Raylib::GetShaderLocation(game->raylibShader, "ambient");
+				int ambientLoc = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
 				float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-				Raylib::SetShaderValue(game->raylibShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+				Raylib::SetShaderValue(renderer->lightingShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
 
-				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, game->raylibShader);
-				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, game->raylibShader);
-				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, game->raylibShader);
-				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, game->raylibShader);
-				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, game->raylibShader);
-				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, game->raylibShader);
-				game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, game->raylibShader);
+				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+				// game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+				// game->raylibLights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+				// game->raylibLights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+				game->raylibLights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
 
 				game->raylibCubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
-				game->raylibCubeModel.materials[0].shader = game->raylibShader;
+				game->raylibCubeModel.materials[0].shader = renderer->lightingShader;
 			}
 
 #if 1
@@ -1097,72 +1054,14 @@ void updateGame() {
 			game->raylibLights[0].position.y = sunPosition.y;
 			game->raylibLights[0].position.z = sunPosition.z;
 
-			Raylib::UpdateLightValues(game->raylibShader, game->raylibLights[0]);
-			Raylib::UpdateLightValues(game->raylibShader, game->raylibLights[1]);
-			Raylib::UpdateLightValues(game->raylibShader, game->raylibLights[2]);
-			Raylib::UpdateLightValues(game->raylibShader, game->raylibLights[3]);
-			Raylib::SetShaderValue(game->raylibShader, game->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &cameraPos.x, Raylib::SHADER_UNIFORM_VEC3);
+			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[0]);
+			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[1]);
+			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[2]);
+			Raylib::UpdateLightValues(renderer->lightingShader, game->raylibLights[3]);
+			Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &cameraPos.x, Raylib::SHADER_UNIFORM_VEC3);
 
-			if (!game->debugNo3d) {
-				for (int i = 0; i < game->debugCubesNum; i++) {
-					DebugCube *cube = &game->debugCubes[i];
-					Vec3 size = getSize(cube->aabb);
-					Vec3 pos = cube->aabb.min + size/2;
-					Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(cube->color));
-				}
-
-				Raylib::Ray raylibScreenRay = {};
-				{//@copyPastedRaylib::GetMouseRay
-					Raylib::Vector2 mouse = {game->mouse.x, game->mouse.y};
-					// Calculate normalized device coordinates
-					// NOTE: y value is negative
-					float x = (2.0f*mouse.x)/game->size.x - 1.0f;
-					float y = 1.0f - (2.0f*mouse.y)/game->size.y;
-					float z = 1.0f;
-
-					// Store values in a vector
-					Raylib::Vector3 deviceCoords = { x, y, z };
-
-					// Calculate view matrix from camera look at
-					Raylib::Matrix matView = Raylib::MatrixLookAt(raylibCamera.position, raylibCamera.target, raylibCamera.up);
-
-					Raylib::Matrix matProj = Raylib::MatrixIdentity();
-
-					if (raylibCamera.projection == Raylib::CAMERA_PERSPECTIVE) logf("No persp allowed\n");
-					float aspect = 16.0/9.0;
-					double top = game->size.y/2;
-					double right = game->size.x/2;
-					float nearCull = -10000;
-					float farCull = 10000;
-
-					// Calculate projection matrix from orthographic
-					matProj = Raylib::MatrixOrtho(-right, right, -top, top, nearCull, farCull);
-
-					Raylib::Matrix scale1 = Raylib::MatrixScale(game->size.x/(float)platform->windowWidth, game->size.y/(float)platform->windowHeight, 1);
-					Raylib::Matrix scale2 = Raylib::MatrixScale(game->sizeScale, game->sizeScale, 1);
-					matProj = Raylib::MatrixMultiply(matProj, scale1);
-					matProj = Raylib::MatrixMultiply(matProj, scale2);
-
-					// Unproject far/near points
-					Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
-					Raylib::Vector3 farPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 1.0f }, matProj, matView);
-
-					// Unproject the mouse cursor in the near plane.
-					// We need this as the source position because orthographic projects, compared to perspect doesn't have a
-					// convergence point, meaning that the "eye" of the camera is more like a plane than a point.
-					Raylib::Vector3 cameraPlanePointerPos = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, -1.0f }, matProj, matView);
-
-					// Calculate normalized direction vector
-					Raylib::Vector3 direction = Raylib::Vector3Normalize(Raylib::Vector3Subtract(farPoint, nearPoint));
-
-					raylibScreenRay.position = cameraPlanePointerPos;
-
-					// Apply calculated vectors to ray
-					raylibScreenRay.direction = direction;
-				}
-
-				game->mouseRayPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
-				game->mouseRayDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
+			{ // Really draw 3d
+				getMouseRay(camera, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
 				// logf("%f %f %f | %f %f %f\n", ray.position.x, ray.position.y, ray.position.z, ray.direction.x, ray.direction.y, ray.direction.z);
 
 				/// Draw actors 3d
@@ -1186,151 +1085,155 @@ void updateGame() {
 				};
 				// qsort(actors, actorsNum, sizeof(Actor *), qsortActors);
 
-				for (int i = 0; i < actorsNum; i++) {
-					Actor *actor = actors[i];
-					AABB aabb = getAABB(actor);
-
-					// Raylib::Vector2 screenPos = Raylib::GetWorldToScreen({actor->position.x, actor->position.y, actor->position.z}, raylibCamera);
-					// actor->overlayPosition.x = screenPos.x;
-					// actor->overlayPosition.y = screenPos.y;
-
-					int boxColor = 0xFFFFFFFF;
-					bool showBox = false;
-					float boxHeightPerc = 1;
-
-					if (actor->type == ACTOR_UNIT) {
-						if (game->debugDrawPlayerBox) showBox = true;
-						boxColor = teamColors[actor->team];
-
-						if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
-
-						if (game->debugDrawBillboards) {
-							auto getMarkerFrame = [](char *animName, char *markerName)->int {
-								for (int i = 0; i < game->animationMarkerDataNum; i++) {
-									AnimationMarkerData *marker = &game->animationMarkerData[i];
-									if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->frame;
-								}
-
-								return 0;
-							};
-
-							Animation *anim = NULL;
-							float animTime;
-							int animFrameOverride = -1;
-							if (actor->actionsNum > 0) {
-								Action *action = &actor->actions[0];
-								anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
-								animTime = action->time;
-								if (anim) anim->loops = action->info->animationLoops;
-
-								float actionStartupEndTime = action->info->startupFrames / 60.0;
-								float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
-								float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
-
-								int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
-								int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
-								int animationRecoveryEndFrame = 0;
-								if (anim) animationRecoveryEndFrame = anim->framesNum-1;
-
-								if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
-									if (action->time < actionStartupEndTime) {
-										animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
-									} else if (action->time < actionActiveEndTime) { 
-										animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
-									} else {
-										animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
-									}
-								}
-							} else {
-								if (actor->timeMoving) {
-									if (actor->isRunningLeft || actor->isRunningRight) {
-										anim = getAnimation("Unit/run");
-										animTime = actor->timeMoving; // This should actually be actor->timeRunning
-									} else {
-										anim = getAnimation("Unit/walk");
-										animTime = actor->timeMoving;
-									}
-								} else if (actor->timeNotMoving) {
-									anim = getAnimation("Unit/idle");
-									animTime = actor->timeNotMoving;
-								} else if (actor->timeInAir) {
-									anim = getAnimation("Unit/jump");
-									animTime = actor->timeInAir;
-									anim->loops = false;
-								} else {
-									anim = getAnimation("Unit/idle");
-								}
-							}
-
-							Frame *frame = NULL;
-
-							if (anim) {
-								// logf("%s (%f)\n", anim->name, animTime);
-								frame = getAnimFrameAtSecond(anim, animTime);
-								if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
-							}
-
-							bool flipped = false;
-							float scale = globals->actorSpriteScale;
-							Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
-							if (actor->facingLeft) flipped = true;
-							if (frame) {
-								Rect source = {};
-								source.width = frame->width;
-								source.height = frame->height;
-								source.x = frame->srcX;
-								source.y = frame->texture->height - source.height - frame->srcY;
-
-								Vec2 size = v2(frame->width, frame->height);
-								if (flipped) size.x *= -1;
-								size *= scale;
-
-								if (actor->actionsNum > 0) {
-									Action *action = &actor->actions[0];
-									if (action->type == ACTION_BLOCKSTUN) { // Vibration
-										float amount = clampMap(action->time, 0, action->customLength, 10, 0, QUAD_IN);
-										if (platform->frameCount % 2) {
-											position.x += amount;
-										} else {
-											position.x -= amount;
-										}
-									}
-								}
-
-								// position.x += frame->destOffX;
-								// position.y += frame->destOffY;
-
-								drawBillboard(raylibCamera, frame->texture, position, size, boxColor, source);
-							} else {
-								showBox = true;
-							}
+				for (int pass = 0; pass < 2; pass++) {
+					if (pass == 1) {
+						Raylib::BeginShaderMode(renderer->lightingShader);
+						for (int i = 0; i < game->debugCubesNum; i++) {
+							DebugCube *cube = &game->debugCubes[i];
+							Vec3 size = getSize(cube->aabb);
+							Vec3 pos = cube->aabb.min + size/2;
+							Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(cube->color));
 						}
-					} else if (actor->type == ACTOR_GROUND) {
-						showBox = true;
-						boxColor = 0xFFE8C572;
-					} else if (actor->type == ACTOR_DUMMY) {
-						showBox = true;
-						boxColor = 0xFFFF878B;
-					} else if (actor->type == ACTOR_DOOR) {
-						showBox = true;
-						boxColor = 0xFF523501;
-					} else if (actor->type == ACTOR_UNIT_SPAWNER) {
-						if (game->inEditor) showBox = true;
-					} else if (actor->type == ACTOR_ITEM) {
-						showBox = true;
-						boxColor = lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5);
-					} else if (actor->type == ACTOR_STORE) {
-						showBox = true;
-						boxColor = 0xFF45E6E6;
-					} else {
-						showBox = true;
+						Raylib::EndShaderMode();
 					}
 
-					if (showBox) {
-						Vec3 size = getSize(aabb);
-						size.z *= boxHeightPerc;
-						Vec3 pos = aabb.min + size/2;
-						Raylib::DrawModelEx(game->raylibCubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(boxColor));
+					for (int i = 0; i < actorsNum; i++) {
+						Actor *actor = actors[i];
+						AABB aabb = getAABB(actor);
+
+						int boxColor = 0xFFFFFFFF;
+						bool showBox = false;
+						float boxHeightPerc = 1;
+
+						if (actor->type == ACTOR_UNIT) {
+							if (game->debugDrawPlayerBox) showBox = true;
+							boxColor = teamColors[actor->team];
+
+							if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
+
+							if (pass == 1 && game->debugDrawBillboards) {
+								auto getMarkerFrame = [](char *animName, char *markerName)->int {
+									for (int i = 0; i < game->animationMarkerDataNum; i++) {
+										AnimationMarkerData *marker = &game->animationMarkerData[i];
+										if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->frame;
+									}
+
+									return 0;
+								};
+
+								Animation *anim = NULL;
+								float animTime;
+								int animFrameOverride = -1;
+								if (actor->actionsNum > 0) {
+									Action *action = &actor->actions[0];
+									anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
+									animTime = action->time;
+									if (anim) anim->loops = action->info->animationLoops;
+
+									float actionStartupEndTime = action->info->startupFrames / 60.0;
+									float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
+									float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
+
+									int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
+									int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
+									int animationRecoveryEndFrame = 0;
+									if (anim) animationRecoveryEndFrame = anim->framesNum-1;
+
+									if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
+										if (action->time < actionStartupEndTime) {
+											animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
+										} else if (action->time < actionActiveEndTime) { 
+											animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
+										} else {
+											animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
+										}
+									}
+								} else {
+									if (actor->timeMoving) {
+										if (actor->isRunningLeft || actor->isRunningRight) {
+											anim = getAnimation("Unit/run");
+											animTime = actor->timeMoving; // This should actually be actor->timeRunning
+										} else {
+											anim = getAnimation("Unit/walk");
+											animTime = actor->timeMoving;
+										}
+									} else if (actor->timeNotMoving) {
+										anim = getAnimation("Unit/idle");
+										animTime = actor->timeNotMoving;
+									} else if (actor->timeInAir) {
+										anim = getAnimation("Unit/jump");
+										animTime = actor->timeInAir;
+										anim->loops = false;
+									} else {
+										anim = getAnimation("Unit/idle");
+									}
+								}
+
+								Frame *frame = NULL;
+
+								if (anim) {
+									// logf("%s (%f)\n", anim->name, animTime);
+									frame = getAnimFrameAtSecond(anim, animTime);
+									if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
+								}
+
+								bool flipped = false;
+								float scale = globals->actorSpriteScale;
+								Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
+								if (actor->facingLeft) flipped = true;
+								if (frame) {
+									Rect source = {};
+									source.width = frame->width;
+									source.height = frame->height;
+									source.x = frame->srcX;
+									source.y = frame->texture->height - source.height - frame->srcY;
+
+									Vec2 size = v2(frame->width, frame->height);
+									if (flipped) size.x *= -1;
+									size *= scale;
+
+									if (actor->actionsNum > 0) {
+										Action *action = &actor->actions[0];
+										if (action->type == ACTION_BLOCKSTUN) { // Vibration
+											float amount = clampMap(action->time, 0, action->customLength, 10, 0, QUAD_IN);
+											if (platform->frameCount % 2) {
+												position.x += amount;
+											} else {
+												position.x -= amount;
+											}
+										}
+									}
+
+									// position.x += frame->destOffX;
+									// position.y += frame->destOffY;
+
+									drawBillboard(raylibCamera, frame->texture, position, size, boxColor, source);
+								} else {
+									showBox = true;
+								}
+							}
+						} else if (actor->type == ACTOR_GROUND) {
+							showBox = true;
+							boxColor = 0xFFE8C572;
+						} else if (actor->type == ACTOR_DUMMY) {
+							showBox = true;
+							boxColor = 0xFFFF878B;
+						} else if (actor->type == ACTOR_DOOR) {
+							showBox = true;
+							boxColor = 0xFF523501;
+						} else if (actor->type == ACTOR_UNIT_SPAWNER) {
+							if (game->inEditor) showBox = true;
+						} else if (actor->type == ACTOR_ITEM) {
+							showBox = true;
+							boxColor = lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5);
+						} else if (actor->type == ACTOR_STORE) {
+							showBox = true;
+							boxColor = 0xFF45E6E6;
+						} else {
+							showBox = true;
+						}
+
+						if (showBox) drawAABB3d(aabb, boxColor);
 					}
 				}
 
@@ -1376,8 +1279,7 @@ void updateGame() {
 	{
 		RenderTexture *texture = game->debugTexture;
 		Matrix3 matrix = mat3();
-		matrix.TRANSLATE(game->screenOverlayOffset);
-		matrix.SCALE(game->screenOverlaySize);
+		matrix.SCALE(game->size);
 
 		drawSimpleTexture(texture, matrix);
 	}
@@ -1390,8 +1292,7 @@ void updateGame() {
 	{
 		RenderTexture *texture = game->mapTexture;
 		Matrix3 matrix = mat3();
-		matrix.TRANSLATE(game->screenOverlayOffset);
-		matrix.SCALE(game->screenOverlaySize);
+		matrix.SCALE(game->size);
 
 		drawSimpleTexture(texture, matrix);
 	}
@@ -1447,7 +1348,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		game->cameraMatrix = mat3(); // More like cameraInvMatrix?
 		game->cameraMatrix.TRANSLATE(game->size/2);
-		game->cameraMatrix.SCALE(game->sizeScale);
 		game->cameraMatrix.TRANSLATE(-v2(game->isoMatrix3 * game->visualCameraTarget));
 		pushCamera2d(game->cameraMatrix);
 		game->worldMouse = game->cameraMatrix.invert() * game->mouse;
@@ -1604,7 +1504,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		backWall.min.z = groundAABB.min.z;
 		backWall.max.z = backWall.min.z + 1000;
 		walls[wallsNum++] = backWall;
-		// drawAABB3d(backWall, 4, 0xFFFF0000);
+		// drawAABB3d(backWall, 0xFFFF0000);
 
 		AABB frontWall = makeAABB();
 		frontWall.min.x = groundAABB.min.x;
@@ -1616,7 +1516,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		frontWall.min.z = groundAABB.min.z;
 		frontWall.max.z = frontWall.min.z + 1000;
 		walls[wallsNum++] = frontWall;
-		// drawAABB3d(frontWall, 4, 0xFFFF0000);
+		// drawAABB3d(frontWall, 0xFFFF0000);
 
 		AABB leftWall = makeAABB();
 		leftWall.min.x = groundAABB.min.x - wallThickness;
@@ -1628,7 +1528,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		leftWall.min.z = groundAABB.min.z;
 		leftWall.max.z = leftWall.min.z + 1000;
 		walls[wallsNum++] = leftWall;
-		// drawAABB3d(leftWall, 4, 0xFFFF0000);
+		// drawAABB3d(leftWall, 0xFFFF0000);
 
 		AABB rightWall = makeAABB();
 		rightWall.min.x = groundAABB.max.x;
@@ -1640,7 +1540,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		rightWall.min.z = groundAABB.min.z;
 		rightWall.max.z = rightWall.min.z + 1000;
 		walls[wallsNum++] = rightWall;
-		// drawAABB3d(rightWall, 4, 0xFFFF0000);
+		// drawAABB3d(rightWall, 0xFFFF0000);
 	} ///
 
 	if (lastStepOfFrame && game->inEditor) { /// Editor update
@@ -1648,7 +1548,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Always show wireframes", &game->debugAlwaysShowWireframes);
-			ImGui::Checkbox("No 3d", &game->debugNo3d);
 			ImGui::Checkbox("Show player box", &game->debugDrawPlayerBox);
 			ImGui::Checkbox("Draw hitboxes", &game->debugDrawHitboxes);
 			ImGui::Checkbox("Draw actor status", &game->debugDrawActorStatus);
@@ -2168,7 +2067,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								hitbox -= v3(center.x, 0, 0)*2;
 							}
 							hitbox += actorCenter;
-							if (game->debugDrawHitboxes) drawAABB3d(hitbox, 2, 0xFFFF0000);
+							if (game->debugDrawHitboxes) drawAABB3d(hitbox, 0xFFFF0000);
 							worldSpaceHitboxs[worldSpaceHitboxesNum++] = hitbox;
 						}
 
@@ -3486,7 +3385,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			clearRenderer();
 			if (keyJustPressed('M')) game->lookingAtMap = !game->lookingAtMap;
 			if (game->lookingAtMap) {
-				Vec2 mapTileSize = v2(100, 100) * game->sizeScale;
+				Vec2 mapTileSize = v2(100, 100);
 				Vec2 totalSize = v2(CITY_COLS, CITY_ROWS) * mapTileSize;
 
 				Vec2 startCursor = game->size/2 - totalSize/2;
@@ -4363,7 +4262,7 @@ void bringWithinBounds(Map *map, Actor *actor) {
 	actor->position = newPos;
 }
 
-void drawAABB3d(AABB aabb, int lineThickness, int color) {
+void drawAABB3d(AABB aabb, int color) {
 	if (game->debugCubesNum > DEBUG_CUBES_MAX-1) {
 		logf("Too many debug cubes\n");
 		return;
