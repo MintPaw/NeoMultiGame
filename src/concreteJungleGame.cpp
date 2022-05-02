@@ -1,5 +1,6 @@
 // Distance based walking frames
 // Make it so allies leave if there's too many
+// Figure out how to prevent units from bunching up by doors
 
 // We need healing
 // Do a ghost that is the base speed
@@ -85,7 +86,7 @@ alertedPointing
 #define BLOCKING_STAMINA_THRESHOLD 5
 #define SECS_PER_CITY_TICK 1
 Vec3 UNIT_SIZE = v3(150, 150, 300);
-#define ROOM_PREWARM_TIME 5
+#define ROOM_PREWARM_TIME 20
 
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
@@ -534,6 +535,7 @@ struct Game {
 	float cityTime;
 
 	int leftToBeatTillUnlock;
+	float timeTillNextSpawn;
 
 #define WORLD_SOUNDS_MAX CHANNELS_MAX
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
@@ -891,6 +893,7 @@ void updateGame() {
 		// game->debugDrawPlayerBox = true;
 		game->debugDrawBillboards = true;
 		game->debugDrawHitboxes = true;
+		game->debugDrawActorStatsSimple = true;
 
 		game->cameraAngleDegrees.x = 75;
 		game->cameraAngleDegrees.y = 3;
@@ -945,7 +948,7 @@ void updateGame() {
 	int steps = 1;
 
 	if (!game->debugSkipPrewarm && game->mapTime < ROOM_PREWARM_TIME) {
-		steps = 5;
+		steps = 20;
 	}
 
 	for (int i = 0; i < steps; i++) {
@@ -3206,12 +3209,20 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		{ /// Spawn enemies // Spawn npcs
 			auto createNpcUnit = [](Map *map)->Actor *{
 				Actor *actor = createActor(map, ACTOR_UNIT);
+				actor->stats[STAT_DAMAGE] = 5;
+				actor->stats[STAT_HP] = 5;
+				actor->stats[STAT_MAX_STAMINA] = 5;
+				actor->stats[STAT_STAMINA_REGEN] = 5;
+				actor->stats[STAT_MOVEMENT_SPEED] = 5;
+				actor->stats[STAT_ATTACK_SPEED] = 5;
 
 				actor->team = rndPick(map->alliances, TEAMS_MAX);
-				Vec2 allianceMinMax = v2(0.05, 0.1);
+				Vec2 allianceMinMax;
+				allianceMinMax.x = 0.05;
+				allianceMinMax.y = clampMap(map->alliances[actor->team], 0, 1, 0.05, 0.2);
 				actor->allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
 
-				int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 0, 20);
+				int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 10, 50);
 				for (int i = 0; i < extraPoints; i++) {
 					actor->stats[rndInt(0, STATS_MAX-1)]++;
 					actor->level++;
@@ -3228,9 +3239,11 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 			float totalAlliance = 0;
 			for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
-			int maxNpcs = clampMap(totalAlliance, 0, 2, 0, 10);
+			int maxNpcs = clampMap(totalAlliance, 0, 2, 2, 20);
+			if (totalAlliance <= 0.01) maxNpcs = 0;
 
-			int startingNpcs = maxNpcs * 0.8;
+			// int startingNpcs = maxNpcs * 0.8;
+			int startingNpcs = 0; // This is disabled because I think prewarming is better
 			if (game->mapTime == 0 && startingNpcs > 0) {
 				auto generatePoissonPoints = [](AABB surface, Vec2 cellSize, int *outPointsNum)->Vec3 *{
 					Vec3 surfaceSize = getSize(surface);
@@ -3318,10 +3331,11 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				}
 			}
 
-			bool spawnThisFrame = false;
-			if (rndPerc(0.01)) spawnThisFrame = true;
+			game->timeTillNextSpawn -= elapsed;
+			float fullPerc = currentNpcs / (float)maxNpcs;
+			if (game->timeTillNextSpawn < 0 && fullPerc < 1) {
+				game->timeTillNextSpawn = clampMap(fullPerc, 0, 1, 0, 10);
 
-			if (currentNpcs < maxNpcs && spawnThisFrame) {
 				Actor *randomDoor = getRandomActorOfType(map, ACTOR_DOOR);
 				if (randomDoor) {
 					Actor *newActor = createNpcUnit(map);
