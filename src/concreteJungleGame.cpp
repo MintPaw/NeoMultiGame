@@ -1,6 +1,7 @@
 // Make it so allies leave if there's too many
 // Figure out how to prevent units from bunching up by doors
 // Smooth out movement, blocking, and animation transtions
+// Figure out a better solution for passes
 
 // We need healing
 // Do a ghost that is the base speed
@@ -125,7 +126,7 @@ enum ActionType {
 	ACTION_KNOCKDOWN=3,
 	ACTION_BLOCKSTUN=4,
 	ACTION_RAISING=5,
-	ACTION_FORCED_IDLE=6,
+	ACTION_EXTRA_4=6,
 	ACTION_EXTRA_5=7,
 	ACTION_EXTRA_6=8,
 	ACTION_EXTRA_7=9,
@@ -145,6 +146,9 @@ enum ActionType {
 	ACTION_CULLING_BLADE=23,
 	ACTION_STICKY_NAPALM=24,
 
+	ACTION_FORCED_IDLE=64,
+	ACTION_FORCED_MOVE=65,
+	ACTION_FORCED_LEAVE=66, // Not working yet
 	ACTION_TYPES_MAX=128,
 };
 
@@ -253,6 +257,7 @@ struct Action {
 	float prevTime;
 	float time;
 	float customLength;
+	Vec3 targetPosition;
 };
 
 enum ActorType {
@@ -1068,7 +1073,7 @@ void updateGame() {
 
 							if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
 
-							if (pass == 1 && game->debugDrawBillboards) {
+							if (game->debugDrawBillboards) {
 								auto getMarkerFrame = [](char *animName, char *markerName)->int {
 									for (int i = 0; i < game->animationMarkerDataNum; i++) {
 										AnimationMarkerData *marker = &game->animationMarkerData[i];
@@ -1081,7 +1086,11 @@ void updateGame() {
 								Animation *anim = NULL;
 								float animTime;
 								int animFrameOverride = -1;
-								if (actor->actionsNum > 0) {
+								if (actor->actionsNum > 0 &&
+									actor->actions[0].type != ACTION_FORCED_MOVE &&
+									actor->actions[0].type != ACTION_FORCED_IDLE &&
+									actor->actions[0].type != ACTION_FORCED_LEAVE
+								) {
 									Action *action = &actor->actions[0];
 									anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
 									animTime = action->time;
@@ -1164,9 +1173,9 @@ void updateGame() {
 									// position.x += frame->destOffX;
 									// position.y += frame->destOffY;
 
-									drawBillboard(camera, frame->texture, position, size, boxColor, source);
+									if (pass == 1) drawBillboard(camera, frame->texture, position, size, boxColor, source);
 								} else {
-									showBox = true;
+									if (pass == 0) showBox = true;
 								}
 							}
 						} else if (actor->type == ACTOR_GROUND) {
@@ -1710,7 +1719,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			if (ImGui::TreeNode("Action type infos")) {
 				if (ImGui::Button("Remove player actions")) player->actionsNum = 0;
 				for (int i = 0; i < ACTION_TYPES_MAX; i++) {
-					if (i >= ACTION_EXTRA_5 && i <= ACTION_EXTRA_8) continue;
+					if (i >= ACTION_EXTRA_4 && i <= ACTION_EXTRA_8) continue;
 					ActionTypeInfo *info = &globals->actionTypeInfos[i];
 					if (ImGui::TreeNode(frameSprintf("%s###%d", info->name, i))) {
 						guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(0xFF000000|stringHash32(info->name), 0xFF000000, 0.5));
@@ -1939,7 +1948,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 		bool canInput = true;
 		{ /// Update action
-			if (actor->actionsNum > 0) { 
+			if (actor->actionsNum > 0) {
 				Action *action = &actor->actions[0];
 				canInput = false;
 				if (action->type != ACTION_BLOCKSTUN) actor->isBlocking = false;
@@ -2154,7 +2163,9 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					action->type == ACTION_HITSTUN ||
 					action->type == ACTION_KNOCKDOWN ||
 					action->type == ACTION_BLOCKSTUN ||
-					action->type == ACTION_FORCED_IDLE
+					action->type == ACTION_FORCED_IDLE ||
+					action->type == ACTION_FORCED_MOVE || 
+					action->type == ACTION_FORCED_LEAVE
 				) usesCustomLength = true;
 
 				float maxTime;
@@ -2163,6 +2174,20 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				} else {
 					maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames) / 60.0;
 				}
+
+				if (action->type == ACTION_FORCED_MOVE) {
+					maxTime = 9999;
+
+					Vec3 dir = normalize(action->targetPosition - actor->position);
+
+					float baseSpeed = getStatPoints(actor, STAT_MOVEMENT_SPEED) * 0.2;
+					Vec2 speed = v2(baseSpeed, baseSpeed);
+					actor->movementAccel.x += dir.x * speed.x;
+					actor->movementAccel.y += dir.y * speed.y;
+
+					if (distance(actor->position, action->targetPosition) < 20) actionDone = true;
+				}
+
 				if (action->time >= maxTime) actionDone = true;
 				if (actionDone) {
 					if (actor->pastActionsNum > ACTIONS_MAX-1) {
