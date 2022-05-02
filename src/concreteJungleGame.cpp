@@ -1,4 +1,5 @@
 // Distance based walking frames
+// Make it so allies leave if there's too many
 
 // We need healing
 // Do a ghost that is the base speed
@@ -334,6 +335,7 @@ struct Actor {
 
 #define MAP_NAME_MAX_LEN 64
 	char destMapName[MAP_NAME_MAX_LEN];
+	float locked;
 
 	int unitsToSpawn;
 
@@ -397,6 +399,7 @@ struct Actor {
 	float aiStateLength;
 	float allianceCost;
 
+	bool isLastExitedDoor;
 	bool doorPlayerSpawnedOver;
 
 	ItemType itemType;
@@ -529,6 +532,8 @@ struct Game {
 	bool cityInited;
 	int cityTicks;
 	float cityTime;
+
+	int leftToBeatTillUnlock;
 
 #define WORLD_SOUNDS_MAX CHANNELS_MAX
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
@@ -1165,7 +1170,7 @@ void updateGame() {
 							boxColor = 0xFFFF878B;
 						} else if (actor->type == ACTOR_DOOR) {
 							showBox = true;
-							boxColor = 0xFF523501;
+							boxColor = lerpColor(0xFF523501, 0xFF121212, actor->locked);
 						} else if (actor->type == ACTOR_UNIT_SPAWNER) {
 							if (game->inEditor) showBox = true;
 						} else if (actor->type == ACTOR_ITEM) {
@@ -1333,7 +1338,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					}
 				}
 
-				if (player) {
+				if (player) { // There always has to be a player???
 					Actor *newActor = createActor(destMap, ACTOR_UNIT); // Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird
 					int id = newActor->id;
 					Item *itemsPtr = newActor->items;
@@ -1350,11 +1355,13 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					if (door) {
 						playerSpawnPos = door->position + v3(0, 0, 1);
 						door->doorPlayerSpawnedOver = true;
+						door->isLastExitedDoor = true;
 					}
 
 					newActor->position = playerSpawnPos;
 
 					bringWithinBounds(destMap, newActor);
+					player = newActor;
 				}
 
 				for (int i = 0; i < srcMap->actorsNum; i++) {
@@ -1364,24 +1371,30 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						i--;
 						continue;
 					}
-				}
 
-				for (int i = 0; i < destMap->actorsNum; i++) {
-					Actor *actor = &destMap->actors[i];
-					AABB spawnPointAABB = getAABB(actor);
-					// if (actor->type == ACTOR_UNIT_SPAWNER) {
-					// 	for (int i = 0; i < actor->unitsToSpawn; i++) {
-					// 		Actor *newActor = createActor(destMap, ACTOR_UNIT);
-					// 		newActor->position.x = rndFloat(spawnPointAABB.min.x, spawnPointAABB.max.x);
-					// 		newActor->position.y = rndFloat(spawnPointAABB.min.y, spawnPointAABB.max.y);
-					// 		newActor->position.z = spawnPointAABB.max.z;
-					// 		newActor->team = rndInt(1, TEAMS_MAX);
-					// 	}
-					// }
+					if (actor->type == ACTOR_DOOR) actor->isLastExitedDoor = false;
 				}
 
 				game->currentMapIndex = game->nextMapIndex;
 				game->mapTime = 0;
+
+				Map *map = &game->maps[game->currentMapIndex];
+
+				int lockAmount = 0;
+				{ //@copyPastedGetLockAmount
+					float totalOtherAlliance = 0;
+					float largestOtherAlliance = 0;
+					for (int i = 0; i < TEAMS_MAX; i++) {
+						if (i != player->team) {
+							totalOtherAlliance += map->alliances[i];
+							if (largestOtherAlliance < map->alliances[i]) largestOtherAlliance = map->alliances[i];
+						}
+					}
+					if (totalOtherAlliance > 0.3 && map->alliances[player->team] < 0.8) {
+						lockAmount = clampMap(largestOtherAlliance, 0.3, 1, 1, 15);
+					}
+				}
+				game->leftToBeatTillUnlock = lockAmount;
 			}
 		} else {
 			float prevNextMap_t = game->nextMap_t;
@@ -2501,7 +2514,19 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		} else if (actor->type == ACTOR_DUMMY) {
 			actor->team = 1;
 		} else if (actor->type == ACTOR_DOOR) {
-			if (overlaps(actor, player)) {
+			if (game->mapTime == 0) {
+				actor->locked = 0;
+			}
+
+			if (game->leftToBeatTillUnlock > 0) {
+				if (game->mapTime > ROOM_PREWARM_TIME) actor->locked += 0.003;
+				if (game->mapTime == 0 && !actor->doorPlayerSpawnedOver) actor->locked = 1;
+			} else {
+				actor->locked -= 0.05;
+			}
+			actor->locked = Clamp01(actor->locked);
+
+			if (actor->locked < 0.9 && overlaps(actor, player)) {
 				if (!actor->doorPlayerSpawnedOver) {
 					for (int i = 0; i < MAPS_MAX; i++) {
 						Map *possibleMap = &game->maps[i];
@@ -2710,6 +2735,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					player->money *= 0.5;
 				} else {
 					map->alliances[actor->team] -= actor->allianceCost;
+					if (actor->team != player->team) game->leftToBeatTillUnlock--;
 				}
 			}
 		}
@@ -3369,14 +3395,27 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								drawRect(bar, teamColors[i]);
 							}
 						} else if (game->mapVisualization == MAP_VISUALIZATION_LOCKED_IN) {
-							bool anyOver = false;
-							for (int i = 0; i < TEAMS_MAX; i++) {
-								if (map->alliances[i] > 0.5) anyOver = true;
+							int lockAmount = 0;
+							{ //@copyPastedGetLockAmount
+								float totalOtherAlliance = 0;
+								float largestOtherAlliance = 0;
+								for (int i = 0; i < TEAMS_MAX; i++) {
+									if (i != player->team) {
+										totalOtherAlliance += map->alliances[i];
+										if (largestOtherAlliance < map->alliances[i]) largestOtherAlliance = map->alliances[i];
+									}
+								}
+								if (totalOtherAlliance > 0.3 && map->alliances[player->team] < 0.8) {
+									lockAmount = clampMap(largestOtherAlliance, 0.3, 1, 1, 15);
+								}
 							}
 
 							Rect rect = makeRect(cursor, mapTileSize);
-							if (anyOver && map->alliances[player->team] < 0.5) {
+							if (lockAmount) {
 								drawRect(rect, 0xFF800000);
+
+								DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+								drawTextInRect(frameSprintf("%d", lockAmount), props, inflatePerc(rect, -0.1));
 							} else {
 								drawRect(rect, 0xFF008000);
 							}
@@ -3647,18 +3686,15 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			}
 		} ///
 
-		{ /// Xp bar
-#if 1
-			drawText(game->defaultFont, frameSprintf("Money: $%.2f\n", player->money), v2(), 0xFFEEEEEE);
-#else
-			float maxXp = 100;
-
-			Rect bgRect = makeRect(v2(), v2(0.3, 0.1)*game->size);
-			drawRect(bgRect, 0xFF000000);
-			Rect rect = inflate(bgRect, -0.01*game->size.y);
-			rect.width *= player->money / maxXp;
-			drawRect(rect, 0xFF808000);
-#endif
+		{ /// Money
+			Vec2 cursor = v2();
+			char *str = frameSprintf("Money: $%.2f", player->money);
+			Vec2 size = drawText(game->defaultFont, str, cursor, 0xFFEEEEEE);
+			cursor.y += size.y + 5;
+			if (game->leftToBeatTillUnlock > 0) {
+				str = frameSprintf("%d left", game->leftToBeatTillUnlock);
+				drawText(game->defaultFont, str, cursor, 0xFFEEEEEE);
+			}
 		} ///
 
 		{ /// Store
