@@ -52,8 +52,6 @@ struct AnimationSystem {
 	Allocator animsMapAllocator;
 	HashMap *animsMap;
 
-	bool topLeftAnimationFrameProps;
-
 #define SPRITE_SHEETS_MAX 1024
 	unsigned char *bitmapDatas[SPRITE_SHEETS_MAX];
 	int bitmapDatasNum;
@@ -73,14 +71,8 @@ struct AnimationSystem {
 		char path[PATH_MAX_LEN];
 	};
 
-	ThreadSafeQueue *pngIn;
-	ThreadSafeQueue *bitmapDataOut;
-	int pngsToDecode;
-
 	ThreadSafeQueue *spritePathsQueue;
 	ThreadSafeQueue *spriteBitmapsOut;
-
-	float currentScale;
 };
 
 AnimationSystem *animSys = NULL;
@@ -100,20 +92,14 @@ void spriteLoadThread(void *threadStruct);
 void initAnimations() {
 	animSys = (AnimationSystem *)zalloc(sizeof(AnimationSystem));
 	animSys->frameRate = 10.0;
-	animSys->currentScale = 1;
-
-	animSys->pngIn = createThreadSafeQueue(sizeof(AnimationSystem::Buffer), 256, false);
-	animSys->bitmapDataOut = createThreadSafeQueue(sizeof(AnimationSystem::Buffer), 256, false);
 
 	animSys->garbageTexture = createRenderTexture(1, 1);
 }
 
 void packSpriteSheet(const char *dirName) {
+	logf("Packing sprite sheets...\n");
+
 	if (!animSys) initAnimations();
-	if (animSys->pngsToDecode) {
-		logf("Can't cache while loading...\n");
-		return;
-	}
 
 	NanoTime nano = getNanoTime();
 
@@ -266,7 +252,8 @@ void packSpriteSheet(const char *dirName) {
 	}
 
 	regenerateSheetAnimations();
-	// logf("Time to pack sprites: %f\n", getMsPassed(nano)); nano = getNanoTime();
+
+	logf("Done took %fms\n", getMsPassed(nano));
 }
 
 void spriteLoadThread(void *threadStruct) {
@@ -468,10 +455,99 @@ void regenerateSheetAnimations() {
 
 void saveSpriteSheets(char *dir);
 void saveSpriteSheets(char *dir) {
+	for (int i = 0; i < animSys->sheetTexturesNum; i++) {
+		char *path = frameSprintf("%s/sheet%d.png", dir, i);
+
+		RenderTexture *texture = animSys->sheetTextures[i];
+		u8 *bitmapData = getTextureData(texture);
+
+		for (int y = 0; y < texture->height; y++) { // Unmultiply alpha
+			//@todo Has to happen here because getTextureData doesn't handle the flag in raylib, I should probably remove the flag.
+			for (int x = 0; x < texture->width; x++) {
+				int pixelIndex = (y*texture->width+x)*4;
+
+				float r = bitmapData[(y*texture->width+x)*4 + 0] / 255.0;
+				float g = bitmapData[(y*texture->width+x)*4 + 1] / 255.0;
+				float b = bitmapData[(y*texture->width+x)*4 + 2] / 255.0;
+				float a = bitmapData[(y*texture->width+x)*4 + 3] / 255.0;
+
+				r /= a;
+				g /= a;
+				b /= a;
+
+				bitmapData[(y*texture->width+x)*4 + 0] = roundf(r*255.0);
+				bitmapData[(y*texture->width+x)*4 + 1] = roundf(g*255.0);
+				bitmapData[(y*texture->width+x)*4 + 2] = roundf(b*255.0);
+				bitmapData[(y*texture->width+x)*4 + 3] = roundf(a*255.0);
+			}
+		}
+
+		stbi_flip_vertically_on_write(true);
+		if (!stbi_write_png(frameSprintf("%s%s", filePathPrefix, path), texture->width, texture->height, 4, bitmapData, texture->width*4)) {
+			logf("Failed to write sprite sheet: %s\n", path);
+		}
+	}
+
+	DataStream *stream = newDataStream();
+
+	writeU32(stream, 1); // Version
+	writeU32(stream, animSys->sheetTexturesNum);
+
+	writeU32(stream, animSys->framesNum);
+	for (int i = 0; i < animSys->framesNum; i++) {
+		Frame *frame = &animSys->frames[i];
+		writeString(stream, frame->name);
+		writeU32(stream, frame->textureNumber);
+		writeU32(stream, frame->srcX);
+		writeU32(stream, frame->srcY);
+		writeU32(stream, frame->srcWidth);
+		writeU32(stream, frame->srcHeight);
+		writeU32(stream, frame->destOffX);
+		writeU32(stream, frame->destOffY);
+		writeU32(stream, frame->width);
+		writeU32(stream, frame->height);
+	}
+
+	writeDataStream(frameSprintf("%s/sheetData.bin", dir), stream);
+	destroyDataStream(stream);
 }
 
 void loadSpriteSheet(char *sheetDataPath);
 void loadSpriteSheet(char *sheetDataPath) {
+	char *dir = frameStringClone(sheetDataPath);
+	*strrchr(dir, '/') = 0;
+
+	DataStream *stream = loadDataStream(sheetDataPath);
+	if (!stream) Panic("No sprite sheet data stream?\n");
+
+	int version = readU32(stream);
+
+	animSys->sheetTexturesNum = readU32(stream);
+	for (int i = 0; i < animSys->sheetTexturesNum; i++) {
+		animSys->sheetTextures[i] = createRenderTexture(frameSprintf("%s/sheet%d.png", dir, i));
+	}
+
+	animSys->framesNum = readU32(stream);
+	for (int i = 0; i < animSys->framesNum; i++) {
+		Frame *frame = &animSys->frames[i];
+		memset(frame, 0, sizeof(Frame));
+		readStringInto(stream, frame->name, FRAME_NAME_MAX_LEN);
+		frame->textureNumber = readU32(stream);
+		frame->srcX = readU32(stream);
+		frame->srcY = readU32(stream);
+		frame->srcWidth = readU32(stream);
+		frame->srcHeight = readU32(stream);
+		frame->destOffX = readU32(stream);
+		frame->destOffY = readU32(stream);
+		frame->width = readU32(stream);
+		frame->height = readU32(stream);
+
+		frame->texture = animSys->sheetTextures[frame->textureNumber];
+	}
+
+	destroyDataStream(stream);
+
+	regenerateSheetAnimations();
 }
 
 Animation *getAnimation(const char *animName) {

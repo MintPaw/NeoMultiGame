@@ -18,7 +18,7 @@ bool createDirectory(const char *dirName);
 void removeDirectory(const char *dirName);
 void renameFile(const char *currentName, const char *newName);
 void appendFile(const char *fileName, void *data, int length);
-void writeFile(const char *fileName, void *data, int length);
+bool writeFile(const char *fileName, void *data, int length);
 void *readFile(const char *fileName, int *outSize=NULL);
 void deleteFile(const char *fileName);
 void loadRemoteZip(const char *url, const char *path);
@@ -560,7 +560,7 @@ void renameFile(const char *currentName, const char *newName) {
 #endif
 }
 
-void writeFile(const char *fileName, void *data, int length) {
+bool writeFile(const char *fileName, void *data, int length) {
 	char realName[PATH_MAX_LEN] = {};
 	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, fileName);
@@ -583,7 +583,7 @@ void writeFile(const char *fileName, void *data, int length) {
 #endif
 		logf("Cannot find file %s to write. (Maybe because you're saving too fast)\n", realName);
 		logLastOSError();
-		return;
+		return false;
 	}
 
 	DWORD written;
@@ -599,20 +599,23 @@ void writeFile(const char *fileName, void *data, int length) {
 #if !defined(FALLOW_DEBUG)
 		void showErrorWindow(char *msg); //@headerHack
 		showErrorWindow(frameSprintf("Failed to write file %s\n", realName));
+		return false;
 #endif
 	}
 
 	CloseHandle(hFile);
-	// logf("%s saved\n", realName);
+	return true;
 #else
 	FILE *filePtr = fopen(realName, "wb");
 	if (!filePtr) {
 		logf("Cannot find file %s\n", realName);
 		Assert(0);
+		return false;
 	}
 
 	fwrite(data, length, 1, filePtr);
 	fclose(filePtr);
+	return true;
 #endif
 }
 

@@ -421,6 +421,7 @@ void clearRenderer(int color=0);
 
 Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
+RenderTexture *createRenderTexture(const char *path, int flags=0);
 RenderTexture *createRenderTexture(int width, int height, void *data=NULL, int flags=0);
 void setTextureSmooth(Texture *texture, bool smooth);
 void setTextureSmooth(RenderTexture *renderTexture, bool smooth);
@@ -580,6 +581,25 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	return texture;
 }
 
+RenderTexture *createRenderTexture(const char *path, int flags) {
+	int pngSize;
+	void *pngData = readFile(path, &pngSize);
+
+	int width, height, channels;
+	stbi_set_flip_vertically_on_load(true);
+	stbi_uc *img = stbi_load_from_memory((unsigned char *)pngData, pngSize, &width, &height, &channels, 4);
+
+	if (!img) return NULL;
+
+	RenderTexture *texture = createRenderTexture(width, height, img, flags);
+	if (!texture) Panic(frameSprintf("Failed to load image %s\n", path));
+
+	free(img);
+	free(pngData);
+
+	return texture;
+}
+
 RenderTexture *createRenderTexture(int width, int height, void *data, int flags) {
 	RenderTexture *renderTexture = (RenderTexture *)zalloc(sizeof(RenderTexture));
 	renderTexture->width = width;
@@ -672,13 +692,21 @@ void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, 
 }
 
 u8 *getTextureData(RenderTexture *renderTexture, int flags) {
-	logf("Can't getTextureData in raylib yet @stub\n");
-	return NULL;
+	Texture texture;
+	texture.width = renderTexture->width;
+	texture.height = renderTexture->height;
+	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
+	return getTextureData(&texture, flags);
 }
 
 u8 *getTextureData(Texture *texture, int flags) {
-	logf("Can't getTextureData in raylib yet @stub\n");
-	return NULL;
+	Raylib::Image raylibImage = Raylib::LoadImageFromTexture(texture->raylibTexture);
+
+	u8 *data = (u8 *)zalloc(texture->width * texture->height * 4);
+	memcpy(data, raylibImage.data, texture->width * texture->height * 4);
+
+	Raylib::UnloadImage(raylibImage);
+	return data;
 }
 
 void destroyTexture(Texture *texture) {

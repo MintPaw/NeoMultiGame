@@ -714,6 +714,16 @@ void updateGame() {
 		animSys->loopsByDefault = true;
 		animSys->frameRate = 60;
 
+		bool reprocessSheets = false;
+		for (int i = 0; i < assetPathsNum; i++) {
+			char *path = assetPaths[i];
+			if (strstr(path, "/needsReprocess.dummy")) {
+				reprocessSheets = true;
+				deleteFile(path);
+			}
+		}
+		if (reprocessSheets) removeDirectory("assets/sheets");
+
 		if (fileExists("assets/sheets/sheetData.bin")) {
 			loadSpriteSheet("assets/sheets/sheetData.bin");
 		} else {

@@ -194,7 +194,7 @@ void writeCrashLog() {
 
 	char *logPath = frameSprintf("%s/crashlog.txt", exeDir);
 
-	void writeFile(const char *fileName, void *data, int length); //@headerHack
+	bool writeFile(const char *fileName, void *data, int length); //@headerHack
 	writeFile(logPath, buf, strlen(buf));
 }
 

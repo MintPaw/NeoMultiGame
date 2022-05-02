@@ -44,6 +44,10 @@ def exportUnitGeneral(armature):
     f.write(outString)
     f.close()
 
+    f = open("C:/bin/frames/spriteDump/"+unitName+"/needsReprocess.dummy", "w")
+    f.write("dummy file")
+    f.close()
+
 def exportImage(outPath, animFileName):
     scn = bpy.data.scenes[0]
     world = bpy.data.worlds["World"]

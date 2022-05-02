@@ -117,6 +117,7 @@ int argbToHex(unsigned char a, unsigned char r, unsigned char g, unsigned char b
 int argbToHex(Vec4 argb);
 int argbFloatToHex(float a, float r, float g, float b);
 void hexToArgb(int argbHex, int *a, int *r, int *g, int *b);
+void hexToArgbFloat(int argbHex, float *a, float *r, float *g, float *b);
 Vec4 hexToArgbFloat(int argbHex);
 int setAofArgb(int src, int newA);
 int setBofArgb(int src, int newB);
@@ -1946,6 +1947,13 @@ void hexToArgb(int argbHex, int *a, int *r, int *g, int *b) {
 	*r = (argbHex >> 16) & 0xFF;
 	*g = (argbHex >> 8) & 0xFF;
 	*b = (argbHex     ) & 0xFF;
+}
+
+void hexToArgbFloat(int argbHex, float *a, float *r, float *g, float *b) {
+	*a = ((argbHex >> 24) & 0xFF) / 255.0;
+	*r = ((argbHex >> 16) & 0xFF) / 255.0;
+	*g = ((argbHex >> 8) & 0xFF) / 255.0;
+	*b = ((argbHex     ) & 0xFF) / 255.0;
 }
 
 Vec4 hexToArgbFloat(int argbHex) {
