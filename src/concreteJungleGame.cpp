@@ -1,6 +1,6 @@
-// Distance based walking frames
 // Make it so allies leave if there's too many
 // Figure out how to prevent units from bunching up by doors
+// Smooth out movement, blocking, and animation transtions
 
 // We need healing
 // Do a ghost that is the base speed
@@ -188,6 +188,8 @@ struct Globals {
 	Vec3 actorSpriteOffset;
 	float actorSpriteScale;
 	float actorSpriteScaleMultiplier;
+	float movementPercDistanceWalkingRatio;
+	float movementPercDistanceRunningRatio;
 };
 
 enum ItemType {
@@ -382,6 +384,8 @@ struct Actor {
 	float timeNotMoving;
 	float timeInAir;
 	float timeWithoutAction;
+
+	float movementPerc;
 
 	Vec2 prevInputVec; // All this is just for running lmao
 	float timeSinceLastLeftPress;
@@ -1105,10 +1109,10 @@ void updateGame() {
 									if (actor->timeMoving) {
 										if (actor->isRunningLeft || actor->isRunningRight) {
 											anim = getAnimation("Unit/run");
-											animTime = actor->timeMoving; // This should actually be actor->timeRunning
+											animFrameOverride = anim->framesNum * actor->movementPerc;
 										} else {
 											anim = getAnimation("Unit/walk");
-											animTime = actor->timeMoving;
+											animFrameOverride = anim->framesNum * actor->movementPerc;
 										}
 									} else if (actor->timeNotMoving) {
 										anim = getAnimation("Unit/idle");
@@ -1148,7 +1152,7 @@ void updateGame() {
 									if (actor->actionsNum > 0) {
 										Action *action = &actor->actions[0];
 										if (action->type == ACTION_BLOCKSTUN) { // Vibration
-											float amount = clampMap(action->time, 0, action->customLength, 10, 0, QUAD_IN);
+											float amount = clampMap(action->time, 0, action->customLength, 5, 0, QUAD_IN);
 											if (platform->frameCount % 2) {
 												position.x += amount;
 											} else {
@@ -1776,6 +1780,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
 			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
 			ImGui::DragFloat("Actor sprite scale multiplier", &globals->actorSpriteScaleMultiplier, 0.01);
+			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01);
+			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01);
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -2593,6 +2599,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			actor->timeNotMoving = 0;
 		}
 
+		Vec3 oldPosition = actor->position;
 		if (actor->info->hasPhysics && timeScale > 0.1) {
 			{ // Bump other actors
 				for (int i = 0; i < map->actorsNum; i++) {
@@ -2711,7 +2718,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			actor->velo.z *= 0.98;
 		}
 
-		if (actor->type == ACTOR_UNIT && !actor->playerControlled) { //We have to flip around ai actors here because physics flips them if they're moving slightly backwards
+		if (actor->type == ACTOR_UNIT) { //We have to flip around ai actors here because physics flips them if they're moving slightly backwards
 			Actor *target = getActor(actor->aiTarget);
 			if (target) {
 				Vec3 dir = target->position - actor->position;
@@ -2721,6 +2728,21 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					actor->facingLeft = false;
 				}
 			}
+		}
+
+		if (actor->type == ACTOR_UNIT) {
+			float distanceCovered = distance(oldPosition, actor->position);
+			Vec3 dir = normalize(actor->position - oldPosition);
+			float movementPerc = distanceCovered;
+			if (actor->isRunningLeft || actor->isRunningRight) movementPerc *= globals->movementPercDistanceRunningRatio;
+			else movementPerc *= globals->movementPercDistanceWalkingRatio;
+			if ((dir.x > 0 && actor->facingLeft) || (dir.x < 0 && !actor->facingLeft)) movementPerc *= -1;
+			actor->movementPerc += movementPerc;
+			
+			while (actor->movementPerc < 0) actor->movementPerc++;
+			while (actor->movementPerc > 1) actor->movementPerc--;
+
+			if (actor->timeMoving == 0) actor->movementPerc = 0;
 		}
 
 		if (actor->hp < 20 && getEquippedItemCount(actor, ITEM_HEALTH_PACK) > 0) {
@@ -2936,12 +2958,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					const int ICONS_MAX = 128;
 					Icon *icons = (Icon *)zalloc(sizeof(Icon) * ICONS_MAX);
 					int iconsNum = 0;
-
-					// {
-					// 	Icon *icon = &icons[iconsNum++];
-					// 	icon->texture = getTexture("assets/images/statusIcons/arrowRight.png");
-					// 	if (actor->facingLeft) icon->flipped = true;
-					// }
 
 					for (int i = 0; i < actor->buffsNum; i++) {
 						Buff *buff = &actor->buffs[i];
@@ -4437,7 +4453,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 10;
+	int globalsVersion = 11;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -4468,6 +4484,8 @@ void saveGlobals() {
 	writeVec3(stream, globals->actorSpriteOffset);
 	writeFloat(stream, globals->actorSpriteScale);
 	writeFloat(stream, globals->actorSpriteScaleMultiplier);
+	writeFloat(stream, globals->movementPercDistanceWalkingRatio);
+	writeFloat(stream, globals->movementPercDistanceRunningRatio);
 
 	writeDataStream("assets/info/globals.bin", stream);
 	destroyDataStream(stream);
@@ -4512,6 +4530,8 @@ void loadGlobals() {
 	globals->actorSpriteOffset = readVec3(stream);
 	globals->actorSpriteScale = readFloat(stream);
 	if (globalsVersion >= 10) globals->actorSpriteScaleMultiplier = readFloat(stream);
+	if (globalsVersion >= 11) globals->movementPercDistanceWalkingRatio = readFloat(stream);
+	if (globalsVersion >= 11) globals->movementPercDistanceRunningRatio = readFloat(stream);
 
 	destroyDataStream(stream);
 }
