@@ -1,5 +1,3 @@
-// Count units in room on map
-// Make it so you can't get hit during prewarm
 // Distance based walking frames
 
 // We need healing
@@ -25,60 +23,32 @@ Upgrades:
 		- +2% chance of hyper armor
 
 	- Slow mo (Can I even do that? -_-)
-
 	- Warp strike
-
 	!- Automatic push blocking
-
-	- Level up
-		+1 to every stat
-
+	- Level up (+1 to every stat)
 	- Bleed
-
 	!- Dash
-
 	- Mist coil: Fire a fireball at the cost of hp
-
 	- Aphotic Shield: Create a shield the absorbs a certain amount of damage (armor?)
-
 	- (passive) Curse of Avernus: Hitting an enemy 4 times within a specific amount of time will cause them to be slowed
-
 	- Borrowed Time: For a short time, taking damage heals you (automatically activates at low hp?)
-
 	- Acid Spray: Throw down some acid that slowly damages anyone who's standing in it.
-
 	- Chemical Rage: Puts you into rage for a short time, gives hp regen, cooldown reduction, and movespeed (and attack speed?)
-
 	- Cold Feet: Drop a orb that slow surrounding units
-
 	!- (passive) Mana break: Attacks that land take a small percentage of enemy stamina
-
 	- Magnetic field: Drop a field that give allies bonus attack speed
-
 	- Spark wraith: Like a one-time widow mine
-
 	- (passive) Counter spike: Gives a chance for a magical counter to being attacked
-
 	!- Culling blade: An attack that instantly kills units below a certain amount of hp percent
-
 	- (passive) Enfeeble: Attacking applies a debuff that lowers attack damage
-
 	- Brain sap: An attack that heals you
-
 	- (passive) Sticky napalm: A stacking slow that's applied with every attack
-
 	- Flamebreak: You "hit the ground" and push everyone away
-
 	- Firefly: For a short time, when you walk around, you drop fire or something else that does damage
-
 	- Ally summons?
-
 	- Primal roar: Stuns everyone in a "cone" in front of you
-
 	!- (passive) Bloodrage: You gain attack speed as you lose hp
-
 	- Blood rite: Put down a seal/bomb that goes off after ~3 seconds
-
 	- Handgun: Limited ammo
 
 *idle = 1
@@ -2052,6 +2022,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 							Actor *otherActor = &map->actors[i];
 							if (!otherActor->info->canBeHit) continue;
 							if (otherActor->team == actor->team) continue;
+							if (otherActor->playerControlled && inRoomPrewarm) continue;
 							ActionType otherActorActionType = ACTION_NONE;
 							if (otherActor->actionsNum != 0) otherActorActionType = otherActor->actions[0].type;
 
