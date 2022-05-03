@@ -2410,6 +2410,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						};
 
 						if (actor->actionsNum == 0) { // This is the same as canInput
+							float aggroRange = 512;
+
 							Actor *target = getActor(actor->aiTarget);
 							if (!target) { // Find target
 								int bestOtherId = 0;
@@ -2427,6 +2429,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 										if (otherActor->type != ACTOR_UNIT) continue;
 										if (otherActor->team == actor->team) continue;
 										if (otherActor->playerControlled && inRoomPrewarm) continue;
+										if (distance(actor, otherActor) < aggroRange) continue;
 
 										int otherAttackersNum;
 										int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
@@ -2457,6 +2460,54 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 							if (actor->aiState == AI_IDLE) {
 								if (target) actor->aiState = AI_STAND_NEAR_TARGET;
+
+								if (actor->aiStateTime > 1 && actor->timeNotMoving > 2) {
+									for (int i = 0; ; i++) {
+										Vec3 newPos;
+										newPos.x = rndFloat(groundAABB.min.x, groundAABB.max.x);
+										newPos.y = rndFloat(groundAABB.min.y, groundAABB.max.y);
+										newPos.z = groundAABB.max.z + 1; // This should probably be a ray cast eventually
+										AABB newAABB = getAABBAtPosition(actor, newPos);
+
+										bool canStand = true;
+										for (int i = 0; i < map->actorsNum; i++) {
+											Actor *otherActor = &map->actors[i];
+											if (!otherActor->info->isWall) continue;
+
+											if (overlaps(otherActor, newAABB)) {
+												canStand = false;
+												break;
+											}
+										}
+
+										if (canStand) {
+											Action *action = addAction(actor, ACTION_FORCED_MOVE);
+											action->targetPosition = newPos;
+											break;
+										}
+
+										if (i >= 100) {
+											logf("Failed to find ai walk location\n");
+											break;
+										}
+									}
+								}
+
+								// Actor *closestDoor = NULL;
+								// float closestDoorDist = 0;
+								// for (int i = 0; i < map->actorsNum; i++) {
+								// 	Actor *otherActor = &map->actors[i];
+								// 	if (otherActor->type != ACTOR_DOOR) continue;
+
+								// 	float dist = distance(actor, otherActor);
+								// 	if (!closestDoor || dist < closestDoorDist) {
+								// 		closestDoor = actor;
+								// 		closestDoorDist = dist;
+								// 	}
+								// }
+
+								// if (closestDoor && closestDoorDist <= 300) {
+								// }
 							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
 								if (actor->aiStateTime == 0) {
 									float dist = rndFloat(100, 200);
