@@ -1057,184 +1057,154 @@ void updateGame() {
 			{ // Really draw 3d
 				Map *map = &game->maps[game->currentMapIndex];
 
-				Actor **actors = (Actor **)frameMalloc(sizeof(Actor *) * map->actorsNum);
-				int actorsNum = map->actorsNum;
-				for (int i = 0; i < map->actorsNum; i++) actors[i] = &map->actors[i];
+				for (int i = 0; i < map->actorsNum; i++) {
+					Actor *actor = &map->actors[i];
+					AABB aabb = getAABB(actor);
 
-				auto qsortActors = [](const void *ptrA, const void *ptrB)->int {
-					Actor *actorA = *(Actor **)ptrA;
-					Actor *actorB = *(Actor **)ptrB;
-					if (actorA->position.z < actorB->position.z) {
-						return 1;
-					} else if (actorA->position.z > actorB->position.z) {
-						return -1;
-					} else {
-						return 0;
-					}
+					int boxColor = 0xFFFFFFFF;
+					bool showBox = false;
+					float boxHeightPerc = 1;
 
-				};
-				// qsort(actors, actorsNum, sizeof(Actor *), qsortActors);
+					if (actor->type == ACTOR_UNIT) {
+						if (game->debugDrawPlayerBox) showBox = true;
+						boxColor = teamColors[actor->team];
 
-				for (int pass = 0; pass < 2; pass++) {
-					if (pass == 1) {
-						startShader(renderer->lightingShader);
-						for (int i = 0; i < game->debugCubesNum; i++) {
-							DebugCube *cube = &game->debugCubes[i];
-							drawAABB(cube->aabb, cube->color);
-						}
-						endShader();
-					}
+						if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
 
-					for (int i = 0; i < actorsNum; i++) {
-						Actor *actor = actors[i];
-						AABB aabb = getAABB(actor);
+						if (game->debugDrawBillboards) {
+							auto getMarkerFrame = [](char *animName, char *markerName)->int {
+								for (int i = 0; i < game->animationMarkerDataNum; i++) {
+									AnimationMarkerData *marker = &game->animationMarkerData[i];
+									if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->frame;
+								}
 
-						int boxColor = 0xFFFFFFFF;
-						bool showBox = false;
-						float boxHeightPerc = 1;
+								return 0;
+							};
 
-						if (actor->type == ACTOR_UNIT) {
-							if (game->debugDrawPlayerBox) showBox = true;
-							boxColor = teamColors[actor->team];
+							Animation *anim = NULL;
+							float animTime;
+							int animFrameOverride = -1;
+							if (actor->actionsNum > 0 &&
+								actor->actions[0].type != ACTION_FORCED_MOVE &&
+								actor->actions[0].type != ACTION_FORCED_IDLE &&
+								actor->actions[0].type != ACTION_FORCED_LEAVE
+							) {
+								Action *action = &actor->actions[0];
+								anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
+								animTime = action->time;
+								if (anim) anim->loops = action->info->animationLoops;
 
-							if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
+								float actionStartupEndTime = action->info->startupFrames / 60.0;
+								float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
+								float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
 
-							if (game->debugDrawBillboards) {
-								auto getMarkerFrame = [](char *animName, char *markerName)->int {
-									for (int i = 0; i < game->animationMarkerDataNum; i++) {
-										AnimationMarkerData *marker = &game->animationMarkerData[i];
-										if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->frame;
-									}
+								int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
+								int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
+								int animationRecoveryEndFrame = 0;
+								if (anim) animationRecoveryEndFrame = anim->framesNum-1;
 
-									return 0;
-								};
-
-								Animation *anim = NULL;
-								float animTime;
-								int animFrameOverride = -1;
-								if (actor->actionsNum > 0 &&
-									actor->actions[0].type != ACTION_FORCED_MOVE &&
-									actor->actions[0].type != ACTION_FORCED_IDLE &&
-									actor->actions[0].type != ACTION_FORCED_LEAVE
-								) {
-									Action *action = &actor->actions[0];
-									anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
-									animTime = action->time;
-									if (anim) anim->loops = action->info->animationLoops;
-
-									float actionStartupEndTime = action->info->startupFrames / 60.0;
-									float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
-									float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
-
-									int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
-									int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
-									int animationRecoveryEndFrame = 0;
-									if (anim) animationRecoveryEndFrame = anim->framesNum-1;
-
-									if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
-										if (action->time < actionStartupEndTime) {
-											animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
-										} else if (action->time < actionActiveEndTime) { 
-											animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
-										} else {
-											animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
-										}
-									}
-								} else {
-									if (actor->timeMoving) {
-										if (actor->isRunningLeft || actor->isRunningRight) {
-											anim = getAnimation("Unit/run");
-											animFrameOverride = anim->framesNum * actor->movementPerc;
-										} else {
-											anim = getAnimation("Unit/walk");
-											animFrameOverride = anim->framesNum * actor->movementPerc;
-										}
-									} else if (actor->timeNotMoving) {
-										anim = getAnimation("Unit/idle");
-										animTime = actor->timeNotMoving;
-									} else if (actor->timeInAir) {
-										anim = getAnimation("Unit/jump");
-										animTime = actor->timeInAir;
-										anim->loops = false;
+								if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
+									if (action->time < actionStartupEndTime) {
+										animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
+									} else if (action->time < actionActiveEndTime) { 
+										animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
 									} else {
-										anim = getAnimation("Unit/idle");
+										animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
 									}
 								}
-
-								Frame *frame = NULL;
-
-								if (anim) {
-									// logf("%s (%f)\n", anim->name, animTime);
-									frame = getAnimFrameAtSecond(anim, animTime);
-									if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
-								}
-
-								bool flipped = false;
-								float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
-								Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
-								if (actor->facingLeft) flipped = true;
-								if (frame) {
-									Rect source = {};
-									source.width = frame->width;
-									source.height = frame->height;
-									source.x = frame->srcX;
-									source.y = frame->texture->height - source.height - frame->srcY;
-
-									Vec2 size = v2(frame->width, frame->height);
-									if (flipped) size.x *= -1;
-									size *= scale;
-
-									if (actor->actionsNum > 0) {
-										Action *action = &actor->actions[0];
-										if (action->type == ACTION_BLOCKSTUN) { // Vibration
-											float amount = clampMap(action->time, 0, action->customLength, 5, 0, QUAD_IN);
-											if (platform->frameCount % 2) {
-												position.x += amount;
-											} else {
-												position.x -= amount;
-											}
-										}
+							} else {
+								if (actor->timeMoving) {
+									if (actor->isRunningLeft || actor->isRunningRight) {
+										anim = getAnimation("Unit/run");
+										animFrameOverride = anim->framesNum * actor->movementPerc;
+									} else {
+										anim = getAnimation("Unit/walk");
+										animFrameOverride = anim->framesNum * actor->movementPerc;
 									}
-
-									// position.x += frame->destOffX;
-									// position.y += frame->destOffY;
-									if (pass == 1) {
-										DrawBillboardCall billboard = {};
-										billboard.camera = camera;
-										billboard.renderTexture = frame->texture;
-										billboard.position = position;
-										billboard.size = size;
-										billboard.tint = boxColor;
-										billboard.source = source;
-										pushBillboard(billboard);
-									}
+								} else if (actor->timeNotMoving) {
+									anim = getAnimation("Unit/idle");
+									animTime = actor->timeNotMoving;
+								} else if (actor->timeInAir) {
+									anim = getAnimation("Unit/jump");
+									animTime = actor->timeInAir;
+									anim->loops = false;
 								} else {
-									if (pass == 0) showBox = true;
+									anim = getAnimation("Unit/idle");
 								}
 							}
-						} else if (actor->type == ACTOR_GROUND) {
-							showBox = true;
-							boxColor = 0xFFE8C572;
-						} else if (actor->type == ACTOR_DUMMY) {
-							showBox = true;
-							boxColor = 0xFFFF878B;
-						} else if (actor->type == ACTOR_DOOR) {
-							showBox = true;
-							boxColor = lerpColor(0xFF523501, 0xFF121212, actor->locked);
-						} else if (actor->type == ACTOR_UNIT_SPAWNER) {
-							if (game->inEditor) showBox = true;
-						} else if (actor->type == ACTOR_ITEM) {
-							showBox = true;
-							boxColor = lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5);
-						} else if (actor->type == ACTOR_STORE) {
-							showBox = true;
-							boxColor = 0xFF45E6E6;
-						} else {
-							showBox = true;
-						}
 
-						if (showBox) pushAABB(aabb, boxColor);
+							Frame *frame = NULL;
+
+							if (anim) {
+								// logf("%s (%f)\n", anim->name, animTime);
+								frame = getAnimFrameAtSecond(anim, animTime);
+								if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
+							}
+
+							bool flipped = false;
+							float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
+							Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
+							if (actor->facingLeft) flipped = true;
+							if (frame) {
+								Rect source = {};
+								source.width = frame->width;
+								source.height = frame->height;
+								source.x = frame->srcX;
+								source.y = frame->texture->height - source.height - frame->srcY;
+
+								Vec2 size = v2(frame->width, frame->height);
+								if (flipped) size.x *= -1;
+								size *= scale;
+
+								if (actor->actionsNum > 0) {
+									Action *action = &actor->actions[0];
+									if (action->type == ACTION_BLOCKSTUN) { // Vibration
+										float amount = clampMap(action->time, 0, action->customLength, 5, 0, QUAD_IN);
+										if (platform->frameCount % 2) {
+											position.x += amount;
+										} else {
+											position.x -= amount;
+										}
+									}
+								}
+
+								// position.x += frame->destOffX;
+								// position.y += frame->destOffY;
+
+								DrawBillboardCall billboard = {};
+								billboard.camera = camera;
+								billboard.renderTexture = frame->texture;
+								billboard.position = position;
+								billboard.size = size;
+								billboard.tint = boxColor;
+								billboard.source = source;
+								pushBillboard(billboard);
+							} else {
+								showBox = true;
+							}
+						}
+					} else if (actor->type == ACTOR_GROUND) {
+						showBox = true;
+						boxColor = 0xFFE8C572;
+					} else if (actor->type == ACTOR_DUMMY) {
+						showBox = true;
+						boxColor = 0xFFFF878B;
+					} else if (actor->type == ACTOR_DOOR) {
+						showBox = true;
+						boxColor = lerpColor(0xFF523501, 0xFF121212, actor->locked);
+					} else if (actor->type == ACTOR_UNIT_SPAWNER) {
+						if (game->inEditor) showBox = true;
+					} else if (actor->type == ACTOR_ITEM) {
+						showBox = true;
+						boxColor = lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5);
+					} else if (actor->type == ACTOR_STORE) {
+						showBox = true;
+						boxColor = 0xFF45E6E6;
+					} else {
+						showBox = true;
 					}
+
+					if (showBox) pushAABB(aabb, boxColor);
 				}
 
 				{ /// Render particles
@@ -1277,9 +1247,16 @@ void updateGame() {
 					}
 				} ///
 			}
-			game->debugCubesNum = 0;
 
 			{ /// Really really draw 3d
+				startShader(renderer->lightingShader);
+				for (int i = 0; i < game->debugCubesNum; i++) {
+					DebugCube *cube = &game->debugCubes[i];
+					drawAABB(cube->aabb, cube->color);
+				}
+				endShader();
+				game->debugCubesNum = 0;
+
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
 					if (billboard->texture) {
