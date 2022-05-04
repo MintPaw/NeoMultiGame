@@ -2651,7 +2651,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					pushScreenRect(staminaBgRect, 0xFF000070);
 
 					Rect rect = staminaBgRect;
-					rect.width *= actor->stamina/actor->maxStamina;
+					rect.width *= fabs(actor->stamina/actor->maxStamina);
 					pushScreenRect(rect, actor->stamina < 0 ? 0xFFF00000 : 0xFF0000F0);
 				}
 
