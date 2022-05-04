@@ -500,6 +500,12 @@ struct Particle {
 	float maxTime;
 };
 
+struct Log3Buffer {
+	Vec3 position;
+	char *buffer;
+	float logTime;
+};
+
 struct Game {
 	Font *defaultFont;
 	Font *particleFont;
@@ -575,6 +581,9 @@ struct Game {
 	int particlesNum;
 	int particlesMax;
 
+	Vec3 mouseRayPos;
+	Vec3 mouseRayDir;
+
 	/// Editor/debug
 	int selectedActorId;
 
@@ -600,8 +609,9 @@ struct Game {
 	DebugCube debugCubes[DEBUG_CUBES_MAX];
 	int debugCubesNum;
 
-	Vec3 mouseRayPos;
-	Vec3 mouseRayDir;
+#define LOG3_BUFFERS_MAX 256
+	Log3Buffer log3Buffers[LOG3_BUFFERS_MAX];
+	int log3BuffersNum;
 };
 Game *game = NULL;
 
@@ -649,6 +659,7 @@ AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
 void drawAABB3d(AABB aabb, int color);
 void drawAABB2d(AABB aabb, int lineThickness, int color);
+void log3f(Vec3 position, const char *msg, ...);
 
 int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
@@ -2871,7 +2882,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 	}
 
 	pushTargetTexture(game->debugTexture);
-	{ /// Draw actors (debug/overlay)
+	{ /// Draw actors (debug/overlay) //@todo rename to overlayTexture
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
 
@@ -3127,6 +3138,27 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			if (complete) {
 				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
 				game->effectsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
+
+	{ /// Update log3buffers
+		for (int i = 0; i < game->log3BuffersNum; i++) {
+			Log3Buffer *log3Buffer = &game->log3Buffers[i];
+
+			float maxTime = 3;
+			float time = game->time - log3Buffer->logTime;
+
+			float alpha = clampMap(time, 0, maxTime*0.05, 0, 1) * clampMap(time, maxTime*0.95, maxTime, 1, 0);
+
+			AABB aabb = makeCenteredAABB(log3Buffer->position, v3(16, 16, 16));
+			drawAABB3d(aabb, 0xFFFF0000);
+
+			if (time > maxTime) {
+				arraySpliceIndex(game->log3Buffers, game->log3BuffersNum, sizeof(Log3Buffer), i);
+				game->log3BuffersNum--;
 				i--;
 				continue;
 			}
@@ -4373,6 +4405,31 @@ void drawAABB2d(AABB aabb, int lineThickness, int color) {
 		Vec3 end = game->isoMatrix3 * points[i*2 + 1];
 		drawLine(v2(start), v2(end), lineThickness, color);
 	}
+}
+
+void log3f(Vec3 position, const char *msg, ...) {
+	va_list args;
+
+	va_start(args, msg);
+	int size = stbsp_vsnprintf(NULL, 0, msg, args);
+	va_end(args);
+
+	char *str = frameMalloc(size+1);
+
+	va_start(args, msg);
+	stbsp_vsnprintf(str, size+1, msg, args);
+	va_end(args);
+
+	if (game->log3BuffersNum > LOG3_BUFFERS_MAX-1) {
+		game->log3BuffersNum = LOG3_BUFFERS_MAX-1;
+		logf("Too log3's!\n");
+	}
+
+	Log3Buffer *log3Buffer = &game->log3Buffers[game->log3BuffersNum++];
+	memset(log3Buffer, 0, sizeof(Log3Buffer));
+	log3Buffer->position = position;
+	log3Buffer->buffer = stringClone(str);
+	log3Buffer->logTime = game->time;
 }
 
 int playWorldSound(char *path, Vec3 worldPosition) {
