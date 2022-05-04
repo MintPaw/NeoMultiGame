@@ -513,6 +513,7 @@ struct DrawBillboardCall {
 	Vec3 position;
 	Vec2 size;
 	int tint;
+	int alpha;
 	Rect source;
 };
 
@@ -1177,6 +1178,7 @@ void updateGame() {
 								billboard.position = position;
 								billboard.size = size;
 								billboard.tint = boxColor;
+								billboard.alpha = 1;
 								billboard.source = source;
 								pushBillboard(billboard);
 							} else {
@@ -1206,46 +1208,6 @@ void updateGame() {
 
 					if (showBox) pushAABB(aabb, boxColor);
 				}
-
-				{ /// Render particles
-					for (int i = 0; i < game->particlesNum; i++) {
-						Particle *particle = &game->particles[i];
-
-						float fadeInPerc = 0.10;
-						float fadeOutPerc = 0.10;
-
-						if (particle->type == PARTICLE_DUST) {
-						} else if (particle->type == PARTICLE_BLOOD) {
-						}
-
-						float alpha =
-							clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
-							* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
-
-						{
-							RenderTexture *texture = renderer->circleTexture;
-							Vec2 size = v2(32, 32);
-							Rect source = makeRect(texture);
-
-							int tint = particle->tint;
-							Vec4 tintVec = hexToArgbFloat(particle->tint);
-							tintVec *= alpha;
-
-							tint = argbToHex(tintVec);
-
-							// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
-
-							DrawBillboardCall billboard = {};
-							billboard.camera = camera;
-							billboard.renderTexture = texture;
-							billboard.position = particle->position;
-							billboard.size = size;
-							billboard.tint = tint;
-							billboard.source = source;
-							pushBillboard(billboard);
-						}
-					}
-				} ///
 			}
 
 			{ /// Really really draw 3d
@@ -1259,10 +1221,18 @@ void updateGame() {
 
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
+					billboard->camera = camera;
+
+					int tint = billboard->tint;
+					Vec4 tintVec = hexToArgbFloat(billboard->tint);
+					tintVec *= billboard->alpha;
+					tint = argbToHex(tintVec);
+					// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
+
 					if (billboard->texture) {
-						drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, billboard->tint, billboard->source);
+						drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, tint, billboard->source);
 					} else {
-						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, billboard->tint, billboard->source);
+						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
 					}
 				}
 				game->billboardsNum = 0;
@@ -2890,6 +2860,25 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 			particle->position += particle->velo;
 			particle->velo *= 0.95;
+
+			float fadeInPerc = 0.10;
+			float fadeOutPerc = 0.10;
+
+			if (particle->type == PARTICLE_DUST) {
+			} else if (particle->type == PARTICLE_BLOOD) {
+			}
+
+			float alpha =
+				clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
+				* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
+
+			DrawBillboardCall billboard = {};
+			billboard.renderTexture = renderer->circleTexture;
+			billboard.position = particle->position;
+			billboard.size = v2(32, 32);
+			billboard.tint = particle->tint;
+			billboard.alpha = alpha;
+			pushBillboard(billboard);
 
 			if (complete) {
 				game->particles[i] = game->particles[game->particlesNum-1];
