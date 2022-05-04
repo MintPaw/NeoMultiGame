@@ -506,6 +506,16 @@ struct Log3Buffer {
 	float logTime;
 };
 
+struct DrawBillboardCall {
+	Camera camera;
+	Texture *texture;
+	RenderTexture *renderTexture;
+	Vec3 position;
+	Vec2 size;
+	int tint;
+	Rect source;
+};
+
 struct Game {
 	Font *defaultFont;
 	Font *particleFont;
@@ -584,6 +594,10 @@ struct Game {
 	Vec3 mouseRayPos;
 	Vec3 mouseRayDir;
 
+#define BILLBOARDS_MAX 8192
+	DrawBillboardCall billboards[BILLBOARDS_MAX];
+	int billboardsNum;
+
 	/// Editor/debug
 	int selectedActorId;
 
@@ -657,8 +671,9 @@ AABB getAABB(Actor *actor);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
-void drawAABB3d(AABB aabb, int color);
-void drawAABB2d(AABB aabb, int lineThickness, int color);
+void pushAABB(AABB aabb, int color);
+void pushAABBOutline(AABB aabb, int lineThickness, int color);
+void pushBillboard(DrawBillboardCall billboard);
 void log3f(Vec3 position, const char *msg, ...);
 
 int playWorldSound(char *path, Vec3 worldPosition);
@@ -1183,8 +1198,16 @@ void updateGame() {
 
 									// position.x += frame->destOffX;
 									// position.y += frame->destOffY;
-
-									if (pass == 1) drawBillboard(camera, frame->texture, position, size, boxColor, source);
+									if (pass == 1) {
+										DrawBillboardCall billboard = {};
+										billboard.camera = camera;
+										billboard.renderTexture = frame->texture;
+										billboard.position = position;
+										billboard.size = size;
+										billboard.tint = boxColor;
+										billboard.source = source;
+										pushBillboard(billboard);
+									}
 								} else {
 									if (pass == 0) showBox = true;
 								}
@@ -1210,7 +1233,7 @@ void updateGame() {
 							showBox = true;
 						}
 
-						if (showBox) drawAABB3d(aabb, boxColor);
+						if (showBox) pushAABB(aabb, boxColor);
 					}
 				}
 
@@ -1242,12 +1265,31 @@ void updateGame() {
 
 							// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
 
-							drawBillboard(camera, texture, particle->position, size, tint, source);
+							DrawBillboardCall billboard = {};
+							billboard.camera = camera;
+							billboard.renderTexture = texture;
+							billboard.position = particle->position;
+							billboard.size = size;
+							billboard.tint = tint;
+							billboard.source = source;
+							pushBillboard(billboard);
 						}
 					}
 				} ///
 			}
 			game->debugCubesNum = 0;
+
+			{ /// Really really draw 3d
+				for (int i = 0; i < game->billboardsNum; i++) {
+					DrawBillboardCall *billboard = &game->billboards[i];
+					if (billboard->texture) {
+						drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, billboard->tint, billboard->source);
+					} else {
+						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, billboard->tint, billboard->source);
+					}
+				}
+				game->billboardsNum = 0;
+			}
 
 			end3d();
 		}
@@ -1489,7 +1531,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		backWall.min.z = groundAABB.min.z;
 		backWall.max.z = backWall.min.z + 1000;
 		walls[wallsNum++] = backWall;
-		// drawAABB3d(backWall, 0xFFFF0000);
+		// pushAABB(backWall, 0xFFFF0000);
 
 		AABB frontWall = makeAABB();
 		frontWall.min.x = groundAABB.min.x;
@@ -1501,7 +1543,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		frontWall.min.z = groundAABB.min.z;
 		frontWall.max.z = frontWall.min.z + 1000;
 		walls[wallsNum++] = frontWall;
-		// drawAABB3d(frontWall, 0xFFFF0000);
+		// pushAABB(frontWall, 0xFFFF0000);
 
 		AABB leftWall = makeAABB();
 		leftWall.min.x = groundAABB.min.x - wallThickness;
@@ -1513,7 +1555,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		leftWall.min.z = groundAABB.min.z;
 		leftWall.max.z = leftWall.min.z + 1000;
 		walls[wallsNum++] = leftWall;
-		// drawAABB3d(leftWall, 0xFFFF0000);
+		// pushAABB(leftWall, 0xFFFF0000);
 
 		AABB rightWall = makeAABB();
 		rightWall.min.x = groundAABB.max.x;
@@ -1525,7 +1567,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		rightWall.min.z = groundAABB.min.z;
 		rightWall.max.z = rightWall.min.z + 1000;
 		walls[wallsNum++] = rightWall;
-		// drawAABB3d(rightWall, 0xFFFF0000);
+		// pushAABB(rightWall, 0xFFFF0000);
 	} ///
 
 	if (lastStepOfFrame && game->inEditor) { /// Editor update
@@ -2056,7 +2098,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								hitbox -= v3(center.x, 0, 0)*2;
 							}
 							hitbox += actorCenter;
-							if (game->debugDrawHitboxes) drawAABB3d(hitbox, 0xFFFF0000);
+							if (game->debugDrawHitboxes) pushAABB(hitbox, 0xFFFF0000);
 							worldSpaceHitboxs[worldSpaceHitboxesNum++] = hitbox;
 						}
 
@@ -2933,10 +2975,10 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			}
 
 			if (game->inEditor) {
-				if (contains(bounds, game->worldMouse) || game->debugAlwaysShowWireframes) drawAABB2d(aabb, 2, 0xFFFFFFFF);
+				if (contains(bounds, game->worldMouse) || game->debugAlwaysShowWireframes) pushAABBOutline(aabb, 2, 0xFFFFFFFF);
 
 				if (game->selectedActorId == actor->id) {
-					drawAABB2d(aabb, 2, lerpColor(0xFFFFFF80, 0xFFFFFF00, secondPhase));
+					pushAABBOutline(aabb, 2, lerpColor(0xFFFFFF80, 0xFFFFFF00, secondPhase));
 
 					if (game->inEditor) {
 						Line3 lineX = makeLine3(actor->position, actor->position + v3(64, 0, 0));
@@ -3154,7 +3196,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			float alpha = clampMap(time, 0, maxTime*0.05, 0, 1) * clampMap(time, maxTime*0.95, maxTime, 1, 0);
 
 			AABB aabb = makeCenteredAABB(log3Buffer->position, v3(16, 16, 16));
-			drawAABB3d(aabb, 0xFFFF0000);
+			pushAABB(aabb, 0xFFFF0000);
 
 			if (time > maxTime) {
 				arraySpliceIndex(game->log3Buffers, game->log3BuffersNum, sizeof(Log3Buffer), i);
@@ -4384,7 +4426,7 @@ void bringWithinBounds(Map *map, Actor *actor) {
 	actor->position = newPos;
 }
 
-void drawAABB3d(AABB aabb, int color) {
+void pushAABB(AABB aabb, int color) {
 	if (game->debugCubesNum > DEBUG_CUBES_MAX-1) {
 		logf("Too many debug cubes\n");
 		return;
@@ -4396,7 +4438,7 @@ void drawAABB3d(AABB aabb, int color) {
 	cube->color = color;
 }
 
-void drawAABB2d(AABB aabb, int lineThickness, int color) {
+void pushAABBOutline(AABB aabb, int lineThickness, int color) {
 	Vec3 points[24];
 	AABBToLines(aabb, points);
 
@@ -4405,6 +4447,15 @@ void drawAABB2d(AABB aabb, int lineThickness, int color) {
 		Vec3 end = game->isoMatrix3 * points[i*2 + 1];
 		drawLine(v2(start), v2(end), lineThickness, color);
 	}
+}
+
+void pushBillboard(DrawBillboardCall billboard) {
+	if (game->billboardsNum > BILLBOARDS_MAX-1) {
+		game->billboardsNum = BILLBOARDS_MAX-1;
+		logf("Too many billboards!\n");
+	}
+
+	game->billboards[game->billboardsNum++] = billboard;
 }
 
 void log3f(Vec3 position, const char *msg, ...) {
