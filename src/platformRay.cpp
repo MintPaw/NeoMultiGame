@@ -378,6 +378,7 @@ struct Renderer {
 	int maxTextureUnits; // Does nothing
 
 	Raylib::Shader lightingShader;
+	int lightingShaderAlphaLoc;
 	Raylib::Shader alphaDiscardShader;
 
 	int width;
@@ -472,6 +473,13 @@ void updateLightingShader();
 
 void resetRenderContext();
 
+void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
+void end3d();
+void startShader(Raylib::Shader shader);
+void endShader();
+void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
+void drawAABB(AABB aabb, int color);
+
 #include "rendererUtils.cpp"
 bool usesAlphaDiscard = false;
 
@@ -505,6 +513,7 @@ void initRenderer(int width, int height) {
 		free(fs);
 
 		renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
+		renderer->lightingShaderAlphaLoc = Raylib::GetShaderLocation(renderer->lightingShader, "alpha");
 
 		int ambientLoc = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
 		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
@@ -906,10 +915,6 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	bottomRight = Raylib::Vector3Add(bottomRight, toRaylib(position));
 	bottomLeft = Raylib::Vector3Add(bottomLeft, toRaylib(position));
 
-	Raylib::BeginShaderMode(renderer->alphaDiscardShader);
-	// Raylib::rlDisableDepthMask();
-	// Raylib::rlEnableColorBlend();
-
 	Raylib::rlCheckRenderBatchLimit(4);
 
 	Raylib::rlSetTexture(texture->raylibTexture.id);
@@ -937,9 +942,6 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	Raylib::rlEnd();
 
 	Raylib::rlSetTexture(0);
-
-	// Raylib::rlEnableDepthMask();
-	Raylib::EndShaderMode();
 }
 
 //void drawBillboardWithRot(Vec3 camPos, Vec3 camTarget, Vec3 camUp, Texture *texture, Vec3 position, Vec2 size, Rect source, Vec2 origin, float rotation, int tint);
@@ -1236,15 +1238,6 @@ void resetRenderContext() {
 	glBindSampler(0, 0);
 #endif
 }
-
-///- 3d Renderer
-
-void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
-void end3d();
-void startShader(Raylib::Shader shader);
-void endShader();
-void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
-void drawAABB(AABB aabb, int color);
 
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::rlDrawRenderBatchActive();

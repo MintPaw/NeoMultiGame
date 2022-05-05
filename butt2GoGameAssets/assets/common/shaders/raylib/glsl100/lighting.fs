@@ -36,6 +36,7 @@ struct Light {
 uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
 uniform vec3 viewPos;
+uniform vec4 alpha;
 
 void main()
 {
@@ -75,6 +76,7 @@ void main()
 
     vec4 finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
     finalColor += texelColor*(ambient/10.0);
+    finalColor.a = alpha.x;
 
     // Gamma correction
     gl_FragColor = pow(finalColor, vec4(1.0/2.2));

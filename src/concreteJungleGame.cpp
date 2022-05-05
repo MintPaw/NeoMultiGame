@@ -462,6 +462,7 @@ const char *mapVisualizationStrings[] = {
 struct WorldCubes {
 	AABB aabb;
 	int color;
+	float alpha;
 };
 
 struct WorldChannel {
@@ -698,7 +699,7 @@ AABB getAABB(Actor *actor);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
-void pushAABB(AABB aabb, int color);
+void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushBillboard(DrawBillboardCall billboard);
 void log3f(Vec3 position, const char *msg, ...);
@@ -1245,11 +1246,15 @@ void updateGame() {
 				startShader(renderer->lightingShader);
 				for (int i = 0; i < game->worldCubesNum; i++) {
 					WorldCubes *cube = &game->worldCubes[i];
+
+					Vec4 alpha = v4(cube->alpha, 0, 0, 0);
+					Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShaderAlphaLoc, &alpha.x, Raylib::SHADER_UNIFORM_VEC4);
 					drawAABB(cube->aabb, cube->color);
 				}
 				endShader();
 				game->worldCubesNum = 0;
 
+				startShader(renderer->alphaDiscardShader);
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
 					if (isZero(billboard->camera.up)) billboard->camera = camera;
@@ -1266,6 +1271,7 @@ void updateGame() {
 						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
 					}
 				}
+				endShader();
 				game->billboardsNum = 0;
 			}
 
@@ -4476,7 +4482,7 @@ void bringWithinBounds(Map *map, Actor *actor) {
 	actor->position = newPos;
 }
 
-void pushAABB(AABB aabb, int color) {
+void pushAABB(AABB aabb, int color, float alpha) {
 	if (game->worldCubesNum > WORLD_CUBES_MAX-1) {
 		logf("Too many debug cubes\n");
 		return;
@@ -4486,6 +4492,7 @@ void pushAABB(AABB aabb, int color) {
 	memset(cube, 0, sizeof(WorldCubes));
 	cube->aabb = aabb;
 	cube->color = color;
+	cube->alpha = alpha;
 }
 
 void pushAABBOutline(AABB aabb, int lineThickness, int color) {
