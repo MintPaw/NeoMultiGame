@@ -1,7 +1,9 @@
+// Fix units getting stuck sometimes
 // Make it so allies leave if there's too many
+// Add shops and food (and subrooms?)
 // Figure out how to prevent units from bunching up by doors
 // Smooth out movement, blocking, and animation transtions
-// Figure out a better solution for passes
+// Make shops take less time to travel to
 
 // We need healing
 // Do a ghost that is the base speed
@@ -12,6 +14,9 @@
 // Don't block backwards?
 
 /*
+Street/room types:
+	- Dark
+	- Shopping
 
 Upgrades:
 	- Chain lightning (5 max links, 4% chance, 5% damage, 40 distance)
@@ -556,6 +561,7 @@ struct Game {
 	Map maps[MAPS_MAX];
 	int currentMapIndex;
 	int nextMapIndex;
+	char lastMapName[MAP_NAME_MAX_LEN];
 	float nextMap_t;
 	float prevMapTime;
 	float mapTime;
@@ -1364,6 +1370,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			if (game->nextMap_t > 1) changeMaps = true;
 
 			if (changeMaps) {
+				strcpy(game->lastMapName, game->maps[game->currentMapIndex].name);
 				Map *srcMap = &game->maps[game->currentMapIndex];
 				Map *destMap = &game->maps[game->nextMapIndex];
 				// infof("%s\n", destMap->name);
@@ -1628,6 +1635,9 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 							"#longRoom",
 						};
 						templateMap = getMapByName(choices[rndInt(0, ArrayLength(choices)-1)]);
+						float totalBaseAlliance = 0;
+						for (int i = 0; i < TEAMS_MAX; i++) totalBaseAlliance += map->baseAlliances[i];
+						if (totalBaseAlliance >= 0.75) templateMap = getMapByName("#cornerBuildings");
 
 						float baseAlliances[TEAMS_MAX];
 						memcpy(baseAlliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
@@ -1636,23 +1646,36 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						strcpy(map->name, frameSprintf("city%d-%d", x, y));
 						map->isTemplatized = true;
 						memcpy(map->baseAlliances, baseAlliances, sizeof(float) * TEAMS_MAX);
+						memcpy(map->alliances, baseAlliances, sizeof(float) * TEAMS_MAX);
 
 						if (streq(templateMap->name, "#cornerBuildings")) {
-							Actor *building = NULL;
+							Actor *leftBuilding = getActorByName(map, "leftBuilding");
+							leftBuilding->size.x *= rndFloat(0.5, 1);
+							leftBuilding->size.y *= rndFloat(0.5, 1);
+							leftBuilding->position.x -= 2000;
+							leftBuilding->position.y += 2000;
+							bringWithinBounds(map, leftBuilding);
 
-							building = getActorByName(map, "leftBuilding");
-							building->size.x *= rndFloat(0.5, 1);
-							building->size.y *= rndFloat(0.5, 1);
-							building->position.x -= 2000;
-							building->position.y += 2000;
-							bringWithinBounds(map, building);
+							Actor *rightBuilding = getActorByName(map, "rightBuilding");
+							rightBuilding->size.x *= rndFloat(0.5, 1);
+							rightBuilding->size.y *= rndFloat(0.5, 1);
+							rightBuilding->position.x += 2000;
+							rightBuilding->position.y += 2000;
+							bringWithinBounds(map, rightBuilding);
 
-							building = getActorByName(map, "rightBuilding");
-							building->size.x *= rndFloat(0.5, 1);
-							building->size.y *= rndFloat(0.5, 1);
-							building->position.x += 2000;
-							building->position.y += 2000;
-							bringWithinBounds(map, building);
+							Actor *door = createActor(map, ACTOR_DOOR);
+							if (rndPerc(0.5)) {
+								door->size = v3(20, 300, 350);
+								door->position.x = leftBuilding->position.x + leftBuilding->size.x/2 + door->size.x/2;
+								door->position.y = leftBuilding->position.y;
+								strcpy(door->destMapName, "shopLeft");
+							} else {
+								door->size = v3(300, 20, 350);
+								door->position.x = rightBuilding->position.x;
+								door->position.y = rightBuilding->position.y - rightBuilding->size.y/2 - door->size.y/2;
+								strcpy(door->destMapName, "shopTop");
+							}
+							door->position.z = groundAABB.max.z;
 						}
 
 						{ /// Fix doors
@@ -1685,11 +1708,19 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								deleteActor(map, door);
 							}
 						} ///
-
-						saveMap(map, mapIndex);
 					}
 				}
 				logf("Maps templatized\n");
+			}
+			if (ImGui::Button("Save all city maps")) {
+				for (int y = 0; y < CITY_ROWS; y++) {
+					for (int x = 0; x < CITY_COLS; x++) {
+						int cityIndex = y * CITY_COLS + x;
+						int mapIndex = cityIndex + CITY_START_INDEX;
+						Map *map = &game->maps[mapIndex];
+						saveMap(map, mapIndex);
+					}
+				}
 			}
 			ImGui::TreePop();
 		}
@@ -2685,13 +2716,17 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 
 			if (actor->locked < 0.9 && overlaps(actor, player)) {
 				if (!actor->doorPlayerSpawnedOver) {
+					char *nextMapName = actor->destMapName;
+					if (streq(nextMapName, "!lastMap")) nextMapName = game->lastMapName;
+
 					for (int i = 0; i < MAPS_MAX; i++) {
 						Map *possibleMap = &game->maps[i];
-						if (streq(possibleMap->name, actor->destMapName)) {
+						if (streq(possibleMap->name, nextMapName)) {
 							game->nextMapIndex = i;
 							break;
 						}
 					}
+
 				}
 			} else {
 				actor->doorPlayerSpawnedOver = false;
