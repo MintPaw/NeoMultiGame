@@ -69,7 +69,7 @@ int rndPick(int *weights, int weightsNum) {
 		}
 	}
 
-	logf("rndPick failed horribly");
+	logf("rndPick failed horribly\n");
 	return 0;
 }
 
@@ -85,6 +85,6 @@ int rndPick(float *weights, int weightsNum) {
 		if (rnd <= 0) return i;
 	}
 
-	logf("rndPick(float) failed horribly");
+	logf("rndPick(float) failed horribly\n");
 	return 0;
 }

@@ -1,3 +1,4 @@
+// Make the shops have stuff
 // Fix units getting stuck sometimes
 // Make it so allies leave if there's too many
 // Add shops and food (and subrooms?)
@@ -245,6 +246,9 @@ struct ItemTypeInfo {
 	float price;
 	ItemType preReq;
 	int maxAmountFromStore;
+
+	// Unserialized
+	int everBought;
 };
 struct Item {
 	ItemType type;
@@ -337,6 +341,14 @@ struct Style {
 	int passiveItem;
 };
 
+enum StoreType {
+	STORE_NONE,
+	STORE_ATTACK,
+	STORE_STAMINA,
+	STORE_UTILITY,
+	STORE_TYPES_MAX,
+};
+
 struct Actor {
 	ActorType type;
 	int id;
@@ -348,6 +360,7 @@ struct Actor {
 
 #define MAP_NAME_MAX_LEN 64
 	char destMapName[MAP_NAME_MAX_LEN];
+	StoreType destMapStoreType;
 	float locked;
 
 	int unitsToSpawn;
@@ -537,6 +550,15 @@ struct ScreenElement {
 	int thickness;
 };
 
+struct StoreData {
+	StoreType type;
+	int relatedMapIndex;
+	int relatedActorId;
+#define STORE_ITEMS_MAX 8
+	Item items[STORE_ITEMS_MAX];
+	int itemsNum;
+};
+
 struct Game {
 	Font *defaultFont;
 	Font *particleFont;
@@ -562,6 +584,7 @@ struct Game {
 	Map maps[MAPS_MAX];
 	int currentMapIndex;
 	int nextMapIndex;
+	StoreType nextMapStoreType;
 	char lastMapName[MAP_NAME_MAX_LEN];
 	float nextMap_t;
 	float prevMapTime;
@@ -593,9 +616,10 @@ struct Game {
 	bool inStore;
 	bool ignoreStoreOverlap;
 	float storeTime;
-#define STORE_ITEMS_MAX 8
-	Item storeItems[STORE_ITEMS_MAX];
-	int storeItemsNum;
+#define STORE_DATAS_MAX 128
+	StoreData storeDatas[STORE_DATAS_MAX];
+	int storeDatasNum;
+	StoreData *currentStoreData;
 
 	bool inInventory;
 	int draggingItemId;
@@ -715,7 +739,7 @@ Particle *createParticle(ParticleType type);
 
 void saveMap(Map *map, int mapFileIndex);
 void loadMap(Map *map, int mapFileIndex);
-void loadAndRefreshMaps();
+void refreshMap(Map *map);
 
 void saveGlobals();
 void loadGlobals();
@@ -1333,7 +1357,18 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 	{ /// Init city (and maps)
 		if (!game->cityInited) {
 			game->cityInited = true;
-			loadAndRefreshMaps();
+			{ //loadAndRefreshMaps
+				for (int i = 0; i < MAPS_MAX; i++) {
+					Map *map = &game->maps[i];
+
+					while (map->actorsNum > 0) {
+						removeActorByIndex(map, 0);
+					}
+
+					loadMap(map, i);
+					refreshMap(map);
+				}
+			}
 			game->currentMapIndex = 0;
 			game->mapTime = 0;
 			game->timeTillNextCityTick = 0;
@@ -1430,6 +1465,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				}
 
 				game->currentMapIndex = game->nextMapIndex;
+
 				game->mapTime = 0;
 
 				Map *map = &game->maps[game->currentMapIndex];
@@ -1652,7 +1688,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						strcpy(map->name, frameSprintf("city%d-%d", x, y));
 						map->isTemplatized = true;
 						memcpy(map->baseAlliances, baseAlliances, sizeof(float) * TEAMS_MAX);
-						memcpy(map->alliances, baseAlliances, sizeof(float) * TEAMS_MAX);
 
 						if (streq(templateMap->name, "#cornerBuildings")) {
 							Actor *leftBuilding = getActorByName(map, "leftBuilding");
@@ -1682,6 +1717,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								strcpy(door->destMapName, "shopTop");
 							}
 							door->position.z = groundAABB.max.z;
+
+							door->destMapStoreType = (StoreType)rndInt(1, STORE_TYPES_MAX-1);
 						}
 
 						{ /// Fix doors
@@ -1714,6 +1751,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 								deleteActor(map, door);
 							}
 						} ///
+
+						refreshMap(map);
 					}
 				}
 				logf("Maps templatized\n");
@@ -2720,8 +2759,8 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			}
 			actor->locked = Clamp01(actor->locked);
 
-			if (actor->locked < 0.9 && overlaps(actor, player)) {
-				if (!actor->doorPlayerSpawnedOver) {
+			if (overlaps(actor, player)) {
+				if (actor->locked < 0.9 && !actor->doorPlayerSpawnedOver && game->currentMapIndex == game->nextMapIndex) {
 					char *nextMapName = actor->destMapName;
 					if (streq(nextMapName, "!lastMap")) nextMapName = game->lastMapName;
 
@@ -2729,10 +2768,35 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 						Map *possibleMap = &game->maps[i];
 						if (streq(possibleMap->name, nextMapName)) {
 							game->nextMapIndex = i;
+
+							game->currentStoreData = NULL;
+							if (actor->destMapStoreType != STORE_NONE) {
+								for (int i = 0; i < game->storeDatasNum; i++) {
+									StoreData *data = &game->storeDatas[i];
+									if (data->relatedMapIndex == game->currentMapIndex && data->relatedActorId == actor->id) {
+										game->currentStoreData = data;
+										break;
+									}
+								}
+								if (!game->currentStoreData) {
+									if (game->storeDatasNum > STORE_DATAS_MAX-1) {
+										logf("Too many store datas!\n");
+										game->storeDatasNum--;
+									}
+									logf("Store created\n");
+									StoreData *data = &game->storeDatas[game->storeDatasNum++];
+									memset(data, 0, sizeof(StoreData));
+									data->relatedMapIndex = game->currentMapIndex;
+									data->relatedActorId = actor->id;
+									data->itemsNum = -1;
+
+									game->currentStoreData = data;
+								}
+							}
+
 							break;
 						}
 					}
-
 				}
 			} else {
 				actor->doorPlayerSpawnedOver = false;
@@ -3392,39 +3456,10 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
 				logf("Stores have restocked\n");
 				game->debugForceRestock = false;
-
-				Item *possibleItems = (Item *)frameMalloc(sizeof(Item) * ITEM_TYPES_MAX);
-				int possibleItemsNum = 0;
-				for (int i = 0; i < ITEM_TYPES_MAX; i++) {
-					ItemTypeInfo *info = &game->itemTypeInfos[i];
-
-					if (getStashedItemCount(player, (ItemType)i) >= info->maxAmountFromStore) continue;
-					//@todo prereqs
-
-					initItem(&possibleItems[possibleItemsNum], (ItemType)i, 1);
-					possibleItemsNum++;
+				for (int i = 0; i < game->storeDatasNum; i++) {
+					StoreData *data = &game->storeDatas[i];
+					data->itemsNum = -1;
 				}
-
-				game->storeItemsNum = 0;
-				for (int i = 0; i < 3; i++) {
-					if (possibleItemsNum <= 0) break;
-
-					int itemIndex = rndInt(0, possibleItemsNum-1);
-					game->storeItems[game->storeItemsNum] = possibleItems[itemIndex];
-					game->storeItemsNum++;
-					arraySpliceIndex(possibleItems, possibleItemsNum, sizeof(Item), itemIndex);
-					possibleItemsNum--;
-				}
-
-				// for (int i = 0; i < MAPS_MAX; i++) {
-				// 	Map *map = &game->maps[i];
-				// 	for (int i = 0; i < map->actorsNum; i++) {
-				// 		Actor *actor = &map->actors[i];
-				// 		if (actor->type == ACTOR_STORE) {
-				// 			actor->itemsNum = 0;
-				// 		}
-				// 	}
-				// }
 			}
 		} ///
 
@@ -3999,16 +4034,65 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 	Map *map = &game->maps[game->currentMapIndex];
 
 	if (game->inStore) {
+		StoreData *data = game->currentStoreData;
+		if (!data) {
+			logf("No store data!\n");
+			game->inStore = false;
+			return;
+		}
+
+		if (data->itemsNum == -1) {
+			auto getRandomShopItemType = []()->ItemType {
+				Item *allItems = (Item *)frameMalloc(sizeof(Item) * ITEM_TYPES_MAX);
+				int allItemsNum = 0;
+				for (int i = 0; i < ITEM_TYPES_MAX; i++) {
+					Item *item = &allItems[allItemsNum++];
+					initItem(item, (ItemType)i, 1);
+					item->amount = item->info->maxAmountFromStore - item->info->everBought;
+				}
+
+				for (int i = 0; i < game->storeDatasNum; i++) {
+					StoreData *data = &game->storeDatas[i];
+					for (int i = 0; i < data->itemsNum; i++) {
+						Item *item = &data->items[i];
+
+						allItems[item->type].amount -= item->amount;
+					}
+				}
+
+				int *chances = (int *)frameMalloc(sizeof(int) * ITEM_TYPES_MAX);
+				int totalChances = 0;
+				for (int i = 0; i < allItemsNum; i++) {
+					Item *item = &allItems[i];
+					chances[i] += item->amount;
+					if (item->amount < 0) logf("Item %s has count %d\n", item->info->name, item->amount);
+					totalChances += item->amount;
+				}
+
+				if (totalChances <= 0) return ITEM_NONE;
+
+				ItemType chosenType = (ItemType)rndPick(chances, ITEM_TYPES_MAX);
+				return chosenType;
+			};
+
+			data->itemsNum = 0;
+			for (int i = 0; i < 8; i++) {
+				ItemType type = getRandomShopItemType();
+				if (type == ITEM_NONE) continue;
+				initItem(&data->items[data->itemsNum++], type, 1);
+			}
+		}
+
 		Rect bgRect = makeCenteredRect(game->size/2, game->size*v2(0.8, 0.6));
 		drawRect(bgRect, 0xFF222222);
 
 		Rect innerRect = inflatePerc(bgRect, -0.2);
 
-		for (int i = 0; i < game->storeItemsNum; i++) {
-			Item *item = &game->storeItems[i];
+		for (int i = 0; i < data->itemsNum; i++) {
+			Item *item = &data->items[i];
 
 			Rect itemSlice = innerRect;
-			itemSlice.width /= game->storeItemsNum;
+			itemSlice.width /= data->itemsNum;
 			itemSlice.x += i * itemSlice.width;
 			drawRect(itemSlice, lerpColor(0xFF000000, 0xFF111111, timePhase(game->time*0.2 + (i*0.1))));
 
@@ -4043,9 +4127,10 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 			if (contains(buyRect, game->mouse) && platform->mouseJustUp) {
 				if (player->money >= item->info->price) {
 					player->money -= item->info->price;
+					item->info->everBought++;
 					giveItem(player, item->type, item->amount); // Maybe giveItem should take an item pointer to copy the id?
-					arraySpliceIndex(game->storeItems, game->storeItemsNum, sizeof(Item), i);
-					game->storeItemsNum--;
+					arraySpliceIndex(data->items, data->itemsNum, sizeof(Item), i);
+					data->itemsNum--;
 				} else {
 					infof("Not enough cash\n");
 				}
@@ -4153,17 +4238,8 @@ Actor *createActor(Map *map, ActorType type) {
 }
 
 void deleteActor(Map *map, Actor *actor) {
-	for (int i = 0; i < map->actorsNum; i++) {
-		if (&map->actors[i] == actor) {
-			arraySpliceIndex(map->actors, map->actorsNum, sizeof(Actor), i);
-			map->actorsNum--;
-			i--;
-			return;
-		}
-	}
-
-	logf("Couldn't delete actor, because it's not on this map...\n");
-};
+	removeActorById(map, actor->id);
+}
 
 Actor *getActor(int id) {
 	if (id == 0) return NULL;
@@ -4620,7 +4696,7 @@ Particle *createParticle(ParticleType type) {
 void saveMap(Map *map, int mapFileIndex) {
 	DataStream *stream = newDataStream();
 
-	int mapVersion = 6;
+	int mapVersion = 7;
 	writeU32(stream, mapVersion);
 
 	writeString(stream, map->name);
@@ -4651,6 +4727,7 @@ void saveMap(Map *map, int mapFileIndex) {
 		writeVec3(stream, actor->position);
 		writeVec3(stream, actor->size);
 		writeString(stream, actor->destMapName);
+		writeU32(stream, actor->destMapStoreType);
 		writeU32(stream, actor->unitsToSpawn);
 	}
 
@@ -4687,6 +4764,7 @@ void loadMap(Map *map, int mapFileIndex) {
 		actor->position = readVec3(stream);
 		actor->size = readVec3(stream);
 		if (mapVersion >= 2) readStringInto(stream, actor->destMapName, MAP_NAME_MAX_LEN);
+		if (mapVersion >= 7) actor->destMapStoreType = (StoreType)readU32(stream);
 		if (mapVersion >= 3) actor->unitsToSpawn = readU32(stream);
 	}
 
@@ -4699,26 +4777,12 @@ void loadMap(Map *map, int mapFileIndex) {
 	destroyDataStream(stream);
 }
 
-void loadAndRefreshMaps() {
-	for (int i = 0; i < MAPS_MAX; i++) {
-		Map *map = &game->maps[i];
-
-		for (int i = 0; map->actorsNum; i++) { // Free actor memory
-			Actor *actor = &map->actors[i];
-			if (actor->items) {
-				free(actor->items);
-				actor->items = NULL;
-			}
-		}
-
-		loadMap(map, i);
-
-		memcpy(map->alliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
-		for (int i = 0; i < TEAMS_MAX; i++) {
-			if (map->alliances[i] >= 1) {
-				map->fortifiedByTeam = i;
-				map->fortifiedPerc = 1;
-			}
+void refreshMap(Map *map) {
+	memcpy(map->alliances, map->baseAlliances, sizeof(float) * TEAMS_MAX);
+	for (int i = 0; i < TEAMS_MAX; i++) {
+		if (map->alliances[i] >= 1) {
+			map->fortifiedByTeam = i;
+			map->fortifiedPerc = 1;
 		}
 	}
 }
