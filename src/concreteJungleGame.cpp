@@ -202,58 +202,89 @@ struct Globals {
 	float movementPercDistanceRunningRatio;
 };
 
+enum StatType {
+	STAT_DAMAGE,
+	STAT_HP,
+	STAT_STAMINA_REGEN,
+	STAT_MAX_STAMINA,
+	STAT_MOVEMENT_SPEED,
+	STAT_ATTACK_SPEED,
+	STATS_MAX,
+};
+char *statStrings[] = {
+	"Damage",
+	"Hp",
+	"Stamina regen",
+	"Max stamina",
+	"Movement speed",
+	"Attack speed",
+};
+u32 statTypeColors[] = {
+	0xFF690009,
+	0xFF004F0C,
+	0xFF6E81FF,
+	0xFF0523EB,
+	0xFF02ED26,
+	0xFFFF3042,
+};
+
 enum ItemType {
-	ITEM_NONE,
-	ITEM_MONEY,
-	ITEM_HEALTH_PACK,
-	ITEM_DAMAGE_BOOST,
-	ITEM_HP_BOOST,
-	ITEM_STAMINA_REGEN_BOOST,
-	ITEM_MAX_STAMINA_BOOST,
-	ITEM_MOVEMENT_SPEED_BOOST,
-	ITEM_ATTACK_SPEED_BOOST,
-	ITEM_MAGNET,
-	// ITEM_MAGNET_RANGE_1,
-	ITEM_HYPER_ARMOR, // Doesn't work??
-	// ITEM_HYPER_ARMOR_ODDS_1,
-	ITEM_HEAVEN_STEP,
-	// ITEM_HEAVEN_LENGTH_1,
-	ITEM_SHADOW_STEP,
-	// ITEM_SHADOW_STEP_COST_1
-	ITEM_BUDDHA_PALM,
-	ITEM_BLOOD_RAGE,
-	// ITEM_BLOOD_RAGE_AMP_1,
-	ITEM_DASH,
-	// ITEM_DASH_RANGE_1,
-	ITEM_BRAIN_SAP,
-	// ITEM_BRAIN_SAP_SPEED_1,
-	ITEM_CULLING_BLADE,
-	// ITEM_CULLING_BLADE_CUT_OFF_1,
-	ITEM_STICKY_NAPALM,
-	// ITEM_CULLING_BLADE_CUT_OFF_1,
+	ITEM_NONE=0,
+	ITEM_MONEY=1,
+	ITEM_HEALTH_PACK=2,
+	ITEM_DAMAGE_BOOST=3,
+	ITEM_HP_BOOST=4,
+	ITEM_STAMINA_REGEN_BOOST=5,
+	ITEM_MAX_STAMINA_BOOST=6,
+	ITEM_MOVEMENT_SPEED_BOOST=7,
+	ITEM_ATTACK_SPEED_BOOST=8,
+	ITEM_MAGNET=9,
+	ITEM_HYPER_ARMOR=10, // Doesn't work??
+	ITEM_HEAVEN_STEP=11,
+	ITEM_SHADOW_STEP=12,
+	ITEM_BUDDHA_PALM=13,
+	ITEM_BLOOD_RAGE=14,
+	ITEM_DASH=15,
+	ITEM_BRAIN_SAP=16,
+	ITEM_CULLING_BLADE=17,
+	ITEM_STICKY_NAPALM=18,
+	ITEM_FOOD_0=19,
+	ITEM_FOOD_1=20,
+	ITEM_FOOD_2=21,
+	ITEM_FOOD_3=22,
+	ITEM_FOOD_4=23,
+	ITEM_FOOD_5=24,
+	ITEM_FOOD_6=25,
+	ITEM_FOOD_7=26,
+	ITEM_FOOD_8=27,
 	ITEM_TYPES_MAX,
 };
 enum ItemSlotType {
 	ITEM_SLOT_GLOBAL,
 	ITEM_SLOT_PASSIVE,
 	ITEM_SLOT_ACTIVE,
+	ITEM_SLOT_CONSUMABLE,
 };
 struct ItemTypeInfo {
 #define ITEM_NAME_MAX_LEN 32
 	char name[ITEM_NAME_MAX_LEN];
 	ItemSlotType slotType;
 	ActionType actionType;
-	float price;
+	float basePrice;
 	ItemType preReq;
 	int maxAmountFromStore;
 
-	// Unserialized
+	float statsToGive[STATS_MAX];
+
+	//@playerSaveSerialize
 	int everBought;
 };
 struct Item {
 	ItemType type;
 	int id;
 	int amount;
+
+	float price;
 
 	ItemTypeInfo *info;
 };
@@ -302,32 +333,6 @@ enum AiState {
 	AI_IDLE,
 	AI_STAND_NEAR_TARGET,
 	AI_APPROACH_FOR_ATTACH,
-};
-
-enum StatType {
-	STAT_DAMAGE,
-	STAT_HP,
-	STAT_STAMINA_REGEN,
-	STAT_MAX_STAMINA,
-	STAT_MOVEMENT_SPEED,
-	STAT_ATTACK_SPEED,
-	STATS_MAX,
-};
-char *statStrings[] = {
-	"Damage",
-	"Hp",
-	"Stamina regen",
-	"Max stamina",
-	"Movement speed",
-	"Attack speed",
-};
-u32 statTypeColors[] = {
-	0xFF690009,
-	0xFF004F0C,
-	0xFF6E81FF,
-	0xFF0523EB,
-	0xFF02ED26,
-	0xFFFF3042,
 };
 
 enum AiType {
@@ -881,101 +886,123 @@ void updateGame() {
 			info = &game->itemTypeInfos[ITEM_HEALTH_PACK];
 			strcpy(info->name, "health pack");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 10;
+			info->basePrice = 10;
 			info->maxAmountFromStore = 10;
 
 			info = &game->itemTypeInfos[ITEM_DAMAGE_BOOST];
 			strcpy(info->name, "damage boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_HP_BOOST];
 			strcpy(info->name, "hp boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_STAMINA_REGEN_BOOST];
 			strcpy(info->name, "stamina regen boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_MAX_STAMINA_BOOST];
 			strcpy(info->name, "max stamina boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_MOVEMENT_SPEED_BOOST];
 			strcpy(info->name, "movement speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_ATTACK_SPEED_BOOST];
 			strcpy(info->name, "attack speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
-			info->price = 25;
+			info->basePrice = 25;
 			info->maxAmountFromStore = 5;
 
 			info = &game->itemTypeInfos[ITEM_MAGNET];
 			strcpy(info->name, "magnet");
 			info->slotType = ITEM_SLOT_PASSIVE;
-			info->price = 30;
+			info->basePrice = 30;
 
 			info = &game->itemTypeInfos[ITEM_HYPER_ARMOR];
 			strcpy(info->name, "hyper armor");
 			info->slotType = ITEM_SLOT_PASSIVE;
-			info->price = 40;
+			info->basePrice = 40;
 
 			info = &game->itemTypeInfos[ITEM_HEAVEN_STEP];
 			strcpy(info->name, "heaven step");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 50;
+			info->basePrice = 50;
 			info->actionType = ACTION_HEAVEN_STEP;
 
 			info = &game->itemTypeInfos[ITEM_SHADOW_STEP];
 			strcpy(info->name, "shadow step");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 60;
+			info->basePrice = 60;
 			info->actionType = ACTION_SHADOW_STEP;
 
 			info = &game->itemTypeInfos[ITEM_BUDDHA_PALM];
 			strcpy(info->name, "buddha palm");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 70;
+			info->basePrice = 70;
 			info->actionType = ACTION_BUDDHA_PALM;
 
 			info = &game->itemTypeInfos[ITEM_BLOOD_RAGE];
 			strcpy(info->name, "blood rage");
 			info->slotType = ITEM_SLOT_PASSIVE;
-			info->price = 80;
+			info->basePrice = 80;
 
 			info = &game->itemTypeInfos[ITEM_DASH];
 			strcpy(info->name, "dash");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 90;
+			info->basePrice = 90;
 			info->actionType = ACTION_DASH;
 
 			info = &game->itemTypeInfos[ITEM_BRAIN_SAP];
 			strcpy(info->name, "brain sap");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 100;
+			info->basePrice = 100;
 			info->actionType = ACTION_BRAIN_SAP;
 
 			info = &game->itemTypeInfos[ITEM_CULLING_BLADE];
 			strcpy(info->name, "culling blade");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 110;
+			info->basePrice = 110;
 			info->actionType = ACTION_CULLING_BLADE;
 
 			info = &game->itemTypeInfos[ITEM_STICKY_NAPALM];
 			strcpy(info->name, "sticky napalm");
 			info->slotType = ITEM_SLOT_ACTIVE;
-			info->price = 120;
+			info->basePrice = 120;
 			info->actionType = ACTION_STICKY_NAPALM;
+
+			for (int i = 0; i < 9; i++) {
+				ItemType type = (ItemType)(ITEM_FOOD_0 + i);
+				info = &game->itemTypeInfos[type];
+				sprintf(info->name, "food %d", i);
+				info->slotType = ITEM_SLOT_CONSUMABLE;
+				info->basePrice = 5;
+				info->maxAmountFromStore = 3;
+
+				StoreType storeType = (StoreType)((i / 3)+1);
+				int variantIndex = i % 3;
+				if (storeType == STORE_ATTACK) {
+					if (variantIndex == 0 || variantIndex == 2) info->statsToGive[STAT_DAMAGE]++;
+					if (variantIndex == 1 || variantIndex == 2) info->statsToGive[STAT_ATTACK_SPEED]++;
+				} else if (storeType == STORE_STAMINA) {
+					if (variantIndex == 0 || variantIndex == 2) info->statsToGive[STAT_STAMINA_REGEN]++;
+					if (variantIndex == 1 || variantIndex == 2) info->statsToGive[STAT_MAX_STAMINA]++;
+				} else if (storeType == STORE_UTILITY) {
+					if (variantIndex == 0 || variantIndex == 2) info->statsToGive[STAT_HP]++;
+					if (variantIndex == 1 || variantIndex == 2) info->statsToGive[STAT_MOVEMENT_SPEED]++;
+				}
+			}
 		}
 
 		game->particlesMax = 128;
@@ -2690,6 +2717,19 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				} ///
 			}
 
+			{ /// Update items
+				for (int i = 0; i < actor->itemsNum; i++) {
+					Item *item = &actor->items[i];
+					if (item->info->slotType == ITEM_SLOT_CONSUMABLE) {
+						for (int i = 0; i < STATS_MAX; i++) {
+							actor->stats[i] += item->info->statsToGive[i];
+						}
+						removeItem(actor, item->type, 1);
+						continue; // This removal is not bulletproof
+					}
+				}
+			} ///
+
 			bool doRefill = false;
 			if (actor->maxHp == 0) doRefill = true;
 			actor->maxHp = getStatPoints(actor, STAT_HP) * 10;
@@ -2786,6 +2826,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 									logf("Store created\n");
 									StoreData *data = &game->storeDatas[game->storeDatasNum++];
 									memset(data, 0, sizeof(StoreData));
+									data->type = actor->destMapStoreType;
 									data->relatedMapIndex = game->currentMapIndex;
 									data->relatedActorId = actor->id;
 									data->itemsNum = -1;
@@ -4042,13 +4083,25 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 		}
 
 		if (data->itemsNum == -1) {
-			auto getRandomShopItemType = []()->ItemType {
+			auto getRandomStoreItemType = [](StoreType storeType)->ItemType {
 				Item *allItems = (Item *)frameMalloc(sizeof(Item) * ITEM_TYPES_MAX);
 				int allItemsNum = 0;
 				for (int i = 0; i < ITEM_TYPES_MAX; i++) {
 					Item *item = &allItems[allItemsNum++];
 					initItem(item, (ItemType)i, 1);
 					item->amount = item->info->maxAmountFromStore - item->info->everBought;
+
+					bool allowItem = true;
+					if (i >= ITEM_FOOD_0 && i <= ITEM_FOOD_8) {
+						if (storeType == STORE_ATTACK) {
+							if (i < ITEM_FOOD_0 || i > ITEM_FOOD_2) allowItem = false;
+						} else if (storeType == STORE_STAMINA) {
+							if (i < ITEM_FOOD_3 || i > ITEM_FOOD_5) allowItem = false;
+						} else if (storeType == STORE_UTILITY) {
+							if (i < ITEM_FOOD_6 || i > ITEM_FOOD_8) allowItem = false;
+						}
+					}
+					if (!allowItem) item->amount = 0;
 				}
 
 				for (int i = 0; i < game->storeDatasNum; i++) {
@@ -4064,8 +4117,8 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 				int totalChances = 0;
 				for (int i = 0; i < allItemsNum; i++) {
 					Item *item = &allItems[i];
+					if (item->amount < 0) item->amount = 0;
 					chances[i] += item->amount;
-					if (item->amount < 0) logf("Item %s has count %d\n", item->info->name, item->amount);
 					totalChances += item->amount;
 				}
 
@@ -4077,7 +4130,7 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 
 			data->itemsNum = 0;
 			for (int i = 0; i < 8; i++) {
-				ItemType type = getRandomShopItemType();
+				ItemType type = getRandomStoreItemType(data->type);
 				if (type == ITEM_NONE) continue;
 				initItem(&data->items[data->itemsNum++], type, 1);
 			}
@@ -4106,6 +4159,9 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 				drawTextInRect("Buy", props, buyRect);
 			}
 
+			float price = item->info->basePrice;
+			if (item->price) price = item->price;
+
 			Rect priceRect = buyRect;
 			priceRect.y -= priceRect.height + priceRect.height*0.2;
 			priceRect.width = itemSlice.width * 0.9;
@@ -4113,20 +4169,47 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 			drawRect(priceRect, 0xFF111111);
 			{
 				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFF909090);
-				drawTextInRect(frameSprintf("Price $%.0f", item->info->price), props, priceRect);
+				drawTextInRect(frameSprintf("Price $%.2f", price), props, priceRect);
 			}
 
 			Rect descRect = inflatePerc(itemSlice, v2(-0.1, -0.6));
 			descRect.y = priceRect.y - descRect.height*1.05;
 			drawRect(descRect, 0xFF111111);
 			{
+				char *descLines[8] = {};
+				int descLinesNum = 0;
+				int descTotal = 0;
+				for (int i = 0; i < STATS_MAX; i++) {
+					float toGive = item->info->statsToGive[i];
+					if (toGive > 0) {
+						descLines[descLinesNum++] = frameSprintf("+%.0f %s", toGive, statStrings[i]);
+						descTotal += strlen(descLines[descLinesNum-1]);
+					} else if (toGive < 0) {
+						descLines[descLinesNum++] = frameSprintf("-%.0f %s", toGive, statStrings[i]);
+						descTotal += strlen(descLines[descLinesNum-1]);
+					}
+				}
+
+				char *desc = (char *)frameMalloc(descTotal + 128);
+				for (int i = 0; i < descLinesNum; i++) {
+					strcat(desc, descLines[i]);
+					strcat(desc, "\n");
+				}
 				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFF909090);
-				drawTextInRect(item->info->name, props, descRect, v2(0.5, 0));
+				drawTextInRect(desc, props, descRect, v2(0.5, 0));
+			}
+
+			Rect titleRect = inflatePerc(itemSlice, v2(-0.1, -0.8));
+			titleRect.y = itemSlice.y + itemSlice.height * 0.03;
+			drawRect(titleRect, 0xFF111111);
+			{
+				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFF909090);
+				drawTextInRect(item->info->name, props, titleRect, v2(0.5, 0));
 			}
 
 			if (contains(buyRect, game->mouse) && platform->mouseJustUp) {
-				if (player->money >= item->info->price) {
-					player->money -= item->info->price;
+				if (player->money >= price) {
+					player->money -= price;
 					item->info->everBought++;
 					giveItem(player, item->type, item->amount); // Maybe giveItem should take an item pointer to copy the id?
 					arraySpliceIndex(data->items, data->itemsNum, sizeof(Item), i);
