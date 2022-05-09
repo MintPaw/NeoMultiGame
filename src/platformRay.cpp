@@ -851,6 +851,7 @@ void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, V
 }
 
 void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
+	if (renderer->disabled) return;
 	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
 	if (isZero(size)) size = v2(texture->width, texture->height);
 
@@ -1068,6 +1069,8 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 
 void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, int tint, float alpha, int flags) {
 	alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
+	if (renderer->disabled) return;
+	if (alpha == 0) return;
 
 	Vec2 verts[] = {
 		v2(0, 0),

@@ -1,8 +1,5 @@
-// Make the shops have stuff
 // Fix units getting stuck sometimes
 // Make it so allies leave if there's too many
-// Add shops and food (and subrooms?)
-// Figure out how to prevent units from bunching up by doors
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less time to travel to
 
@@ -582,6 +579,7 @@ struct Game {
 	Vec2 worldMouse;
 
 	int hitPauseFrames;
+	bool lastStepOfFrame;
 
 	ActorTypeInfo actorTypeInfos[ACTORS_MAX];
 
@@ -672,6 +670,7 @@ struct Game {
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
 	bool debugSkipPrewarm;
+	bool debugDrawPathing;
 
 	/// 3D
 	Vec2i cameraAngleDegrees;
@@ -688,7 +687,7 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
-void stepGame(bool lastStepOfFrame, float elapsed, float timeScale);
+void stepGame(float elapsed, float timeScale);
 void updateStore(Actor *player, Actor *storeActor, float elapsed);
 Map *getMapByName(char *mapName);
 Map *getCityMapByCoords(int x, int y);
@@ -731,7 +730,7 @@ void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushBillboard(DrawBillboardCall billboard);
-void log3f(Vec3 position, const char *msg, ...);
+Log3Buffer *log3f(Vec3 position, const char *msg, ...);
 ScreenElement *createScreenElement();
 void pushScreenRect(Rect rect, int color);
 void pushScreenRectOutline(Rect rect, int thickness, int color);
@@ -1009,7 +1008,6 @@ void updateGame() {
 		game->particles = (Particle *)zalloc(sizeof(Particle) * game->particlesMax);
 
 		game->timeScale = 1;
-		// game->debugDrawPlayerBox = true;
 		game->debugDrawBillboards = true;
 		game->debugDrawHitboxes = true;
 		game->debugDrawActorStatsSimple = true;
@@ -1071,8 +1069,13 @@ void updateGame() {
 	}
 
 	for (int i = 0; i < steps; i++) {
-		bool lastStepOfFrame = i == (steps-1);
-		stepGame(lastStepOfFrame, elapsed, timeScale);
+		game->lastStepOfFrame = i == (steps-1);
+		// if (lastStepOfFrame) {
+		// 	renderer->disabled = false;
+		// } else {
+		// 	renderer->disabled = true;
+		// }
+		stepGame(elapsed, timeScale);
 	}
 
 	{ /// Update world channels
@@ -1361,7 +1364,7 @@ void updateGame() {
 	drawOnScreenLog();
 }
 
-void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
+void stepGame(float elapsed, float timeScale) {
 	Globals *globals = &game->globals;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
@@ -1618,7 +1621,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 		// pushAABB(rightWall, 0xFFFF0000);
 	} ///
 
-	if (lastStepOfFrame && game->inEditor) { /// Editor update
+	if (game->lastStepOfFrame && game->inEditor) { /// Editor update
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1633,6 +1636,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
+			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);
 
 			ImGui::SliderInt("Degs1", &game->cameraAngleDegrees.x, 0, 90);
 			ImGui::SliderInt("Degs2", &game->cameraAngleDegrees.y, -90, 90);
@@ -2307,6 +2311,10 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 				}
 
 				if (action->type == ACTION_FORCED_MOVE) {
+					if (game->debugDrawPathing) {
+						log3f(actor->position, "start")->logTime -= 9999;
+						log3f(action->targetPosition, "end")->logTime -= 9999;
+					}
 					maxTime = 9999;
 
 					Vec3 dir = normalize(action->targetPosition - actor->position);
@@ -2601,6 +2609,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 										AABB newAABB = getAABBAtPosition(actor, newPos);
 
 										bool canStand = true;
+										if (!equal(newAABB, bringWithinBounds(map, newAABB))) canStand = false;
 										for (int i = 0; i < map->actorsNum; i++) {
 											Actor *otherActor = &map->actors[i];
 											if (!otherActor->info->isWall) continue;
@@ -2823,7 +2832,6 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 										logf("Too many store datas!\n");
 										game->storeDatasNum--;
 									}
-									logf("Store created\n");
 									StoreData *data = &game->storeDatas[game->storeDatasNum++];
 									memset(data, 0, sizeof(StoreData));
 									data->type = actor->destMapStoreType;
@@ -3773,7 +3781,7 @@ void stepGame(bool lastStepOfFrame, float elapsed, float timeScale) {
 					}
 				}
 
-				if (lastStepOfFrame && game->inEditor) {
+				if (game->lastStepOfFrame && game->inEditor) {
 					Map *map = game->editorSelectedCityMap;
 					if (map) {
 						ImGui::Begin("Map data", NULL, ImGuiWindowFlags_AlwaysAutoResize);
@@ -4674,7 +4682,7 @@ void pushBillboard(DrawBillboardCall billboard) {
 	game->billboards[game->billboardsNum++] = billboard;
 }
 
-void log3f(Vec3 position, const char *msg, ...) {
+Log3Buffer *log3f(Vec3 position, const char *msg, ...) {
 	va_list args;
 
 	va_start(args, msg);
@@ -4689,7 +4697,7 @@ void log3f(Vec3 position, const char *msg, ...) {
 
 	if (game->log3BuffersNum > LOG3_BUFFERS_MAX-1) {
 		game->log3BuffersNum = LOG3_BUFFERS_MAX-1;
-		logf("Too log3's!\n");
+		logf("Too many log3's!\n");
 	}
 
 	Log3Buffer *log3Buffer = &game->log3Buffers[game->log3BuffersNum++];
@@ -4697,6 +4705,7 @@ void log3f(Vec3 position, const char *msg, ...) {
 	log3Buffer->position = position;
 	log3Buffer->buffer = stringClone(str);
 	log3Buffer->logTime = game->time;
+	return log3Buffer;
 }
 
 ScreenElement *createScreenElement() {
