@@ -1,7 +1,6 @@
-// Fix units getting stuck sometimes
 // Make it so allies leave if there's too many
 // Smooth out movement, blocking, and animation transtions
-// Make shops take less time to travel to
+// Make shops take less in-game time to travel to
 
 // We need healing
 // Do a ghost that is the base speed
