@@ -12,8 +12,20 @@
 
 /*
 Street/room types:
+	- Snowy (slowed, slippery?)
+	- Rainy (low visibility)
+	- Desert/Hot (stamina regen reduction)
+	- Windy (wind)
 	- Dark
+	- Gravity (high gravity)
 	- Shopping
+	- Blood moon (high speed, vampirism?)
+
+Weapons:
+	- Sword
+	- Baseball/pipe
+	- Knife
+	- Crate?
 
 Upgrades:
 	- Chain lightning (5 max links, 4% chance, 5% damage, 40 distance)
@@ -670,6 +682,8 @@ struct Game {
 	Map *editorSelectedCityMap;
 	bool debugSkipPrewarm;
 	bool debugDrawPathing;
+	bool debugPaused;
+	float debugTimeScale;
 
 	/// 3D
 	Vec2i cameraAngleDegrees;
@@ -1006,7 +1020,7 @@ void updateGame() {
 		game->particlesMax = 128;
 		game->particles = (Particle *)zalloc(sizeof(Particle) * game->particlesMax);
 
-		game->timeScale = 1;
+		game->debugTimeScale = 1;
 		game->debugDrawBillboards = true;
 		game->debugDrawHitboxes = true;
 		game->debugDrawActorStatsSimple = true;
@@ -1019,12 +1033,24 @@ void updateGame() {
 
 	Globals *globals = &game->globals;
 
-	float timeScale = game->timeScale;
+	if (keyJustPressed('0')) game->debugPaused = !game->debugPaused;
+	if (keyJustPressed('-')) {
+		game->debugTimeScale -= 0.1;
+		logf("Time scale: %.2f\n", game->debugTimeScale);
+	}
+	if (keyJustPressed('+')) {
+		game->debugTimeScale += 0.1;
+		logf("Time scale: %.2f\n", game->debugTimeScale);
+	}
+
+	float timeScale = 1 * game->debugTimeScale;
 
 	if (game->hitPauseFrames > 0) {
 		game->hitPauseFrames--;
 		timeScale = 0.0001;
 	}
+
+	if  (game->debugPaused) timeScale = 0.0001;
 
 	float elapsed = platform->elapsed * timeScale;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
@@ -1645,17 +1671,18 @@ void stepGame(float elapsed, float timeScale) {
 			ImGui::Text("isRunningLeft: %d", player->isRunningLeft);
 			ImGui::Text("isRunningRight: %d", player->isRunningRight);
 
+			if (ImGui::Button("Spawn low max hp enemy")) {
+				Actor *actor = createActor(map, ACTOR_UNIT);
+				actor->stats[STAT_HP] = 2;
+				actor->team = 1;
+				actor->position = v3(0, 0, 10);
+			}
+
+			ImGui::SameLine();
 			if (ImGui::Button("Spawn enemy")) {
 				Actor *actor = createActor(map, ACTOR_UNIT);
 				actor->team = 1;
 				actor->position = v3(0, 0, 10);
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Spawn dummy")) {
-				Actor *actor = createActor(map, ACTOR_UNIT);
-				actor->team = 1;
-				actor->position = v3(0, 0, 10);
-				actor->aiType = AI_DUMMY;
 			}
 
 			if (ImGui::Button("Kill enemies")) {
@@ -2242,7 +2269,9 @@ void stepGame(float elapsed, float timeScale) {
 										else if (damage >= 5) playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
 										else playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
 
-										if (actor->playerControlled || otherActor->playerControlled) game->hitPauseFrames = action->info->damage;
+										if (actor->playerControlled || otherActor->playerControlled) {
+											game->hitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0, 0.5, 2, 120);
+										}
 										otherActor->hp -= damage;
 
 										Effect *effect = createEffect(
