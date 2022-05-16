@@ -700,7 +700,7 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
-void stepGame(float elapsed, float timeScale);
+void stepGame(float elapsed);
 void updateStore(Actor *player, Actor *storeActor, float elapsed);
 Map *getMapByName(char *mapName);
 Map *getCityMapByCoords(int x, int y);
@@ -1038,7 +1038,7 @@ void updateGame() {
 		game->debugTimeScale -= 0.1;
 		logf("Time scale: %.2f\n", game->debugTimeScale);
 	}
-	if (keyJustPressed('+')) {
+	if (keyJustPressed('=')) {
 		game->debugTimeScale += 0.1;
 		logf("Time scale: %.2f\n", game->debugTimeScale);
 	}
@@ -1100,7 +1100,7 @@ void updateGame() {
 		// } else {
 		// 	renderer->disabled = true;
 		// }
-		stepGame(elapsed, timeScale);
+		stepGame(elapsed);
 	}
 
 	{ /// Update world channels
@@ -1389,7 +1389,7 @@ void updateGame() {
 	drawOnScreenLog();
 }
 
-void stepGame(float elapsed, float timeScale) {
+void stepGame(float elapsed) {
 	Globals *globals = &game->globals;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
@@ -1674,6 +1674,15 @@ void stepGame(float elapsed, float timeScale) {
 			if (ImGui::Button("Spawn low max hp enemy")) {
 				Actor *actor = createActor(map, ACTOR_UNIT);
 				actor->stats[STAT_HP] = 2;
+				actor->team = 1;
+				actor->position = v3(0, 0, 10);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Spawn low max stamina enemy")) {
+				Actor *actor = createActor(map, ACTOR_UNIT);
+				actor->stats[STAT_MAX_STAMINA] = 1;
+				actor->stats[STAT_STAMINA_REGEN] = 1;
 				actor->team = 1;
 				actor->position = v3(0, 0, 10);
 			}
@@ -2270,7 +2279,7 @@ void stepGame(float elapsed, float timeScale) {
 										else playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
 
 										if (actor->playerControlled || otherActor->playerControlled) {
-											game->hitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0, 0.5, 2, 120);
+											game->hitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0.1, 0.5, 10, 20);
 										}
 										otherActor->hp -= damage;
 
@@ -2481,7 +2490,7 @@ void stepGame(float elapsed, float timeScale) {
 
 				actor->prevInputVec = inputVec;
 
-				if (jumpPressed && actor->isOnGround) actor->movementAccel.z += 20;
+				if (jumpPressed && actor->isOnGround) actor->velo.z += 20;
 
 				if (punchPressed) {
 					if (actor->isOnGround) {
@@ -2930,7 +2939,9 @@ void stepGame(float elapsed, float timeScale) {
 		}
 
 		Vec3 oldPosition = actor->position;
-		if (actor->info->hasPhysics && timeScale > 0.1) {
+
+		// This elapsed > 0.0001 check is here to prevent units from setting isOnGround to false, then not changing it back because so little time has passed
+		if (actor->info->hasPhysics && elapsed > 0.0001) {
 			{ // Bump other actors
 				for (int i = 0; i < map->actorsNum; i++) {
 					Actor *otherActor = &map->actors[i];
@@ -2960,19 +2971,23 @@ void stepGame(float elapsed, float timeScale) {
 				actor->isBlocking = false;
 			}
 
+			float timeScale = elapsed / (1/60.0);
+
 			float grav = 1;
 			for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
 
 			actor->accel.z -= grav;
 
-			actor->velo += actor->accel;
+			actor->velo += actor->accel * timeScale;
 			actor->accel = v3();
+
+			Vec3 positionOffset = actor->velo * timeScale;
 
 			{ // AABB collision
 				bool bouncedOffSideWall = false;
 
 				AABB oldAABB = getAABB(actor);
-				AABB newAABB = oldAABB + actor->velo;
+				AABB newAABB = oldAABB + positionOffset;
 				actor->isOnGround = false;
 				for (int i = 0; i < wallsNum; i++) {
 					AABB wallAABB = walls[i];
