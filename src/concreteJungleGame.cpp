@@ -1,4 +1,3 @@
-// Make it so allies leave if there's too many
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less in-game time to travel to
 
@@ -102,6 +101,8 @@ alertedPointing
 #define SECS_PER_CITY_TICK 1
 Vec3 UNIT_SIZE = v3(150, 150, 300);
 #define ROOM_PREWARM_TIME 20
+
+#define GROUND_SPACING 0.1
 
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
@@ -2975,8 +2976,7 @@ void stepGame(float elapsed) {
 
 		Vec3 oldPosition = actor->position;
 
-		// This elapsed > 0.0001 check is here to prevent units from setting isOnGround to false, then not changing it back because so little time has passed
-		if (actor->info->hasPhysics && elapsed > 0.0001) {
+		if (actor->info->hasPhysics) {
 			{ // Bump other actors
 				for (int i = 0; i < map->actorsNum; i++) {
 					Actor *otherActor = &map->actors[i];
@@ -3030,12 +3030,12 @@ void stepGame(float elapsed) {
 
 					if (newAABB.min.z <= wallAABB.max.z && oldAABB.min.z > wallAABB.max.z) { // Bot
 						float dist = wallAABB.max.z - newAABB.min.z;
-						newAABB += v3(0, 0, dist+0.1);
+						newAABB += v3(0, 0, dist+GROUND_SPACING);
 						actor->velo.z = 0;
 						actor->isOnGround = true;
 					}
 
-					// if (newAABB.min.z >= wallAABB.min.z && oldAABB.max.z < wallAABB.max.z) { // Top
+					// if (newAABB.min.z >= wallAABB.min.z && oldAABB.max.z < wallAABB.max.z) { // Top //@todo
 					// 	float dist = wallAABB.min.z - newAABB.max.z;
 					// 	newAABB += v3(0, 0, dist-0.1);
 					// 	actor->velo.z = 0;
@@ -3045,7 +3045,7 @@ void stepGame(float elapsed) {
 
 					if (newAABB.min.x <= wallAABB.max.x && oldAABB.min.x > wallAABB.max.x) { // left
 						float dist = wallAABB.max.x - newAABB.min.x;
-						newAABB += v3(dist+0.1, 0, 0);
+						newAABB += v3(dist+GROUND_SPACING, 0, 0);
 						if (actor->velo.x < 0) {
 							bouncedOffSideWall = true;
 							actor->velo.x *= -restitution;
@@ -3054,7 +3054,7 @@ void stepGame(float elapsed) {
 
 					if (newAABB.max.x >= wallAABB.min.x && oldAABB.max.x < wallAABB.min.x) { // right
 						float dist = wallAABB.min.x - newAABB.max.x;
-						newAABB += v3(dist-0.1, 0, 0);
+						newAABB += v3(dist-GROUND_SPACING, 0, 0);
 						if (actor->velo.x > 0) {
 							bouncedOffSideWall = true;
 							actor->velo.x *= -restitution;
@@ -3063,7 +3063,7 @@ void stepGame(float elapsed) {
 
 					if (newAABB.min.y <= wallAABB.max.y && oldAABB.min.y > wallAABB.max.y) {
 						float dist = wallAABB.max.y - newAABB.min.y;
-						newAABB += v3(0, dist+0.1, 0);
+						newAABB += v3(0, dist+GROUND_SPACING, 0);
 						if (actor->velo.y < 0) {
 							bouncedOffSideWall = true;
 							actor->velo.y *= -restitution;
@@ -3072,12 +3072,16 @@ void stepGame(float elapsed) {
 
 					if (newAABB.max.y >= wallAABB.min.y && oldAABB.max.y < wallAABB.min.y) {
 						float dist = wallAABB.min.y - newAABB.max.y;
-						newAABB += v3(0, dist-0.1, 0);
+						newAABB += v3(0, dist-GROUND_SPACING, 0);
 						if (actor->velo.y > 0) {
 							bouncedOffSideWall = true;
 							actor->velo.y *= -restitution;
 						}
 					}
+
+					Vec3 feetPoint = getPosition(newAABB);
+					feetPoint.z += GROUND_SPACING*2;
+					if (contains(wallAABB, feetPoint)) actor->isOnGround = true;
 				}
 
 				Vec3 newPos = getCenter(newAABB);
