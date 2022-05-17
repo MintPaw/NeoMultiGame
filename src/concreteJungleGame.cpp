@@ -162,7 +162,7 @@ enum ActionType {
 
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
-	ACTION_FORCED_LEAVE=66, // Not working yet
+	ACTION_FORCED_LEAVE=66,
 	ACTION_TYPES_MAX=128,
 };
 
@@ -1193,14 +1193,19 @@ void updateGame() {
 								return 0;
 							};
 
+							bool usesFrameData = false;
+							if (actor->actionsNum > 0) {
+								usesFrameData = true;
+								Action *action = &actor->actions[0];
+								if (action->type == ACTION_FORCED_MOVE) usesFrameData = false;
+								if (action->type == ACTION_FORCED_IDLE) usesFrameData = false;
+								if (action->type == ACTION_FORCED_LEAVE) usesFrameData = false;
+							}
+
 							Animation *anim = NULL;
 							float animTime;
 							int animFrameOverride = -1;
-							if (actor->actionsNum > 0 &&
-								actor->actions[0].type != ACTION_FORCED_MOVE &&
-								actor->actions[0].type != ACTION_FORCED_IDLE &&
-								actor->actions[0].type != ACTION_FORCED_LEAVE
-							) {
+							if (usesFrameData) {
 								Action *action = &actor->actions[0];
 								anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
 								animTime = action->time;
@@ -1390,6 +1395,7 @@ void updateGame() {
 }
 
 void stepGame(float elapsed) {
+	if (elapsed > (1/60.0) + 0.001 && platform->frameCount % (60*5) == 0) logf("You shouldn't use high time steps...\n");
 	Globals *globals = &game->globals;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
@@ -1888,7 +1894,7 @@ void stepGame(float elapsed) {
 				for (int i = 0; i < ACTION_TYPES_MAX; i++) {
 					if (i >= ACTION_EXTRA_4 && i <= ACTION_EXTRA_8) continue;
 					ActionTypeInfo *info = &globals->actionTypeInfos[i];
-					if (ImGui::TreeNode(frameSprintf("%s###%d", info->name, i))) {
+					if (ImGui::TreeNode(frameSprintf("%d: %s###%d", i, info->name, i))) {
 						guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(0xFF000000|stringHash32(info->name), 0xFF000000, 0.5));
 
 						ImGui::InputText("Name", info->name, ACTION_NAME_MAX_LEN);
@@ -2364,6 +2370,10 @@ void stepGame(float elapsed) {
 					if (distance(actor->position, action->targetPosition) < 20) actionDone = true;
 				}
 
+				if (action->type == ACTION_FORCED_LEAVE) {
+					maxTime = 1;
+				}
+
 				if (action->time >= maxTime) actionDone = true;
 				if (actionDone) {
 					if (actor->pastActionsNum > ACTIONS_MAX-1) {
@@ -2372,7 +2382,11 @@ void stepGame(float elapsed) {
 					} 
 					actor->pastActions[actor->pastActionsNum++] = actor->actions[0];
 
-					if (action->type == ACTION_KNOCKDOWN) addAction(actor, ACTION_RAISING);
+					if (action->type == ACTION_KNOCKDOWN) {
+						addAction(actor, ACTION_RAISING);
+					} else if (action->type == ACTION_FORCED_LEAVE) {
+						actor->markedForDeletion = true;
+					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
 					actor->actionsNum--;
@@ -2638,53 +2652,69 @@ void stepGame(float elapsed) {
 								if (target) actor->aiState = AI_STAND_NEAR_TARGET;
 
 								if (actor->aiStateTime > 1 && actor->timeNotMoving > 2) {
-									for (int i = 0; ; i++) {
-										Vec3 newPos;
-										newPos.x = rndFloat(groundAABB.min.x, groundAABB.max.x);
-										newPos.y = rndFloat(groundAABB.min.y, groundAABB.max.y);
-										newPos.z = groundAABB.max.z + 1; // This should probably be a ray cast eventually
-										AABB newAABB = getAABBAtPosition(actor, newPos);
+									int alliedUnits = 0;
+									int totalUnits = 0;
+									for (int i = 0; i < map->actorsNum; i++) {
+										Actor *otherActor = &map->actors[i];
+										if (otherActor->type != ACTOR_UNIT) continue;
+										totalUnits++;
+										if (actor->team == otherActor->team) alliedUnits++;
+									}
+									float currentTeamPerc = (float)totalUnits / (float)alliedUnits;
 
-										bool canStand = true;
-										if (!equal(newAABB, bringWithinBounds(map, newAABB))) canStand = false;
+									bool shouldLeave = false;
+									if (currentTeamPerc > 0.95 && rndPerc(0.1)) shouldLeave = true;
+
+									if (shouldLeave) {
+										Actor **possilbeDoor = (Actor **)frameMalloc(sizeof(Actor *) * ACTORS_MAX);
+										int possibleDoorNum = 0;
 										for (int i = 0; i < map->actorsNum; i++) {
-											Actor *otherActor = &map->actors[i];
-											if (!otherActor->info->isWall) continue;
+											Actor *door = &map->actors[i];
+											if (door->type == ACTOR_DOOR && door->destMapStoreType == STORE_NONE) possilbeDoor[possibleDoorNum++] = door;
+										}
 
-											if (overlaps(otherActor, newAABB)) {
-												canStand = false;
+										if (possibleDoorNum > 0) {
+											Actor *door = possilbeDoor[rndInt(0, possibleDoorNum-1)];
+
+											Action *action = addAction(actor, ACTION_FORCED_MOVE);
+											action->targetPosition = door->position;
+
+											addAction(actor, ACTION_FORCED_LEAVE);
+										}
+
+									} else {
+										for (int i = 0; ; i++) {
+											Vec3 newPos;
+											newPos.x = rndFloat(groundAABB.min.x, groundAABB.max.x);
+											newPos.y = rndFloat(groundAABB.min.y, groundAABB.max.y);
+											newPos.z = groundAABB.max.z + 1; // This should probably be a ray cast eventually
+											AABB newAABB = getAABBAtPosition(actor, newPos);
+
+											bool canStand = true;
+											if (!equal(newAABB, bringWithinBounds(map, newAABB))) canStand = false;
+											for (int i = 0; i < map->actorsNum; i++) {
+												Actor *otherActor = &map->actors[i];
+												if (!otherActor->info->isWall) continue;
+
+												if (overlaps(otherActor, newAABB)) {
+													canStand = false;
+													break;
+												}
+											}
+
+											if (canStand) {
+												Action *action = addAction(actor, ACTION_FORCED_MOVE);
+												action->targetPosition = newPos;
+												break;
+											}
+
+											if (i >= 100) {
+												logf("Failed to find ai walk location\n");
 												break;
 											}
 										}
-
-										if (canStand) {
-											Action *action = addAction(actor, ACTION_FORCED_MOVE);
-											action->targetPosition = newPos;
-											break;
-										}
-
-										if (i >= 100) {
-											logf("Failed to find ai walk location\n");
-											break;
-										}
 									}
 								}
-
-								// Actor *closestDoor = NULL;
-								// float closestDoorDist = 0;
-								// for (int i = 0; i < map->actorsNum; i++) {
-								// 	Actor *otherActor = &map->actors[i];
-								// 	if (otherActor->type != ACTOR_DOOR) continue;
-
-								// 	float dist = distance(actor, otherActor);
-								// 	if (!closestDoor || dist < closestDoorDist) {
-								// 		closestDoor = actor;
-								// 		closestDoorDist = dist;
-								// 	}
-								// }
-
-								// if (closestDoor && closestDoorDist <= 300) {
-								// }
 							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
 								if (actor->aiStateTime == 0) {
 									float dist = rndFloat(100, 200);
