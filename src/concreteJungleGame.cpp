@@ -737,6 +737,7 @@ bool overlaps(Actor *actor0, Actor *actor1);
 bool overlaps(Actor *actor, AABB aabb);
 float distance(Actor *actor0, Actor *actor1);
 AABB getAABB(Actor *actor);
+Vec3 getPosition(AABB aabb);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
@@ -2367,7 +2368,11 @@ void stepGame(float elapsed) {
 					actor->movementAccel.x += dir.x * speed.x;
 					actor->movementAccel.y += dir.y * speed.y;
 
-					if (distance(actor->position, action->targetPosition) < 20) actionDone = true;
+					Vec3 targetPosition = action->targetPosition;
+					AABB destAABB = getAABBAtPosition(actor, targetPosition);
+					destAABB = bringWithinBounds(map, destAABB);
+					targetPosition = getPosition(destAABB);
+					if (distance(actor->position, targetPosition) < 20) actionDone = true;
 				}
 
 				if (action->type == ACTION_FORCED_LEAVE) {
@@ -4694,6 +4699,12 @@ float distance(Actor *actor0, Actor *actor1) {
 
 AABB getAABB(Actor *actor) {
 	return getAABBAtPosition(actor, actor->position);
+}
+
+Vec3 getPosition(AABB aabb) {
+	Vec3 ret = getCenter(aabb);
+	ret.z -= getSize(aabb).z/2;
+	return ret;
 }
 
 AABB bringWithinBounds(AABB groundAABB, AABB aabb) {
