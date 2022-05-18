@@ -78,6 +78,17 @@ enum PlatformKey {
 	KEY_ESC=Raylib::KEY_ESCAPE,
 };
 
+enum JoyButtons {
+	JOY_X = Raylib::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
+	JOY_CIRCLE = Raylib::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT,
+	JOY_SQUARE = Raylib::GAMEPAD_BUTTON_RIGHT_FACE_LEFT,
+	JOY_TRIANGLE = Raylib::GAMEPAD_BUTTON_RIGHT_FACE_UP,
+	JOY_PAD_LEFT = Raylib::GAMEPAD_BUTTON_LEFT_FACE_LEFT,
+	JOY_PAD_RIGHT = Raylib::GAMEPAD_BUTTON_LEFT_FACE_RIGHT,
+	JOY_PAD_UP = Raylib::GAMEPAD_BUTTON_LEFT_FACE_UP,
+	JOY_PAD_DOWN = Raylib::GAMEPAD_BUTTON_LEFT_FACE_DOWN,
+};
+
 Platform *platform = NULL;
 
 void initPlatform(int windowWidth, int windowHeight, char *windowTitle);
@@ -87,11 +98,15 @@ void platformUpdate();
 
 void minimizeWindow();
 void maximizeWindow();
-void setClipboard(char *str);
 bool keyPressed(int key);
 bool keyJustPressed(int key);
 bool keyJustReleased(int key);
-
+bool joyButtonPressed(int controllerId, int button);
+bool joyButtonJustReleased(int controllerId, int button);
+bool joyButtonJustPressed(int controllerId, int button);
+Vec2 joyLeftStick(int controllerId);
+Vec2 joyRightStick(int controllerId);
+void setClipboard(char *str);
 void platformSleep(int ms);
 NanoTime getNanoTime();
 float getMsPassed(NanoTime startTime);
@@ -257,6 +272,42 @@ bool keyJustPressed(int key) {
 bool keyJustReleased(int key) {
 	if (platform->typingGui) return false;
 	return Raylib::IsKeyReleased(key);
+}
+
+bool joyButtonPressed(int controllerId, int button) {
+	if (!Raylib::IsGamepadAvailable(controllerId)) return false;
+	bool ret = Raylib::IsGamepadButtonDown(controllerId, button);
+	return ret;
+}
+
+bool joyButtonJustReleased(int controllerId, int button) {
+	if (!Raylib::IsGamepadAvailable(controllerId)) return false;
+	bool ret = Raylib::IsGamepadButtonReleased(controllerId, button);
+	return ret;
+}
+
+bool joyButtonJustPressed(int controllerId, int button) {
+	if (!Raylib::IsGamepadAvailable(controllerId)) return false;
+	bool ret = Raylib::IsGamepadButtonPressed(controllerId, button);
+	return ret;
+}
+
+Vec2 joyLeftStick(int controllerId) {
+	if (!Raylib::IsGamepadAvailable(controllerId)) return v2();
+
+	Vec2 ret;
+	ret.x = Raylib::GetGamepadAxisMovement(controllerId, Raylib::GAMEPAD_AXIS_LEFT_X);
+	ret.y = Raylib::GetGamepadAxisMovement(controllerId, Raylib::GAMEPAD_AXIS_LEFT_Y);
+	return ret;
+}
+
+Vec2 joyRightStick(int controllerId) {
+	if (!Raylib::IsGamepadAvailable(controllerId)) return v2();
+
+	Vec2 ret;
+	ret.x = Raylib::GetGamepadAxisMovement(controllerId, Raylib::GAMEPAD_AXIS_RIGHT_X);
+	ret.y = Raylib::GetGamepadAxisMovement(controllerId, Raylib::GAMEPAD_AXIS_RIGHT_Y);
+	return ret;
 }
 
 void platformSleep(int ms) {

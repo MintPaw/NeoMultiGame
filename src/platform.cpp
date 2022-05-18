@@ -56,12 +56,9 @@ bool keyPressed(int key);
 bool keyJustPressed(int key);
 bool keyJustReleased(int key);
 void resetKeys();
-// Vec2 getLeftStick(int controllerId);
-// Vec2 getRightStick(int controllerId);
 bool joyButtonPressed(int controllerId, int button);
 bool joyButtonJustReleased(int controllerId, int button);
 bool joyButtonJustPressed(int controllerId, int button);
-float joyAxis(int controllerId, int axis);
 Vec2 joyLeftStick(int controllerId);
 Vec2 joyRightStick(int controllerId);
 void maximizeWindow();
@@ -739,20 +736,19 @@ bool joyButtonJustPressed(int controllerId, int button) {
 	return false;
 }
 
-float joyAxis(int controllerId, int axis) {
-	JoyPad *pad = &platform->joyPads[controllerId];
-	if (!pad->connected) return false;
-
-	return pad->axes[axis];
-}
-
 Vec2 joyLeftStick(int controllerId) {
-	Vec2 ret = v2(joyAxis(controllerId, 0), joyAxis(controllerId, 1));
+	JoyPad *pad = &platform->joyPads[controllerId];
+	if (!pad->connected) return v2();
+
+	Vec2 ret = v2(pad->axes[0], pad->axes[1]);
 	return ret;
 }
 
 Vec2 joyRightStick(int controllerId) {
-	Vec2 ret = v2(joyAxis(controllerId, 2), joyAxis(controllerId, 3));
+	JoyPad *pad = &platform->joyPads[controllerId];
+	if (!pad->connected) return v2();
+
+	Vec2 ret = v2(pad->axes[2], pad->axes[3]);
 	return ret;
 }
 

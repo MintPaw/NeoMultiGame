@@ -111,6 +111,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "file.cpp"
 #include "dataStream.cpp"
 #include "platformRay.cpp"
+#include "platformUtils.cpp"
 #include "zip.cpp"
 #include "textureSystem.cpp"
 #include "audio.cpp"
