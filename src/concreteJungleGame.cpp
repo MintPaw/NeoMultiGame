@@ -744,7 +744,6 @@ bool overlaps(Actor *actor0, Actor *actor1);
 bool overlaps(Actor *actor, AABB aabb);
 float distance(Actor *actor0, Actor *actor1);
 AABB getAABB(Actor *actor);
-Vec3 getPosition(AABB aabb);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
@@ -2313,7 +2312,7 @@ void stepGame(float elapsed) {
 					Vec3 targetPosition = action->targetPosition;
 					AABB destAABB = getAABBAtPosition(actor, targetPosition);
 					destAABB = bringWithinBounds(map, destAABB);
-					targetPosition = getPosition(destAABB);
+					targetPosition = getCenter(destAABB) - getSize(destAABB).z/2;
 					if (distance(actor->position, targetPosition) < 20) actionDone = true;
 				}
 
@@ -3025,7 +3024,14 @@ void stepGame(float elapsed) {
 
 			actor->accel.z -= grav;
 
-			actor->velo += actor->accel * timeScale;
+			Vec3 damping = v3();
+			if (actor->isOnGround) {
+				damping.x = 0.2;
+				damping.y = 0.2;
+			}
+			damping.z = 0.02;
+
+			actor->velo += (actor->accel - damping*actor->velo) * timeScale;
 			actor->accel = v3();
 
 			Vec3 positionOffset = actor->velo * timeScale;
@@ -3038,7 +3044,12 @@ void stepGame(float elapsed) {
 				actor->isOnGround = false;
 				for (int i = 0; i < wallsNum; i++) {
 					AABB wallAABB = walls[i];
-					if (!intersects(newAABB, wallAABB)) continue;
+					if (!intersects(newAABB, wallAABB)) {
+						Vec3 feetPoint = getCenter(newAABB) - getSize(newAABB).z/2;
+						feetPoint.z -= GROUND_SPACING*2;
+						if (contains(wallAABB, feetPoint)) actor->isOnGround = true;
+						continue;
+					}
 
 					if (newAABB.min.z <= wallAABB.max.z && oldAABB.min.z > wallAABB.max.z) { // Bot
 						float dist = wallAABB.max.z - newAABB.min.z;
@@ -3090,10 +3101,6 @@ void stepGame(float elapsed) {
 							actor->velo.y *= -restitution;
 						}
 					}
-
-					Vec3 feetPoint = getPosition(newAABB);
-					feetPoint.z += GROUND_SPACING*2;
-					if (contains(wallAABB, feetPoint)) actor->isOnGround = true;
 				}
 
 				Vec3 newPos = getCenter(newAABB);
@@ -3106,12 +3113,6 @@ void stepGame(float elapsed) {
 					}
 				}
 			}
-
-			if (actor->isOnGround) {
-				actor->velo.x *= 0.8;
-				actor->velo.y *= 0.8;
-			}
-			actor->velo.z *= 0.98;
 		}
 
 		if (actor->type == ACTOR_UNIT) { // We have to flip around ai actors here because physics flips them if they're moving slightly backwards
@@ -4715,12 +4716,6 @@ float distance(Actor *actor0, Actor *actor1) {
 
 AABB getAABB(Actor *actor) {
 	return getAABBAtPosition(actor, actor->position);
-}
-
-Vec3 getPosition(AABB aabb) {
-	Vec3 ret = getCenter(aabb);
-	ret.z -= getSize(aabb).z/2;
-	return ret;
 }
 
 AABB bringWithinBounds(AABB groundAABB, AABB aabb) {
