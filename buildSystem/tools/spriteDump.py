@@ -9,11 +9,14 @@ import bpy_extras
 import os
 import shutil
 
-globalSpriteSize = 3
+poseMarkersOutString = ""
 
 def setupFileFunc():
     scn = bpy.data.scenes[0]
     world = bpy.data.worlds["World"]
+
+    if world.get("subSteps") is None:
+        world["subSteps"] = 1
 
     scn.render.engine = "BLENDER_EEVEE"
     scn.render.image_settings.compression = 100
@@ -22,27 +25,19 @@ def setupFileFunc():
     bpy.context.scene.render.image_settings.compression = 0
     bpy.data.scenes["Scene"].render.use_overwrite = True
 
-
-def exportUnitGeneral(armature):
+def dumpPoseMarkers(armature):
     scn = bpy.data.scenes[0]
     world = bpy.data.worlds["World"]
-    unitName = armature.name[4:];
+    unitName = armature.name[4:]
     outPath = "C:/bin/frames/spriteDump/"+unitName+"/params.vars"
 
-    subSteps = world["subSteps"];
+    subSteps = world["subSteps"]
 
-    outString = ""
-    for action in bpy.data.actions:
-        for i in range(0, len(action.pose_markers)):
-            marker = action.pose_markers[i]
-            outString += action.name + " "
-            outString += str(marker.frame*subSteps) + " "
-            outString += marker.name
-            outString += "\n";
-
+    global poseMarkersOutString;
     f = open(outPath, "w")
-    f.write(outString)
+    f.write(poseMarkersOutString)
     f.close()
+    poseMarkersOutString = "";
 
     f = open("C:/bin/frames/spriteDump/"+unitName+"/needsReprocess.dummy", "w")
     f.write("dummy file")
@@ -80,7 +75,7 @@ def exportAction(armature, action, outPath):
         print("No dopesheet")
         raise Exception("Bad")
 
-    realAction = action if action != None else dopeSheetArea.action
+    realAction = action if action != None else dopeSheetArea.action # I don't think I need to do this...
 
     files = os.listdir(outPath)
     filtered_files = [file for file in files if (realAction.name in file)]
@@ -90,7 +85,7 @@ def exportAction(armature, action, outPath):
 
     print("Exporting action "+realAction.name+" to "+outPath)
     dopeSheetArea.action = realAction
-    subSteps = world["subSteps"];
+    subSteps = world["subSteps"]
 
     for i in range(int(realAction.frame_range.x), int(realAction.frame_range.y)):
         frameIndex = i
@@ -102,6 +97,14 @@ def exportAction(armature, action, outPath):
             animFileName += str(frameIndex*subSteps + i).zfill(3)
             exportImage(outPath, animFileName)
 
+    global poseMarkersOutString
+    for i in range(0, len(realAction.pose_markers)):
+        marker = realAction.pose_markers[i]
+        poseMarkersOutString += realAction.name + " "
+        poseMarkersOutString += str(marker.frame*subSteps) + " "
+        poseMarkersOutString += marker.name
+        poseMarkersOutString += "\n"
+
 class MESH_OP_generate_all(bpy.types.Operator):
     bl_idname = "mesh.generate_all"
     bl_label = "generate_all"
@@ -112,9 +115,6 @@ class MESH_OP_generate_all(bpy.types.Operator):
         setupFileFunc()
         scn = bpy.data.scenes[0]
         world = bpy.data.worlds["World"]
-
-        if world.get("subSteps") is None:
-            world["subSteps"] = 1
 
         unitName = None
         for obj in scn.objects:
@@ -141,14 +141,40 @@ class MESH_OP_generate_all(bpy.types.Operator):
             exportAction(armature, action, outPath)
 
         print("Done generating all sprite sheets")
-        exportUnitGeneral(armature)
+        dumpPoseMarkers(armature)
+        return {"FINISHED"}
+
+class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
+    bl_idname = "mesh.generate_concrete_jungle"
+    bl_label = "generate_concrete_jungle"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        setupFileFunc()
+        scn = bpy.data.scenes[0]
+        world = bpy.data.worlds["World"]
+
+        unitName = "Unit"
+        outPath = "C:/bin/frames/spriteDump/"+unitName
+
+        shutil.rmtree(outPath, ignore_errors=True)
+        os.makedirs(outPath)
+
+        armature = scn.objects["ARM_"+unitName]
+
+        for action in bpy.data.actions:
+            exportAction(armature, action, outPath)
+
+        dumpPoseMarkers(armature)
         return {"FINISHED"}
 
 def register():
     bpy.utils.register_class(MESH_OP_generate_all)
+    bpy.utils.register_class(MESH_OP_generate_concrete_jungle)
 
 def unregister():
     bpy.utils.unregister_class(MESH_OP_generate_all)
+    bpy.utils.unregister_class(MESH_OP_generate_concrete_jungle)
 
 if __name__ == "__main__":
     register()
