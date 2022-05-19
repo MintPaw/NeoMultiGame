@@ -922,13 +922,7 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 		size.x *= -1;
 	}
 
-	if (size.y < 0) {
-		logf("No y flip\n");
-	}
-
-	float temp = size.x; // I have no idea why we do this
-	size.x = size.y;
-	size.y = temp;
+	if (size.y < 0) logf("No y flip\n");
 
 	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
@@ -936,10 +930,10 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	Raylib::Vector3 left = { -matView.m0, -matView.m4, -matView.m8 };
 	Vec3 up = v3(0, 0, 1);
 
-#if 1
-	Raylib::Vector3 leftScaled = Raylib::Vector3Scale(left, size.y/2);
-	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.y/2);
-	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.x);
+#if 0
+	Raylib::Vector3 leftScaled = Raylib::Vector3Scale(left, size.x/2);
+	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.x/2);
+	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.y);
 
 	Raylib::Vector3 p1 = Raylib::Vector3Add(rightScaled, upScaled);
 	Raylib::Vector3 p2 = rightScaled;
@@ -949,8 +943,8 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	Raylib::Vector3 bottomRight = p2;
 	Raylib::Vector3 bottomLeft = leftScaled;
 #else
-	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.y/2);
-	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.x/2);
+	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.x/2);
+	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.y/2);
 
 	Raylib::Vector3 p1 = Raylib::Vector3Add(rightScaled, upScaled);
 	Raylib::Vector3 p2 = Raylib::Vector3Subtract(rightScaled, upScaled);

@@ -270,8 +270,58 @@ void updateGame() {
 
 	// void testGame();
 	// testGame();
-	printf("Frame %d\n", platform->frameCount);
+	// printf("Frame %d\n", platform->frameCount);
 	drawRect(0, 10, 256, 256, 0xFFFF0000);
+
+	{
+		Matrix3 matrix = mat3();
+		matrix.ROTATE(3);
+		matrix.ROTATE_X(75);
+		Vec3 cameraPos = (matrix * v3(0, 0, 1000));
+
+		Camera camera = {};
+		camera.position = cameraPos;
+		camera.target = v3(0, 0, 0);
+		camera.up = v3(0, 0, 1);
+		camera.fovy = 10;
+		camera.isOrtho = true;
+
+		start3d(camera, v2(platform->windowWidth, platform->windowHeight), -10000, 10000);
+
+		startShader(renderer->alphaDiscardShader);
+		Texture *tex1 = getTexture("assets/images/tex1.png");
+		Texture *tex2 = getTexture("assets/images/tex2.png");
+
+		Texture *textures[] = {
+			tex1,
+			tex2,
+			tex1,
+		};
+		Vec3 positions[] = {
+			v3(-300, 20, 20),
+			v3(-220, 40, 30),
+			v3(-325, 40, 25),
+		};
+		Vec2 sizes[] = {
+			v2(128, 128),
+			v2(64, 128),
+			v2(128, 64),
+		};
+
+		for (int i = 0; i < ArrayLength(textures); i++) {
+			Texture *texture = textures[i];
+			Vec3 position = positions[i];
+			Vec2 size = sizes[i];
+			if (keyPressed('A')) {
+				position.x -= size.x/2;
+				position.z += size.y/2;
+			}
+			drawBillboard(camera, texture, position, size);
+		}
+		endShader();
+
+		end3d();
+	}
 
 	game->time += elapsed;
 

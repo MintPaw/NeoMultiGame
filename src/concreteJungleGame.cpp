@@ -1197,7 +1197,6 @@ void updateGame() {
 						}
 
 						bool flipped = false;
-						float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
 						Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
 						if (actor->facingLeft) flipped = true;
 						if (frame) {
@@ -1209,7 +1208,6 @@ void updateGame() {
 
 							Vec2 size = v2(frame->width, frame->height);
 							if (flipped) size.x *= -1;
-							size *= scale;
 
 							if (actor->actionsNum > 0) {
 								Action *action = &actor->actions[0];
@@ -1223,8 +1221,15 @@ void updateGame() {
 								}
 							}
 
-							// position.x += frame->destOffX;
-							// position.y += frame->destOffY;
+							Vec2 refSize = v2(getSize(aabb).x, getSize(aabb).z);
+							Vec2 currentOffset = refSize/2 - size/2;
+							Vec2 wantedOffset = v2(frame->destOffX, frame->destOffY);
+							Vec2 diff = wantedOffset - currentOffset;
+
+							float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
+							position.x += diff.x * scale;
+							position.z -= diff.y * scale;
+							size *= scale;
 
 							DrawBillboardCall billboard = {};
 							billboard.camera = camera;
@@ -1880,6 +1885,7 @@ void stepGame(float elapsed) {
 							if (info->buffToGet) ImGui::InputFloat("Buff to get time", &info->buffToGetTime, 0);
 							ImGui::Combo("Buff to give", (int *)&info->buffToGive, buffTypeStrings, ArrayLength(buffTypeStrings));
 							if (info->buffToGive) ImGui::InputFloat("Buff to give time", &info->buffToGiveTime, 0);
+							ImGui::TreePop();
 						}
 
 						if (ImGui::Button("Do action")) addAction(player, (ActionType)i);
