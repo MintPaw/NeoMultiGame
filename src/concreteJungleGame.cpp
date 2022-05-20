@@ -556,6 +556,15 @@ struct DrawBillboardCall {
 	Rect source;
 };
 
+enum WorldElementType {
+	WORLD_ELEMENT_TRIANGLE,
+};
+struct WorldElement {
+	WorldElementType type;
+	Tri tri;
+	int color;
+};
+
 enum ScreenElementType {
 	SCREEN_ELEMENT_RECT,
 	SCREEN_ELEMENT_RECT_OUTLINE,
@@ -669,6 +678,9 @@ struct Game {
 	ScreenElement screenElements[SCREEN_ELEMENTS_MAX];
 	int screenElementsNum;
 
+#define WORLD_ELEMENTS_MAX 2048
+	WorldElement worldElements[WORLD_ELEMENTS_MAX];
+	int worldElementsNum;
 
 	/// Editor/debug
 	int selectedActorId;
@@ -750,6 +762,8 @@ void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushBillboard(DrawBillboardCall billboard);
+WorldElement *createWorldElement();
+void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color);
 Log3Buffer *log3f(Vec3 position, const char *msg, ...);
 ScreenElement *createScreenElement();
 void pushScreenRect(Rect rect, int color);
@@ -1207,7 +1221,6 @@ void updateGame() {
 							source.y = frame->texture->height - source.height - frame->srcY;
 
 							Vec2 size = v2(frame->width, frame->height);
-							if (flipped) size.x *= -1;
 
 							if (actor->actionsNum > 0) {
 								Action *action = &actor->actions[0];
@@ -1221,15 +1234,45 @@ void updateGame() {
 								}
 							}
 
-							Vec2 refSize = v2(getSize(aabb).x, getSize(aabb).z);
-							Vec2 currentOffset = refSize/2 - size/2;
-							Vec2 wantedOffset = v2(frame->destOffX, frame->destOffY);
-							Vec2 diff = wantedOffset - currentOffset;
-
 							float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
-							position.x += diff.x * scale;
-							position.z -= diff.y * scale;
 							size *= scale;
+
+							/*
+							0   3
+						 	 ---
+							|   |
+							 ---
+							1   2
+							*/
+							Rect inner;
+							inner.x = frame->destOffX*scale;
+							inner.y = frame->destOffY*scale;
+							inner.width = frame->width*scale;
+							inner.height = frame->height*scale;
+
+							Vec3 billboardOffset;
+							billboardOffset.x = aabb.min.x + inner.x;
+							billboardOffset.y = getCenter(aabb).y-0.01;
+							billboardOffset.z = aabb.max.z - inner.height;
+
+							Vec3 verts[] = {
+								globals->actorSpriteOffset + billboardOffset + v3(0, 0, -inner.y+inner.height),
+								globals->actorSpriteOffset + billboardOffset + v3(0, 0, 0 -inner.y),
+								globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y+inner.height),
+								globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y),
+							};
+							// pushTriangle(verts[0], verts[1], verts[2], 0xFF0000FF);
+							// pushTriangle(verts[2], verts[1], verts[3], 0xFF0000FF);
+
+							position.x = (verts[0].x + verts[3].x)/2;
+							position.y = verts[0].y - 1;
+							position.z = (verts[0].z + verts[1].z)/2;
+							size = getSize(inner);
+							if (flipped) {
+								float edgeDist = aabb.max.x - position.x;
+								position.x = aabb.min.x + edgeDist;
+								size.x *= -1;
+							}
 
 							DrawBillboardCall billboard = {};
 							billboard.camera = camera;
@@ -1298,6 +1341,18 @@ void updateGame() {
 						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
 					}
 				}
+
+				for (int i = 0; i < game->worldElementsNum; i++) {
+					WorldElement *element = &game->worldElements[i];
+
+					if (element->type == WORLD_ELEMENT_TRIANGLE) {
+						Vec3 *verts = element->tri.verts;
+						Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
+					}
+				}
+				game->worldElementsNum = 0;
+
+
 				endShader();
 				game->billboardsNum = 0;
 			}
@@ -1542,6 +1597,9 @@ void stepGame(float elapsed) {
 
 		groundAABB = getAABB(ground);
 	} ///
+
+	if (keyJustPressed('T')) addAction(player, (ActionType)26);
+	if (keyJustPressed('G')) addAction(player, (ActionType)25);
 
 	{ /// Add extra walls outside ground
 		float wallThickness = 20;
@@ -1906,8 +1964,8 @@ void stepGame(float elapsed) {
 			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
 			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
 			ImGui::DragFloat("Actor sprite scale multiplier", &globals->actorSpriteScaleMultiplier, 0.01);
-			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01);
-			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01);
+			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01, 0, 0, "%.4f");
+			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01, 0, 0, "%.4f");
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -4781,6 +4839,26 @@ void pushBillboard(DrawBillboardCall billboard) {
 	}
 
 	game->billboards[game->billboardsNum++] = billboard;
+}
+
+WorldElement *createWorldElement() {
+	if (game->worldElementsNum > WORLD_ELEMENTS_MAX-1) {
+		game->worldElementsNum = WORLD_ELEMENTS_MAX-1;
+		logf("Too many world elements!\n");
+	}
+
+	WorldElement *element = &game->worldElements[game->worldElementsNum++];
+	memset(element, 0, sizeof(WorldElement));
+	return element;
+}
+
+void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color) {
+	WorldElement *element = createWorldElement();
+	element->type = WORLD_ELEMENT_TRIANGLE;
+	element->tri.verts[0] = vert0;
+	element->tri.verts[1] = vert1;
+	element->tri.verts[2] = vert2;
+	element->color = color;
 }
 
 Log3Buffer *log3f(Vec3 position, const char *msg, ...) {
