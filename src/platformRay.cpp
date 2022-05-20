@@ -933,41 +933,28 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 
 	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
-	Raylib::Vector3 right = { matView.m0, matView.m4, matView.m8 };
-	Raylib::Vector3 left = { -matView.m0, -matView.m4, -matView.m8 };
+	Vec3 right = v3(matView.m0, matView.m4, matView.m8);
+	Vec3 left = v3(-matView.m0, -matView.m4, -matView.m8);
 	Vec3 up = v3(matView.m1, matView.m5, matView.m9);
 	// Vec3 up = v3(0, 0, 1);
 
-#if 0
-	Raylib::Vector3 leftScaled = Raylib::Vector3Scale(left, size.x/2);
-	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.x/2);
-	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.y);
+	Vec3 rightScaled = right * (size.x/2);
+	Vec3 upScaled = up * (size.y/2);
 
-	Raylib::Vector3 p1 = Raylib::Vector3Add(rightScaled, upScaled);
-	Raylib::Vector3 p2 = rightScaled;
+	Vec3 p1 = rightScaled + upScaled;
+	Vec3 p2 = rightScaled - upScaled;
 
-	Raylib::Vector3 topLeft = Raylib::Vector3Add(leftScaled, upScaled);
-	Raylib::Vector3 topRight = p1;
-	Raylib::Vector3 bottomRight = p2;
-	Raylib::Vector3 bottomLeft = leftScaled;
-#else
-	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, size.x/2);
-	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), size.y/2);
+	Vec3 topLeft = -p2;
+	Vec3 topRight = p1;
+	Vec3 bottomRight = p2;
+	Vec3 bottomLeft = -p1;
 
-	Raylib::Vector3 p1 = Raylib::Vector3Add(rightScaled, upScaled);
-	Raylib::Vector3 p2 = Raylib::Vector3Subtract(rightScaled, upScaled);
+	// Rotation would happen here!
 
-	Raylib::Vector3 topLeft = Raylib::Vector3Scale(p2, -1);
-	Raylib::Vector3 topRight = p1;
-	Raylib::Vector3 bottomRight = p2;
-	Raylib::Vector3 bottomLeft = Raylib::Vector3Scale(p1, -1);
-#endif
-
-	// Translate points to the draw center (position)
-	topLeft = Raylib::Vector3Add(topLeft, toRaylib(position));
-	topRight = Raylib::Vector3Add(topRight, toRaylib(position));
-	bottomRight = Raylib::Vector3Add(bottomRight, toRaylib(position));
-	bottomLeft = Raylib::Vector3Add(bottomLeft, toRaylib(position));
+	topLeft += position;
+	topRight += position;
+	bottomRight += position;
+	bottomLeft += position;
 
 	Raylib::rlCheckRenderBatchLimit(4);
 
@@ -977,19 +964,15 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	Raylib::Color raylibTint = toRaylibColor(tint);
 	Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
 
-	// Bottom-left corner for texture and quad
 	Raylib::rlTexCoord2f(uv0.x, uv0.y);
 	Raylib::rlVertex3f(topLeft.x, topLeft.y, topLeft.z);
 
-	// Top-left corner for texture and quad
 	Raylib::rlTexCoord2f(uv0.x, uv1.y);
 	Raylib::rlVertex3f(bottomLeft.x, bottomLeft.y, bottomLeft.z);
 
-	// Top-right corner for texture and quad
 	Raylib::rlTexCoord2f(uv1.x, uv1.y);
 	Raylib::rlVertex3f(bottomRight.x, bottomRight.y, bottomRight.z);
 
-	// Bottom-right corner for texture and quad
 	Raylib::rlTexCoord2f(uv1.x, uv0.y);
 	Raylib::rlVertex3f(topRight.x, topRight.y, topRight.z);
 
