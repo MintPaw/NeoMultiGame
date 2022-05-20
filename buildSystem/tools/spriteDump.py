@@ -59,7 +59,7 @@ def exportImage(outPath, animFileName):
     bpy.ops.render.render(write_still=True)
     #bpy.ops.render.opengl(animation=False, render_keyed_only=False, sequencer=False, write_still=True, view_context=False)
 
-def exportAction(armature, action, outPath):
+def exportAction(armature, action, outPath, altName=None):
     scn = bpy.data.scenes[0]
     world = bpy.data.worlds["World"]
     camera = bpy.context.scene.objects["Camera"]
@@ -77,13 +77,16 @@ def exportAction(armature, action, outPath):
 
     realAction = action if action != None else dopeSheetArea.action # I don't think I need to do this...
 
+    animName = realAction.name
+    if altName is not None: animName = altName
+
     files = os.listdir(outPath)
-    filtered_files = [file for file in files if (realAction.name in file)]
+    filtered_files = [file for file in files if (animName in file)]
     for file in filtered_files:
         path_to_file = os.path.join(outPath, file)
         os.remove(path_to_file)
 
-    print("Exporting action "+realAction.name+" to "+outPath)
+    print("Exporting action "+animName+"("+realAction.name+") to "+outPath)
     dopeSheetArea.action = realAction
     subSteps = world["subSteps"]
 
@@ -92,7 +95,7 @@ def exportAction(armature, action, outPath):
         for i in range(0, subSteps):
             scn.frame_set(frameIndex, subframe=i/subSteps)
 
-            animFileName = realAction.name
+            animFileName = animName
             animFileName += "_"
             animFileName += str(frameIndex*subSteps + i).zfill(3)
             exportImage(outPath, animFileName)
@@ -100,7 +103,7 @@ def exportAction(armature, action, outPath):
     global poseMarkersOutString
     for i in range(0, len(realAction.pose_markers)):
         marker = realAction.pose_markers[i]
-        poseMarkersOutString += realAction.name + " "
+        poseMarkersOutString += animName + " "
         poseMarkersOutString += str(marker.frame*subSteps) + " "
         poseMarkersOutString += marker.name
         poseMarkersOutString += "\n"
@@ -162,8 +165,43 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
 
         armature = scn.objects["ARM_"+unitName]
 
-        for action in bpy.data.actions:
-            exportAction(armature, action, outPath)
+        actions = bpy.data.actions
+        bpy.data.scenes[0].objects["sword"].hide_render = True
+
+        exportAction(armature, actions["idle"], outPath)
+        exportAction(armature, actions["walk"], outPath)
+        exportAction(armature, actions["run"], outPath)
+
+        exportAction(armature, actions["startPickup"], outPath)
+        exportAction(armature, actions["endPickup"], outPath)
+
+        exportAction(armature, actions["blockstun"], outPath)
+        exportAction(armature, actions["hitstun"], outPath)
+        exportAction(armature, actions["airHitstun"], outPath)
+        exportAction(armature, actions["knockdown"], outPath)
+        exportAction(armature, actions["raising"], outPath)
+
+        exportAction(armature, actions["jump"], outPath)
+        exportAction(armature, actions["airKick"], outPath)
+        exportAction(armature, actions["airPunch"], outPath)
+
+        exportAction(armature, actions["punch1"], outPath)
+        exportAction(armature, actions["punch2"], outPath)
+        exportAction(armature, actions["uppercut"], outPath)
+        exportAction(armature, actions["kick"], outPath)
+
+        exportAction(armature, actions["runningKick"], outPath)
+        exportAction(armature, actions["runningPunch"], outPath)
+
+        exportAction(armature, actions["upTest"], outPath)
+        exportAction(armature, actions["duckTest"], outPath)
+
+        bpy.data.scenes[0].objects["sword"].hide_render = False
+
+        exportAction(armature, actions["idle_sword"], outPath)
+        exportAction(armature, actions["walk_sword"], outPath)
+        exportAction(armature, actions["run_sword"], outPath)
+        exportAction(armature, actions["pickupEnd_sword"], outPath)
 
         dumpPoseMarkers(armature)
         return {"FINISHED"}
