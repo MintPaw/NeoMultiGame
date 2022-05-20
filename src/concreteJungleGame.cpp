@@ -1598,9 +1598,6 @@ void stepGame(float elapsed) {
 		groundAABB = getAABB(ground);
 	} ///
 
-	if (keyJustPressed('T')) addAction(player, (ActionType)26);
-	if (keyJustPressed('G')) addAction(player, (ActionType)25);
-
 	{ /// Add extra walls outside ground
 		float wallThickness = 20;
 
@@ -2360,10 +2357,7 @@ void stepGame(float elapsed) {
 				}
 
 				if (action->type == ACTION_FORCED_MOVE) {
-					if (game->debugDrawPathing) {
-						log3f(actor->position, "start")->logTime -= 9999;
-						log3f(action->targetPosition, "end")->logTime -= 9999;
-					}
+					if (game->debugDrawPathing) log3f(actor->position, "start")->logTime -= 9999;
 					maxTime = 9999;
 
 					Vec3 dir = normalize(action->targetPosition - actor->position);
@@ -2374,9 +2368,13 @@ void stepGame(float elapsed) {
 					actor->movementAccel.y += dir.y * speed.y;
 
 					Vec3 targetPosition = action->targetPosition;
+					if (game->debugDrawPathing) log3f(action->targetPosition, "end")->logTime -= 9999;
+
 					AABB destAABB = getAABBAtPosition(actor, targetPosition);
 					destAABB = bringWithinBounds(map, destAABB);
-					targetPosition = getCenter(destAABB) - getSize(destAABB).z/2;
+					targetPosition = getCenter(destAABB) + getSize(destAABB)*v3(0, 0, -0.5);
+					if (game->debugDrawPathing) log3f(action->targetPosition, "trueEnd")->logTime -= 9999;
+
 					if (distance(actor->position, targetPosition) < 20) actionDone = true;
 				}
 
@@ -3109,7 +3107,7 @@ void stepGame(float elapsed) {
 				for (int i = 0; i < wallsNum; i++) {
 					AABB wallAABB = walls[i];
 					if (!intersects(newAABB, wallAABB)) {
-						Vec3 feetPoint = getCenter(newAABB) - getSize(newAABB).z/2;
+						Vec3 feetPoint = getCenter(newAABB) + getSize(newAABB)*v3(0, 0, -0.5);
 						feetPoint.z -= GROUND_SPACING*2;
 						if (contains(wallAABB, feetPoint)) actor->isOnGround = true;
 						continue;
