@@ -459,28 +459,7 @@ void saveSpriteSheets(char *dir) {
 		char *path = frameSprintf("%s/sheet%d.png", dir, i);
 
 		RenderTexture *texture = animSys->sheetTextures[i];
-		u8 *bitmapData = getTextureData(texture);
-
-		for (int y = 0; y < texture->height; y++) { // Unmultiply alpha
-			//@todo Has to happen here because getTextureData doesn't handle the flag in raylib, I should probably remove the flag.
-			for (int x = 0; x < texture->width; x++) {
-				int pixelIndex = (y*texture->width+x)*4;
-
-				float r = bitmapData[(y*texture->width+x)*4 + 0] / 255.0;
-				float g = bitmapData[(y*texture->width+x)*4 + 1] / 255.0;
-				float b = bitmapData[(y*texture->width+x)*4 + 2] / 255.0;
-				float a = bitmapData[(y*texture->width+x)*4 + 3] / 255.0;
-
-				r /= a;
-				g /= a;
-				b /= a;
-
-				bitmapData[(y*texture->width+x)*4 + 0] = roundf(r*255.0);
-				bitmapData[(y*texture->width+x)*4 + 1] = roundf(g*255.0);
-				bitmapData[(y*texture->width+x)*4 + 2] = roundf(b*255.0);
-				bitmapData[(y*texture->width+x)*4 + 3] = roundf(a*255.0);
-			}
-		}
+		u8 *bitmapData = getTextureData(texture); // Alpha is purposely not unmultiplied
 
 		stbi_flip_vertically_on_write(true);
 		if (!stbi_write_png(frameSprintf("%s%s", filePathPrefix, path), texture->width, texture->height, 4, bitmapData, texture->width*4)) {
@@ -524,7 +503,7 @@ void loadSpriteSheet(char *sheetDataPath) {
 
 	animSys->sheetTexturesNum = readU32(stream);
 	for (int i = 0; i < animSys->sheetTexturesNum; i++) {
-		animSys->sheetTextures[i] = createRenderTexture(frameSprintf("%s/sheet%d.png", dir, i));
+		animSys->sheetTextures[i] = createRenderTexture(frameSprintf("%s/sheet%d.png", dir, i), _F_TD_SKIP_PREMULTIPLY);
 	}
 
 	animSys->framesNum = readU32(stream);

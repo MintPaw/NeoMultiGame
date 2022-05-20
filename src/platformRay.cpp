@@ -707,6 +707,12 @@ void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, 
 	if ((flags & _F_TD_SKIP_PREMULTIPLY) == 0) {
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
+#if 1
+				float a = ((u8 *)data)[(y*width+x)*4 + 3] / 255.0;
+				((u8 *)data)[(y*width+x)*4 + 2] *= a;
+				((u8 *)data)[(y*width+x)*4 + 1] *= a;
+				((u8 *)data)[(y*width+x)*4 + 0] *= a;
+#else
 				u8 a, r, g, b;
 				int index = (y*width+x) * 4;
 				a = ((u8 *)data)[index + 3];
@@ -722,6 +728,7 @@ void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, 
 				((u8 *)data)[index + 2] = r;
 				((u8 *)data)[index + 1] = g;
 				((u8 *)data)[index + 0] = b;
+#endif
 			}
 		}
 	}
