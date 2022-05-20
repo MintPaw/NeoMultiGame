@@ -935,7 +935,8 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 
 	Raylib::Vector3 right = { matView.m0, matView.m4, matView.m8 };
 	Raylib::Vector3 left = { -matView.m0, -matView.m4, -matView.m8 };
-	Vec3 up = v3(0, 0, 1);
+	Vec3 up = v3(matView.m1, matView.m5, matView.m9);
+	// Vec3 up = v3(0, 0, 1);
 
 #if 0
 	Raylib::Vector3 leftScaled = Raylib::Vector3Scale(left, size.x/2);

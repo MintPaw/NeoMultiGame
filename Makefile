@@ -656,13 +656,13 @@ encodeButt2GoGameAudio:
 	find /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets/audio -type f -name "*.wav" -delete
 
 encodeConcreteJungleGameAudio:
-	rm -rf concreteJungleGameAssets/assets/audio
-	cp -r concreteJungleGameAssets/assets/__raw/audio concreteJungleGameAssets/assets/audio
-	for file in `find concreteJungleGameAssets/assets/audio -type f -name "*.wav"`; do \
+	rm -rf /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio
+	cp -r /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/audio /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio
+	for file in `find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio -type f -name "*.wav"`; do \
 		ffmpeg -i $$file -ar 44100 $${file%.*}.ogg & \
 	done; \
 	wait
-	find concreteJungleGameAssets/assets/audio -type f -name "*.wav" -delete
+	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio -type f -name "*.wav" -delete
 
 buildBhgOptimizedDebug:
 	cmd /c "\
@@ -874,7 +874,7 @@ devShipConcreteJungleGameToSelf:
 	cmd /c "\
 		set GAME_NAME=concreteJungleGame&& \
 		set DEBUG_MODE=1&& \
-		set INTERNAL_MODE=1&& \
+		set INTERNAL_MODE=0&& \
 		set OPTIMIZED_MODE=1&& \
 		buildSystem\$(WIN_BUILD_BAT).bat\
 		"

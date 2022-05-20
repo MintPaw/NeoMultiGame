@@ -1140,7 +1140,7 @@ void updateGame() {
 			float distPerc = distance(v2(), screenPerc);
 			float vol = clampMap(distPerc, 0, 2, 1, 0);
 			float pan = screenPerc.x;
-			channel->userVolume = vol;
+			channel->userVolume2 = vol;
 			channel->pan = pan;
 		}
 	} ///
@@ -4928,7 +4928,12 @@ int playWorldSound(char *path, Vec3 worldPosition) {
 		return -1;
 	}
 
-	int id = playSound(sound)->id;
+	int id;
+	{
+		Channel *channel = playSound(sound);
+		channel->userVolume = 0.2;
+		id = channel->id;
+	}
 	WorldChannel *worldChannel = &game->worldChannels[game->worldChannelsNum++];
 	memset(worldChannel, 0, sizeof(WorldChannel));
 	worldChannel->channelId = id;
