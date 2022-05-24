@@ -1,5 +1,5 @@
-// Weapons
-// Controller input
+// Do tick marks on hp bars
+// Weapon hitboxes, damage, and velos
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less in-game time to travel to
 // Better map and fortification graphics
@@ -171,6 +171,13 @@ enum ActionType {
 	ACTION_FORCED_LEAVE=66,
 	ACTION_START_PICKUP=67,
 	ACTION_END_PICKUP=68,
+	ACTION_THROW=69,
+	ACTION_AIR_THROW=70,
+	ACTION_ATTACK1_SWORD=71,
+	ACTION_ATTACK1_KNIFE=72,
+	ACTION_AIR_ATTACK1_SWORD=73,
+	ACTION_AIR_ATTACK1_KNIFE=74,
+	ACTION_TOSS=75,
 	ACTION_TYPES_MAX=128,
 };
 
@@ -274,7 +281,7 @@ enum ItemType {
 	ITEM_FOOD_7=26,
 	ITEM_FOOD_8=27,
 	ITEM_SWORD=28,
-	ITEM_KNIFE=28,
+	ITEM_KNIFE=29,
 	ITEM_TYPES_MAX,
 };
 enum ItemSlotType {
@@ -2481,6 +2488,30 @@ void stepGame(float elapsed) {
 							initItem(&actor->heldItem, itemActor->itemType, 1);
 							itemActor->markedForDeletion = true;
 						}
+					} else if (action->type == ACTION_THROW) {
+						Actor *itemActor = createActor(map, ACTOR_ITEM);
+						itemActor->itemType = actor->heldItem.type;
+						itemActor->position = actor->position;
+						itemActor->position.z += actor->size.z * 0.75;
+						itemActor->velo.z = 1;
+						if (actor->facingLeft) {
+							itemActor->velo.x = -40;
+						} else {
+							itemActor->velo.x = 40;
+						}
+						actor->heldItem.type = ITEM_NONE;
+					} else if (action->type == ACTION_TOSS) {
+						Actor *itemActor = createActor(map, ACTOR_ITEM);
+						itemActor->itemType = actor->heldItem.type;
+						itemActor->position = actor->position;
+						itemActor->position.z += actor->size.z * 0.75;
+						itemActor->velo.z = 5;
+						if (actor->facingLeft) {
+							itemActor->velo.x = 5;
+						} else {
+							itemActor->velo.x = -5;
+						}
+						actor->heldItem.type = ITEM_NONE;
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2576,43 +2607,66 @@ void stepGame(float elapsed) {
 
 				if (punchPressed) {
 					if (actor->isOnGround) {
-						bool didAttack = false;
-
-						if (actor->isRunningLeft || actor->isRunningRight) {
-							addAction(actor, ACTION_RUNNING_PUNCH);
-							didAttack = true;
-						}
-
-						if (!didAttack && actor->pastActionsNum >= 2) {
-							bool arePunches = true;
-							for (int i = actor->pastActionsNum-2; i < actor->pastActionsNum; i++) {
-								Action *action = &actor->pastActions[i];
-								if (action->type != ACTION_PUNCH) arePunches = false;
-							}
-
-							if (arePunches) {
-								addAction(actor, ACTION_UPPERCUT);
+						if (actor->heldItem.type == ITEM_NONE) {
+							bool didAttack = false;
+							if (actor->isRunningLeft || actor->isRunningRight) {
+								addAction(actor, ACTION_RUNNING_PUNCH);
 								didAttack = true;
 							}
+
+							if (!didAttack && actor->pastActionsNum >= 2) {
+								bool arePunches = true;
+								for (int i = actor->pastActionsNum-2; i < actor->pastActionsNum; i++) {
+									Action *action = &actor->pastActions[i];
+									if (action->type != ACTION_PUNCH) arePunches = false;
+								}
+
+								if (arePunches) {
+									addAction(actor, ACTION_UPPERCUT);
+									didAttack = true;
+								}
+							}
+							if (!didAttack) addAction(actor, ACTION_PUNCH);
+						} else if (actor->heldItem.type == ITEM_SWORD) {
+							addAction(actor, ACTION_ATTACK1_SWORD);
+						} else if (actor->heldItem.type == ITEM_KNIFE) {
+							addAction(actor, ACTION_ATTACK1_KNIFE);
 						}
-						if (!didAttack) addAction(actor, ACTION_PUNCH);
 					} else {
-						addAction(actor, ACTION_AIR_PUNCH);
+						if (actor->heldItem.type == ITEM_NONE) {
+							addAction(actor, ACTION_AIR_PUNCH);
+						} else if (actor->heldItem.type == ITEM_SWORD) {
+							addAction(actor, ACTION_AIR_ATTACK1_SWORD);
+						} else if (actor->heldItem.type == ITEM_KNIFE) {
+							addAction(actor, ACTION_AIR_ATTACK1_KNIFE);
+						}
 					}
 				}
 
 				if (kickPressed) {
 					if (actor->isOnGround) {
-						bool didAttack = false;
+						if (actor->heldItem.type == ITEM_NONE) {
+							bool didAttack = false;
 
-						if (actor->isRunningLeft || actor->isRunningRight) {
-							addAction(actor, ACTION_RUNNING_KICK);
-							didAttack = true;
+							if (actor->isRunningLeft || actor->isRunningRight) {
+								addAction(actor, ACTION_RUNNING_KICK);
+								didAttack = true;
+							}
+
+							if (!didAttack) addAction(actor, ACTION_KICK);
+						} else if (actor->heldItem.type == ITEM_SWORD) {
+							addAction(actor, ACTION_THROW);
+						} else if (actor->heldItem.type == ITEM_KNIFE) {
+							addAction(actor, ACTION_THROW);
 						}
-
-						if (!didAttack) addAction(actor, ACTION_KICK);
 					} else {
-						addAction(actor, ACTION_AIR_KICK);
+						if (actor->heldItem.type == ITEM_NONE) {
+							addAction(actor, ACTION_AIR_KICK);
+						} else if (actor->heldItem.type == ITEM_SWORD) {
+							addAction(actor, ACTION_AIR_THROW);
+						} else if (actor->heldItem.type == ITEM_KNIFE) {
+							addAction(actor, ACTION_AIR_THROW);
+						}
 					}
 				}
 
@@ -2644,6 +2698,13 @@ void stepGame(float elapsed) {
 				if (changeStyle4Pressed) {
 					infof("Style 4\n");
 					actor->styleIndex = 3;
+				}
+
+				if (pickupPressed) {
+					// Maybe pickup logic should go here...
+					if (actor->heldItem.type != ITEM_NONE) {
+						addAction(actor, ACTION_TOSS);
+					}
 				}
 
 				actor->timeSinceLastLeftPress += elapsed;
@@ -2902,14 +2963,20 @@ void stepGame(float elapsed) {
 					if (action->type == ACTION_FORCED_LEAVE) usesFrameData = false;
 				}
 
-				char *animSuffix = "";
-				if (actor->heldItem.type == ITEM_SWORD) animSuffix = "_sword";
-				if (actor->heldItem.type == ITEM_KNIFE) animSuffix = "_knife";
+				auto getActorAnimation = [](Actor *actor, char *name) {
+					char *animSuffix = "";
+					if (actor->heldItem.type == ITEM_SWORD) animSuffix = "_sword";
+					if (actor->heldItem.type == ITEM_KNIFE) animSuffix = "_knife";
+
+					if (!stringEndsWith(name, animSuffix)) name = frameSprintf("%s%s", name, animSuffix);
+
+					Animation *anim = getAnimationOrEmpty(name);
+					return anim;
+				};
 
 				if (usesFrameData) {
 					Action *action = &actor->actions[0];
-					// actor->anim = getAnimationOrEmpty(frameSprintf("Unit/%s%s", action->info->animationName, animSuffix));
-					actor->anim = getAnimationOrEmpty(frameSprintf("Unit/%s", action->info->animationName));
+					actor->anim = getActorAnimation(actor, frameSprintf("Unit/%s", action->info->animationName));
 					actor->animTime = action->time;
 					actor->anim->loops = action->info->animationLoops;
 
@@ -2937,22 +3004,19 @@ void stepGame(float elapsed) {
 				} else {
 					if (actor->timeMoving) {
 						if (actor->isRunningLeft || actor->isRunningRight) {
-							actor->anim = getAnimationOrEmpty("Unit/run");
+							actor->anim = getActorAnimation(actor, "Unit/run");
 							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
 						} else {
-							actor->anim = getAnimationOrEmpty("Unit/walk");
+							actor->anim = getActorAnimation(actor, "Unit/walk");
 							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
 						}
-					} else if (actor->timeNotMoving) {
-						actor->anim = getAnimationOrEmpty("Unit/idle");
-						actor->animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
 					} else if (actor->timeInAir) {
-						actor->anim = getAnimationOrEmpty("Unit/jump");
+						actor->anim = getActorAnimation(actor, "Unit/jump");
 						actor->animTime = actor->timeInAir * FRAME_SUBSTEPS * 2; // * 2 because it's slow...
 						actor->anim->loops = false;
 					} else {
-						logf("Bad actor state?\n");
-						actor->anim = getAnimationOrEmpty("Unit/idle");
+						actor->anim = getActorAnimation(actor, "Unit/idle");
+						actor->animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
 					}
 				}
 
