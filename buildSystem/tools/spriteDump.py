@@ -57,7 +57,7 @@ def exportImage(outPath, animFileName):
     path += ".png"
 
     scn.render.filepath = path
-    print("["+totalFrameCount+"] Saving to: "+path)
+    print("["+str(totalFrameCount)+"] Saving to: "+path)
 
     scn.view_layers[0].update()
     bpy.ops.render.render(write_still=True)
@@ -93,6 +93,7 @@ def exportAction(armature, action, outPath, altName=None):
     print("Exporting action "+animName+"("+realAction.name+") to "+outPath)
     dopeSheetArea.action = realAction
     subSteps = world["subSteps"]
+    global totalFrameCount
 
     for i in range(int(realAction.frame_range.x), int(realAction.frame_range.y)):
         frameIndex = i
@@ -208,6 +209,7 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["endPickup_sword"], outPath, "endPickup_sword");
         exportAction(armature, actions["idle_sword"], outPath, "idle_sword");
         exportAction(armature, actions["attack1_sword"], outPath, "attack1_sword");
+        exportAction(armature, actions["attack2_sword"], outPath, "attack2_sword");
 
         exportAction(armature, actions["walk_sword"], outPath, "walk_sword");
         exportAction(armature, actions["run_sword"], outPath, "run_sword");

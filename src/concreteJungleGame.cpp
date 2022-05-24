@@ -1,3 +1,4 @@
+// Make movement end combos
 // Do tick marks on hp bars
 // Weapon hitboxes, damage, and velos
 // Smooth out movement, blocking, and animation transtions
@@ -333,9 +334,9 @@ enum ActorType {
 	ACTOR_UNIT=1,
 	ACTOR_GROUND=2,
 	ACTOR_WALL=3,
-	ACTOR_DUMMY=4,
+	ACTOR_DUMMY=4, // Unused
 	ACTOR_DOOR=5,
-	ACTOR_UNIT_SPAWNER=6,
+	ACTOR_UNIT_SPAWNER=6, // Unused
 	ACTOR_ITEM=7,
 	ACTOR_STORE=8,
 	ACTORS_MAX,
@@ -475,10 +476,6 @@ struct Actor {
 #define STYLES_MAX 4
 	Style styles[STYLES_MAX];
 	int styleIndex;
-
-	Animation *anim;
-	float animTime;
-	int animFrameOverride;
 };
 
 struct Map {
@@ -643,6 +640,7 @@ struct Game {
 	Vec3 visualCameraTarget;
 	Matrix3 isoMatrix3;
 	Matrix3 cameraMatrix;
+	Camera camera3d;
 
 	int nextActionId;
 
@@ -781,6 +779,7 @@ void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushBillboard(DrawBillboardCall billboard);
+void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped);
 WorldElement *createWorldElement();
 void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color);
 Log3Buffer *log3f(Vec3 position, const char *msg, ...);
@@ -1191,20 +1190,8 @@ void updateGame() {
 
 	{ /// Draw 3d
 		if (shouldDraw3d) {
-			Matrix3 matrix = mat3();
-			matrix.ROTATE(game->cameraAngleDegrees.y);
-			matrix.ROTATE_X(game->cameraAngleDegrees.x);
-
-			Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
-
-			Camera camera = {};
-			camera.position = cameraPos;
-			camera.target = game->visualCameraTarget;
-			camera.up = v3(0, 0, 1);
-			camera.fovy = 10;
-			camera.isOrtho = true;
-
-			start3d(camera, game->size, -10000, 10000);
+			Camera camera3d = game->camera3d;
+			start3d(camera3d, game->size, -10000, 10000);
 
 #if 1
 			Vec3 sunPosition = v3(104.000, -134.000, 66.000);
@@ -1215,179 +1202,52 @@ void updateGame() {
 			renderer->lights[0].position.x = sunPosition.x;
 			renderer->lights[0].position.y = sunPosition.y;
 			renderer->lights[0].position.z = sunPosition.z;
-			updateLightingShader(camera);
+			updateLightingShader(camera3d);
 
-			getMouseRay(camera, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
+			getMouseRay(camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
 
-			{ // Really draw 3d
-				Map *map = &game->maps[game->currentMapIndex];
+			startShader(renderer->lightingShader);
+			for (int i = 0; i < game->worldCubesNum; i++) {
+				WorldCubes *cube = &game->worldCubes[i];
 
-				for (int i = 0; i < map->actorsNum; i++) {
-					Actor *actor = &map->actors[i];
-					AABB aabb = getAABB(actor);
+				Vec4 alpha = v4(cube->alpha, 0, 0, 0);
+				Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShaderAlphaLoc, &alpha.x, Raylib::SHADER_UNIFORM_VEC4);
+				drawAABB(cube->aabb, cube->color);
+			}
+			endShader();
+			game->worldCubesNum = 0;
 
-					int boxColor = 0xFFFFFFFF;
-					bool showBox = false;
-					float boxHeightPerc = 1;
+			if (!game->debugDrawBillboards) game->billboardsNum = 0;
+			startShader(renderer->alphaDiscardShader);
+			for (int i = 0; i < game->billboardsNum; i++) {
+				DrawBillboardCall *billboard = &game->billboards[i];
+				if (isZero(billboard->camera.up)) billboard->camera = camera3d;
 
-					if (actor->type == ACTOR_UNIT) {
-						if (game->debugDrawPlayerBox) showBox = true;
-						boxColor = teamColors[actor->team];
-						if (actor->actionsNum > 0 && actor->actions[0].type == ACTION_KNOCKDOWN) boxHeightPerc *= 0.5;
+				int tint = billboard->tint;
+				Vec4 tintVec = hexToArgbFloat(billboard->tint);
+				tintVec *= billboard->alpha;
+				tint = argbToHex(tintVec);
+				// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
 
-						Frame *frame = NULL;
-						if (actor->anim) {
-							// logf("%s (%f)\n", anim->name, animTime);
-							frame = getAnimFrameAtSecond(actor->anim, actor->animTime);
-							if (actor->animFrameOverride != -1) frame = actor->anim->frames[actor->animFrameOverride];
-						}
-
-						bool flipped = false;
-						Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
-						if (actor->facingLeft) flipped = true;
-						if (frame) {
-							Rect source = {};
-							source.width = frame->width;
-							source.height = frame->height;
-							source.x = frame->srcX;
-							source.y = frame->texture->height - source.height - frame->srcY;
-
-							Vec2 size = v2(frame->width, frame->height);
-
-							if (actor->actionsNum > 0) {
-								Action *action = &actor->actions[0];
-								if (action->type == ACTION_BLOCKSTUN) { // Vibration
-									float amount = clampMap(action->time, 0, action->customLength, 5, 0, QUAD_IN);
-									if (platform->frameCount % 2) {
-										position.x += amount;
-									} else {
-										position.x -= amount;
-									}
-								}
-							}
-
-							float scale = globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
-							size *= scale;
-
-							/*
-							0   3
-						 	 ---
-							|   |
-							 ---
-							1   2
-							*/
-							Rect inner;
-							inner.x = frame->destOffX*scale;
-							inner.y = frame->destOffY*scale;
-							inner.width = frame->width*scale;
-							inner.height = frame->height*scale;
-
-							Vec3 billboardOffset;
-							billboardOffset.x = aabb.min.x + inner.x;
-							billboardOffset.y = getCenter(aabb).y-0.01;
-							billboardOffset.z = aabb.max.z - inner.height;
-
-							Vec3 verts[] = {
-								globals->actorSpriteOffset + billboardOffset + v3(0, 0, -inner.y+inner.height),
-								globals->actorSpriteOffset + billboardOffset + v3(0, 0, 0 -inner.y),
-								globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y+inner.height),
-								globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y),
-							};
-							// pushTriangle(verts[0], verts[1], verts[2], 0xFF0000FF);
-							// pushTriangle(verts[2], verts[1], verts[3], 0xFF0000FF);
-
-							position.x = (verts[0].x + verts[3].x)/2;
-							position.y = verts[0].y - 1;
-							position.z = (verts[0].z + verts[1].z)/2;
-							size = getSize(inner);
-							if (flipped) {
-								float edgeDist = aabb.max.x - position.x;
-								position.x = aabb.min.x + edgeDist;
-								size.x *= -1;
-							}
-
-							DrawBillboardCall billboard = {};
-							billboard.camera = camera;
-							billboard.renderTexture = frame->texture;
-							billboard.position = position;
-							billboard.size = size;
-							billboard.tint = boxColor;
-							billboard.alpha = 1;
-							billboard.source = source;
-							pushBillboard(billboard);
-						} else {
-							showBox = true;
-						}
-					} else if (actor->type == ACTOR_GROUND) {
-						showBox = true;
-						boxColor = 0xFFE8C572;
-					} else if (actor->type == ACTOR_DUMMY) {
-						showBox = true;
-						boxColor = 0xFFFF878B;
-					} else if (actor->type == ACTOR_DOOR) {
-						showBox = true;
-						boxColor = lerpColor(0xFF523501, 0xFF121212, actor->locked);
-					} else if (actor->type == ACTOR_UNIT_SPAWNER) {
-						if (game->inEditor) showBox = true;
-					} else if (actor->type == ACTOR_ITEM) {
-						showBox = true;
-						boxColor = lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5);
-					} else if (actor->type == ACTOR_STORE) {
-						showBox = true;
-						boxColor = 0xFF45E6E6;
-					} else {
-						showBox = true;
-					}
-
-					if (showBox) pushAABB(aabb, boxColor);
+				if (billboard->texture) {
+					drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, tint, billboard->source);
+				} else {
+					drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
 				}
 			}
 
-			{ /// Really really draw 3d
-				startShader(renderer->lightingShader);
-				for (int i = 0; i < game->worldCubesNum; i++) {
-					WorldCubes *cube = &game->worldCubes[i];
+			for (int i = 0; i < game->worldElementsNum; i++) {
+				WorldElement *element = &game->worldElements[i];
 
-					Vec4 alpha = v4(cube->alpha, 0, 0, 0);
-					Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShaderAlphaLoc, &alpha.x, Raylib::SHADER_UNIFORM_VEC4);
-					drawAABB(cube->aabb, cube->color);
+				if (element->type == WORLD_ELEMENT_TRIANGLE) {
+					Vec3 *verts = element->tri.verts;
+					Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
 				}
-				endShader();
-				game->worldCubesNum = 0;
-
-				if (!game->debugDrawBillboards) game->billboardsNum = 0;
-				startShader(renderer->alphaDiscardShader);
-				for (int i = 0; i < game->billboardsNum; i++) {
-					DrawBillboardCall *billboard = &game->billboards[i];
-					if (isZero(billboard->camera.up)) billboard->camera = camera;
-
-					int tint = billboard->tint;
-					Vec4 tintVec = hexToArgbFloat(billboard->tint);
-					tintVec *= billboard->alpha;
-					tint = argbToHex(tintVec);
-					// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
-
-					if (billboard->texture) {
-						drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, tint, billboard->source);
-					} else {
-						drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
-					}
-				}
-
-				for (int i = 0; i < game->worldElementsNum; i++) {
-					WorldElement *element = &game->worldElements[i];
-
-					if (element->type == WORLD_ELEMENT_TRIANGLE) {
-						Vec3 *verts = element->tri.verts;
-						Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
-					}
-				}
-				game->worldElementsNum = 0;
-
-
-				endShader();
-				game->billboardsNum = 0;
 			}
+			game->worldElementsNum = 0;
+
+			endShader();
+			game->billboardsNum = 0;
 
 			end3d();
 		}
@@ -1491,6 +1351,19 @@ void stepGame(float elapsed) {
 		}
 
 		game->isoMatrix3 = matrix;
+
+		{ // 3d camera
+			Matrix3 matrix = mat3();
+			matrix.ROTATE(game->cameraAngleDegrees.y);
+			matrix.ROTATE_X(game->cameraAngleDegrees.x);
+			Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
+
+			game->camera3d.position = cameraPos;
+			game->camera3d.target = game->visualCameraTarget;
+			game->camera3d.up = v3(0, 0, 1);
+			game->camera3d.fovy = 10;
+			game->camera3d.isOrtho = true;
+		}
 	} ///
 
 	bool inRoomPrewarm = false;
@@ -2074,7 +1947,7 @@ void stepGame(float elapsed) {
 			ImGui::DragFloat3("Position", &actor->position.x);
 			ImGui::DragFloat3("Size", &actor->size.x);
 
-			if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+			if (actor->type == ACTOR_UNIT) {
 				ImGui::InputInt("Team", &actor->team);
 				if (ImGui::TreeNode("Stats")) {
 					for (int i = 0; i < STATS_MAX; i++) {
@@ -2191,9 +2064,6 @@ void stepGame(float elapsed) {
 
 	for (int i = 0; i < map->actorsNum; i++) { /// Update actors
 		Actor *actor = &map->actors[i];
-		actor->anim = NULL;
-		actor->animTime = 0;
-		actor->animFrameOverride = -1;
 
 		if (actor->prevIsOnGround != actor->isOnGround) { /// Landing on the ground
 			actor->prevIsOnGround = actor->isOnGround;
@@ -2974,11 +2844,15 @@ void stepGame(float elapsed) {
 					return anim;
 				};
 
+				Animation *anim = NULL;
+				float animTime = 0;
+				int animFrameOverride = -1;
+
 				if (usesFrameData) {
 					Action *action = &actor->actions[0];
-					actor->anim = getActorAnimation(actor, frameSprintf("Unit/%s", action->info->animationName));
-					actor->animTime = action->time;
-					actor->anim->loops = action->info->animationLoops;
+					anim = getActorAnimation(actor, frameSprintf("Unit/%s", action->info->animationName));
+					animTime = action->time;
+					anim->loops = action->info->animationLoops;
 
 					float actionStartupEndTime = action->info->startupFrames / 60.0;
 					float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
@@ -2987,39 +2861,73 @@ void stepGame(float elapsed) {
 					int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
 					int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
 					int animationRecoveryEndFrame = 0;
-					animationRecoveryEndFrame = actor->anim->framesNum-1;
+					animationRecoveryEndFrame = anim->framesNum-1;
 
 					if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
 						if (action->time < actionStartupEndTime) {
-							actor->animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
+							animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
 						} else if (action->time < actionActiveEndTime) { 
-							actor->animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
+							animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
 						} else {
-							actor->animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
+							animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
 						}
 					} else {
 						float maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames)/60.0;
-						actor->animFrameOverride = roundf(clampMap(action->time, 0, maxTime, 0, animationRecoveryEndFrame));
+						animFrameOverride = roundf(clampMap(action->time, 0, maxTime, 0, animationRecoveryEndFrame));
 					}
 				} else {
 					if (actor->timeMoving) {
 						if (actor->isRunningLeft || actor->isRunningRight) {
-							actor->anim = getActorAnimation(actor, "Unit/run");
-							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
+							anim = getActorAnimation(actor, "Unit/run");
+							animFrameOverride = anim->framesNum * actor->movementPerc;
 						} else {
-							actor->anim = getActorAnimation(actor, "Unit/walk");
-							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
+							anim = getActorAnimation(actor, "Unit/walk");
+							animFrameOverride = anim->framesNum * actor->movementPerc;
 						}
 					} else if (actor->timeInAir) {
-						actor->anim = getActorAnimation(actor, "Unit/jump");
-						actor->animTime = actor->timeInAir * FRAME_SUBSTEPS * 2; // * 2 because it's slow...
-						actor->anim->loops = false;
+						anim = getActorAnimation(actor, "Unit/jump");
+						animTime = actor->timeInAir * FRAME_SUBSTEPS * 2; // * 2 because it's slow...
+						anim->loops = false;
 					} else {
-						actor->anim = getActorAnimation(actor, "Unit/idle");
-						actor->animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
+						anim = getActorAnimation(actor, "Unit/idle");
+						animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
 					}
 				}
 
+				Frame *frame = NULL;
+				if (anim) {
+					frame = getAnimFrameAtSecond(anim, animTime);
+					if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
+				}
+
+				AABB aabb = getAABB(actor);
+				if (actor->actionsNum > 0) {
+					Action *action = &actor->actions[0];
+					if (action->type == ACTION_BLOCKSTUN) { // Vibration
+						float amount = clampMap(action->time, 0, action->customLength, 5, 0, QUAD_IN);
+						if (platform->frameCount % 2) {
+							aabb += v3(amount, 0, 0);
+						} else {
+							aabb -= v3(amount, 0, 0);
+						}
+					}
+				}
+
+				float scale = 1;
+				bool flipped = false;
+				if (actor->facingLeft) flipped = true;
+
+				DrawBillboardCall billboard = {};
+				billboard.camera = game->camera3d;
+				billboard.tint = teamColors[actor->team];
+				billboard.alpha = 1;
+				if (frame) {
+					pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+				}
+
+				if (!frame || game->debugDrawPlayerBox) {
+					pushAABB(aabb, teamColors[actor->team]);
+				}
 			} ///
 
 			{ /// Draw overlay
@@ -3066,9 +2974,9 @@ void stepGame(float elapsed) {
 				}
 			} ///
 		} else if (actor->type == ACTOR_GROUND) {
+			pushAABB(getAABB(actor), 0xFFE8C572);
 		} else if (actor->type == ACTOR_WALL) {
-		} else if (actor->type == ACTOR_DUMMY) {
-			actor->team = 1;
+			pushAABB(getAABB(actor), 0xFFFFFFFF);
 		} else if (actor->type == ACTOR_DOOR) {
 			if (game->mapTime == 0) {
 				actor->locked = 0;
@@ -3124,6 +3032,8 @@ void stepGame(float elapsed) {
 			} else {
 				actor->doorPlayerSpawnedOver = false;
 			}
+
+			pushAABB(getAABB(actor), lerpColor(0xFF523501, 0xFF121212, actor->locked));
 		} else if (actor->type == ACTOR_ITEM) {
 			if (actor->isOnGround) {
 				if (getEquippedItemCount(player, ITEM_MAGNET) > 0) {
@@ -3150,6 +3060,8 @@ void stepGame(float elapsed) {
 					}
 				}
 			}
+
+			pushAABB(getAABB(actor), lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5));
 		} else if (actor->type == ACTOR_STORE) {
 			bool overlappingStore = overlaps(actor, player);
 
@@ -3159,6 +3071,9 @@ void stepGame(float elapsed) {
 			}
 
 			if (!overlappingStore) game->ignoreStoreOverlap = false;
+			pushAABB(getAABB(actor), 0xFF45E6E6);
+		} else {
+			pushAABB(getAABB(actor), lerpColor(0xFFFF00FF, 0x00FF00FF, timePhase(platform->time)));
 		}
 
 		if (actor->isOnGround) {
@@ -3457,7 +3372,7 @@ void stepGame(float elapsed) {
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
 			{ // Status lines
-				if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+				if (actor->type == ACTOR_UNIT) {
 					const int TEXT_LINES_MAX = 8;
 					char *textLines[TEXT_LINES_MAX];
 					int textLinesNum = 0;
@@ -3544,7 +3459,7 @@ void stepGame(float elapsed) {
 			}
 
 			{ // Status icons
-				if (actor->type == ACTOR_UNIT || actor->type == ACTOR_DUMMY) {
+				if (actor->type == ACTOR_UNIT) {
 					struct Icon {
 						Texture *texture;
 						bool flipped;
@@ -4993,6 +4908,64 @@ void pushBillboard(DrawBillboardCall billboard) {
 	}
 
 	game->billboards[game->billboardsNum++] = billboard;
+}
+
+void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped) {
+	Globals *globals = &game->globals;
+
+	Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
+	Rect source = {};
+	source.width = frame->width;
+	source.height = frame->height;
+	source.x = frame->srcX;
+	source.y = frame->texture->height - source.height - frame->srcY;
+
+	scale *= globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
+	Vec2 size = v2(frame->width, frame->height);
+	size *= scale;
+
+	/*
+		 0   3
+		 -----
+		 |   |
+		 -----
+		 1   2
+		 */
+	Rect inner;
+	inner.x = frame->destOffX*scale;
+	inner.y = frame->destOffY*scale;
+	inner.width = frame->width*scale;
+	inner.height = frame->height*scale;
+
+	Vec3 billboardOffset;
+	billboardOffset.x = aabb.min.x + inner.x;
+	billboardOffset.y = getCenter(aabb).y-0.01;
+	billboardOffset.z = aabb.max.z - inner.height;
+
+	Vec3 verts[] = {
+		globals->actorSpriteOffset + billboardOffset + v3(0, 0, -inner.y+inner.height),
+		globals->actorSpriteOffset + billboardOffset + v3(0, 0, 0 -inner.y),
+		globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y+inner.height),
+		globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y),
+	};
+	// pushTriangle(verts[0], verts[1], verts[2], 0xFF0000FF);
+	// pushTriangle(verts[2], verts[1], verts[3], 0xFF0000FF);
+
+	position.x = (verts[0].x + verts[3].x)/2;
+	position.y = verts[0].y - 1;
+	position.z = (verts[0].z + verts[1].z)/2;
+	size = getSize(inner);
+	if (flipped) {
+		float edgeDist = aabb.max.x - position.x;
+		position.x = aabb.min.x + edgeDist;
+		size.x *= -1;
+	}
+
+	billboard.renderTexture = frame->texture;
+	billboard.size = size;
+	billboard.source = source;
+	billboard.position = position;
+	pushBillboard(billboard);
 }
 
 WorldElement *createWorldElement() {
