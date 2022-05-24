@@ -37,7 +37,6 @@ struct Animation {
 };
 
 struct AnimationSystem {
-	RenderTexture *garbageTexture;
 	float frameRate;
 	bool loopsByDefault;
 
@@ -73,6 +72,9 @@ struct AnimationSystem {
 
 	ThreadSafeQueue *spritePathsQueue;
 	ThreadSafeQueue *spriteBitmapsOut;
+
+	RenderTexture *garbageTexture;
+	Animation emptyAnim;
 };
 
 AnimationSystem *animSys = NULL;
@@ -82,6 +84,7 @@ void packSpriteSheet(const char *dirName);
 void regenerateSheetAnimations();
 Animation *getAnimation(const char *animName);
 Frame *getFrame(const char *frameName);
+Animation *getAnimationOrEmpty(const char *animName);
 Frame *getAnimFrameAtSecond(Animation *anim, float time);
 Frame *getAnimFrameAtPercent(Animation *anim, float percent);
 
@@ -94,6 +97,7 @@ void initAnimations() {
 	animSys->frameRate = 10.0;
 
 	animSys->garbageTexture = createRenderTexture(1, 1);
+	strcpy(animSys->emptyAnim.name, "Empty");
 }
 
 void packSpriteSheet(const char *dirName) {
@@ -549,6 +553,13 @@ Animation *getAnimation(const char *animName) {
 	return NULL;
 #endif
 }
+
+Animation *getAnimationOrEmpty(const char *animName) {
+	Animation *anim = getAnimation(animName);
+	if (!anim) anim = &animSys->emptyAnim;
+	return anim;
+}
+
 
 Frame *getFrame(const char *frameName) {
 	for (int i = 0; i < animSys->framesNum; i++) {

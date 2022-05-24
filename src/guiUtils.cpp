@@ -77,4 +77,3 @@ void guiColoredTreePop() {
 	guiPopStyleColor();
 	ImGui::TreePop();
 }
-    // IMGUI_API bool          TreeNodeEx(const char* label, ImGuiTreeNodeFlags flags = 0);

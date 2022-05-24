@@ -2,6 +2,7 @@
 // Controller input
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less in-game time to travel to
+// Better map and fortification graphics
 
 // We need healing
 // Do a ghost that is the base speed
@@ -106,6 +107,8 @@ Vec3 UNIT_SIZE = v3(150, 150, 300);
 
 #define GROUND_SPACING 0.1
 
+#define FRAME_SUBSTEPS 2
+
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
 	0xFFFF878B,
@@ -166,6 +169,8 @@ enum ActionType {
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
 	ACTION_FORCED_LEAVE=66,
+	ACTION_START_PICKUP=67,
+	ACTION_END_PICKUP=68,
 	ACTION_TYPES_MAX=128,
 };
 
@@ -268,6 +273,8 @@ enum ItemType {
 	ITEM_FOOD_6=25,
 	ITEM_FOOD_7=26,
 	ITEM_FOOD_8=27,
+	ITEM_SWORD=28,
+	ITEM_KNIFE=28,
 	ITEM_TYPES_MAX,
 };
 enum ItemSlotType {
@@ -275,6 +282,7 @@ enum ItemSlotType {
 	ITEM_SLOT_PASSIVE,
 	ITEM_SLOT_ACTIVE,
 	ITEM_SLOT_CONSUMABLE,
+	ITEM_SLOT_WEAPON,
 };
 struct ItemTypeInfo {
 #define ITEM_NAME_MAX_LEN 32
@@ -300,6 +308,7 @@ struct Item {
 	ItemTypeInfo *info;
 };
 
+struct Actor;
 struct Action {
 	int id;
 	ActionType type;
@@ -309,6 +318,7 @@ struct Action {
 	float time;
 	float customLength;
 	Vec3 targetPosition;
+	int relatedActorId;
 };
 
 enum ActorType {
@@ -452,6 +462,8 @@ struct Actor {
 	Item *items;
 	int itemsNum;
 	int itemsMax;
+
+	Item heldItem;
 
 #define STYLES_MAX 4
 	Style styles[STYLES_MAX];
@@ -727,7 +739,7 @@ Vec2i getCoordsByCityMap(Map *map);
 int getIndexByMap(Map *map);
 Actor *createActor(Map *map, ActorType type);
 void deleteActor(Map *map, Actor *actor);
-Actor *getActor(int id);
+Actor *getActor(Map *map, int id);
 Actor *getActorOfType(Map *map, ActorType type);
 Actor *getRandomActorOfType(Map *map, ActorType type);
 Actor *getActorByName(Map *map, char *actorName);
@@ -782,6 +794,7 @@ void refreshMap(Map *map);
 void saveGlobals();
 void loadGlobals();
 /// FUNCTIONS ^
+
 
 void runGame() {
 #if defined(_WIN32)
@@ -1014,6 +1027,18 @@ void updateGame() {
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 120;
 			info->actionType = ACTION_STICKY_NAPALM;
+
+			info = &game->itemTypeInfos[ITEM_SWORD];
+			strcpy(info->name, "Sword");
+			info->slotType = ITEM_SLOT_WEAPON;
+			info->basePrice = 0;
+			info->maxAmountFromStore = 0;
+
+			info = &game->itemTypeInfos[ITEM_KNIFE];
+			strcpy(info->name, "Knife");
+			info->slotType = ITEM_SLOT_WEAPON;
+			info->basePrice = 0;
+			info->maxAmountFromStore = 0;
 
 			for (int i = 0; i < 9; i++) {
 				ItemType type = (ItemType)(ITEM_FOOD_0 + i);
@@ -1726,6 +1751,18 @@ void stepGame(float elapsed) {
 				}
 			}
 
+			if (ImGui::Button("Spawn sword")) {
+				Actor *actor = createActor(map, ACTOR_ITEM);
+				actor->itemType = ITEM_SWORD;
+				actor->position = v3(0, 0, 10);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Spawn knife")) {
+				Actor *actor = createActor(map, ACTOR_ITEM);
+				actor->itemType = ITEM_KNIFE;
+				actor->position = v3(0, 0, 10);
+			}
+
 			ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
 			ImGui::TreePop();
 		}
@@ -2010,7 +2047,7 @@ void stepGame(float elapsed) {
 		ImGui::Separator();
 		ImGui::Separator();
 
-		Actor *actor = getActor(game->selectedActorId);
+		Actor *actor = getActor(map, game->selectedActorId);
 		if (actor) {
 			if (ImGui::Button("Delete actor")) actor->markedForDeletion = true;
 			if (ImGui::Button("Duplicate actor")) {
@@ -2099,6 +2136,52 @@ void stepGame(float elapsed) {
 		if (keyPressed(KEY_DOWN) || keyPressed('S')) game->cameraTarget.y -= scrollSpeed;
 	} /// 
 
+	Vec2 inputVec = v2();
+	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed;
+	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
+	bool pickupPressed;
+	{ /// Update inputs
+		jumpPressed = false;
+		punchPressed = false;
+		kickPressed = false;
+		special1Pressed = false;
+		special2Pressed = false;
+		changeStyle1Pressed = false;
+		changeStyle2Pressed = false;
+		changeStyle3Pressed = false;
+		changeStyle4Pressed = false;
+		pickupPressed = false;
+
+		bool canInput = true;
+		if (player->actionsNum > 0) canInput = false;
+		if (inRoomPrewarm) canInput = false;
+		if (game->inEditor) canInput = false;
+		if (player->stamina <= 0) canInput = false;
+
+		if (canInput) {
+			if (keyPressed('W') || keyPressed(KEY_UP) || joyButtonPressed(0, JOY_PAD_UP)) inputVec.y++;
+			if (keyPressed('S') || keyPressed(KEY_DOWN) || joyButtonPressed(0, JOY_PAD_DOWN)) inputVec.y--;
+			if (keyPressed('A') || keyPressed(KEY_LEFT) || joyButtonPressed(0, JOY_PAD_LEFT)) inputVec.x--;
+			if (keyPressed('D') || keyPressed(KEY_RIGHT) || joyButtonPressed(0, JOY_PAD_RIGHT)) inputVec.x++;
+			Vec2 leftStick = joyLeftStick(0);
+			inputVec.y += clampMap(leftStick.y, -0.2, -1, 0, 1); // This doesn't actually result in smooth movement
+			inputVec.y -= clampMap(leftStick.y, 0.2, 1, 0, 1);
+			inputVec.x += clampMap(leftStick.x, 0.2, 1, 0, 1);
+			inputVec.x -= clampMap(leftStick.x, -0.2, -1, 0, 1);
+			inputVec = inputVec.normalize();
+			if (keyJustPressed(' ') || joyButtonJustPressed(0, JOY_X)) jumpPressed = true;
+			if (keyJustPressed('J') || joyButtonJustPressed(0, JOY_SQUARE)) punchPressed = true;
+			if (keyJustPressed('K') || joyButtonJustPressed(0, JOY_TRIANGLE)) kickPressed = true;
+			if (keyJustPressed('U')) special1Pressed = true;
+			if (keyJustPressed('I')) special2Pressed = true;
+			if (keyJustPressed('L') || joyButtonJustPressed(0, JOY_CIRCLE)) pickupPressed = true;
+			if (keyJustPressed('1')) changeStyle1Pressed = true;
+			if (keyJustPressed('2')) changeStyle2Pressed = true;
+			if (keyJustPressed('3')) changeStyle3Pressed = true;
+			if (keyJustPressed('4')) changeStyle4Pressed = true;
+		}
+	} ///
+
 	for (int i = 0; i < map->actorsNum; i++) { /// Update actors
 		Actor *actor = &map->actors[i];
 		actor->anim = NULL;
@@ -2125,11 +2208,9 @@ void stepGame(float elapsed) {
 			}
 		} ///
 
-		bool canInput = true;
 		{ /// Update action
 			if (actor->actionsNum > 0) {
 				Action *action = &actor->actions[0];
-				canInput = false;
 				if (action->type != ACTION_BLOCKSTUN) actor->isBlocking = false;
 
 				bool actionDone = false;
@@ -2394,6 +2475,12 @@ void stepGame(float elapsed) {
 						addAction(actor, ACTION_RAISING);
 					} else if (action->type == ACTION_FORCED_LEAVE) {
 						actor->markedForDeletion = true;
+					} else if (action->type == ACTION_START_PICKUP) {
+						Actor *itemActor = getActor(map, action->relatedActorId);
+						if (itemActor) {
+							initItem(&actor->heldItem, itemActor->itemType, 1);
+							itemActor->markedForDeletion = true;
+						}
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2455,38 +2542,6 @@ void stepGame(float elapsed) {
 
 			if (actor->playerControlled) {
 				if (!game->inEditor) game->cameraTarget = actor->position;
-
-				Vec2 inputVec = v2();
-				bool jumpPressed = false;
-				bool punchPressed = false;
-				bool kickPressed = false;
-				bool special1Pressed = false;
-				bool special2Pressed = false;
-				bool changeStyle1Pressed = false;
-				bool changeStyle2Pressed = false;
-				bool changeStyle3Pressed = false;
-				bool changeStyle4Pressed = false;
-				if (!game->inEditor && !inRoomPrewarm && canInput && actor->stamina > 0) {
-					if (keyPressed('W') || keyPressed(KEY_UP) || joyButtonPressed(0, JOY_PAD_UP)) inputVec.y++;
-					if (keyPressed('S') || keyPressed(KEY_DOWN) || joyButtonPressed(0, JOY_PAD_DOWN)) inputVec.y--;
-					if (keyPressed('A') || keyPressed(KEY_LEFT) || joyButtonPressed(0, JOY_PAD_LEFT)) inputVec.x--;
-					if (keyPressed('D') || keyPressed(KEY_RIGHT) || joyButtonPressed(0, JOY_PAD_RIGHT)) inputVec.x++;
-					Vec2 leftStick = joyLeftStick(0);
-					inputVec.y += clampMap(leftStick.y, -0.2, -1, 0, 1); // This doesn't actually result in smooth movement
-					inputVec.y -= clampMap(leftStick.y, 0.2, 1, 0, 1);
-					inputVec.x += clampMap(leftStick.x, 0.2, 1, 0, 1);
-					inputVec.x -= clampMap(leftStick.x, -0.2, -1, 0, 1);
-					inputVec = inputVec.normalize();
-					if (keyJustPressed(' ') || joyButtonJustPressed(0, JOY_X)) jumpPressed = true;
-					if (keyJustPressed('J') || joyButtonJustPressed(0, JOY_SQUARE)) punchPressed = true;
-					if (keyJustPressed('K') || joyButtonJustPressed(0, JOY_TRIANGLE)) kickPressed = true;
-					if (keyJustPressed('U')) special1Pressed = true;
-					if (keyJustPressed('I')) special2Pressed = true;
-					if (keyJustPressed('1')) changeStyle1Pressed = true;
-					if (keyJustPressed('2')) changeStyle2Pressed = true;
-					if (keyJustPressed('3')) changeStyle3Pressed = true;
-					if (keyJustPressed('4')) changeStyle4Pressed = true;
-				}
 
 				{ // Figure out running
 					if (inputVec.x < -0.5) {
@@ -2612,10 +2667,10 @@ void stepGame(float elapsed) {
 							return ids;
 						};
 
-						if (actor->actionsNum == 0) { // This is the same as canInput
+						if (actor->actionsNum == 0) {
 							float aggroRange = 512;
 
-							Actor *target = getActor(actor->aiTarget);
+							Actor *target = getActor(map, actor->aiTarget);
 							if (!target) { // Find target
 								int bestOtherId = 0;
 
@@ -2847,11 +2902,16 @@ void stepGame(float elapsed) {
 					if (action->type == ACTION_FORCED_LEAVE) usesFrameData = false;
 				}
 
+				char *animSuffix = "";
+				if (actor->heldItem.type == ITEM_SWORD) animSuffix = "_sword";
+				if (actor->heldItem.type == ITEM_KNIFE) animSuffix = "_knife";
+
 				if (usesFrameData) {
 					Action *action = &actor->actions[0];
-					actor->anim = getAnimation(frameSprintf("Unit/%s", action->info->animationName));
+					// actor->anim = getAnimationOrEmpty(frameSprintf("Unit/%s%s", action->info->animationName, animSuffix));
+					actor->anim = getAnimationOrEmpty(frameSprintf("Unit/%s", action->info->animationName));
 					actor->animTime = action->time;
-					if (actor->anim) actor->anim->loops = action->info->animationLoops;
+					actor->anim->loops = action->info->animationLoops;
 
 					float actionStartupEndTime = action->info->startupFrames / 60.0;
 					float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
@@ -2860,7 +2920,7 @@ void stepGame(float elapsed) {
 					int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
 					int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
 					int animationRecoveryEndFrame = 0;
-					if (actor->anim) animationRecoveryEndFrame = actor->anim->framesNum-1;
+					animationRecoveryEndFrame = actor->anim->framesNum-1;
 
 					if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
 						if (action->time < actionStartupEndTime) {
@@ -2870,25 +2930,29 @@ void stepGame(float elapsed) {
 						} else {
 							actor->animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
 						}
+					} else {
+						float maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames)/60.0;
+						actor->animFrameOverride = roundf(clampMap(action->time, 0, maxTime, 0, animationRecoveryEndFrame));
 					}
 				} else {
 					if (actor->timeMoving) {
 						if (actor->isRunningLeft || actor->isRunningRight) {
-							actor->anim = getAnimation("Unit/run");
+							actor->anim = getAnimationOrEmpty("Unit/run");
 							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
 						} else {
-							actor->anim = getAnimation("Unit/walk");
+							actor->anim = getAnimationOrEmpty("Unit/walk");
 							actor->animFrameOverride = actor->anim->framesNum * actor->movementPerc;
 						}
 					} else if (actor->timeNotMoving) {
-						actor->anim = getAnimation("Unit/idle");
-						actor->animTime = actor->timeNotMoving;
+						actor->anim = getAnimationOrEmpty("Unit/idle");
+						actor->animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
 					} else if (actor->timeInAir) {
-						actor->anim = getAnimation("Unit/jump");
-						actor->animTime = actor->timeInAir;
+						actor->anim = getAnimationOrEmpty("Unit/jump");
+						actor->animTime = actor->timeInAir * FRAME_SUBSTEPS * 2; // * 2 because it's slow...
 						actor->anim->loops = false;
 					} else {
-						actor->anim = getAnimation("Unit/idle");
+						logf("Bad actor state?\n");
+						actor->anim = getAnimationOrEmpty("Unit/idle");
 					}
 				}
 
@@ -2927,7 +2991,7 @@ void stepGame(float elapsed) {
 				}
 
 				if (game->debugDrawActorTargets) {
-					Actor *target = getActor(actor->aiTarget);
+					Actor *target = getActor(map, actor->aiTarget);
 					if (target) {
 						Vec2 positionCenter2 = v2(game->isoMatrix3 * getCenter(aabb));
 
@@ -3005,7 +3069,8 @@ void stepGame(float elapsed) {
 					}
 				}
 
-				if (overlaps(actor, player)) {
+				ItemTypeInfo *itemTypeInfo = &game->itemTypeInfos[actor->itemType];
+				if (itemTypeInfo->slotType != ITEM_SLOT_WEAPON && overlaps(actor, player)) {
 					if (actor->itemType == ITEM_MONEY) {
 						player->money += actor->itemAmount;
 						actor->markedForDeletion = true;
@@ -3178,7 +3243,7 @@ void stepGame(float elapsed) {
 		}
 
 		if (actor->type == ACTOR_UNIT) { // We have to flip around ai actors here because physics flips them if they're moving slightly backwards
-			Actor *target = getActor(actor->aiTarget);
+			Actor *target = getActor(map, actor->aiTarget);
 			if (target) {
 				Vec3 dir = target->position - actor->position;
 				if (dir.x <= 0) {
@@ -3254,6 +3319,34 @@ void stepGame(float elapsed) {
 		if (actor->position.z < -10000) actor->position = v3(0, 0, 500);
 	} ///
 
+	{ /// Update pickup prompt
+		Actor *promptItem = NULL;
+		for (int i = 0; i < map->actorsNum; i++) {
+			Actor *actor = &map->actors[i];
+			if (actor->type != ACTOR_ITEM) continue;
+
+			ItemTypeInfo *itemTypeInfo = &game->itemTypeInfos[actor->itemType];
+			if (itemTypeInfo->slotType != ITEM_SLOT_WEAPON) continue;
+
+			if (player->heldItem.type == ITEM_NONE && overlaps(player, actor)) {
+				promptItem = actor;
+				break;
+			}
+		}
+
+		if (promptItem) {
+			Vec2 position2 = v2(game->isoMatrix3 * promptItem->position);
+			Rect rect = makeCenteredSquare(position2, 64);
+			pushScreenRect(rect, 0x80FF0000);
+
+			if (pickupPressed) {
+				Action *action = addAction(player, ACTION_START_PICKUP);
+				action->relatedActorId = promptItem->id;
+				addAction(player, ACTION_END_PICKUP);
+			}
+		}
+	}
+
 	{ /// Update particles
 		for (int i = 0; i < game->particlesNum; i++) {
 			Particle *particle = &game->particles[i];
@@ -3293,7 +3386,7 @@ void stepGame(float elapsed) {
 				continue;
 			}
 		}
-	}
+	} ///
 
 	pushTargetTexture(game->debugTexture);
 	{ /// Draw actors (debug/overlay) //@todo rename to overlayTexture
@@ -4489,10 +4582,9 @@ void deleteActor(Map *map, Actor *actor) {
 	removeActorById(map, actor->id);
 }
 
-Actor *getActor(int id) {
+Actor *getActor(Map *map, int id) {
 	if (id == 0) return NULL;
 
-	Map *map = &game->maps[game->currentMapIndex];
 	for (int i = 0; i < map->actorsNum; i++) {
 		Actor *actor = &map->actors[i];
 		if (actor->id == id) return actor;

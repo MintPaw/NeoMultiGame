@@ -167,41 +167,64 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
 
         actions = bpy.data.actions
         bpy.data.scenes[0].objects["sword"].hide_render = True
+        bpy.data.scenes[0].objects["knife"].hide_render = True
 
-        exportAction(armature, actions["idle"], outPath)
-        exportAction(armature, actions["walk"], outPath)
-        exportAction(armature, actions["run"], outPath)
+        exportAction(armature, actions["idle"], outPath, "idle");
+        exportAction(armature, actions["walk"], outPath, "walk");
+        exportAction(armature, actions["run"], outPath, "run");
 
-        exportAction(armature, actions["startPickup"], outPath)
-        exportAction(armature, actions["endPickup"], outPath)
+        exportAction(armature, actions["startPickup"], outPath, "startPickup");
+        exportAction(armature, actions["endPickup"], outPath, "endPickup");
 
-        exportAction(armature, actions["blockstun"], outPath)
-        exportAction(armature, actions["hitstun"], outPath)
-        exportAction(armature, actions["airHitstun"], outPath)
-        exportAction(armature, actions["knockdown"], outPath)
-        exportAction(armature, actions["raising"], outPath)
+        exportAction(armature, actions["blockstun"], outPath, "blockstun");
+        exportAction(armature, actions["hitstun"], outPath, "hitstun");
+        exportAction(armature, actions["airHitstun"], outPath, "airHitstun");
+        exportAction(armature, actions["knockdown"], outPath, "knockdown");
+        exportAction(armature, actions["raising"], outPath, "raising");
 
-        exportAction(armature, actions["jump"], outPath)
-        exportAction(armature, actions["airKick"], outPath)
-        exportAction(armature, actions["airPunch"], outPath)
+        exportAction(armature, actions["jump"], outPath, "jump");
+        exportAction(armature, actions["airKick"], outPath, "airKick");
+        exportAction(armature, actions["airPunch"], outPath, "airPunch");
 
-        exportAction(armature, actions["punch1"], outPath)
-        exportAction(armature, actions["punch2"], outPath)
-        exportAction(armature, actions["uppercut"], outPath)
-        exportAction(armature, actions["kick"], outPath)
+        exportAction(armature, actions["punch1"], outPath, "punch1");
+        exportAction(armature, actions["punch2"], outPath, "punch2");
+        exportAction(armature, actions["uppercut"], outPath, "uppercut");
+        exportAction(armature, actions["kick"], outPath, "kick");
 
-        exportAction(armature, actions["runningKick"], outPath)
-        exportAction(armature, actions["runningPunch"], outPath)
+        exportAction(armature, actions["runningKick"], outPath, "runningKick");
+        exportAction(armature, actions["runningPunch"], outPath, "runningPunch");
 
-        exportAction(armature, actions["upTest"], outPath)
-        exportAction(armature, actions["duckTest"], outPath)
+        exportAction(armature, actions["upTest"], outPath, "upTest");
+        exportAction(armature, actions["duckTest"], outPath, "duckTest");
 
         bpy.data.scenes[0].objects["sword"].hide_render = False
 
-        exportAction(armature, actions["idle_sword"], outPath)
-        exportAction(armature, actions["walk_sword"], outPath)
-        exportAction(armature, actions["run_sword"], outPath)
-        exportAction(armature, actions["pickupEnd_sword"], outPath)
+        exportAction(armature, actions["pickupEnd_sword"], outPath, "pickupEnd_sword");
+        exportAction(armature, actions["idle_sword"], outPath, "idle_sword");
+        exportAction(armature, actions["walk_sword"], outPath, "walk_sword");
+        exportAction(armature, actions["run_sword"], outPath, "run_sword");
+        exportAction(armature, actions["attack1_sword"], outPath, "attack1_sword");
+        exportAction(armature, actions["throw"], outPath, "throw_sword");
+        exportAction(armature, actions["jump_sword"], outPath, "jump_sword");
+        exportAction(armature, actions["airAttack1_sword"], outPath, "airAttack1_sword");
+        exportAction(armature, actions["airThrow"], outPath, "airThrow_sword");
+
+        bpy.data.scenes[0].objects["sword"].hide_render = True
+        bpy.data.scenes[0].objects["knife"].hide_render = False
+
+        exportAction(armature, actions["idle_knife"], outPath, "idle_knife");
+        exportAction(armature, actions["attack1_knife"], outPath, "attack1_knife");
+
+        exportAction(armature, actions["walk"], outPath, "walk_knife")
+        exportAction(armature, actions["run"], outPath, "run_knife")
+
+        exportAction(armature, actions["endPickup"], outPath, "endPickup_knife")
+
+        exportAction(armature, actions["jump"], outPath, "jump_knife")
+        exportAction(armature, actions["airPunch"], outPath, "airAttack1_knife")
+
+        exportAction(armature, actions["throw"], outPath, "throw_knife")
+        exportAction(armature, actions["airThrow"], outPath, "airThrow_knife")
 
         dumpPoseMarkers(armature)
         return {"FINISHED"}
