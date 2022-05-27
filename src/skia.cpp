@@ -1020,37 +1020,37 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						} else if (recurse.blendMode == SWF_BLEND_SCREEN) {
 							cmd->blendMode = BLEND_SCREEN;
 						} else if (recurse.blendMode == SWF_BLEND_LIGHTEN) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_DARKEN) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_DIFFERENCE) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_ADD) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_SUBTRACT) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_INVERT) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode invert\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode invert\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_ALPHA) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode alpha\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode alpha\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_ERASE) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode erase\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode erase\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_OVERLAY) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						} else if (recurse.blendMode == SWF_BLEND_HARDLIGHT) {
-							if (usingInvalidBlendModeWarnings < 32) logf("Using invalid blend mode\n");
+							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 							usingInvalidBlendModeWarnings++;
 						}
-						if (usingInvalidBlendModeWarnings == 32) logf("Too many blend mode warnings, stopping reports.\n");
+						if (usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
 
 						genDrawShape(drawable->shape, props, cmdList);
 					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {

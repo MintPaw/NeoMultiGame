@@ -1,9 +1,13 @@
+// Make thrown weapons do damage
+// Add weapon images while they're on the ground
 // Make movement end combos
 // Do tick marks on hp bars
 // Weapon hitboxes, damage, and velos
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less in-game time to travel to
 // Better map and fortification graphics
+// Make Dark Souls-like potion thing
+// Glowing eyes?
 
 // We need healing
 // Do a ghost that is the base speed

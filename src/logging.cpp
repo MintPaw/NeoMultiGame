@@ -9,11 +9,13 @@ struct LoggingSystem {
 #define LOGF_BUFFERS_MAX 1024
 	LogfBuffer logs[LOGF_BUFFERS_MAX];
 	volatile u32 logfMutex; 
+	DataStream *logStream;
 
 	float time;
 };
 
 LogfBuffer *loggerLogString(char *msg);
+char *getLogfBufferString();
 void showLogfBufferErrorWindow();
 void writeCrashLog();
 /// FUNCTIONS ^
@@ -22,6 +24,7 @@ LoggingSystem *logSys = NULL;
 
 void initLoggingSystem() {
 	logSys = (LoggingSystem *)zalloc(sizeof(LoggingSystem));
+	logSys->logStream = newDataStream();
 }
 
 void infof(const char *msg, ...) {
@@ -38,6 +41,7 @@ void infof(const char *msg, ...) {
 
 	LogfBuffer *buffer = loggerLogString(str);
 	buffer->isInfo = true;
+	writeString(logSys->logStream, frameSprintf("[info] %.1f: %s", logSys->time, str));
 }
 
 void logf(const char *msg, ...) {
@@ -57,6 +61,12 @@ void logf(const char *msg, ...) {
 
 	// void appendFile(const char *fileName, void *data, int length); //@hack
 	// appendFile("assets/stdout.txt", str, strlen(str));
+
+	{
+		char *logStr = frameSprintf("[log] %.1f: %s", logSys->time, str);
+		logStr[strlen(logStr)-1] = 0;
+		writeString(logSys->logStream, logStr);
+	}
 
 	LogfBuffer *buffer = loggerLogString(str);
 
@@ -147,7 +157,7 @@ void loggerPanic(const char *msg, const char *fileName, int lineNum) {
 #endif
 }
 
-void showLogfBufferErrorWindow() {
+char *getLogfBufferString() {
 	int totalMessages = 0;
 	int bufSize = 0;
 	for (int i = 0; i < LOGF_BUFFERS_MAX; i++) {
@@ -167,6 +177,11 @@ void showLogfBufferErrorWindow() {
 		strcat(buf, "\n");
 	}
 
+	return buf;
+}
+
+void showLogfBufferErrorWindow() {
+	char *buf = getLogfBufferString();
 	void showErrorWindow(char *msg); //@hack
 	showErrorWindow(buf);
 }

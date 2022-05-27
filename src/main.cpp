@@ -104,9 +104,12 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 
 #include "memoryTools.cpp"
 #include "mathTools.cpp"
+
+#define DATA_STREAM_HEADER
+#include "dataStream.cpp"
+
 #include "rnd.cpp"
 #include "ds.cpp"
-
 #include "logging.cpp"
 #include "file.cpp"
 #include "dataStream.cpp"
@@ -279,6 +282,10 @@ char exeDir[PATH_MAX_LEN] = {};
 
 #include "memoryTools.cpp"
 #include "mathTools.cpp"
+
+#define DATA_STREAM_HEADER
+#include "dataStream.cpp"
+
 #include "rnd.cpp"
 #include "perlin.cpp"
 #include "ds.cpp"
