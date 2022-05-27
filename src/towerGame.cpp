@@ -281,7 +281,7 @@ void updateGame() {
 			info->buildAmountNeeded = 100;
 			info->maxHp = 50;
 			info->maxEnergy = 100;
-		}
+		} ///
 
 		Scene *scene = &game->scene;
 		{ //@copyPastedLoadScene
@@ -420,7 +420,7 @@ void stepGame() {
 			game->typeToBuild = typeToBuild;
 			game->uiMode = UI_BUILD;
 		}
-	}
+	} ///
 
 	Actor *player = NULL;
 	for (int i = 0; i < scene->actorsNum; i++) { // Init loop
@@ -493,7 +493,8 @@ void stepGame() {
 
 	float denRadii[] = {128, 256};
 	float denSpawnTimes[] = {5, 1.5};
-	float denSpawnCounts[] = {4, 15};
+	// float denSpawnCounts[] = {4, 15};
+	float denSpawnCounts[] = {4*5, 15*5};
 
 	for (int i = 0; i < scene->actorsNum; i++) { // Main update
 		Actor *actor = &scene->actors[i];
