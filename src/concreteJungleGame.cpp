@@ -507,12 +507,14 @@ enum MapVisualization {
 	MAP_VISUALIZATION_BARS,
 	MAP_VISUALIZATION_LOCKED_IN,
 	MAP_VISUALIZATION_MAX_ALLIANCE_SURROUNDING,
+	MAP_VISUALIZATION_TOTAL_ALLIANCE_SURROUNDING,
 };
 const char *mapVisualizationStrings[] = {
 	"Slices",
 	"Bars",
 	"Locked in",
 	"Max alliance surrounding",
+	"Total alliance surrounding",
 };
 
 struct WorldCubes {
@@ -772,6 +774,7 @@ int getEquippedItemCount(Actor *actor, ItemType type);
 float getStatPoints(Actor *actor, StatType stat);
 int getSurroundingAtMaxAlliance(Vec2i startingIndex, int team);
 int getTeamWithMostAlliance(Map *map);
+float countSurroundingAlliance(Vec2i startingIndex, int team);
 
 Rect getBounds(AABB aabb);
 AABB getAABBAtPosition(Actor *actor, Vec3 position);
@@ -3457,7 +3460,7 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			{ // Status icons
+			{ /// Status icons
 				if (actor->type == ACTOR_UNIT) {
 					struct Icon {
 						Texture *texture;
@@ -3508,7 +3511,7 @@ void stepGame(float elapsed) {
 						cursor.y -= rect.height + 8;
 					}
 				}
-			}
+			} ///
 
 		}
 	} ///
@@ -3749,14 +3752,13 @@ void stepGame(float elapsed) {
 				actor->stats[STAT_STAMINA_REGEN] = 5;
 				actor->stats[STAT_MOVEMENT_SPEED] = 5;
 				actor->stats[STAT_ATTACK_SPEED] = 5;
+				actor->level = 0;
 
 				actor->team = rndPick(map->alliances, TEAMS_MAX);
-				Vec2 allianceMinMax;
-				allianceMinMax.x = 0.05;
-				allianceMinMax.y = clampMap(map->alliances[actor->team], 0, 1, 0.05, 0.2);
-				actor->allianceCost = rndFloat(allianceMinMax.x, allianceMinMax.y);
+				actor->allianceCost = 0.05;
 
-				int extraPoints = clampMap(actor->allianceCost, allianceMinMax.x, allianceMinMax.y, 10, 50);
+				float surroundingAlliance = countSurroundingAlliance(getCoordsByCityMap(map), actor->team);
+				int extraPoints = clampMap(surroundingAlliance, 0, 8, 10, 50);
 				for (int i = 0; i < extraPoints; i++) {
 					actor->stats[rndInt(0, STATS_MAX-1)]++;
 					actor->level++;
@@ -3976,6 +3978,23 @@ void stepGame(float elapsed) {
 								int count = getSurroundingAtMaxAlliance(v2i(x, y), team);
 								drawRect(rect, lerpColor(0xFF00FF00, 0xFFFF0000, (float)count/(TEAMS_MAX-1)));
 								drawTextInRect(frameSprintf("%d", count), props, inflatePerc(rect, -0.1));
+							}
+						} else if (game->mapVisualization == MAP_VISUALIZATION_TOTAL_ALLIANCE_SURROUNDING) {
+							Rect rect = makeRect(cursor, mapTileSize);
+
+							Rect tile = rect;
+							tile.width *= 0.5;
+							tile.height *= 0.25;
+
+							if (TEAMS_MAX != 8 && platform->frameCount % 60 == 0) logf("You have to change how MAP_VISUALIZATION_TOTAL_ALLIANCE_SURROUNDING works\n");
+							for (int i = 0; i < TEAMS_MAX; i++) {
+								DrawTextProps props = newDrawTextProps(game->defaultFont, teamColors[i]);
+								drawTextInRect(frameSprintf("%.2f", countSurroundingAlliance(v2i(x, y), i)), props, tile);
+								tile.y += tile.height;
+								if (i == 3) {
+									tile.x += tile.width;
+									tile.y = rect.y;
+								}
 							}
 						}
 
@@ -4550,7 +4569,7 @@ Actor *createActor(Map *map, ActorType type) {
 		actor->stats[STAT_STAMINA_REGEN] = 10;
 		actor->stats[STAT_MOVEMENT_SPEED] = 10;
 		actor->stats[STAT_ATTACK_SPEED] = 10;
-		actor->level = 10;
+		actor->level = 30;
 	} else if (actor->type == ACTOR_ITEM) {
 		actor->size = v3(50, 50, 50);
 	}
@@ -4803,6 +4822,26 @@ int getTeamWithMostAlliance(Map *map) {
 		if (map->alliances[i] > map->alliances[highestTeam]) highestTeam = i;
 	}
 	return highestTeam;
+}
+
+float countSurroundingAlliance(Vec2i startingIndex, int team) {
+	float alliance = 0;
+	for (int i = 0; i < 8; i++) {
+		Vec2 offset = v2();
+		if (i == 0) offset = v2(-1, -1);
+		if (i == 1) offset = v2(-1, 0);
+		if (i == 2) offset = v2(-1, 1);
+		if (i == 3) offset = v2(0, -1);
+		if (i == 4) offset = v2(0, 1);
+		if (i == 5) offset = v2(1, -1);
+		if (i == 6) offset = v2(1, 0);
+		if (i == 7) offset = v2(1, 1);
+		Map *adjMap = getCityMapByCoords(startingIndex.x+offset.x, startingIndex.y+offset.y);
+		if (!adjMap) continue;
+		alliance += adjMap->alliances[team];
+	}
+
+	return alliance;
 }
 
 Rect getBounds(AABB aabb) {
