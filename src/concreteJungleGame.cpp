@@ -1,3 +1,6 @@
+// Don't lose stats upon death
+// Make money fade away eventaully
+// Nerf money dropping
 // Make thrown weapons do damage
 // Add weapon images while they're on the ground
 // Make movement end combos
@@ -241,7 +244,7 @@ enum StatType {
 };
 char *statStrings[] = {
 	"Damage",
-	"Hp",
+	"Max hp",
 	"Stamina regen",
 	"Max stamina",
 	"Movement speed",
@@ -304,6 +307,7 @@ struct ItemTypeInfo {
 	float basePrice;
 	ItemType preReq;
 	int maxAmountFromStore;
+	float extraHpFromConsume;
 
 	float statsToGive[STATS_MAX];
 
@@ -928,16 +932,13 @@ void updateGame() {
 
 			for (int i = 0; i < ITEM_TYPES_MAX; i++) {
 				info = &game->itemTypeInfos[i];
-				info->maxAmountFromStore = 1;
 			}
 
 			info = &game->itemTypeInfos[ITEM_NONE];
 			strcpy(info->name, "none");
-			info->maxAmountFromStore = 0;
 
 			info = &game->itemTypeInfos[ITEM_MONEY];
 			strcpy(info->name, "xp");
-			info->maxAmountFromStore = 0;
 
 			info = &game->itemTypeInfos[ITEM_HEALTH_PACK];
 			strcpy(info->name, "health pack");
@@ -949,42 +950,43 @@ void updateGame() {
 			strcpy(info->name, "damage boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_HP_BOOST];
 			strcpy(info->name, "hp boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_STAMINA_REGEN_BOOST];
 			strcpy(info->name, "stamina regen boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MAX_STAMINA_BOOST];
 			strcpy(info->name, "max stamina boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MOVEMENT_SPEED_BOOST];
 			strcpy(info->name, "movement speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_ATTACK_SPEED_BOOST];
 			strcpy(info->name, "attack speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 5;
+			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MAGNET];
 			strcpy(info->name, "magnet");
 			info->slotType = ITEM_SLOT_PASSIVE;
 			info->basePrice = 30;
+			info->maxAmountFromStore = 1;
 
 			info = &game->itemTypeInfos[ITEM_HYPER_ARMOR];
 			strcpy(info->name, "hyper armor");
@@ -1019,6 +1021,7 @@ void updateGame() {
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 90;
 			info->actionType = ACTION_DASH;
+			info->maxAmountFromStore = 1;
 
 			info = &game->itemTypeInfos[ITEM_BRAIN_SAP];
 			strcpy(info->name, "brain sap");
@@ -1042,13 +1045,11 @@ void updateGame() {
 			strcpy(info->name, "Sword");
 			info->slotType = ITEM_SLOT_WEAPON;
 			info->basePrice = 0;
-			info->maxAmountFromStore = 0;
 
 			info = &game->itemTypeInfos[ITEM_KNIFE];
 			strcpy(info->name, "Knife");
 			info->slotType = ITEM_SLOT_WEAPON;
 			info->basePrice = 0;
-			info->maxAmountFromStore = 0;
 
 			for (int i = 0; i < 9; i++) {
 				ItemType type = (ItemType)(ITEM_FOOD_0 + i);
@@ -1057,6 +1058,7 @@ void updateGame() {
 				info->slotType = ITEM_SLOT_CONSUMABLE;
 				info->basePrice = 5;
 				info->maxAmountFromStore = 3;
+				info->extraHpFromConsume = 50;
 
 				StoreType storeType = (StoreType)((i / 3)+1);
 				int variantIndex = i % 3;
@@ -2803,8 +2805,9 @@ void stepGame(float elapsed) {
 						for (int i = 0; i < STATS_MAX; i++) {
 							actor->stats[i] += item->info->statsToGive[i];
 						}
+						actor->hp += item->info->extraHpFromConsume;
 						removeItem(actor, item->type, 1);
-						continue; // This removal is not bulletproof
+						continue; // This removal is not bulletproof // (not frame perfect)
 					}
 				}
 			} ///
@@ -4417,7 +4420,7 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 			descRect.y = priceRect.y - descRect.height*1.05;
 			drawRect(descRect, 0xFF111111);
 			{
-				char *descLines[8] = {};
+				char *descLines[16] = {};
 				int descLinesNum = 0;
 				int descTotal = 0;
 				for (int i = 0; i < STATS_MAX; i++) {
@@ -4430,6 +4433,7 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 						descTotal += strlen(descLines[descLinesNum-1]);
 					}
 				}
+				if (item->info->extraHpFromConsume) descLines[descLinesNum++] = frameSprintf("+%.0f hp", item->info->extraHpFromConsume);
 
 				char *desc = (char *)frameMalloc(descTotal + 128);
 				for (int i = 0; i < descLinesNum; i++) {
