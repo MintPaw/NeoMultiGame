@@ -1,6 +1,5 @@
 // Don't lose stats upon death
 // Make money fade away eventaully
-// Nerf money dropping
 // Make thrown weapons do damage
 // Add weapon images while they're on the ground
 // Make movement end combos
@@ -938,13 +937,12 @@ void updateGame() {
 			strcpy(info->name, "none");
 
 			info = &game->itemTypeInfos[ITEM_MONEY];
-			strcpy(info->name, "xp");
+			strcpy(info->name, "money");
 
 			info = &game->itemTypeInfos[ITEM_HEALTH_PACK];
 			strcpy(info->name, "health pack");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 10;
-			info->maxAmountFromStore = 10;
 
 			info = &game->itemTypeInfos[ITEM_DAMAGE_BOOST];
 			strcpy(info->name, "damage boost");
@@ -3409,19 +3407,6 @@ void stepGame(float elapsed) {
 						);
 					}
 
-					if (game->debugDrawActorStatsSimple) {
-						textLines[textLinesNum++] = "SIMPLE_STATS";
-						// textLines[textLinesNum++] = frameSprintf(
-						// 	"%.0f %.0f %.0f %.0f %.0f %.0f",
-						// 	getStatPoints(actor, STAT_DAMAGE),
-						// 	getStatPoints(actor, STAT_HP),
-						// 	getStatPoints(actor, STAT_STAMINA_REGEN),
-						// 	getStatPoints(actor, STAT_MAX_STAMINA),
-						// 	getStatPoints(actor, STAT_MOVEMENT_SPEED),
-						// 	getStatPoints(actor, STAT_ATTACK_SPEED)
-						// );
-					}
-
 					if (game->debugDrawActorFacingDirection) {
 						textLines[textLinesNum++] = frameSprintf("%s", actor->facingLeft ? "Facing left" : "Facing right");
 					}
@@ -3429,39 +3414,46 @@ void stepGame(float elapsed) {
 					Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
 					Vec2 cursor = positionTop2;
 					for (int i = 0; i < textLinesNum; i++) {
-						if (streq(textLines[i], "SIMPLE_STATS")) {
-							char *statTextStrs[STATS_MAX];
-							Vec2 statTextSizes[STATS_MAX];
-							Vec2 size = v2();
-							for (int i = 0; i < STATS_MAX; i++) {
-								statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
-								statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
-								size.x += statTextSizes[i].x;
-								size.y = MaxNum(size.y, statTextSizes[i].y);
-							}
-							Vec2 position;
-							position.x = cursor.x - size.x/2;
-							position.y = cursor.y - size.y;
+						Vec2 size = getTextSize(game->defaultFont, textLines[i]);
+						Vec2 position;
+						position.x = cursor.x - size.x/2;
+						position.y = cursor.y - size.y;
 
-							for (int i = 0; i < STATS_MAX; i++) {
-								drawText(game->simpleStatsFont, statTextStrs[i], position, statTypeColors[i]);
-								position.x += statTextSizes[i].x;
-							}
+						Rect rect = inflate(makeRect(position, size), 5);
+						drawRect(rect, 0x80000000);
+						drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
 
-							cursor.y -= size.y;
-						} else {
-							Vec2 size = getTextSize(game->defaultFont, textLines[i]);
-							Vec2 position;
-							position.x = cursor.x - size.x/2;
-							position.y = cursor.y - size.y;
+						cursor.y -= size.y;
+					}
 
-							Rect rect = inflate(makeRect(position, size), 5);
-							drawRect(rect, 0x80000000);
-							drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
+					if (game->debugDrawActorStatsSimple) {
+						char *statTextStrs[STATS_MAX];
+						Vec2 statTextSizes[STATS_MAX];
+						Vec2 size = v2();
+						for (int i = 0; i < STATS_MAX; i++) {
+							statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
+							statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
+							size.x += statTextSizes[i].x;
+							size.y = MaxNum(size.y, statTextSizes[i].y);
+						}
+						Vec2 position = positionTop2;
+						position.x -= size.x/2;
+						position.y -= size.y;
 
-							cursor.y -= size.y;
+						for (int i = 0; i < STATS_MAX; i++) {
+							drawText(game->simpleStatsFont, statTextStrs[i], position, statTypeColors[i]);
+							position.x += statTextSizes[i].x;
+						}
+
+						{
+							Vec2 center = positionTop2;
+							center.y -= 30;
+							Rect levelRect = makeCenteredSquare(center, 32);
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+							drawTextInRect(frameSprintf("%d", actor->level), props, levelRect);
 						}
 					}
+
 				}
 			}
 
@@ -4282,22 +4274,22 @@ void stepGame(float elapsed) {
 		Actor *actor = &map->actors[i];
 		if (actor->markedForDeletion) {
 			if (actor->type == ACTOR_UNIT && actor->team != player->team) {
-				int xpToGive = actor->level;
+				int moneyToGive = clampMap(actor->level, 1, 100, 1, 50);
 				for (;;) {
 					int chunkSize = rndInt(1, 3);
-					if (chunkSize > xpToGive) chunkSize = xpToGive;
+					if (chunkSize > moneyToGive) chunkSize = moneyToGive;
 
-					Actor *xp = createActor(map, ACTOR_ITEM);
-					xp->position = actor->position;
-					xp->itemType = ITEM_MONEY;
-					xp->itemAmount = chunkSize;
-					xp->velo.x = rndFloat(-1, 1);
-					xp->velo.y = rndFloat(-1, 1);
-					xp->velo.z = rndFloat(0.2, 1)*2;
-					xp->velo *= v3(7, 7, 12);
+					Actor *money = createActor(map, ACTOR_ITEM);
+					money->position = actor->position;
+					money->itemType = ITEM_MONEY;
+					money->itemAmount = chunkSize;
+					money->velo.x = rndFloat(-1, 1);
+					money->velo.y = rndFloat(-1, 1);
+					money->velo.z = rndFloat(0.2, 1)*2;
+					money->velo *= v3(7, 7, 12);
 
-					xpToGive -= chunkSize;
-					if (xpToGive <= 0) break;
+					moneyToGive -= chunkSize;
+					if (moneyToGive <= 0) break;
 				}
 			}
 			removeActorByIndex(map, i);
