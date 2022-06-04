@@ -1,4 +1,7 @@
-// Don't lose stats upon death
+// Do npc awareness
+// Attacks that break block need to go through
+// Air attacks need to float
+// Running kick needs to launch further
 // Make money fade away eventaully
 // Make thrown weapons do damage
 // Add weapon images while they're on the ground
@@ -20,6 +23,17 @@
 // Don't block backwards?
 
 /*
+
+Ending items:
+	- Statis attack
+	- Create weapon (costs 1/2 of remaining hp)
+	- Dash (Parry if neutral?)
+	- Warp strike dagger
+	- Weapon stash?
+	- Hyper armor
+	- Shotgun
+	- Estus
+
 Street/room types:
 	- Snowy (slowed, slippery?)
 	- Rainy (low visibility)
@@ -3133,7 +3147,7 @@ void stepGame(float elapsed) {
 
 			float timeScale = elapsed / (1/60.0);
 
-			float grav = 1;
+			float grav = 0.75;
 			for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
 
 			actor->accel.z -= grav;
@@ -3292,6 +3306,8 @@ void stepGame(float elapsed) {
 					game->nextMapIndex = CITY_START_INDEX;
 					logf("You died (-$%.2f)\n", player->money*0.5);
 					player->money *= 0.5;
+					player->hp = player->maxHp;
+					player->markedForDeletion = false;
 				} else {
 					map->alliances[actor->team] -= actor->allianceCost;
 					if (actor->team != player->team) game->leftToBeatTillUnlock--;
@@ -3299,7 +3315,7 @@ void stepGame(float elapsed) {
 			}
 		}
 		actor->hp = mathClamp(actor->hp, 0, actor->maxHp);
-		actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03;
+		if (actor->actionsNum == 0) actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03;
 		actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
 
 		actor->aiStateTime += elapsed;
