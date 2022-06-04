@@ -370,6 +370,16 @@ float length(Vec3 vec) {
 	return vec.length();
 }
 
+Vec3 cross(Vec3 a, Vec3 b);
+Vec3 cross(Vec3 a, Vec3 b) {
+	return a.cross(b);
+}
+
+float dot(Vec3 a, Vec3 b);
+float dot(Vec3 a, Vec3 b) {
+	return a.dot(b);
+}
+
 struct Vec4 {
 	union {
 		float x;
@@ -4431,3 +4441,10 @@ bool overlaps(Tri2 tri0, Tri2 tri1) {
 	return false;
 }
 /// / Tri2
+
+struct Cone {
+	Vec3 position;
+	Vec3 direction;
+	float radius;
+	float length;
+};

@@ -455,6 +455,7 @@ struct Renderer {
 
 	Raylib::Light lights[MAX_LIGHTS];
 	Raylib::Model cubeModel;
+	Raylib::Model coneModel;
 
 	void *tempTextureBuffer;
 	int tempTextureBufferSize;
@@ -530,6 +531,7 @@ void startShader(Raylib::Shader shader);
 void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 void drawAABB(AABB aabb, int color);
+void drawCone(Cone cone, int color);
 
 #include "rendererUtils.cpp"
 bool usesAlphaDiscard = false;
@@ -591,6 +593,9 @@ void initRenderer(int width, int height) {
 
 	renderer->cubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
 	renderer->cubeModel.materials[0].shader = renderer->lightingShader;
+
+	renderer->coneModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCone(1, 1, 16));
+	renderer->coneModel.materials[0].shader = renderer->lightingShader;
 
 	initRendererUtils();
 }
@@ -1340,6 +1345,21 @@ void drawAABB(AABB aabb, int color) {
 	Vec3 size = getSize(aabb);
 	Vec3 pos = aabb.min + size/2;
 	Raylib::DrawModelEx(renderer->cubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
+}
+
+void drawCone(Cone cone, int color) {
+	Vec3 origDir = v3(0, -1, 0);
+	Vec3 newDir = cone.direction;
+	float rotationAngle = acos(dot(origDir, newDir)/(length(origDir)*length(newDir)));
+	Vec3 rotationAxis = cross(origDir, newDir);
+
+	Vec3 position = cone.position;
+	position += newDir * cone.length;
+
+	Vec3 size = v3(cone.radius, cone.length, cone.radius);
+
+	Raylib::rlMatrixMode(RL_MODELVIEW);
+	Raylib::DrawModelEx(renderer->coneModel, toRaylib(position), toRaylib(rotationAxis), toDeg(rotationAngle), toRaylib(size), toRaylibColor(color));
 }
 
 ///- Gui

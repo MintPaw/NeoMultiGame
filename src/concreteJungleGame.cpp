@@ -497,6 +497,8 @@ struct Actor {
 #define STYLES_MAX 4
 	Style styles[STYLES_MAX];
 	int styleIndex;
+
+	float awareness;
 };
 
 struct Map {
@@ -597,11 +599,14 @@ struct DrawBillboardCall {
 
 enum WorldElementType {
 	WORLD_ELEMENT_TRIANGLE,
+	WORLD_ELEMENT_CONE,
 };
 struct WorldElement {
 	WorldElementType type;
 	Tri tri;
+	Cone cone;
 	int color;
+	float alpha;
 };
 
 enum ScreenElementType {
@@ -736,6 +741,7 @@ struct Game {
 	bool debugDrawActorFacingDirection;
 	bool debugDrawActorTargets;
 	bool debugDrawBillboards;
+	bool debugDrawVisionCones;
 	bool debugNeverTakeDamage;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
@@ -802,6 +808,7 @@ AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
+void pushCone(Cone cone, int color, float alpha=1);
 void pushBillboard(DrawBillboardCall billboard);
 void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped);
 WorldElement *createWorldElement();
@@ -1263,6 +1270,8 @@ void updateGame() {
 				if (element->type == WORLD_ELEMENT_TRIANGLE) {
 					Vec3 *verts = element->tri.verts;
 					Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
+				} else if (element->type == WORLD_ELEMENT_CONE) {
+					drawCone(element->cone, element->color);
 				}
 			}
 			game->worldElementsNum = 0;
@@ -1590,6 +1599,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
+			ImGui::Checkbox("Draw vision cones", &game->debugDrawVisionCones);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);
 
@@ -2461,6 +2471,18 @@ void stepGame(float elapsed) {
 					particle->tint = 0xFFDEA404;
 				}
 			}
+
+			Cone visionCone;
+			{ /// Vision cone
+				Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
+				Cone visionCone;
+				visionCone.position = actor->position + v3(0, 0, actor->size.z);
+				visionCone.direction = v3(1, 0, 0);
+				if (actor->facingLeft) visionCone.direction = v3(-1, 0, 0);
+				visionCone.length = 600;
+				visionCone.radius = 300;
+				if (game->debugDrawVisionCones) pushCone(visionCone, 0xFFFF0000);
+			} ///
 
 			if (actor->playerControlled) {
 				if (!game->inEditor) game->cameraTarget = actor->position;
@@ -3348,7 +3370,7 @@ void stepGame(float elapsed) {
 				addAction(player, ACTION_END_PICKUP);
 			}
 		}
-	}
+	} ///
 
 	{ /// Update particles
 		for (int i = 0; i < game->particlesNum; i++) {
@@ -4299,10 +4321,10 @@ void stepGame(float elapsed) {
 			} else {
 				drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
 			}
-		}
+		} ///
 
 		popCamera2d();
-	} ///
+	} /// 
 	popTargetTexture(); // game->debugTexture
 
 	for (int i = 0; i < map->actorsNum; i++) { /// Removed marked actors
@@ -5031,6 +5053,7 @@ WorldElement *createWorldElement() {
 
 	WorldElement *element = &game->worldElements[game->worldElementsNum++];
 	memset(element, 0, sizeof(WorldElement));
+	element->alpha = 1;
 	return element;
 }
 
@@ -5041,6 +5064,14 @@ void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color) {
 	element->tri.verts[1] = vert1;
 	element->tri.verts[2] = vert2;
 	element->color = color;
+}
+
+void pushCone(Cone cone, int color, float alpha) {
+	WorldElement *element = createWorldElement();
+	element->type = WORLD_ELEMENT_CONE;
+	element->cone = cone;
+	element->color = color;
+	element->alpha = alpha;
 }
 
 Log3Buffer *log3f(Vec3 position, const char *msg, ...) {
