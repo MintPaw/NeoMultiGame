@@ -381,7 +381,7 @@ NanoTime mainNano;
 #endif
 
 #if defined(PLAYING_dynaGame)
-# include "C:/dynaGame/src/dynaGame.cpp"
+# include STRINGIFY(ALT_CORE_PATH)
 #endif
 
 #if defined(PLAYING_rtsClient2)
