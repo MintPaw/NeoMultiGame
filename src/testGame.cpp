@@ -271,6 +271,7 @@ void updateGame() {
 	// void testGame();
 	// testGame();
 	// printf("Frame %d\n", platform->frameCount);
+#if 0
 	drawRect(0, 10, 256, 256, 0xFFFF0000);
 
 	{
@@ -322,6 +323,16 @@ void updateGame() {
 
 		end3d();
 	}
+#endif
+
+	static int tint = 0xFFFFFFFF;
+	guiInputArgb("tint", &tint);
+
+	Texture *texture = getTexture("assets/images/bulletTest.png");
+	RenderProps props = newRenderProps();
+	props.matrix.SCALE(10);
+	props.tint = tint;
+	drawTexture(texture, props);
 
 	game->time += elapsed;
 

@@ -46,6 +46,9 @@ struct Platform {
 	bool rightMouseDown;
 	bool rightMouseJustDown;
 	bool rightMouseJustUp;
+	bool useRelativeMouse; //@todo Actually make this work
+	Vec2 relativeMouse; //@todo Actually make this work
+	bool windowHasFocus; //@todo Actually make this work
 
 	bool hoveringGui;
 	bool typingGui;

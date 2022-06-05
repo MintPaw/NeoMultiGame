@@ -40,6 +40,16 @@ namespace Raylib {
 #include "rlights.h"
 };
 
+#undef RED
+#undef ORANGE
+#undef YELLOW
+#undef LIME
+#undef GREEN
+#undef BLUE
+#undef PURPLE
+#undef VIOLET
+#undef MAGENTA
+
 #ifdef IMGUI_OBJ
 #include "imgui.h"
 #include "imstb_rectpack.h"
@@ -371,7 +381,7 @@ NanoTime mainNano;
 #endif
 
 #if defined(PLAYING_dynaGame)
-# include "dynaGame/dynaGame.cpp"
+# include "C:/dynaGame/src/dynaGame.cpp"
 #endif
 
 #if defined(PLAYING_rtsClient2)

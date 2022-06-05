@@ -22,26 +22,27 @@ uniform sampler2D u_texture;
 void main() { 
 	vec2 stepSize = (1.0/u_textureSize) * u_thickness;
 
-#if 1
-	vec4 col = texture2D(u_texture, v_uv);
+#if 0
+	vec4 col = texture(u_texture, v_uv);
 	if (col.a > 0.5) discard;
 	float a =
-		texture2D(u_texture, v_uv + vec2(1, 0)*stepSize).a +
-		texture2D(u_texture, v_uv + vec2(-1, 0)*stepSize).a +
-		texture2D(u_texture, v_uv + vec2(0, 1)*stepSize).a +
-		texture2D(u_texture, v_uv + vec2(0, -1)*stepSize).a;
+		texture(u_texture, v_uv + vec2(1, 0)*stepSize).a +
+		texture(u_texture, v_uv + vec2(-1, 0)*stepSize).a +
+		texture(u_texture, v_uv + vec2(0, 1)*stepSize).a +
+		texture(u_texture, v_uv + vec2(0, -1)*stepSize).a;
 
 	if (col.a < 1.0 && a > 0.0) {
 		fragColor = u_color;
 	} else {
+		fragColor = vec4(0.0);
 		discard;
 	}
 #else
-	float alpha = 4*texture2D(u_texture, v_uv).a;
-	alpha -= texture2D(u_texture, v_uv + vec2(1, 0)*stepSize).a;
-	alpha -= texture2D(u_texture, v_uv + vec2(-1, 0)*stepSize).a;
-	alpha -= texture2D(u_texture, v_uv + vec2(0, 1)*stepSize).a;
-	alpha -= texture2D(u_texture, v_uv + vec2(0, -1)*stepSize).a;
+	float alpha = 4.0*texture(u_texture, v_uv).a;
+	alpha -= texture(u_texture, v_uv + vec2(1, 0)*stepSize).a;
+	alpha -= texture(u_texture, v_uv + vec2(-1, 0)*stepSize).a;
+	alpha -= texture(u_texture, v_uv + vec2(0, 1)*stepSize).a;
+	alpha -= texture(u_texture, v_uv + vec2(0, -1)*stepSize).a;
 
 	fragColor.rgb = u_color.rgb;
 	fragColor.a = alpha;

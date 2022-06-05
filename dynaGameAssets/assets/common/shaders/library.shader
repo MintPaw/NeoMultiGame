@@ -3,6 +3,7 @@ precision highp float;
 #define TEXTURE2D texture
 #define PI 3.1415926535897932384626433832795
 #define DIFFUSE_INSTANCES_MAX 16
+#define linearstep(edge0, edge1, x) clamp((x - (edge0)) / (edge1 - (edge0)), 0.0, 1.0)
 
 
 

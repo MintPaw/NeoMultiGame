@@ -1,10 +1,7 @@
-#define IN in
-#define OUT out
-
-IN vec4 a_position;
+in vec4 a_position;
 uniform mat3 u_matrix;
 
-OUT vec2 v_texCoord;
+out vec2 v_texCoord;
 
 void main() {
 	gl_Position = vec4(u_matrix * vec3(a_position.xy, 1.0), 1.0);
@@ -23,9 +20,30 @@ precision highp float;
 in vec2 v_texCoord;
 out vec4 fragColor;
 uniform sampler2D u_texture;
+uniform float u_alpha;
+
+vec4 filteredTexture(sampler2D aSampler, vec2 uv) {
+	vec2 res = vec2(textureSize(aSampler, 0));
+	uv = uv*res + 0.5;
+
+	vec2 fl = floor(uv);
+	vec2 fr = fract(uv);
+	vec2 aa = fwidth(uv)*0.75;
+	fr = smoothstep( vec2(0.5)-aa, vec2(0.5)+aa, fr);
+
+	uv = (fl+fr-0.5) / res;
+
+	vec4 fragment = texture(aSampler, uv);
+
+	/// Pixel filter the edges
+	vec2 uvPixel = fwidth(uv);
+	vec2 border = linearstep(vec2(0.0), vec2(uvPixel), uv) * linearstep(vec2(0.0), vec2(uvPixel), vec2(1.0) - uv);
+	fragment.a *= border.x * border.y;
+
+	return fragment;
+}
 
 void main(void) { 
 	fragColor = texture(u_texture, v_texCoord);
-
-	// fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+	fragColor *= u_alpha;
 }
