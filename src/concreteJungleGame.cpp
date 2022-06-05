@@ -600,11 +600,13 @@ struct DrawBillboardCall {
 enum WorldElementType {
 	WORLD_ELEMENT_TRIANGLE,
 	WORLD_ELEMENT_CONE,
+	WORLD_ELEMENT_SPHERE,
 };
 struct WorldElement {
 	WorldElementType type;
 	Tri tri;
 	Cone cone;
+	Sphere sphere;
 	int color;
 	float alpha;
 };
@@ -741,7 +743,7 @@ struct Game {
 	bool debugDrawActorFacingDirection;
 	bool debugDrawActorTargets;
 	bool debugDrawBillboards;
-	bool debugDrawVisionCones;
+	bool debugDrawVision;
 	bool debugNeverTakeDamage;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
@@ -809,6 +811,7 @@ void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushCone(Cone cone, int color, float alpha=1);
+void pushSphere(Sphere sphere, int color, float alpha=1);
 void pushBillboard(DrawBillboardCall billboard);
 void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped);
 WorldElement *createWorldElement();
@@ -1272,6 +1275,8 @@ void updateGame() {
 					Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
 				} else if (element->type == WORLD_ELEMENT_CONE) {
 					drawCone(element->cone, element->color);
+				} else if (element->type == WORLD_ELEMENT_SPHERE) {
+					drawSphere(element->sphere, element->color);
 				}
 			}
 			game->worldElementsNum = 0;
@@ -1599,7 +1604,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
-			ImGui::Checkbox("Draw vision cones", &game->debugDrawVisionCones);
+			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);
 
@@ -2472,16 +2477,13 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			Cone visionCone;
-			{ /// Vision cone
-				Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
-				Cone visionCone;
-				visionCone.position = actor->position + v3(0, 0, actor->size.z);
-				visionCone.direction = v3(1, 0, 0);
-				if (actor->facingLeft) visionCone.direction = v3(-1, 0, 0);
-				visionCone.length = 600;
-				visionCone.radius = 300;
-				if (game->debugDrawVisionCones) pushCone(visionCone, 0xFFFF0000);
+			Sphere visionSphere;
+			{ /// Vision
+				visionSphere.position = actor->position + v3(0, 0, actor->size.z);
+				visionSphere.position.x += actor->facingLeft ? -400 : 400;
+				visionSphere.radius = 500;
+
+				if (game->debugDrawVision) pushSphere(visionSphere, 0xFFFF0000);
 			} ///
 
 			if (actor->playerControlled) {
@@ -5070,6 +5072,14 @@ void pushCone(Cone cone, int color, float alpha) {
 	WorldElement *element = createWorldElement();
 	element->type = WORLD_ELEMENT_CONE;
 	element->cone = cone;
+	element->color = color;
+	element->alpha = alpha;
+}
+
+void pushSphere(Sphere sphere, int color, float alpha) {
+	WorldElement *element = createWorldElement();
+	element->type = WORLD_ELEMENT_SPHERE;
+	element->sphere = sphere;
 	element->color = color;
 	element->alpha = alpha;
 }

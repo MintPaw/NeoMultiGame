@@ -2020,7 +2020,7 @@ void updateGame() {
 
 			// if (player) {
 			// 	Matrix4 projectionView = defaultWorld->projectionMatrix * defaultWorld->viewMatrix;
-			// 	if (frustrumContains(projectionView, actor->position)) {
+			// 	if (frustumContains(projectionView, actor->position)) {
 			// 		actor->lastIn += elapsed;
 			// 	} else {
 			// 		actor->lastIn = 0;
@@ -2432,7 +2432,7 @@ void updateGame() {
 					Actor *actor = &game->actors[i];
 					if (!actor->hostile) continue;
 					if (actor->hp <= 0) continue;
-					if (!frustrumContains(projectionView, getCenter(actor->skeletonBounds))) continue;
+					if (!frustumContains(projectionView, getCenter(actor->skeletonBounds))) continue;
 
 					Rect rect = worldSpaceAABBToScreenSpaceRect(actor->skeletonBounds);
 					if (!rect.intersects(game->aimerRect)) continue;

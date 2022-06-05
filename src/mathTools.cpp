@@ -4016,8 +4016,8 @@ IntersectionResult intersects(Capsule3 cap, Tri tri) {
 	return result;
 }
 
-void extractFrutumPlanes(Matrix4 projectionView, Vec4 *planes);
-void extractFrutumPlanes(Matrix4 projectionView, Vec4 *planes) {
+void extractFrustumPlanes(Matrix4 projectionView, Vec4 *planes);
+void extractFrustumPlanes(Matrix4 projectionView, Vec4 *planes) {
 	float *m = &projectionView.data[0];
 	// Left clipping plane
 	planes[0].x = m[3] + m[0];
@@ -4060,10 +4060,10 @@ void extractFrutumPlanes(Matrix4 projectionView, Vec4 *planes) {
 	// }
 }
 
-bool frustrumContains(Matrix4 projectionView, Vec3 point);
-bool frustrumContains(Matrix4 projectionView, Vec3 point) {
+bool frustumContains(Matrix4 projectionView, Vec3 point);
+bool frustumContains(Matrix4 projectionView, Vec3 point) {
 	Vec4 planes[6];
-	extractFrutumPlanes(projectionView, planes);
+	extractFrustumPlanes(projectionView, planes);
 
 	for (int i = 0; i < 6; i++) {
 		Vec4 plane = planes[i];
@@ -4076,8 +4076,8 @@ bool frustrumContains(Matrix4 projectionView, Vec3 point) {
 	return true;
 }
 
-bool frustrumContains(Matrix4 projectionView, AABB bounds);
-bool frustrumContains(Matrix4 projectionView, AABB bounds) {
+bool frustumContains(Matrix4 projectionView, AABB bounds);
+bool frustumContains(Matrix4 projectionView, AABB bounds) {
 	Vec3 size = getSize(bounds);
 	Vec3 points[8];
 	points[0] = bounds.min;
@@ -4098,7 +4098,7 @@ bool frustrumContains(Matrix4 projectionView, AABB bounds) {
 	points[7] = points[3] + v3(0, 0, size.z);
 
 	Vec4 planes[6];
-	extractFrutumPlanes(projectionView, planes);
+	extractFrustumPlanes(projectionView, planes);
 
 
 	for (int i = 0; i < 8; i++) {
@@ -4447,4 +4447,9 @@ struct Cone {
 	Vec3 direction;
 	float radius;
 	float length;
+};
+
+struct Sphere {
+	Vec3 position;
+	float radius;
 };

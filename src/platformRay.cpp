@@ -459,6 +459,7 @@ struct Renderer {
 	Raylib::Light lights[MAX_LIGHTS];
 	Raylib::Model cubeModel;
 	Raylib::Model coneModel;
+	Raylib::Model sphereModel;
 
 	void *tempTextureBuffer;
 	int tempTextureBufferSize;
@@ -535,6 +536,7 @@ void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 void drawAABB(AABB aabb, int color);
 void drawCone(Cone cone, int color);
+void drawSphere(Sphere sphere, int color);
 
 #include "rendererUtils.cpp"
 bool usesAlphaDiscard = false;
@@ -599,6 +601,9 @@ void initRenderer(int width, int height) {
 
 	renderer->coneModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCone(1, 1, 16));
 	renderer->coneModel.materials[0].shader = renderer->lightingShader;
+
+	renderer->sphereModel = Raylib::LoadModelFromMesh(Raylib::GenMeshSphere(1, 8, 8));
+	renderer->sphereModel.materials[0].shader = renderer->lightingShader;
 
 	initRendererUtils();
 }
@@ -1363,6 +1368,12 @@ void drawCone(Cone cone, int color) {
 
 	Raylib::rlMatrixMode(RL_MODELVIEW);
 	Raylib::DrawModelEx(renderer->coneModel, toRaylib(position), toRaylib(rotationAxis), toDeg(rotationAngle), toRaylib(size), toRaylibColor(color));
+}
+
+void drawSphere(Sphere sphere, int color) {
+	Vec3 position = sphere.position;
+	Vec3 size = v3(1, 1, 1) * sphere.radius;
+	Raylib::DrawModelEx(renderer->sphereModel, toRaylib(position), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
 }
 
 ///- Gui
