@@ -4453,3 +4453,25 @@ struct Sphere {
 	Vec3 position;
 	float radius;
 };
+
+bool overlaps(AABB aabb, Sphere sphere) {
+	// https://web.archive.org/web/19991129023147/http://www.gamasutra.com/features/19991018/Gomez_4.htm
+	float d = 0;
+	float *C = &sphere.position.x;
+	float *Bmin = &aabb.min.x;
+	float *Bmax = &aabb.max.x;
+
+	for (int i = 0; i < 3; i++ ) {
+		if (C[i] < Bmin[i]) {
+			float s = C[i] - Bmin[i];
+			d += s*s;
+		} else if(C[i] > Bmax[i]) {
+			float s = C[i] - Bmax[i];
+			d += s*s;
+		}
+	}
+
+	float r = sphere.radius;
+	return d <= r*r;
+} 
+

@@ -1,3 +1,4 @@
+// Add a way to see the prewarming
 // Do npc awareness
 // Attacks that break block need to go through
 // Air attacks need to float
@@ -803,6 +804,7 @@ AABB getAABBAtPosition(Actor *actor, Vec3 position);
 AABB getAABBFromSizePosition(Vec3 size, Vec3 position);
 bool overlaps(Actor *actor0, Actor *actor1);
 bool overlaps(Actor *actor, AABB aabb);
+bool overlaps(Actor *actor, Sphere sphere);
 float distance(Actor *actor0, Actor *actor1);
 AABB getAABB(Actor *actor);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
@@ -2477,15 +2479,6 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			Sphere visionSphere;
-			{ /// Vision
-				visionSphere.position = actor->position + v3(0, 0, actor->size.z);
-				visionSphere.position.x += actor->facingLeft ? -400 : 400;
-				visionSphere.radius = 500;
-
-				if (game->debugDrawVision) pushSphere(visionSphere, 0xFFFF0000);
-			} ///
-
 			if (actor->playerControlled) {
 				if (!game->inEditor) game->cameraTarget = actor->position;
 
@@ -2628,6 +2621,13 @@ void stepGame(float elapsed) {
 				{ /// Do enemy AI @todo factor this out
 					float aggression = 0.5;
 
+					Sphere visionSphere;
+					{ /// Vision
+						visionSphere.position = actor->position + v3(0, 0, actor->size.z);
+						visionSphere.position.x += actor->facingLeft ? -400 : 400;
+						visionSphere.radius = 500;
+					} ///
+
 					if (actor->aiType == AI_NORMAL) {
 						auto getAttackers = [](Actor *src, int *attackersNumOut)->int * {
 							Map *map = &game->maps[game->currentMapIndex];
@@ -2643,40 +2643,50 @@ void stepGame(float elapsed) {
 							return ids;
 						};
 
-						if (actor->actionsNum == 0) {
-							float aggroRange = 512;
+						bool canBePassivelyAggroed = false;
+						if (!getActor(map, actor->aiTarget)) {
+							if (actor->actionsNum == 0) canBePassivelyAggroed = true;
+							if (actor->actionsNum == 1 && (
+									actor->actions[0].type == ACTION_FORCED_MOVE ||
+									actor->actions[0].type == ACTION_FORCED_IDLE)
+							) canBePassivelyAggroed = true;
+						}
 
-							Actor *target = getActor(map, actor->aiTarget);
-							if (!target) { // Find target
-								int bestOtherId = 0;
+						if (canBePassivelyAggroed) {
+							if (game->debugDrawVision) pushSphere(visionSphere, 0xFFFF0000);
+							int bestOtherId = 0;
 
-								int currentAttackersNum;
-								int *currentAttackers = getAttackers(actor, &currentAttackersNum);
-								if (currentAttackersNum > 0) {
-									bestOtherId = currentAttackers[0];
-								}
+							int currentAttackersNum;
+							int *currentAttackers = getAttackers(actor, &currentAttackersNum);
+							if (currentAttackersNum > 0) {
+								bestOtherId = currentAttackers[0];
+							}
 
-								if (!bestOtherId) {
-									int lowestOtherAttackers = 0;
-									for (int i = 0; i < map->actorsNum; i++) {
-										Actor *otherActor = &map->actors[i];
-										if (otherActor->type != ACTOR_UNIT) continue;
-										if (otherActor->team == actor->team) continue;
-										if (otherActor->playerControlled && inRoomPrewarm) continue;
-										if (distance(actor, otherActor) < aggroRange) continue;
+							if (!bestOtherId) {
+								int lowestOtherAttackers = 0;
+								for (int i = 0; i < map->actorsNum; i++) {
+									Actor *otherActor = &map->actors[i];
+									if (otherActor->type != ACTOR_UNIT) continue;
+									if (otherActor->team == actor->team) continue;
+									if (otherActor->playerControlled && inRoomPrewarm) continue;
+									// if (distance(actor, otherActor) < 512) continue;
+									if (!overlaps(otherActor, visionSphere)) continue;
 
-										int otherAttackersNum;
-										int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
+									int otherAttackersNum;
+									int *otherAttackers = getAttackers(otherActor, &otherAttackersNum);
 
-										if (!bestOtherId || otherAttackersNum < lowestOtherAttackers) {
-											bestOtherId = otherActor->id;
-											lowestOtherAttackers = otherAttackersNum;
-										}
+									if (!bestOtherId || otherAttackersNum < lowestOtherAttackers) {
+										bestOtherId = otherActor->id;
+										lowestOtherAttackers = otherAttackersNum;
 									}
 								}
-
-								if (bestOtherId) actor->aiTarget = bestOtherId;
 							}
+
+							if (bestOtherId) actor->aiTarget = bestOtherId;
+						}
+
+						if (actor->actionsNum == 0) {
+							Actor *target = getActor(map, actor->aiTarget);
 
 							if (!target) {
 								if (actor->aiState == AI_STAND_NEAR_TARGET) actor->aiState = AI_IDLE;
@@ -4916,6 +4926,11 @@ bool overlaps(Actor *actor0, Actor *actor1) {
 
 bool overlaps(Actor *actor, AABB aabb) {
 	bool ret = intersects(getAABB(actor), aabb);
+	return ret;
+}
+
+bool overlaps(Actor *actor, Sphere sphere) {
+	bool ret = overlaps(getAABB(actor), sphere);
 	return ret;
 }
 
