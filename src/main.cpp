@@ -135,6 +135,8 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "reflectionTool.cpp"
 #include "animation.cpp"
 
+#include "ngui.cpp"
+
 #if (!FALLOW_COMMAND_LINE_ONLY && !__LINUX__)
 #include "swf.cpp"
 #include "skia.cpp"
@@ -325,6 +327,8 @@ char exeDir[PATH_MAX_LEN] = {};
 #include "spine.cpp"
 #include "dragonBones.cpp"
 #include "networking.cpp"
+
+#include "ngui.cpp"
 
 #define GUI_IMPL
 #include "gui.cpp"

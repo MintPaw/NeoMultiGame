@@ -438,45 +438,8 @@ void guiInit() {
 	fontData = (u8 *)readFile("assets/common/arial.ttf", &fontDataSize);
 	gui->bigFont = io.Fonts->AddFontFromMemoryTTF(fontData, fontDataSize, 26);
 
-#if 0
-	ImGuiStyle *style = &ImGui::GetStyle();
-	style->WindowPadding = ImVec2(4, 4);
-	style->PopupRounding = 0;
-	style->FramePadding = ImVec2(2, 2);
-	style->ItemSpacing = ImVec2(8, 6);
-	style->ItemInnerSpacing = ImVec2(2, 4);
-	style->IndentSpacing = 21;
-	style->ScrollbarSize = 16;
-	style->GrabMinSize = 10;
-
-	style->WindowRounding = 0;
-	style->FrameRounding = 7;
-	style->ScrollbarRounding = 12;
-	style->GrabRounding = 7;
-
-	style->Colors[ImGuiCol_FrameBg]                = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
-	style->Colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.74f, 0.74f, 0.74f, 0.40f);
-	style->Colors[ImGuiCol_FrameBgActive]          = ImVec4(0.77f, 0.77f, 0.77f, 0.67f);
-	style->Colors[ImGuiCol_TitleBgActive]          = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-	style->Colors[ImGuiCol_CheckMark]              = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
-	style->Colors[ImGuiCol_SliderGrab]             = ImVec4(0.42f, 0.42f, 0.42f, 1.00f);
-	style->Colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.53f, 0.53f, 0.53f, 1.00f);
-	style->Colors[ImGuiCol_Button]                 = ImVec4(0.56f, 0.56f, 0.56f, 0.40f);
-	style->Colors[ImGuiCol_ButtonHovered]          = ImVec4(0.58f, 0.58f, 0.58f, 1.00f);
-	style->Colors[ImGuiCol_ButtonActive]           = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-	style->Colors[ImGuiCol_Header]                 = ImVec4(0.49f, 0.49f, 0.49f, 0.31f);
-	style->Colors[ImGuiCol_HeaderHovered]          = ImVec4(0.52f, 0.52f, 0.52f, 0.80f);
-	style->Colors[ImGuiCol_HeaderActive]           = ImVec4(0.45f, 0.45f, 0.45f, 1.00f);
-	style->Colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.23f, 0.23f, 0.23f, 0.78f);
-	style->Colors[ImGuiCol_SeparatorActive]        = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
-	style->Colors[ImGuiCol_ResizeGrip]             = ImVec4(0.44f, 0.44f, 0.45f, 0.25f);
-	style->Colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.48f, 0.49f, 0.49f, 0.67f);
-	style->Colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.47f, 0.47f, 0.47f, 0.95f);
-	style->Colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.64f, 0.64f, 0.64f, 0.35f);
-	style->Colors[ImGuiCol_NavHighlight]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-#else
 	ImGui::StyleColorsDark();
-#endif
+
 #ifdef IMPLOT_VERSION 
 	ImPlot::GetStyle().AntiAliasedLines = true;
 #endif
@@ -547,64 +510,6 @@ void guiUpdateEvents() {
 	platform->typingGui = io.WantTextInput;
 #endif
 }
-
-// bool guiInputRgb(const char *name, int *argb, bool showInputs) {
-// 	int a;
-// 	int intCol[3];
-// 	hexToArgb(*argb, &a, &intCol[0], &intCol[1], &intCol[2]);
-
-// 	float floatCol[3];
-// 	floatCol[0] = intCol[0]/255.0;
-// 	floatCol[1] = intCol[1]/255.0;
-// 	floatCol[2] = intCol[2]/255.0;
-
-// 	int flags = ImGuiColorEditFlags_DisplayHex;
-// 	if (!showInputs) flags |= ImGuiColorEditFlags_NoInputs;
-// 	bool ret = ImGui::ColorEdit3(name, floatCol, flags);
-
-// 	intCol[0] = floatCol[0] * 255.0;
-// 	intCol[1] = floatCol[1] * 255.0;
-// 	intCol[2] = floatCol[2] * 255.0;
-// 	*argb = argbToHex(255, intCol[0], intCol[1], intCol[2]);
-
-// 	return ret;
-// }
-
-// bool guiInputArgb(const char *name, int *argb, bool showInputs) {
-// 	int intCol[4];
-// 	hexToArgb(*argb, &intCol[0], &intCol[1], &intCol[2], &intCol[3]);
-
-// 	float floatCol[4];
-// 	floatCol[0] = intCol[1]/255.0;
-// 	floatCol[1] = intCol[2]/255.0;
-// 	floatCol[2] = intCol[3]/255.0;
-// 	floatCol[3] = intCol[0]/255.0;
-
-// 	int flags = 0;
-// 	if (showInputs) {
-// 		flags |= ImGuiColorEditFlags_DisplayHex;
-// 	} else {
-// 		flags |= ImGuiColorEditFlags_NoInputs;
-// 	}
-// 	bool ret = ImGui::ColorEdit4(name, floatCol);
-
-// 	intCol[0] = floatCol[3] * 255.0;
-// 	intCol[1] = floatCol[0] * 255.0;
-// 	intCol[2] = floatCol[1] * 255.0;
-// 	intCol[3] = floatCol[2] * 255.0;
-// 	*argb = argbToHex(intCol[0], intCol[1], intCol[2], intCol[3]);
-
-// 	return ret;
-// }
-
-// void guiPushStyleColor(ImGuiCol style, int color) {
-// 	Vec4 vecColor = hexToArgbFloat(color);
-// 	ImGui::PushStyleColor(style, ImVec4(vecColor.y, vecColor.z, vecColor.w, vecColor.x));
-// }
-
-// void guiPopStyleColor(int amount) {
-// 	ImGui::PopStyleColor(amount);
-// }
 
 void guiTexture(Texture *texture) {
 	ImGui::Image((ImTextureID)(intptr_t)texture->id, ImVec2(texture->width, texture->height), ImVec2(0, 1), ImVec2(1, 0));

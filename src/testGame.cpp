@@ -325,6 +325,7 @@ void updateGame() {
 	}
 #endif
 
+#if 0 // Tint test
 	static int tint = 0xFFFFFFFF;
 	guiInputArgb("tint", &tint);
 
@@ -333,6 +334,13 @@ void updateGame() {
 	props.matrix.SCALE(10);
 	props.tint = tint;
 	drawTexture(texture, props);
+#endif
+
+#if 1 // ngui test
+	if (platform->frameCount == 0) {
+		nguiInit();
+	}
+#endif
 
 	game->time += elapsed;
 
