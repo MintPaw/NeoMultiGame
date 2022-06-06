@@ -494,6 +494,14 @@ Rect operator* (Rect rect, Vec2 vec) {
 	return rect;
 }
 
+Rect operator* (Rect rect, float value) {
+	rect.x *= value;
+	rect.y *= value;
+	rect.width *= value;
+	rect.height *= value;
+	return rect;
+}
+
 struct Tri {
 	Vec3 verts[3];
 };

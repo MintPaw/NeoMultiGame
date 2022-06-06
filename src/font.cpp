@@ -49,6 +49,7 @@ Font *createFont(const char *ttfPath, int fontSize);
 TextProps startText(const char *string, Vec2 position=v2());
 bool nextTextChar(TextProps *props);
 
+Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(Font *font, const char *string, float maxWidth=9999);
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color=0xFF000000, float maxWidth=9999, bool skipDraw=false, Vec2 scale=v2(1, 1));
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
@@ -271,7 +272,6 @@ Font *createFont(const char *ttfPath, int fontSize) {
 	return font;
 }
 
-Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(char *string, DrawTextProps props) {
 	return drawText(props.font, string, v2(), 0xFFFFFFFF, props.maxWidth, true);
 }

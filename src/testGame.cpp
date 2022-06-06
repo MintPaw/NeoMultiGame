@@ -337,9 +337,46 @@ void updateGame() {
 #endif
 
 #if 1 // ngui test
+	clearRenderer(0xFF000000);
 	if (platform->frameCount == 0) {
 		nguiInit();
 	}
+	ngui->mouse = platform->mouse;
+
+	static bool showingSubItems[3] = {};
+
+	nguiStartWindow("Test Window", v2(500, 500));
+
+	if (nguiButton("Hello")) {
+		logf("You clicked the button!\n");
+		showingSubItems[0] = !showingSubItems[0];
+	}
+
+	if (nguiButton("Dummy button 1")) ;
+	if (nguiButton("Dummy button 2")) ;
+	if (nguiButton("Dummy button 3")) ;
+	if (nguiButton("Dummy button 4")) ;
+
+	if (nguiButton("Second button")) {
+		logf("You clicked the second button!\n");
+		showingSubItems[1] = !showingSubItems[1];
+	}
+
+	if (showingSubItems[0]) {
+		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
+		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
+		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
+		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
+	}
+
+	if (nguiButton("Third button")) {
+		logf("You clicked the third button!\n");
+		showingSubItems[2] = !showingSubItems[2];
+	}
+
+	nguiEndWindow();
+
+	nguiDraw(elapsed);
 #endif
 
 	game->time += elapsed;
