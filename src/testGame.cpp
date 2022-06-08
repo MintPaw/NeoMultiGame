@@ -442,7 +442,7 @@ void updateGame() {
 	nguiStartWindow("Test Window");
 
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "axeIcon");
-	if (nguiButton("Hello")) {
+	if (nguiButton("Hello", "subText")) {
 		logf("You clicked the button!\n");
 		showingSubItems = !showingSubItems;
 	}
@@ -451,7 +451,7 @@ void updateGame() {
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
 	if (nguiButton("Dummy button 1")) ;
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xFFFF0000);
-	if (nguiButton("Dummy button 2")) ;
+	if (nguiButton("Dummy button 2", "This button goes red")) ;
 	nguiPopStyleVar();
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;

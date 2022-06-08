@@ -9,6 +9,7 @@ enum NguiStyleType {
 	NGUI_STYLE_INDENT,
 	NGUI_STYLE_ICON_NAME_PTR,
 	NGUI_STYLE_ICON_ALPHA,
+	NGUI_STYLE_ICON_GRAVITY,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -53,6 +54,7 @@ struct NguiElement {
 
 	int orderIndex;
 	NguiStyleStack styleStack;
+	char *subText;
 
 	Vec2 position;
 	Vec2 graphicsOffset;
@@ -140,7 +142,7 @@ int getNguiId(int parentId, char *name);
 void nguiSetNextWindowSize(Vec2 size);
 void nguiStartWindow(char *name, int flags = 0);
 void nguiEndWindow();
-bool nguiButton(char *name);
+bool nguiButton(char *name, char *subText="");
 
 int getSizeForDataType(NguiDataType dataType);
 /// FUNCTIONS ^
@@ -209,6 +211,11 @@ void nguiInit() {
 	info->name = "Icon alpha";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_GRAVITY];
+	info->enumName = "NGUI_STYLE_ICON_GRAVITY";
+	info->name = "Icon gravity";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
@@ -219,6 +226,7 @@ void nguiInit() {
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
 }
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
@@ -428,7 +436,8 @@ void nguiDraw(float elapsed) {
 
 					char *iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
 					if (iconName[0]) {
-						Rect iconRect = makeRect(graphicsRect.x, graphicsRect.y, graphicsRect.height, graphicsRect.height); // Yes, .height twice
+						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
+						Rect iconRect = getCenteredRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
 						NguiIcon *icon = nguiGetIcon(iconName);
 						if (icon) {
 							setScissor(iconRect);
@@ -444,10 +453,21 @@ void nguiDraw(float elapsed) {
 						}
 					}
 
-					int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
-					Rect textRect = graphicsRect;
-					DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
-					drawTextInRect(label, props, textRect, v2(0, 0.5));
+					{
+						int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
+						Rect textRect = getCenteredRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
+						DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
+						drawTextInRect(label, props, textRect, v2(0, 0));
+					}
+
+					if (child->subText[0]) {
+						int subTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
+						subTextColor = lerpColor(subTextColor, 0x00FFFFFF&subTextColor, 0.25);
+
+						Rect subTextRect = getCenteredRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
+						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
+						drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
+					}
 
 					popAlpha();
 				}
@@ -544,9 +564,10 @@ void nguiEndWindow() {
 	ngui->currentWindow = NULL;
 }
 
-bool nguiButton(char *name) {
+bool nguiButton(char *name, char *subText) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
+	element->subText = subText;
 	return element->justActive;
 }
 
