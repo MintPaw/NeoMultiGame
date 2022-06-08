@@ -1,32 +1,5 @@
-enum NguiElementType {
-	NGUI_ELEMENT_WINDOW,
-	NGUI_ELEMENT_BUTTON,
-};
-struct NguiElement {
-	NguiElementType type;
-
-#define NGUI_ELEMENT_NAME_MAX_LEN 64
-	char name[NGUI_ELEMENT_NAME_MAX_LEN];
-	float alive;
-	int id;
-	int parentId;
-
-	int orderIndex;
-	char *iconName;
-	float iconAlpha;
-	Vec2 size;
-
-	Vec2 position;
-	Vec2 graphicsOffset;
-	int fgColor;
-
-	bool active;
-	bool justActive;
-
-	float creationTime;
-};
-
 enum NguiStyleType {
+	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_ELEMENT_FG_COLOR,
@@ -54,13 +27,40 @@ struct NguiStyleTypeInfo {
 
 struct NguiStyleVar {
 	NguiStyleType type;
-	char data[sizeof(Vec4)];
+#define NGUI_STYLE_VAR_DATA_SIZE (sizeof(Vec4))
+	char data[NGUI_STYLE_VAR_DATA_SIZE];
 };
 
 struct NguiStyleStack {
 	NguiStyleVar *vars;
 	int varsNum;
 	int varsMax;
+};
+
+enum NguiElementType {
+	NGUI_ELEMENT_WINDOW,
+	NGUI_ELEMENT_BUTTON,
+};
+struct NguiElement {
+	NguiElementType type;
+
+#define NGUI_ELEMENT_NAME_MAX_LEN 64
+	char name[NGUI_ELEMENT_NAME_MAX_LEN];
+	float alive;
+	int id;
+	int parentId;
+
+	int orderIndex;
+	NguiStyleStack styleStack;
+
+	Vec2 position;
+	Vec2 graphicsOffset;
+	int fgColor;
+
+	bool active;
+	bool justActive;
+
+	float creationTime;
 };
 
 struct NguiIcon {
@@ -83,12 +83,11 @@ struct Ngui {
 	int currentOrderIndex;
 
 	float uiScale;
-	Vec2 buttonSize;
-	Vec2 currentWindowSize;
 
 	NguiStyleTypeInfo styleTypeInfos[NGUI_STYLE_TYPES_MAX];
 
-	NguiStyleStack styleStack;
+	NguiStyleStack globalStyleStack;
+	NguiStyleStack *currentStyleStack;
 
 #define NGUI_ICONS_MAX 128
 	NguiIcon icons[NGUI_ICONS_MAX];
@@ -103,21 +102,34 @@ void nguiInit();
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform);
 NguiIcon *nguiGetIcon(char *iconName);
 
-void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
-void nguiPushStyleInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_INT, &value); }
-void nguiPushStyleColorInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &value); }
-void nguiPushStyleFloat(NguiStyleType type, float value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &value); }
-void nguiPushStyleVec2(NguiStyleType type, Vec2 value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_VEC2, &value); }
-void nguiPushStyleStringPtr(NguiStyleType type, char *value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_STRING_PTR, &value); }
+void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
+void nguiPushStyleInt(NguiStyleType type, int value)
+{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &value); }
+void nguiPushStyleColorInt(NguiStyleType type, int value)
+{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &value); }
+void nguiPushStyleFloat(NguiStyleType type, float value)
+{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &value); }
+void nguiPushStyleVec2(NguiStyleType type, Vec2 value)
+{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &value); }
+void nguiPushStyleStringPtr(NguiStyleType type, char *value)
+{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value); }
 
-void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
-int nguiGetStyleInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_INT, &ret); return ret; }
-int nguiGetStyleColorInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &ret); return ret; }
-float nguiGetStyleFloat(NguiStyleType type) { float ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
-Vec2 nguiGetStyleVec2(NguiStyleType type) { Vec2 ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_VEC2, &ret); return ret; }
-char *nguiGetStyleStringPtr(NguiStyleType type) { char *ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_STRING_PTR, &ret); return ret; }
+//@speed These could be a lot faster if the elements didn't have randomly ordered styleStacks like the global styleStacks.
+//       Elements could have a different kind of style stack that's a fixed size index by the NguiStyleType
+void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
+int nguiGetStyleInt(NguiStyleType type)
+{ int ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &ret); return ret; }
+int nguiGetStyleColorInt(NguiStyleType type)
+{ int ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &ret); return ret; }
+float nguiGetStyleFloat(NguiStyleType type)
+{ float ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
+Vec2 nguiGetStyleVec2(NguiStyleType type)
+{ Vec2 ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &ret); return ret; }
+char *nguiGetStyleStringPtr(NguiStyleType type)
+{ char *ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &ret); return ret; }
 
 void nguiPopStyleVar(int amount=1);
+void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type);
 
 void nguiDraw(float elapsed);
 
@@ -125,7 +137,7 @@ NguiElement *getNguiElement(char *name);
 int getNguiId(int parentId, char *name);
 
 void nguiSetNextWindowSize(Vec2 size);
-void nguiStartWindow(char *name, Vec2 size, int flags = 0);
+void nguiStartWindow(char *name, int flags = 0);
 void nguiEndWindow();
 bool nguiButton(char *name);
 
@@ -140,10 +152,17 @@ void nguiInit() {
 	ngui->elementsMax = 128;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
 
-	ngui->styleStack.varsMax = 1;
-	ngui->styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * ngui->styleStack.varsMax);
+	ngui->globalStyleStack.varsMax = 1;
+	ngui->globalStyleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * ngui->globalStyleStack.varsMax);
+
+	ngui->currentStyleStack = &ngui->globalStyleStack;
 
 	NguiStyleTypeInfo *info;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_SIZE];
+	info->enumName = "NGUI_STYLE_WINDOW_SIZE";
+	info->name = "Window size";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
 	info->enumName = "NGUI_STYLE_BUTTON_SIZE";
 	info->name = "Button size";
@@ -184,6 +203,7 @@ void nguiInit() {
 	info->name = "Icon alpha";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF353535);
@@ -216,24 +236,24 @@ NguiIcon *nguiGetIcon(char *iconName) {
 	return NULL;
 }
 
-void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
+void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
 		logf("Type mismatch on push ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
 		return;
 	}
 
-	if (ngui->styleStack.varsNum > ngui->styleStack.varsMax-1) {
-		ngui->styleStack.vars = (NguiStyleVar *)resizeArray(
-			ngui->styleStack.vars,
+	if (styleStack->varsNum > styleStack->varsMax-1) {
+		styleStack->vars = (NguiStyleVar *)resizeArray(
+			styleStack->vars,
 			sizeof(NguiStyleVar),
-			ngui->styleStack.varsNum,
-			ngui->styleStack.varsMax*2
+			styleStack->varsNum,
+			styleStack->varsMax*2
 		);
-		ngui->styleStack.varsMax *= 2;
+		styleStack->varsMax *= 2;
 	}
 
-	NguiStyleVar *var = &ngui->styleStack.vars[ngui->styleStack.varsNum++];
+	NguiStyleVar *var = &styleStack->vars[styleStack->varsNum++];
 	memset(var, 0, sizeof(NguiStyleVar));
 	var->type = type;
 
@@ -241,7 +261,7 @@ void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 	memcpy(var->data, ptr, size);
 }
 
-void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
+void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
 		logf("Type mismatch on get ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
@@ -249,8 +269,8 @@ void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 	}
 
 	NguiStyleVar *srcVar = NULL;
-	for (int i = ngui->styleStack.varsNum-1; i >= 0; i--) {
-		NguiStyleVar *var = &ngui->styleStack.vars[i];
+	for (int i = styleStack->varsNum-1; i >= 0; i--) {
+		NguiStyleVar *var = &styleStack->vars[i];
 		if (var->type == type) {
 			srcVar = var;
 			break;
@@ -266,23 +286,34 @@ void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 }
 
 void nguiPopStyleVar(int amount) {
-	ngui->styleStack.varsNum -= amount;
-	if (ngui->styleStack.varsNum < 0) {
+	ngui->currentStyleStack->varsNum -= amount;
+	if (ngui->currentStyleStack->varsNum < 0) {
 		logf("Ngui style stack underflow!!!!\n");
-		ngui->styleStack.varsNum = 0;
+		ngui->currentStyleStack->varsNum = 0;
 	}
 }
+
+void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type) {
+	NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[type];
+	char data[NGUI_STYLE_VAR_DATA_SIZE];
+	nguiGetStyleOfType(src, type, styleTypeInfo->dataType, data);
+	nguiPushStyleOfType(dest, type, styleTypeInfo->dataType, data);
+};
+
 
 void nguiDraw(float elapsed) {
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
 		if (element->alive <= 0) {
+			if (element->styleStack.vars) free(element->styleStack.vars);
 			arraySpliceIndex(ngui->elements, ngui->elementsNum, sizeof(NguiElement), i);
 			i--;
 			ngui->elementsNum--;
 			continue;
 		}
 	}
+
+	ngui->currentStyleStack = &ngui->globalStyleStack;
 
 	NguiElement **elementsLeft = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 	int elementsLeftNum = 0;
@@ -301,7 +332,9 @@ void nguiDraw(float elapsed) {
 			NguiElement *window = elementsLeft[windowIndex];
 			if (window->type != NGUI_ELEMENT_WINDOW) continue;
 
-			Rect windowRect = makeRect(window->position, window->size) * ngui->uiScale;
+			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack This is a really weird hack, since windows are never children
+			Vec2 windowSize = nguiGetStyleVec2(NGUI_STYLE_WINDOW_SIZE);
+			Rect windowRect = makeRect(window->position, windowSize) * ngui->uiScale;
 			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
@@ -333,6 +366,7 @@ void nguiDraw(float elapsed) {
 			NguiElement *prevChild = NULL;
 			for (int i = 0; i < childrenNum; i++) {
 				NguiElement *child = children[i];
+				ngui->currentStyleStack = &child->styleStack;
 
 				child->active = false;
 				char *label = child->name;
@@ -350,7 +384,8 @@ void nguiDraw(float elapsed) {
 					}
 				}
 				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
-				Rect childRect = makeRect(child->position, child->size) * ngui->uiScale;
+				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
+				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					childRect = inflatePerc(childRect, -0.05);
@@ -383,16 +418,18 @@ void nguiDraw(float elapsed) {
 					pushAlpha(alpha);
 					drawRect(graphicsRect, child->fgColor);
 
-					if (child->iconName[0]) {
+					char *iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
+					if (iconName[0]) {
 						Rect iconRect = makeRect(graphicsRect.x, graphicsRect.y, graphicsRect.height, graphicsRect.height); // Yes, .height twice
-						NguiIcon *icon = nguiGetIcon(child->iconName);
+						NguiIcon *icon = nguiGetIcon(iconName);
 						if (icon) {
 							setScissor(iconRect);
 							Matrix3 matrix = mat3();
 							matrix.TRANSLATE(iconRect.x, iconRect.y);
 							matrix.SCALE(iconRect.width, iconRect.height);
 							matrix *= icon->transform;
-							drawSimpleTexture(icon->texture, matrix, v2(0, 0), v2(1, 1), child->iconAlpha);
+							float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
+							drawSimpleTexture(icon->texture, matrix, v2(0, 0), v2(1, 1), alpha);
 							clearScissor();
 						} else {
 							drawRect(iconRect, 0xFFFF0000);
@@ -409,9 +446,10 @@ void nguiDraw(float elapsed) {
 
 				if (!skipCursorBump) {
 					prevCursor = cursor;
-					cursor.y += child->size.y;
+					cursor.y += buttonSize.y;
 				}
 				prevChild = child;
+				ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 			}
 
 			arraySpliceIndex(elementsLeft, elementsLeftNum, sizeof(NguiElement *), windowIndex);
@@ -425,6 +463,7 @@ void nguiDraw(float elapsed) {
 			break;
 		}
 	}
+	ngui->currentStyleStack = &ngui->globalStyleStack;
 
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
@@ -461,11 +500,19 @@ NguiElement *getNguiElement(char *name) {
 		memset(element, 0, sizeof(NguiElement));
 		strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
 		element->id = ++ngui->nextNguiElementId;
+		element->styleStack.varsMax = 1;
+		element->styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * element->styleStack.varsMax);
 	}
 
 	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
 	if (ngui->currentWindow) element->parentId = ngui->currentWindow->id;
+
+	element->styleStack.varsNum = 0;
+	for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
+		copyStyleVar(&element->styleStack, &ngui->globalStyleStack, (NguiStyleType)i);
+	}
+
 	return element;
 }
 
@@ -478,10 +525,9 @@ int getElementIndex(NguiElement *element) {
 	return 0;
 }
 
-void nguiStartWindow(char *name, Vec2 size, int flags) {
+void nguiStartWindow(char *name, int flags) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_WINDOW;
-	element->size = size;
 	ngui->currentWindow = element;
 	ngui->currentOrderIndex = 0;
 }
@@ -493,9 +539,6 @@ void nguiEndWindow() {
 bool nguiButton(char *name) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
-	element->size = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
-	element->iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
-	element->iconAlpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 	return element->justActive;
 }
 

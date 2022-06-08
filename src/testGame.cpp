@@ -364,9 +364,9 @@ void updateGame() {
 		ImGui::Begin("Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		DataStream *codeStream = newDataStream();
-		for (int i = 0; i < ngui->styleStack.varsNum; i++) {
+		for (int i = 0; i < ngui->globalStyleStack.varsNum; i++) {
 			ImGui::PushID(i);
-			NguiStyleVar *var = &ngui->styleStack.vars[i];
+			NguiStyleVar *var = &ngui->globalStyleStack.vars[i];
 			NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
 			if (styleTypeInfo->dataType == NGUI_DATA_TYPE_INT) {
 				writeString(codeStream, frameSprintf("nguiPushStyleInt(%s, %d);\n", styleTypeInfo->enumName, *(int *)var->data));
@@ -439,7 +439,7 @@ void updateGame() {
 
 	static bool showingSubItems = false;
 
-	nguiStartWindow("Test Window", v2(500, 500));
+	nguiStartWindow("Test Window");
 
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "axeIcon");
 	if (nguiButton("Hello")) {
@@ -450,7 +450,9 @@ void updateGame() {
 
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
 	if (nguiButton("Dummy button 1")) ;
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT, 0xFFFF0000);
 	if (nguiButton("Dummy button 2")) ;
+	nguiPopStyleVar();
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
 	nguiPopStyleVar();
