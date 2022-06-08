@@ -2,10 +2,11 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
-	NGUI_STYLE_ELEMENT_FG_COLOR,
-	NGUI_STYLE_ELEMENT_HOVER_TINT,
-	NGUI_STYLE_ELEMENT_ACTIVE_TINT,
-	NGUI_STYLE_ELEMENT_TEXT_COLOR,
+	NGUI_STYLE_FG_COLOR,
+	NGUI_STYLE_HOVER_TINT,
+	NGUI_STYLE_ACTIVE_TINT,
+	NGUI_STYLE_TEXT_COLOR,
+	NGUI_STYLE_INDENT,
 	NGUI_STYLE_ICON_NAME_PTR,
 	NGUI_STYLE_ICON_ALPHA,
 	NGUI_STYLE_TYPES_MAX,
@@ -173,25 +174,30 @@ void nguiInit() {
 	info->name = "Window bg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_FG_COLOR];
-	info->enumName = "NGUI_STYLE_ELEMENT_FG_COLOR";
-	info->name = "Element fg color";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_FG_COLOR];
+	info->enumName = "NGUI_STYLE_FG_COLOR";
+	info->name = "Fg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_HOVER_TINT];
-	info->enumName = "NGUI_STYLE_ELEMENT_HOVER_TINT";
-	info->name = "Element hover tint";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_TINT];
+	info->enumName = "NGUI_STYLE_HOVER_TINT";
+	info->name = "Hover tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_ACTIVE_TINT];
-	info->enumName = "NGUI_STYLE_ELEMENT_ACTIVE_TINT";
-	info->name = "Element active tint";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_TINT];
+	info->enumName = "NGUI_STYLE_ACTIVE_TINT";
+	info->name = "Active tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_TEXT_COLOR];
-	info->enumName = "NGUI_STYLE_ELEMENT_TEXT_COLOR";
-	info->name = "Element text color";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_TEXT_COLOR];
+	info->enumName = "NGUI_STYLE_TEXT_COLOR";
+	info->name = "Text color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_INDENT];
+	info->enumName = "NGUI_STYLE_INDENT";
+	info->name = "Indent";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_NAME_PTR];
 	info->enumName = "NGUI_STYLE_ICON_NAME_PTR";
@@ -206,10 +212,11 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF353535);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT, 0x40FFFFFF);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT, 0xA0FFFFFF);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_TEXT_COLOR, 0xFFECECEC);
+	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
+	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
+	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
+	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
+	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 }
@@ -386,18 +393,19 @@ void nguiDraw(float elapsed) {
 				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
 				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
 				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
+				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT);
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					childRect = inflatePerc(childRect, -0.05);
 
 					Vec2 graphicsOffset = v2();
-					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR);
+					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
 
 					if (contains(childRect, ngui->mouse)) {
-						int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT);
+						int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_HOVER_TINT);
 						fgColor = lerpColor(fgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
 						if (platform->mouseJustDown) {
-							int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT);
+							int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
 							child->fgColor = lerpColor(child->fgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
 
 							child->justActive = true;
@@ -436,7 +444,7 @@ void nguiDraw(float elapsed) {
 						}
 					}
 
-					int textColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_TEXT_COLOR);
+					int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 					Rect textRect = graphicsRect;
 					DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
 					drawTextInRect(label, props, textRect, v2(0, 0.5));
@@ -552,4 +560,3 @@ int getSizeForDataType(NguiDataType dataType) {
 	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
 	return size;
 }
-

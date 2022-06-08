@@ -450,7 +450,7 @@ void updateGame() {
 
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
 	if (nguiButton("Dummy button 1")) ;
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT, 0xFFFF0000);
+	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xFFFF0000);
 	if (nguiButton("Dummy button 2")) ;
 	nguiPopStyleVar();
 	if (nguiButton("Dummy button 3")) ;
@@ -460,12 +460,13 @@ void updateGame() {
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
 	if (showingSubItems) {
+		nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
 		nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "bootIcon");
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
-		nguiPopStyleVar();
+		nguiPopStyleVar(2);
 	}
 
 	if (nguiButton("Third button")) logf("You clicked the third button!\n");
