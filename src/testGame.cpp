@@ -376,11 +376,11 @@ void updateGame() {
 				guiInputArgb(styleTypeInfo->name, (int *)var->data);
 			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_FLOAT) {
 				writeString(codeStream, frameSprintf("nguiPushStyleFloat(%s, %g);\n", styleTypeInfo->enumName, *(float *)var->data));
-				ImGui::DragFloat(styleTypeInfo->name, (float *)var->data);
+				ImGui::DragFloat(styleTypeInfo->name, (float *)var->data, 0.01);
 			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_VEC2) {
 				Vec2 *vec = (Vec2 *)var->data;
 				writeString(codeStream, frameSprintf("nguiPushStyleVec2(%s, v2(%g, %g));\n", styleTypeInfo->enumName, vec->x, vec->y));
-				ImGui::DragFloat2(styleTypeInfo->name, (float *)var->data);
+				ImGui::DragFloat2(styleTypeInfo->name, (float *)var->data, 0.01);
 			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_STRING_PTR) {
 				writeString(codeStream, frameSprintf("nguiPushStyleStringPtr(%s, \"%s\");\n", styleTypeInfo->enumName, *(char **)var->data));
 				ImGui::Text("%s: %s", styleTypeInfo->name, *(char **)var->data);

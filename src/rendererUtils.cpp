@@ -49,6 +49,7 @@ RenderProps newRenderProps() {
 	props.tint = 0xFFFFFFFF;
 	props.matrix = mat3();
 	props.uvMatrix = mat3();
+	props.uv1 = v2(1, 1);
 	return props;
 }
 
@@ -127,6 +128,7 @@ void initRendererUtils() {
 	}
 
 	renderer->linearGrad256 = createTexture(1, 256, gradData);
+	setTextureClamped(renderer->linearGrad256, true);
 }
 
 Texture *createFrameTexture(int width, int height, void *data) {

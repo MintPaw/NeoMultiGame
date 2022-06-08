@@ -11,6 +11,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ICON_ALPHA,
 	NGUI_STYLE_ICON_GRAVITY,
 	NGUI_STYLE_HIGHLIGHT_TINT,
+	NGUI_STYLE_HIGHLIGHT_CRUSH,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -150,7 +151,7 @@ int getSizeForDataType(NguiDataType dataType);
 
 void nguiInit() {
 	ngui = (Ngui *)zalloc(sizeof(Ngui));
-	ngui->defaultFont = createFont("assets/common/arial.ttf", 40);
+	ngui->defaultFont = createFont("assets/common/arial.ttf", 80);
 	ngui->uiScale = platform->windowScaling;
 
 	ngui->elementsMax = 128;
@@ -222,6 +223,11 @@ void nguiInit() {
 	info->name = "Highlight tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_HIGHLIGHT_CRUSH];
+	info->enumName = "NGUI_STYLE_HIGHLIGHT_CRUSH";
+	info->name = "Highlight crush";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
@@ -233,7 +239,8 @@ void nguiInit() {
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
-	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x40000000);
+	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x5C000000);
+	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
 }
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
@@ -442,10 +449,14 @@ void nguiDraw(float elapsed) {
 					{
 						drawRect(graphicsRect, child->fgColor);
 
+						float highlightCrush = nguiGetStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH);
+
 						RenderProps props = newRenderProps();
 						props.matrix.TRANSLATE(graphicsRect.x, graphicsRect.y);
 						props.matrix.SCALE(graphicsRect.width, graphicsRect.height);
-						props.uvMatrix.ROTATE(180);
+						props.uvMatrix.SCALE(highlightCrush);
+						props.uv0 = v2(0, 1);
+						props.uv1 = v2(1, 0);
 						props.srcWidth = props.srcHeight = 1;
 
 						int highlightTint = nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT);

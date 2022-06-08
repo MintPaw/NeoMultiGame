@@ -417,6 +417,8 @@ struct RenderProps {
 #define _F_CIRCLE (1 << 6)
 	u32 flags;
 
+	Vec2 uv0;
+	Vec2 uv1;
 	Matrix3 uvMatrix;
 };
 
@@ -818,7 +820,9 @@ void drawTexture(RenderTexture *renderTexture, RenderProps props) {
 	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
 	float alpha = props.alpha;
 	int flags = props.flags;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, tints, alpha, flags);
+	Vec2 uv0 = props.uv0;
+	Vec2 uv1 = props.uv1;
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, props.matrix, uv0, uv1, props.uvMatrix, tints, alpha, flags);
 }
 
 void drawTexture(Texture *texture, RenderProps props) {
@@ -832,7 +836,11 @@ void drawTexture(Texture *texture, RenderProps props) {
 	props.matrix.SCALE(props.srcWidth, props.srcHeight);
 
 	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
-	drawRaylibTexture(texture->raylibTexture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, tints, props.alpha, props.flags);
+	float alpha = props.alpha;
+	int flags = props.flags;
+	Vec2 uv0 = props.uv0;
+	Vec2 uv1 = props.uv1;
+	drawRaylibTexture(texture->raylibTexture, props.matrix, uv0, uv1, props.uvMatrix, tints, alpha, flags);
 }
 
 void drawSimpleTexture(RenderTexture *renderTexture) {
