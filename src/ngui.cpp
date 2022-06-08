@@ -8,15 +8,16 @@ struct NguiElement {
 #define NGUI_ELEMENT_NAME_MAX_LEN 64
 	char name[NGUI_ELEMENT_NAME_MAX_LEN];
 	bool exists;
+	int id;
+	int parentId;
 
 	Vec2 position;
 	Vec2 size;
+	int orderIndex;
+	char *icon;
+
 	bool active;
 	bool justActive;
-
-	int orderIndex;
-	int id;
-	int parentId;
 
 	float creationTime;
 };
@@ -46,6 +47,13 @@ struct NguiStyleVar {
 	char data[sizeof(Vec4)];
 };
 
+struct NguiIcon {
+#define NGUI_ICON_NAME_MAX_LEN 32
+	char name[NGUI_ICON_NAME_MAX_LEN];
+	Texture *texture;
+	Matrix3 transform;
+};
+
 struct Ngui {
 	Font *defaultFont;
 	Vec2 mouse;
@@ -68,11 +76,17 @@ struct Ngui {
 	int styleStackNum;
 	int styleStackMax;
 
+#define NGUI_ICONS_MAX 128
+	NguiIcon icons[NGUI_ICONS_MAX];
+	int iconsNum;
+
 	NguiElement *currentWindow;
 };
 Ngui *ngui = NULL;
 
 void nguiInit();
+
+void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform);
 
 void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
 void nguiPushStyleInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_INT, &value); }
@@ -131,6 +145,19 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(200, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF404040);
+}
+
+void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
+	if (ngui->iconsNum > NGUI_ICONS_MAX-1) {
+		logf("Too many ngui icons!\n");
+		return;
+	}
+
+	NguiIcon *icon = &ngui->icons[ngui->iconsNum++];
+	memset(icon, 0, sizeof(NguiIcon));
+	strncpy(icon->name, iconName, NGUI_ICON_NAME_MAX_LEN);
+	icon->texture = texture;
+	icon->transform = transform;
 }
 
 void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -216,16 +243,6 @@ void nguiDraw(float elapsed) {
 
 			Rect rect = makeRect(window->position, window->size) * ngui->uiScale;
 			drawRect(rect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
-			{
-				Matrix3 matrix = mat3();
-				matrix.TRANSLATE(rect.x, rect.y);
-				matrix.SCALE(rect.width, rect.height);
-
-				float alpha = 1;
-				Vec4i tints = v4i(0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00);
-				int flags = 0;
-				drawRaylibTexture(renderer->whiteTexture->raylibTexture, matrix, v2(0, 0), v2(1, 1), mat3(), tints, alpha, flags);
-			}
 
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 			int childrenNum = 0;
@@ -308,6 +325,7 @@ void nguiDraw(float elapsed) {
 	// 	NguiElement *element = &ngui->elements[i];
 	// }
 
+	ngui->iconsNum = 0;
 	ngui->time += elapsed;
 }
 

@@ -386,6 +386,11 @@ void updateGame() {
 		nguiInit();
 	}
 
+	Matrix3 matrix = mat3();
+	nguiAddIcon("axeIcon", getTexture("assets/images/icons/axe.png"), matrix);
+	nguiAddIcon("beeIcon", getTexture("assets/images/icons/bee.png"), matrix);
+	nguiAddIcon("bootIcon", getTexture("assets/images/icons/boot.png"), matrix);
+
 	ngui->mouse = platform->mouse;
 
 	static bool showingSubItems = false;
