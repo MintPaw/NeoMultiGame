@@ -4327,6 +4327,42 @@ Vec2 v2(Vec2i veci) {
 
 /// /Vec2i
 
+/// Vec4i
+struct Vec4i {
+	int x, y, z, w;
+
+	void print(const char *label) {
+		logf("%s %d %d\n", label, this->x, this->y);
+	}
+};
+
+Vec4i operator+ (Vec4i a, Vec4i b) { return { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w }; }
+Vec4i operator- (Vec4i a, Vec4i b) { return { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w }; }
+
+Vec4i v4i(int x=0, int y=0, int z=0, int w=0);
+Vec4i v4i(int x, int y, int z, int w) {
+	Vec4i ret = {x, y, z, w};
+	return ret;
+}
+
+Vec4i v4i(Vec4 vec);
+Vec4i v4i(Vec4 vec) {
+	Vec4i ret = {(int)vec.x, (int)vec.y, (int)vec.z, (int)vec.w};
+	return ret;
+}
+
+bool equal(Vec4i a, Vec4i b);
+bool equal(Vec4i a, Vec4i b) {
+	if (a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w) return true;
+	return false;
+}
+
+Vec4 v4(Vec4i veci) {
+	return v4(veci.x, veci.y, veci.z, veci.w);
+}
+
+/// /Vec2i
+
 /// Matrix 2x3
 
 struct Matrix2x3 {

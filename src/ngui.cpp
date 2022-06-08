@@ -216,6 +216,16 @@ void nguiDraw(float elapsed) {
 
 			Rect rect = makeRect(window->position, window->size) * ngui->uiScale;
 			drawRect(rect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
+			{
+				Matrix3 matrix = mat3();
+				matrix.TRANSLATE(rect.x, rect.y);
+				matrix.SCALE(rect.width, rect.height);
+
+				float alpha = 1;
+				Vec4i tints = v4i(0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00);
+				int flags = 0;
+				drawRaylibTexture(renderer->whiteTexture->raylibTexture, matrix, v2(0, 0), v2(1, 1), mat3(), tints, alpha, flags);
+			}
 
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 			int childrenNum = 0;

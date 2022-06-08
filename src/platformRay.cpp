@@ -506,7 +506,9 @@ void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
 void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
-void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, int tint, float alpha, int flags);
+void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
+void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
+void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
 
 void pushTargetTexture(RenderTexture *renderTexture);
 void popTargetTexture();
@@ -809,7 +811,10 @@ void drawTexture(RenderTexture *renderTexture, RenderProps props) {
 	if (props.srcHeight == 0) props.srcHeight = renderTexture->height;
 	props.matrix.SCALE(props.srcWidth, props.srcHeight);
 
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, props.tint, props.alpha, props.flags);
+	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
+	float alpha = props.alpha;
+	int flags = props.flags;
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, tints, alpha, flags);
 }
 
 void drawTexture(Texture *texture, RenderProps props) {
@@ -822,7 +827,8 @@ void drawTexture(Texture *texture, RenderProps props) {
 	if (props.srcHeight == 0) props.srcHeight = texture->height;
 	props.matrix.SCALE(props.srcWidth, props.srcHeight);
 
-	drawRaylibTexture(texture->raylibTexture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, props.tint, props.alpha, props.flags);
+	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
+	drawRaylibTexture(texture->raylibTexture, props.matrix, v2(0, 0), v2(1, 1), props.uvMatrix, tints, props.alpha, props.flags);
 }
 
 void drawSimpleTexture(RenderTexture *renderTexture) {
@@ -831,10 +837,10 @@ void drawSimpleTexture(RenderTexture *renderTexture) {
 	Matrix3 uvMatrix = mat3();
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 void drawSimpleTexture(Texture *texture) {
 	Matrix3 matrix = mat3();
@@ -842,41 +848,41 @@ void drawSimpleTexture(Texture *texture) {
 	Matrix3 uvMatrix = mat3();
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
 	Matrix3 uvMatrix = mat3();
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
 	Matrix3 uvMatrix = mat3();
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 
 void drawFxaaTexture(RenderTexture *renderTexture, Matrix3 matrix) {
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
 	Matrix3 uvMatrix = mat3();
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	float alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 void drawFxaaTexture(Texture *texture, Matrix3 matrix) {
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
 	Matrix3 uvMatrix = mat3();
-	int tint = 0xFFFFFFFF;
+	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	float alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tint, alpha, flags);
+	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
 }
 
 void drawPixelArtFilterTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1) {
@@ -896,7 +902,8 @@ void drawRect(Rect rect, int color, int flags) {
 
 	Matrix3 uvMatrix = mat3();
 	float alpha = 1;
-	drawRaylibTexture(renderer->whiteTexture->raylibTexture, matrix, v2(0, 0), v2(1, 1), uvMatrix, color, alpha, flags);
+	Vec4i tints = v4i(color, color, color, color);
+	drawRaylibTexture(renderer->whiteTexture->raylibTexture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
 }
 
 void drawCircle(Vec2 position, float radius, int color) {
@@ -910,7 +917,8 @@ void drawCircle(Vec2 position, float radius, int color) {
 	Matrix3 uvMatrix = mat3();
 	float alpha = alphaByte/255.0;
 	int flags = 0;
-	drawRaylibTexture(renderer->circleTexture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, color, alpha, flags);
+	Vec4i tints = v4i(color, color, color, color);
+	drawRaylibTexture(renderer->circleTexture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
 }
 
 void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
@@ -994,129 +1002,14 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	Raylib::rlSetTexture(0);
 }
 
-//void drawBillboardWithRot(Vec3 camPos, Vec3 camTarget, Vec3 camUp, Texture *texture, Vec3 position, Vec2 size, Rect source, Vec2 origin, float rotation, int tint);
-//void drawBillboardWithRot(Vec3 camPos, Vec3 camTarget, Vec3 camUp, Texture *texture, Vec3 position, Vec2 size, Rect source, Vec2 origin, float rotation, int tint) {
-//	Vec3 up = v3(0, 0, 1);
-//	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
-//	if (isZero(size)) size = v2(texture->width, texture->height);
+void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags) {
+	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+}
+void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags) {
+	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+}
 
-//	// I flipped uv.y
-//	Vec2 uv0; // bl For some reason
-//	uv0.x = source.x/texture->width;
-//	uv0.y = (source.y + source.height)/texture->height;
-
-//	Vec2 uv1; // tr For some reason
-//	uv1.x = (source.x + source.width)/texture->width;
-//	uv1.y = source.y/texture->height;
-
-//	if (size.x < 0) {
-//		float temp = uv0.x;
-//		uv0.x = uv1.x;
-//		uv1.x = temp;
-//		size.x *= -1;
-//	}
-
-//	if (size.y < 0) {
-//		logf("No y flip\n");
-//	}
-
-//	float temp = size.x; // I have no idea why we do this
-//	size.x = size.y;
-//	size.y = temp;
-
-//	// NOTE: Billboard size will maintain source rectangle aspect ratio, size will represent billboard width
-//	Raylib::Vector2 sizeRatio = { size.y, size.x*(float)source.height/source.width };
-//	sizeRatio.x = size.y;
-//	sizeRatio.y = size.x;
-
-//	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camPos), toRaylib(camTarget), toRaylib(camUp));
-
-//	Raylib::Vector3 right = { matView.m0, matView.m4, matView.m8 };
-//	//Vector3 up = { matView.m1, matView.m5, matView.m9 };
-
-//	Raylib::Vector3 rightScaled = Raylib::Vector3Scale(right, sizeRatio.x/2);
-//	Raylib::Vector3 upScaled = Raylib::Vector3Scale(toRaylib(up), sizeRatio.y/2);
-
-//	Raylib::Vector3 p1 = Raylib::Vector3Add(rightScaled, upScaled);
-//	Raylib::Vector3 p2 = Raylib::Vector3Subtract(rightScaled, upScaled);
-
-//	Raylib::Vector3 topLeft = Raylib::Vector3Scale(p2, -1);
-//	Raylib::Vector3 topRight = p1;
-//	Raylib::Vector3 bottomRight = p2;
-//	Raylib::Vector3 bottomLeft = Raylib::Vector3Scale(p1, -1);
-
-//	if (rotation != 0.0f) {
-//		float sinRotation = sinf(rotation*DEG2RAD);
-//		float cosRotation = cosf(rotation*DEG2RAD);
-
-//		// NOTE: (-1, 1) is the range where origin.x, origin.y is inside the texture
-//		float rotateAboutX = sizeRatio.x*origin.x/2;
-//		float rotateAboutY = sizeRatio.y*origin.y/2;
-
-//		float xtvalue, ytvalue;
-//		float rotatedX, rotatedY;
-
-//		xtvalue = Raylib::Vector3DotProduct(right, topLeft) - rotateAboutX; // Project points to x and y coordinates on the billboard plane
-//		ytvalue = Raylib::Vector3DotProduct(toRaylib(up), topLeft) - rotateAboutY;
-//		rotatedX = xtvalue*cosRotation - ytvalue*sinRotation + rotateAboutX; // Rotate about the point origin
-//		rotatedY = xtvalue*sinRotation + ytvalue*cosRotation + rotateAboutY;
-//		topLeft = Raylib::Vector3Add(Raylib::Vector3Scale(toRaylib(up), rotatedY), Raylib::Vector3Scale(right, rotatedX)); // Translate back to cartesian coordinates
-
-//		xtvalue = Raylib::Vector3DotProduct(right, topRight) - rotateAboutX;
-//		ytvalue = Raylib::Vector3DotProduct(toRaylib(up), topRight) - rotateAboutY;
-//		rotatedX = xtvalue*cosRotation - ytvalue*sinRotation + rotateAboutX;
-//		rotatedY = xtvalue*sinRotation + ytvalue*cosRotation + rotateAboutY;
-//		topRight = Raylib::Vector3Add(Raylib::Vector3Scale(toRaylib(up), rotatedY), Raylib::Vector3Scale(right, rotatedX));
-
-//		xtvalue = Raylib::Vector3DotProduct(right, bottomRight) - rotateAboutX;
-//		ytvalue = Raylib::Vector3DotProduct(toRaylib(up), bottomRight) - rotateAboutY;
-//		rotatedX = xtvalue*cosRotation - ytvalue*sinRotation + rotateAboutX;
-//		rotatedY = xtvalue*sinRotation + ytvalue*cosRotation + rotateAboutY;
-//		bottomRight = Raylib::Vector3Add(Raylib::Vector3Scale(toRaylib(up), rotatedY), Raylib::Vector3Scale(right, rotatedX));
-
-//		xtvalue = Raylib::Vector3DotProduct(right, bottomLeft)-rotateAboutX;
-//		ytvalue = Raylib::Vector3DotProduct(toRaylib(up), bottomLeft)-rotateAboutY;
-//		rotatedX = xtvalue*cosRotation - ytvalue*sinRotation + rotateAboutX;
-//		rotatedY = xtvalue*sinRotation + ytvalue*cosRotation + rotateAboutY;
-//		bottomLeft = Raylib::Vector3Add(Raylib::Vector3Scale(toRaylib(up), rotatedY), Raylib::Vector3Scale(right, rotatedX));
-//	}
-
-//	// Translate points to the draw center (position)
-//	topLeft = Raylib::Vector3Add(topLeft, toRaylib(position));
-//	topRight = Raylib::Vector3Add(topRight, toRaylib(position));
-//	bottomRight = Raylib::Vector3Add(bottomRight, toRaylib(position));
-//	bottomLeft = Raylib::Vector3Add(bottomLeft, toRaylib(position));
-
-//	Raylib::rlCheckRenderBatchLimit(4);
-
-//	Raylib::rlSetTexture(texture->raylibTexture.id);
-
-//	Raylib::rlBegin(RL_QUADS);
-//	Raylib::Color raylibTint = toRaylibColor(tint);
-//	Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-
-//	// Bottom-left corner for texture and quad
-//	Raylib::rlTexCoord2f(uv0.x, uv0.y);
-//	Raylib::rlVertex3f(topLeft.x, topLeft.y, topLeft.z);
-
-//	// Top-left corner for texture and quad
-//	Raylib::rlTexCoord2f(uv0.x, uv1.y);
-//	Raylib::rlVertex3f(bottomLeft.x, bottomLeft.y, bottomLeft.z);
-
-//	// Top-right corner for texture and quad
-//	Raylib::rlTexCoord2f(uv1.x, uv1.y);
-//	Raylib::rlVertex3f(bottomRight.x, bottomRight.y, bottomRight.z);
-
-//	// Bottom-right corner for texture and quad
-//	Raylib::rlTexCoord2f(uv1.x, uv0.y);
-//	Raylib::rlVertex3f(topRight.x, topRight.y, topRight.z);
-
-//	Raylib::rlEnd();
-
-//	Raylib::rlSetTexture(0);
-//}
-
-void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, int tint, float alpha, int flags) {
+void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha,int flags) {
 	alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
 	if (renderer->disabled) return;
 	if (alpha == 0) return;
@@ -1151,15 +1044,6 @@ void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, 
 		uvs[i] = uvMatrix * uvs[i];
 	}
 
-	int a, r, g, b;
-	hexToArgb(tint, &a, &r, &g, &b);
-	a *= alpha;
-	r *= a/255.0;
-	g *= a/255.0;
-	b *= a/255.0;
-	tint = argbToHex(a, r, g, b);
-	Raylib::Color raylibTint = toRaylibColor(tint);
-
 	int raylibPointCount = 4;
 
 	{
@@ -1169,9 +1053,18 @@ void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, 
 
 		Raylib::rlBegin(RL_QUADS);
 
-		Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-
 		for (int i = 0; i < raylibPointCount; i++) {
+			int tint = ((int *)&tints.x)[i];
+			int a, r, g, b;
+			hexToArgb(tint, &a, &r, &g, &b);
+			a *= alpha;
+			r *= a/255.0;
+			g *= a/255.0;
+			b *= a/255.0;
+			tint = argbToHex(a, r, g, b);
+			Raylib::Color raylibTint = toRaylibColor(tint);
+			Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
+
 			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
 			Raylib::rlVertex2f(verts[i].x, verts[i].y);
 		}
