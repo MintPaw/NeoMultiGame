@@ -338,18 +338,63 @@ void updateGame() {
 
 #if 1 // ngui test
 	clearRenderer(0xFF000000);
+
+	if (platform->frameCount > 0) {
+		ImGui::Begin("Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+		DataStream *codeStream = newDataStream();
+		for (int i = 0; i < ngui->styleStackNum; i++) {
+			ImGui::PushID(i);
+			NguiStyleVar *var = &ngui->styleStack[i];
+			NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
+			if (styleTypeInfo->dataType == NGUI_DATA_TYPE_INT) {
+				writeString(codeStream, frameSprintf("nguiPushStyleInt(%s, %d);\n", styleTypeInfo->enumName, *(int *)var->data));
+				ImGui::InputInt(styleTypeInfo->name, (int *)var->data);
+			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_COLOR_INT) {
+				writeString(codeStream, frameSprintf("nguiPushStyleColorInt(%s, 0x%08X);\n", styleTypeInfo->enumName, *(int *)var->data));
+				guiInputArgb(styleTypeInfo->name, (int *)var->data);
+			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_FLOAT) {
+				writeString(codeStream, frameSprintf("nguiPushStyleFloat(%s, %g);\n", styleTypeInfo->enumName, *(float *)var->data));
+				ImGui::DragFloat(styleTypeInfo->name, (float *)var->data);
+			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_VEC2) {
+				Vec2 *vec = (Vec2 *)var->data;
+				writeString(codeStream, frameSprintf("nguiPushStyleVec2(%s, v2(%g, %g));\n", styleTypeInfo->enumName, vec->x, vec->y));
+				ImGui::DragFloat2(styleTypeInfo->name, (float *)var->data);
+			}
+
+			ImGui::PopID();
+		}
+
+		codeStream->index = 0;
+		char *code = NULL;
+		for (;;) {
+			char *str = readFrameString(codeStream);
+			if (!str || codeStream->dataMax - codeStream->index <= 4) break;
+			if (code == NULL) {
+				code = frameStringClone(str);
+			} else {
+				code = frameSprintf("%s%s", code, str);
+			}
+		}
+		ImGui::InputTextMultiline("Code", code, strlen(code), ImVec2(1500, 400));
+
+		destroyDataStream(codeStream);
+		ImGui::End();
+	}
+
 	if (platform->frameCount == 0) {
 		nguiInit();
 	}
+
 	ngui->mouse = platform->mouse;
 
-	static bool showingSubItems[3] = {};
+	static bool showingSubItems = false;
 
 	nguiStartWindow("Test Window", v2(500, 500));
 
 	if (nguiButton("Hello")) {
 		logf("You clicked the button!\n");
-		showingSubItems[0] = !showingSubItems[0];
+		showingSubItems = !showingSubItems;
 	}
 
 	if (nguiButton("Dummy button 1")) ;
@@ -357,22 +402,16 @@ void updateGame() {
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
 
-	if (nguiButton("Second button")) {
-		logf("You clicked the second button!\n");
-		showingSubItems[1] = !showingSubItems[1];
-	}
+	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
-	if (showingSubItems[0]) {
+	if (showingSubItems) {
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
 	}
 
-	if (nguiButton("Third button")) {
-		logf("You clicked the third button!\n");
-		showingSubItems[2] = !showingSubItems[2];
-	}
+	if (nguiButton("Third button")) logf("You clicked the third button!\n");
 
 	nguiEndWindow();
 

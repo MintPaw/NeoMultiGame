@@ -21,6 +21,31 @@ struct NguiElement {
 	float creationTime;
 };
 
+enum NguiStyleType {
+	NGUI_STYLE_BUTTON_SIZE,
+	NGUI_STYLE_WINDOW_BG_COLOR,
+	NGUI_STYLE_ELEMENT_FG_COLOR,
+	NGUI_STYLE_TYPES_MAX,
+};
+
+enum NguiDataType {
+	NGUI_DATA_TYPE_INT,
+	NGUI_DATA_TYPE_COLOR_INT,
+	NGUI_DATA_TYPE_FLOAT,
+	NGUI_DATA_TYPE_VEC2,
+};
+
+struct NguiStyleTypeInfo {
+	char *enumName;
+	char *name;
+	NguiDataType dataType;
+};
+
+struct NguiStyleVar {
+	NguiStyleType type;
+	char data[sizeof(Vec4)];
+};
+
 struct Ngui {
 	Font *defaultFont;
 	Vec2 mouse;
@@ -34,12 +59,35 @@ struct Ngui {
 	int currentOrderIndex;
 
 	float uiScale;
+	Vec2 buttonSize;
 	Vec2 currentWindowSize;
+
+	NguiStyleTypeInfo styleTypeInfos[NGUI_STYLE_TYPES_MAX];
+
+	NguiStyleVar *styleStack;
+	int styleStackNum;
+	int styleStackMax;
+
 	NguiElement *currentWindow;
 };
 Ngui *ngui = NULL;
 
 void nguiInit();
+
+void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
+void nguiPushStyleInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_INT, &value); }
+void nguiPushStyleColorInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &value); }
+void nguiPushStyleFloat(NguiStyleType type, float value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &value); }
+void nguiPushStyleVec2(NguiStyleType type, Vec2 value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_VEC2, &value); }
+
+void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
+int nguiGetStyleInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_INT, &ret); return ret; }
+int nguiGetStyleColorInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &ret); return ret; }
+int nguiGetStyleFloat(NguiStyleType type) { float ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
+Vec2 nguiGetStyleVec2(NguiStyleType type) { Vec2 ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_VEC2, &ret); return ret; }
+
+void nguiPopStyleVar(int amount=1);
+
 void nguiDraw(float elapsed);
 
 NguiElement *getNguiElement(char *name);
@@ -48,8 +96,10 @@ int getNguiId(int parentId, char *name);
 void nguiSetNextWindowSize(Vec2 size);
 void nguiStartWindow(char *name, Vec2 size, int flags = 0);
 void nguiEndWindow();
-/// FUNCTIONS ^
+bool nguiButton(char *name);
 
+int getSizeForDataType(NguiDataType dataType);
+/// FUNCTIONS ^
 
 void nguiInit() {
 	ngui = (Ngui *)zalloc(sizeof(Ngui));
@@ -58,6 +108,81 @@ void nguiInit() {
 
 	ngui->elementsMax = 128;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
+
+	ngui->styleStackMax = 1;
+	ngui->styleStack = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * ngui->styleStackMax);
+
+	NguiStyleTypeInfo *info;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
+	info->enumName = "NGUI_STYLE_BUTTON_SIZE";
+	info->name = "Button size";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_BG_COLOR];
+	info->enumName = "NGUI_STYLE_WINDOW_BG_COLOR";
+	info->name = "Window bg color";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_FG_COLOR];
+	info->enumName = "NGUI_STYLE_ELEMENT_FG_COLOR";
+	info->name = "Element fg color";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(200, 80));
+	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF404040);
+}
+
+void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
+	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
+	if (styleTypeInfo.dataType != dataType) {
+		logf("Type mismatch on push ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
+		return;
+	}
+
+	if (ngui->styleStackNum > ngui->styleStackMax-1) {
+		ngui->styleStack = (NguiStyleVar *)resizeArray(ngui->styleStack, sizeof(NguiStyleVar), ngui->styleStackNum, ngui->styleStackMax*2);
+		ngui->styleStackMax *= 2;
+	}
+
+	NguiStyleVar *var = &ngui->styleStack[ngui->styleStackNum++];
+	memset(var, 0, sizeof(NguiStyleVar));
+	var->type = type;
+
+	int size = getSizeForDataType(dataType);
+	memcpy(var->data, ptr, size);
+}
+
+void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
+	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
+	if (styleTypeInfo.dataType != dataType) {
+		logf("Type mismatch on get ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
+		return;
+	}
+
+	NguiStyleVar *srcVar = NULL;
+	for (int i = ngui->styleStackNum-1; i >= 0; i--) {
+		NguiStyleVar *var = &ngui->styleStack[i];
+		if (var->type == type) {
+			srcVar = var;
+			break;
+		}
+	}
+
+	if (!srcVar) {
+		logf("Failed to get style value for type %d\n", type);
+	}
+
+	int size = getSizeForDataType(dataType);
+	memcpy(ptr, srcVar->data, size);
+}
+
+void nguiPopStyleVar(int amount) {
+	ngui->styleStackNum -= amount;
+	if (ngui->styleStackNum < 0) {
+		logf("Ngui style stack underflow!!!!\n");
+		ngui->styleStackNum = 0;
+	}
 }
 
 void nguiDraw(float elapsed) {
@@ -90,7 +215,7 @@ void nguiDraw(float elapsed) {
 			if (window->type != NGUI_ELEMENT_WINDOW) continue;
 
 			Rect rect = makeRect(window->position, window->size) * ngui->uiScale;
-			drawRect(rect, 0xA0202020);
+			drawRect(rect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 			int childrenNum = 0;
@@ -140,7 +265,7 @@ void nguiDraw(float elapsed) {
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					childRect = inflatePerc(childRect, -0.05);
 
-					int buttonColor = 0xFF404040;
+					int buttonColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR);
 					if (contains(childRect, ngui->mouse)) {
 						buttonColor = lerpColor(buttonColor, 0xFFFFFFFF, 0.25);
 						if (platform->mouseJustDown) child->justActive = true;
@@ -234,6 +359,17 @@ void nguiEndWindow() {
 bool nguiButton(char *name) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
-	element->size = v2(200, 80);
+	element->size = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
 	return element->justActive;
 }
+
+int getSizeForDataType(NguiDataType dataType) {
+	int size = 0;
+	if (dataType == NGUI_DATA_TYPE_INT) size = 4;
+	if (dataType == NGUI_DATA_TYPE_COLOR_INT) size = 4;
+	if (dataType == NGUI_DATA_TYPE_FLOAT) size = 4;
+	if (dataType == NGUI_DATA_TYPE_VEC2) size = sizeof(Vec2);
+	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
+	return size;
+}
+

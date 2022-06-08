@@ -423,7 +423,7 @@ countEngine:
 	cloc --by-file --not-match-d ".*Game.*" --not-match-f ".*GameData.*|.*Game.cpp|.*rts.*" src
 
 countHorseGame:
-	cloc --by-file src/horseGame.cpp src/horseGame/
+	cloc --by-file ../multiGamePrivate/src/horseGame.cpp ../multiGamePrivate/src/horseGame/
 
 pack: #@todo remove
 	cmd /c "\
