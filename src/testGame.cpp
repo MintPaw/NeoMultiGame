@@ -355,11 +355,14 @@ void updateGame() {
 				guiInputArgb(styleTypeInfo->name, (int *)var->data);
 			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_FLOAT) {
 				writeString(codeStream, frameSprintf("nguiPushStyleFloat(%s, %g);\n", styleTypeInfo->enumName, *(float *)var->data));
-				ImGui::DragFloat(styleTypeInfo->name, (float *)var->data);
+				ImGui::InputFloat(styleTypeInfo->name, (float *)var->data);
 			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_VEC2) {
 				Vec2 *vec = (Vec2 *)var->data;
 				writeString(codeStream, frameSprintf("nguiPushStyleVec2(%s, v2(%g, %g));\n", styleTypeInfo->enumName, vec->x, vec->y));
-				ImGui::DragFloat2(styleTypeInfo->name, (float *)var->data);
+				ImGui::InputFloat2(styleTypeInfo->name, (float *)var->data);
+			} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_STRING_PTR) {
+				writeString(codeStream, frameSprintf("nguiPushStyleStringPtr(%s, \"%s\");\n", styleTypeInfo->enumName, *(char **)var->data));
+				ImGui::Text("%s: %s", styleTypeInfo->name, *(char **)var->data);
 			}
 
 			ImGui::PopID();
@@ -397,17 +400,22 @@ void updateGame() {
 
 	nguiStartWindow("Test Window", v2(500, 500));
 
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "axeIcon");
 	if (nguiButton("Hello")) {
 		logf("You clicked the button!\n");
 		showingSubItems = !showingSubItems;
 	}
+	nguiPopStyleVar();
 
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
 	if (nguiButton("Dummy button 1")) ;
 	if (nguiButton("Dummy button 2")) ;
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
 
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "bootIcon");
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
+	nguiPopStyleVar(2);
 
 	if (showingSubItems) {
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");

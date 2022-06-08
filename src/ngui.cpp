@@ -11,10 +11,14 @@ struct NguiElement {
 	int id;
 	int parentId;
 
-	Vec2 position;
-	Vec2 size;
 	int orderIndex;
-	char *icon;
+	char *iconName;
+	float iconAlpha;
+	Vec2 size;
+
+	Vec2 position;
+	Vec2 graphicsOffset;
+	int fgColor;
 
 	bool active;
 	bool justActive;
@@ -26,6 +30,10 @@ enum NguiStyleType {
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_ELEMENT_FG_COLOR,
+	NGUI_STYLE_ELEMENT_HOVER_TINT,
+	NGUI_STYLE_ELEMENT_TEXT_COLOR,
+	NGUI_STYLE_ICON_NAME_PTR,
+	NGUI_STYLE_ICON_ALPHA,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -34,6 +42,7 @@ enum NguiDataType {
 	NGUI_DATA_TYPE_COLOR_INT,
 	NGUI_DATA_TYPE_FLOAT,
 	NGUI_DATA_TYPE_VEC2,
+	NGUI_DATA_TYPE_STRING_PTR,
 };
 
 struct NguiStyleTypeInfo {
@@ -87,18 +96,21 @@ Ngui *ngui = NULL;
 void nguiInit();
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform);
+NguiIcon *nguiGetIcon(char *iconName);
 
 void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
 void nguiPushStyleInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_INT, &value); }
 void nguiPushStyleColorInt(NguiStyleType type, int value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &value); }
 void nguiPushStyleFloat(NguiStyleType type, float value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &value); }
 void nguiPushStyleVec2(NguiStyleType type, Vec2 value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_VEC2, &value); }
+void nguiPushStyleStringPtr(NguiStyleType type, char *value) { nguiPushStyleOfType(type, NGUI_DATA_TYPE_STRING_PTR, &value); }
 
 void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr);
 int nguiGetStyleInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_INT, &ret); return ret; }
 int nguiGetStyleColorInt(NguiStyleType type) { int ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_COLOR_INT, &ret); return ret; }
-int nguiGetStyleFloat(NguiStyleType type) { float ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
+float nguiGetStyleFloat(NguiStyleType type) { float ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
 Vec2 nguiGetStyleVec2(NguiStyleType type) { Vec2 ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_VEC2, &ret); return ret; }
+char *nguiGetStyleStringPtr(NguiStyleType type) { char *ret; nguiGetStyleOfType(type, NGUI_DATA_TYPE_STRING_PTR, &ret); return ret; }
 
 void nguiPopStyleVar(int amount=1);
 
@@ -118,7 +130,7 @@ int getSizeForDataType(NguiDataType dataType);
 void nguiInit() {
 	ngui = (Ngui *)zalloc(sizeof(Ngui));
 	ngui->defaultFont = createFont("assets/common/arial.ttf", 40);
-	ngui->uiScale = 1;
+	ngui->uiScale = platform->windowScaling;
 
 	ngui->elementsMax = 128;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
@@ -142,9 +154,33 @@ void nguiInit() {
 	info->name = "Element fg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
-	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(200, 80));
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_HOVER_TINT];
+	info->enumName = "NGUI_STYLE_ELEMENT_HOVER_TINT";
+	info->name = "Element hover tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_TEXT_COLOR];
+	info->enumName = "NGUI_STYLE_ELEMENT_TEXT_COLOR";
+	info->name = "Element text color";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_NAME_PTR];
+	info->enumName = "NGUI_STYLE_ICON_NAME_PTR";
+	info->name = "Icon name pointer";
+	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ALPHA];
+	info->enumName = "NGUI_STYLE_ICON_ALPHA";
+	info->name = "Icon alpha";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF404040);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF353535);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT, 0x40FFFFFF);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_TEXT_COLOR, 0xFFECECEC);
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 }
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
@@ -158,6 +194,15 @@ void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
 	strncpy(icon->name, iconName, NGUI_ICON_NAME_MAX_LEN);
 	icon->texture = texture;
 	icon->transform = transform;
+}
+
+NguiIcon *nguiGetIcon(char *iconName) {
+	for (int i = 0; i < ngui->iconsNum; i++) {
+		NguiIcon *icon = &ngui->icons[i];
+		if (streq(icon->name, iconName)) return icon;
+	}
+
+	return NULL;
 }
 
 void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -241,8 +286,8 @@ void nguiDraw(float elapsed) {
 			NguiElement *window = elementsLeft[windowIndex];
 			if (window->type != NGUI_ELEMENT_WINDOW) continue;
 
-			Rect rect = makeRect(window->position, window->size) * ngui->uiScale;
-			drawRect(rect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
+			Rect windowRect = makeRect(window->position, window->size) * ngui->uiScale;
+			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 			int childrenNum = 0;
@@ -278,8 +323,8 @@ void nguiDraw(float elapsed) {
 				char *label = child->name;
 
 				bool skipCursorBump = false;
-				if (ngui->time - child->creationTime < 0.001) {
-					if (prevChild && ngui->time - prevChild->creationTime < 0.001) {
+				if (child->creationTime == 0) {
+					if (prevChild && prevChild->creationTime == 0) {
 						child->position = prevCursor;
 						skipCursorBump = true;
 					} else {
@@ -292,14 +337,47 @@ void nguiDraw(float elapsed) {
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					childRect = inflatePerc(childRect, -0.05);
 
-					int buttonColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR);
+					Vec2 graphicsOffset = v2();
+					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR);
+
 					if (contains(childRect, ngui->mouse)) {
-						buttonColor = lerpColor(buttonColor, 0xFFFFFFFF, 0.25);
+						int hoverColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT);
+						float perc = getAofArgb(hoverColor) / 255.0;
+						fgColor = lerpColor(fgColor, hoverColor | 0xFF000000, perc);
 						if (platform->mouseJustDown) child->justActive = true;
+
+						graphicsOffset.x = 20;
 					}
-					drawRect(childRect, buttonColor);
-					DrawTextProps props = newDrawTextProps(ngui->defaultFont, 0xFFA0A0A0);
-					drawTextInRect(label, props, childRect, v2(0, 0.5));
+
+					if (child->fgColor == 0) child->fgColor = fgColor;
+					child->fgColor = lerpColor(child->fgColor, fgColor, 0.05);
+
+					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
+
+					Rect graphicsRect = childRect;
+					graphicsRect.x += child->graphicsOffset.x;
+					graphicsRect.y += child->graphicsOffset.y;
+					drawRect(graphicsRect, child->fgColor);
+
+					if (child->iconName[0]) {
+						Rect iconRect = makeRect(graphicsRect.x, graphicsRect.y, graphicsRect.height, graphicsRect.height); // Yes, .height twice
+						NguiIcon *icon = nguiGetIcon(child->iconName);
+						if (icon) {
+							setScissor(iconRect);
+							Matrix3 matrix = mat3();
+							matrix.TRANSLATE(iconRect.x, iconRect.y);
+							matrix.SCALE(iconRect.width, iconRect.height);
+							drawSimpleTexture(icon->texture, matrix, v2(0, 0), v2(1, 1), child->iconAlpha);
+							clearScissor();
+						} else {
+							drawRect(iconRect, 0xFFFF0000);
+						}
+					}
+
+					int textColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_TEXT_COLOR);
+					Rect textRect = graphicsRect;
+					DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
+					drawTextInRect(label, props, textRect, v2(0, 0.5));
 				}
 
 				if (!skipCursorBump) {
@@ -321,9 +399,10 @@ void nguiDraw(float elapsed) {
 		}
 	}
 
-	// for (int i = 0; i < ngui->elementsNum; i++) {
-	// 	NguiElement *element = &ngui->elements[i];
-	// }
+	for (int i = 0; i < ngui->elementsNum; i++) {
+		NguiElement *element = &ngui->elements[i];
+		element->creationTime += elapsed;
+	}
 
 	ngui->iconsNum = 0;
 	ngui->time += elapsed;
@@ -354,7 +433,6 @@ NguiElement *getNguiElement(char *name) {
 		memset(element, 0, sizeof(NguiElement));
 		strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
 		element->id = ++ngui->nextNguiElementId;
-		element->creationTime = ngui->time;
 	}
 
 	element->exists = true;
@@ -388,15 +466,18 @@ bool nguiButton(char *name) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
 	element->size = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
+	element->iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
+	element->iconAlpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 	return element->justActive;
 }
 
 int getSizeForDataType(NguiDataType dataType) {
 	int size = 0;
-	if (dataType == NGUI_DATA_TYPE_INT) size = 4;
-	if (dataType == NGUI_DATA_TYPE_COLOR_INT) size = 4;
-	if (dataType == NGUI_DATA_TYPE_FLOAT) size = 4;
+	if (dataType == NGUI_DATA_TYPE_INT) size = sizeof(int);
+	if (dataType == NGUI_DATA_TYPE_COLOR_INT) size = sizeof(int);
+	if (dataType == NGUI_DATA_TYPE_FLOAT) size = sizeof(float);
 	if (dataType == NGUI_DATA_TYPE_VEC2) size = sizeof(Vec2);
+	if (dataType == NGUI_DATA_TYPE_STRING_PTR) size = sizeof(char *);
 	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
 	return size;
 }

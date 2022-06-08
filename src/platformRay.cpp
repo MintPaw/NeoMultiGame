@@ -35,6 +35,7 @@ struct Platform {
 
 	int windowWidth;
 	int windowHeight;
+	float windowScaling;
 
 	float realElapsed;
 	float elapsed;
@@ -148,6 +149,8 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 
 	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
+
+	platform->windowScaling = Raylib::GetWindowScaleDPI().x;
 
 	guiInit();
 
@@ -1361,10 +1364,8 @@ void guiInit() {
 		io.Fonts->TexID = &gui->FontTexture;
 	}
 
-	float scaleFactor = Raylib::GetWindowScaleDPI().x;
-	if (scaleFactor == 1.75) scaleFactor = 2;
-	ImGui::GetStyle().ScaleAllSizes(scaleFactor);
-	ImGui::GetIO().FontGlobalScale = scaleFactor;
+	ImGui::GetStyle().ScaleAllSizes(platform->windowScaling);
+	ImGui::GetIO().FontGlobalScale = platform->windowScaling;
 }
 
 void guiStartFrame() {
