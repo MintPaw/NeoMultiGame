@@ -57,6 +57,12 @@ struct NguiStyleVar {
 	char data[sizeof(Vec4)];
 };
 
+struct NguiStyleStack {
+	NguiStyleVar *vars;
+	int varsNum;
+	int varsMax;
+};
+
 struct NguiIcon {
 #define NGUI_ICON_NAME_MAX_LEN 32
 	char name[NGUI_ICON_NAME_MAX_LEN];
@@ -82,9 +88,7 @@ struct Ngui {
 
 	NguiStyleTypeInfo styleTypeInfos[NGUI_STYLE_TYPES_MAX];
 
-	NguiStyleVar *styleStack;
-	int styleStackNum;
-	int styleStackMax;
+	NguiStyleStack styleStack;
 
 #define NGUI_ICONS_MAX 128
 	NguiIcon icons[NGUI_ICONS_MAX];
@@ -136,8 +140,8 @@ void nguiInit() {
 	ngui->elementsMax = 128;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
 
-	ngui->styleStackMax = 1;
-	ngui->styleStack = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * ngui->styleStackMax);
+	ngui->styleStack.varsMax = 1;
+	ngui->styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * ngui->styleStack.varsMax);
 
 	NguiStyleTypeInfo *info;
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
@@ -219,12 +223,17 @@ void nguiPushStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 		return;
 	}
 
-	if (ngui->styleStackNum > ngui->styleStackMax-1) {
-		ngui->styleStack = (NguiStyleVar *)resizeArray(ngui->styleStack, sizeof(NguiStyleVar), ngui->styleStackNum, ngui->styleStackMax*2);
-		ngui->styleStackMax *= 2;
+	if (ngui->styleStack.varsNum > ngui->styleStack.varsMax-1) {
+		ngui->styleStack.vars = (NguiStyleVar *)resizeArray(
+			ngui->styleStack.vars,
+			sizeof(NguiStyleVar),
+			ngui->styleStack.varsNum,
+			ngui->styleStack.varsMax*2
+		);
+		ngui->styleStack.varsMax *= 2;
 	}
 
-	NguiStyleVar *var = &ngui->styleStack[ngui->styleStackNum++];
+	NguiStyleVar *var = &ngui->styleStack.vars[ngui->styleStack.varsNum++];
 	memset(var, 0, sizeof(NguiStyleVar));
 	var->type = type;
 
@@ -240,8 +249,8 @@ void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 	}
 
 	NguiStyleVar *srcVar = NULL;
-	for (int i = ngui->styleStackNum-1; i >= 0; i--) {
-		NguiStyleVar *var = &ngui->styleStack[i];
+	for (int i = ngui->styleStack.varsNum-1; i >= 0; i--) {
+		NguiStyleVar *var = &ngui->styleStack.vars[i];
 		if (var->type == type) {
 			srcVar = var;
 			break;
@@ -257,10 +266,10 @@ void nguiGetStyleOfType(NguiStyleType type, NguiDataType dataType, void *ptr) {
 }
 
 void nguiPopStyleVar(int amount) {
-	ngui->styleStackNum -= amount;
-	if (ngui->styleStackNum < 0) {
+	ngui->styleStack.varsNum -= amount;
+	if (ngui->styleStack.varsNum < 0) {
 		logf("Ngui style stack underflow!!!!\n");
-		ngui->styleStackNum = 0;
+		ngui->styleStack.varsNum = 0;
 	}
 }
 
