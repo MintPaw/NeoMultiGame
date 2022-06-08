@@ -31,6 +31,7 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_ELEMENT_FG_COLOR,
 	NGUI_STYLE_ELEMENT_HOVER_TINT,
+	NGUI_STYLE_ELEMENT_ACTIVE_TINT,
 	NGUI_STYLE_ELEMENT_TEXT_COLOR,
 	NGUI_STYLE_ICON_NAME_PTR,
 	NGUI_STYLE_ICON_ALPHA,
@@ -159,6 +160,11 @@ void nguiInit() {
 	info->name = "Element hover tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_ACTIVE_TINT];
+	info->enumName = "NGUI_STYLE_ELEMENT_ACTIVE_TINT";
+	info->name = "Element active tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_TEXT_COLOR];
 	info->enumName = "NGUI_STYLE_ELEMENT_TEXT_COLOR";
 	info->name = "Element text color";
@@ -178,6 +184,7 @@ void nguiInit() {
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR, 0xFF353535);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT, 0x40FFFFFF);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT, 0xA0FFFFFF);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
@@ -341,10 +348,14 @@ void nguiDraw(float elapsed) {
 					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_FG_COLOR);
 
 					if (contains(childRect, ngui->mouse)) {
-						int hoverColor = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT);
-						float perc = getAofArgb(hoverColor) / 255.0;
-						fgColor = lerpColor(fgColor, hoverColor | 0xFF000000, perc);
-						if (platform->mouseJustDown) child->justActive = true;
+						int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_HOVER_TINT);
+						fgColor = lerpColor(fgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
+						if (platform->mouseJustDown) {
+							int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_ACTIVE_TINT);
+							child->fgColor = lerpColor(child->fgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
+
+							child->justActive = true;
+						}
 
 						graphicsOffset.x = 20;
 					}
@@ -367,6 +378,7 @@ void nguiDraw(float elapsed) {
 							Matrix3 matrix = mat3();
 							matrix.TRANSLATE(iconRect.x, iconRect.y);
 							matrix.SCALE(iconRect.width, iconRect.height);
+							matrix *= icon->transform;
 							drawSimpleTexture(icon->texture, matrix, v2(0, 0), v2(1, 1), child->iconAlpha);
 							clearScissor();
 						} else {

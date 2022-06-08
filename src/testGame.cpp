@@ -339,7 +339,28 @@ void updateGame() {
 #if 1 // ngui test
 	clearRenderer(0xFF000000);
 
+	struct Xform2 {
+		Vec2 translation;
+		Vec2 scale;
+		float rotation;
+	};
+	static Xform2 axeXform = {v2(), v2(1, 1), 0};
+	static Xform2 beeXform = {v2(), v2(1, 1), 0};
+	static Xform2 bootXform = {v2(), v2(1, 1), 0};
+
 	if (platform->frameCount > 0) {
+		ImGui::Begin("Icon editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::DragFloat2("axe translation", &axeXform.translation.x, 0.01);
+		ImGui::DragFloat2("axe scale", &axeXform.scale.x, 0.01);
+		ImGui::DragFloat("axe rotation", &axeXform.rotation);
+		ImGui::DragFloat2("bee translation", &beeXform.translation.x, 0.01);
+		ImGui::DragFloat2("bee scale", &beeXform.scale.x, 0.01);
+		ImGui::DragFloat("bee rotation", &beeXform.rotation);
+		ImGui::DragFloat2("boot translation", &bootXform.translation.x, 0.01);
+		ImGui::DragFloat2("boot scale", &bootXform.scale.x, 0.01);
+		ImGui::DragFloat("boot rotation", &bootXform.rotation);
+		ImGui::End();
+
 		ImGui::Begin("Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		DataStream *codeStream = newDataStream();
@@ -389,9 +410,29 @@ void updateGame() {
 		nguiInit();
 	}
 
-	Matrix3 matrix = mat3();
+	Matrix3 matrix;
+	matrix = mat3();
+	matrix.TRANSLATE(0.5, 0.5);
+	matrix.ROTATE(axeXform.rotation);
+	matrix.SCALE(axeXform.scale);
+	matrix.TRANSLATE(axeXform.translation);
+	matrix.TRANSLATE(-0.5, -0.5);
 	nguiAddIcon("axeIcon", getTexture("assets/images/icons/axe.png"), matrix);
+
+	matrix = mat3();
+	matrix.TRANSLATE(0.5, 0.5);
+	matrix.ROTATE(beeXform.rotation);
+	matrix.SCALE(beeXform.scale);
+	matrix.TRANSLATE(beeXform.translation);
+	matrix.TRANSLATE(-0.5, -0.5);
 	nguiAddIcon("beeIcon", getTexture("assets/images/icons/bee.png"), matrix);
+
+	matrix = mat3();
+	matrix.TRANSLATE(0.5, 0.5);
+	matrix.ROTATE(bootXform.rotation);
+	matrix.SCALE(bootXform.scale);
+	matrix.TRANSLATE(bootXform.translation);
+	matrix.TRANSLATE(-0.5, -0.5);
 	nguiAddIcon("bootIcon", getTexture("assets/images/icons/boot.png"), matrix);
 
 	ngui->mouse = platform->mouse;
