@@ -7,7 +7,7 @@ struct NguiElement {
 
 #define NGUI_ELEMENT_NAME_MAX_LEN 64
 	char name[NGUI_ELEMENT_NAME_MAX_LEN];
-	bool exists;
+	float alive;
 	int id;
 	int parentId;
 
@@ -267,7 +267,7 @@ void nguiPopStyleVar(int amount) {
 void nguiDraw(float elapsed) {
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
-		if (!element->exists) {
+		if (element->alive <= 0) {
 			arraySpliceIndex(ngui->elements, ngui->elementsNum, sizeof(NguiElement), i);
 			i--;
 			ngui->elementsNum--;
@@ -281,7 +281,6 @@ void nguiDraw(float elapsed) {
 		NguiElement *element = &ngui->elements[i];
 		element->active = false;
 		element->justActive = false;
-		element->exists = false;
 		elementsLeft[elementsLeftNum++] = element;
 	}
 
@@ -328,8 +327,11 @@ void nguiDraw(float elapsed) {
 
 				child->active = false;
 				char *label = child->name;
+				float alpha = 1;
+				alpha *= child->alive;
 
 				bool skipCursorBump = false;
+				if (child->alive != 1) skipCursorBump = true;
 				if (child->creationTime == 0) {
 					if (prevChild && prevChild->creationTime == 0) {
 						child->position = prevCursor;
@@ -338,7 +340,7 @@ void nguiDraw(float elapsed) {
 						child->position = cursor;
 					}
 				}
-				child->position = lerp(child->position, cursor, 0.05);
+				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
 				Rect childRect = makeRect(child->position, child->size) * ngui->uiScale;
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
@@ -368,6 +370,8 @@ void nguiDraw(float elapsed) {
 					Rect graphicsRect = childRect;
 					graphicsRect.x += child->graphicsOffset.x;
 					graphicsRect.y += child->graphicsOffset.y;
+
+					pushAlpha(alpha);
 					drawRect(graphicsRect, child->fgColor);
 
 					if (child->iconName[0]) {
@@ -390,6 +394,8 @@ void nguiDraw(float elapsed) {
 					Rect textRect = graphicsRect;
 					DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
 					drawTextInRect(label, props, textRect, v2(0, 0.5));
+
+					popAlpha();
 				}
 
 				if (!skipCursorBump) {
@@ -414,6 +420,7 @@ void nguiDraw(float elapsed) {
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
 		element->creationTime += elapsed;
+		element->alive -= 0.05;
 	}
 
 	ngui->iconsNum = 0;
@@ -447,7 +454,7 @@ NguiElement *getNguiElement(char *name) {
 		element->id = ++ngui->nextNguiElementId;
 	}
 
-	element->exists = true;
+	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
 	if (ngui->currentWindow) element->parentId = ngui->currentWindow->id;
 	return element;
