@@ -5,6 +5,7 @@ enum NguiStyleType {
 	NGUI_STYLE_FG_COLOR,
 	NGUI_STYLE_HOVER_TINT,
 	NGUI_STYLE_ACTIVE_TINT,
+	NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS,
 	NGUI_STYLE_TEXT_COLOR,
 	NGUI_STYLE_INDENT,
 	NGUI_STYLE_ICON_NAME_PTR,
@@ -12,6 +13,8 @@ enum NguiStyleType {
 	NGUI_STYLE_ICON_GRAVITY,
 	NGUI_STYLE_HIGHLIGHT_TINT,
 	NGUI_STYLE_HIGHLIGHT_CRUSH,
+	NGUI_STYLE_HOVER_SOUND_PATH_PTR,
+	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -66,6 +69,8 @@ struct NguiElement {
 	bool justActive;
 
 	float creationTime;
+	float hoveringTime;
+	float timeSinceLastClicked;
 };
 
 struct NguiIcon {
@@ -193,6 +198,11 @@ void nguiInit() {
 	info->name = "Active tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS];
+	info->enumName = "NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS";
+	info->name = "Active flash brightness";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_TEXT_COLOR];
 	info->enumName = "NGUI_STYLE_TEXT_COLOR";
 	info->name = "Text color";
@@ -228,12 +238,23 @@ void nguiInit() {
 	info->name = "Highlight crush";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_SOUND_PATH_PTR];
+	info->enumName = "NGUI_STYLE_HOVER_SOUND_PATH_PTR";
+	info->name = "Hover sound path";
+	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_SOUND_PATH_PTR];
+	info->enumName = "NGUI_STYLE_ACTIVE_SOUND_PATH_PTR";
+	info->name = "Active sound path";
+	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
 	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
+	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0.8);
 	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
@@ -241,6 +262,8 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
 	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x5C000000);
 	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
+	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
+	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
 }
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
@@ -293,8 +316,12 @@ void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDat
 void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
-		logf("Type mismatch on get ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
-		return;
+		Panic(frameSprintf(
+			"Type mismatch on get ngui style type %d (got %d, expected %d)\n",
+			type,
+			dataType,
+			styleTypeInfo.dataType
+		));
 	}
 
 	NguiStyleVar *srcVar = NULL;
@@ -306,9 +333,7 @@ void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiData
 		}
 	}
 
-	if (!srcVar) {
-		logf("Failed to get style value for type %d\n", type);
-	}
+	if (!srcVar) Panic(frameSprintf("Failed to get style value for type %d\n", type));
 
 	int size = getSizeForDataType(dataType);
 	memcpy(ptr, srcVar->data, size);
@@ -424,20 +449,36 @@ void nguiDraw(float elapsed) {
 					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
 
 					if (contains(childRect, ngui->mouse)) {
+						if (child->hoveringTime == 0) playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+
 						int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_HOVER_TINT);
 						fgColor = lerpColor(fgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
 						if (platform->mouseJustDown) {
+							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
 							child->fgColor = lerpColor(child->fgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
 
+							child->timeSinceLastClicked = 0.001;
 							child->justActive = true;
 						}
 
 						graphicsOffset.x = 20;
+						child->hoveringTime += elapsed;
+					} else {
+						child->hoveringTime = 0;
+					}
+
+					float modByForFlash = 0.3;
+					if (child->timeSinceLastClicked > 0 && child->timeSinceLastClicked < modByForFlash*2) {
+						float moddedValue = fmod(child->timeSinceLastClicked, modByForFlash);
+						float perc = moddedValue / modByForFlash;
+						int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
+						float flashBrightness = nguiGetStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
+						if (perc > 0.75) fgColor = lerpColor(fgColor, activeTint, flashBrightness);
 					}
 
 					if (child->fgColor == 0) child->fgColor = fgColor;
-					child->fgColor = lerpColor(child->fgColor, fgColor, 0.05);
+					child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
 
 					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
 
@@ -526,6 +567,7 @@ void nguiDraw(float elapsed) {
 
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
+		if (element->timeSinceLastClicked > 0) element->timeSinceLastClicked += elapsed;
 		element->creationTime += elapsed;
 		element->alive -= 0.05;
 	}
