@@ -500,7 +500,7 @@ NguiElement *getNguiElement(char *name) {
 		memset(element, 0, sizeof(NguiElement));
 		strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
 		element->id = ++ngui->nextNguiElementId;
-		element->styleStack.varsMax = 1;
+		element->styleStack.varsMax = NGUI_STYLE_TYPES_MAX;
 		element->styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * element->styleStack.varsMax);
 	}
 

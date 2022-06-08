@@ -1764,12 +1764,16 @@ int lerpColor(int color1, int color2, float perc) {
 
 	perc = Clamp01(perc);
 
-	return argbToHex(
+	int ret = argbToHex(
 		lerp(a1, a2, perc),
 		lerp(r1, r2, perc),
 		lerp(g1, g2, perc),
 		lerp(b1, b2, perc)
 	);
+
+	if (ret == color1 && ret != color2 && perc > 0) ret = lerpColor(color1, color2, (perc*2)+0.001);
+
+	return ret;
 }
 
 float cubicBezier_getBezierPoint(float perc, float n1, float n2);
