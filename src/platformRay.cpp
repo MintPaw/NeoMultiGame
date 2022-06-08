@@ -458,6 +458,7 @@ struct Renderer {
 
 	Texture *whiteTexture;
 	RenderTexture *circleTexture;
+	Texture *linearGrad256;
 
 	Raylib::Light lights[MAX_LIGHTS];
 	Raylib::Model cubeModel;

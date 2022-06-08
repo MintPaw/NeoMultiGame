@@ -10,6 +10,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ICON_NAME_PTR,
 	NGUI_STYLE_ICON_ALPHA,
 	NGUI_STYLE_ICON_GRAVITY,
+	NGUI_STYLE_HIGHLIGHT_TINT,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -216,6 +217,11 @@ void nguiInit() {
 	info->name = "Icon gravity";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_HIGHLIGHT_TINT];
+	info->enumName = "NGUI_STYLE_HIGHLIGHT_TINT";
+	info->name = "Highlight tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
@@ -227,6 +233,7 @@ void nguiInit() {
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
+	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x40000000);
 }
 
 void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
@@ -432,7 +439,20 @@ void nguiDraw(float elapsed) {
 					graphicsRect.y += child->graphicsOffset.y;
 
 					pushAlpha(alpha);
-					drawRect(graphicsRect, child->fgColor);
+					{
+						drawRect(graphicsRect, child->fgColor);
+
+						RenderProps props = newRenderProps();
+						props.matrix.TRANSLATE(graphicsRect.x, graphicsRect.y);
+						props.matrix.SCALE(graphicsRect.width, graphicsRect.height);
+						props.uvMatrix.ROTATE(180);
+						props.srcWidth = props.srcHeight = 1;
+
+						int highlightTint = nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT);
+						int highlightColor = lerpColor(child->fgColor, 0xFF000000 | highlightTint, getAofArgb(highlightTint)/255.0);
+						props.tint = highlightColor;
+						drawTexture(renderer->linearGrad256, props);
+					}
 
 					char *iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
 					if (iconName[0]) {

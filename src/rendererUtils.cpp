@@ -118,6 +118,15 @@ RendererUtils *rendererUtils = NULL;
 
 void initRendererUtils() {
 	rendererUtils = (RendererUtils *) zalloc(sizeof(RendererUtils));
+
+	char *gradData = (char *)frameMalloc(1 * 256 * 4);
+	for (int y = 0; y < 256; y++) {
+		Vec4 color = v4(y/255.0, 1, 1, 1);
+		int colorInt = argbToHex(color);
+		memcpy(&gradData[y*4], &colorInt, sizeof(int));
+	}
+
+	renderer->linearGrad256 = createTexture(1, 256, gradData);
 }
 
 Texture *createFrameTexture(int width, int height, void *data) {

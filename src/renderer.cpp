@@ -305,6 +305,7 @@ struct Renderer {
 
 	Texture *emptyTexture;
 	Texture *whiteTexture;
+	Texture *linearGrad256;
 
 	GLuint batchNonInstancedBuffer;
 	GLuint batchInstancedBuffer;
