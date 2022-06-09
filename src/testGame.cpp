@@ -473,14 +473,14 @@ void updateGame() {
 
 	nguiEndWindow();
 
-	// nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
-	// nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 1));
-	// nguiStartWindow("Second window");
-	// nguiPopStyleVar(2);
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 0));
+	nguiStartWindow("Second window");
+	nguiPopStyleVar(2);
 
-	// if (nguiButton("Another window?")) logf("Wow\n");
+	if (nguiButton("Another window?")) logf("Wow\n");
 
-	// nguiEndWindow();
+	nguiEndWindow();
 
 	nguiDraw(elapsed);
 #endif

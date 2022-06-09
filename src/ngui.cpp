@@ -415,10 +415,6 @@ void nguiDraw(float elapsed) {
 			if (window->type != NGUI_ELEMENT_WINDOW) continue;
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack This is a really weird hack, since windows are never children
-			Vec2 windowSize = nguiGetStyleVec2(NGUI_STYLE_WINDOW_SIZE);
-			Rect windowRect = makeRect(window->position, windowSize) * ngui->uiScale;
-			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
-
 			NguiElement **children = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
 			int childrenNum = 0;
 
@@ -443,10 +439,11 @@ void nguiDraw(float elapsed) {
 
 			qsort(children, childrenNum, sizeof(NguiElement *), qsortChildrenByOrderIndex);
 
-			Vec2 prevCursor = window->position;
-			Vec2 cursor = window->position;
+			Vec2 prevCursor = v2();
+			Vec2 cursor = v2();
+			Vec2 childrenSize = v2();
 			NguiElement *prevChild = NULL;
-			for (int i = 0; i < childrenNum; i++) {
+			for (int i = 0; i < childrenNum; i++) { // Layout
 				NguiElement *child = children[i];
 				ngui->currentStyleStack = &child->styleStack;
 
@@ -469,6 +466,9 @@ void nguiDraw(float elapsed) {
 
 				child->drawRect = childRect;
 
+				childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
+				childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
+
 				if (!skipCursorBump) {
 					prevCursor = cursor;
 					cursor.y += buttonSize.y;
@@ -476,7 +476,23 @@ void nguiDraw(float elapsed) {
 				prevChild = child;
 			}
 
-			for (int i = 0; i < childrenNum; i++) {
+			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
+
+			// windowPosition is not multiplied by ngui->uiScale because it's given by the user as screen coords
+			Vec2 windowPosition = nguiGetStyleVec2(NGUI_STYLE_WINDOW_POSITION);
+			Vec2 windowSize = childrenSize;
+			windowPosition -= windowSize * nguiGetStyleVec2(NGUI_STYLE_WINDOW_PIVOT);
+			Rect windowRect = makeRect(windowPosition, windowSize);
+
+			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
+
+			for (int i = 0; i < childrenNum; i++) { // Window position
+				NguiElement *child = children[i];
+				child->drawRect.x += windowRect.x;
+				child->drawRect.y += windowRect.y;
+			}
+
+			for (int i = 0; i < childrenNum; i++) { // Update
 				NguiElement *child = children[i];
 				ngui->currentStyleStack = &child->styleStack;
 
