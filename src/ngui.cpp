@@ -3,6 +3,7 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_WINDOW_LAYOUT,
+	NGUI_STYLE_ELEMENTS_IN_ROW,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
@@ -198,6 +199,11 @@ void nguiInit() {
 	info->name = "Window layout";
 	info->dataType = NGUI_DATA_TYPE_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENTS_IN_ROW];
+	info->enumName = "NGUI_STYLE_ELEMENTS_IN_ROW";
+	info->name = "Elements in row";
+	info->dataType = NGUI_DATA_TYPE_INT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
 	info->enumName = "NGUI_STYLE_BUTTON_SIZE";
 	info->name = "Button size";
@@ -277,6 +283,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleInt(NGUI_STYLE_WINDOW_LAYOUT, (int)NGUI_LAYOUT_VERTICAL);
+	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
@@ -443,6 +450,7 @@ void nguiDraw(float elapsed) {
 			Vec2 cursor = v2();
 			Vec2 childrenSize = v2();
 			NguiElement *prevChild = NULL;
+			int elementsInRow = 0;
 			for (int i = 0; i < childrenNum; i++) { // Layout
 				NguiElement *child = children[i];
 				ngui->currentStyleStack = &child->styleStack;
@@ -469,9 +477,17 @@ void nguiDraw(float elapsed) {
 				childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
 				childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
 
+				elementsInRow++;
 				if (!skipCursorBump) {
 					prevCursor = cursor;
-					cursor.y += buttonSize.y;
+					if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
+						cursor.x += buttonSize.x;
+					} else {
+						cursor.x = 0;
+						cursor.y += buttonSize.y;
+						elementsInRow = 0;
+					}
+
 				}
 				prevChild = child;
 			}
