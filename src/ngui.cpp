@@ -73,6 +73,8 @@ struct NguiElement {
 	float creationTime;
 	float hoveringTime;
 	float timeSinceLastClicked;
+
+	Rect drawRect;
 };
 
 struct NguiIcon {
@@ -437,9 +439,6 @@ void nguiDraw(float elapsed) {
 				ngui->currentStyleStack = &child->styleStack;
 
 				child->active = false;
-				char *label = child->name;
-				float alpha = 1;
-				alpha *= child->alive;
 
 				bool skipCursorBump = false;
 				if (child->alive != 1) skipCursorBump = true;
@@ -455,6 +454,25 @@ void nguiDraw(float elapsed) {
 				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
 				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
 				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT);
+
+				child->drawRect = childRect;
+
+				if (!skipCursorBump) {
+					prevCursor = cursor;
+					cursor.y += buttonSize.y;
+				}
+				prevChild = child;
+			}
+
+			for (int i = 0; i < childrenNum; i++) {
+				NguiElement *child = children[i];
+				ngui->currentStyleStack = &child->styleStack;
+
+				char *label = child->name;
+				float alpha = 1;
+				alpha *= child->alive;
+
+				Rect childRect = child->drawRect;
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					childRect = inflatePerc(childRect, -0.05);
@@ -557,14 +575,9 @@ void nguiDraw(float elapsed) {
 
 					popAlpha();
 				}
-
-				if (!skipCursorBump) {
-					prevCursor = cursor;
-					cursor.y += buttonSize.y;
-				}
-				prevChild = child;
-				ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 			}
+
+			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 
 			arraySpliceIndex(elementsLeft, elementsLeftNum, sizeof(NguiElement *), windowIndex);
 			i--;
