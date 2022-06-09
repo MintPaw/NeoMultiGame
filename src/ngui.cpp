@@ -2,6 +2,7 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_POSITION,
 	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
+	NGUI_STYLE_WINDOW_LAYOUT,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
@@ -18,6 +19,11 @@ enum NguiStyleType {
 	NGUI_STYLE_HOVER_SOUND_PATH_PTR,
 	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR,
 	NGUI_STYLE_TYPES_MAX,
+};
+
+enum NguiLayout {
+	NGUI_LAYOUT_VERTICAL,
+	NGUI_LAYOUT_GRID,
 };
 
 enum NguiDataType {
@@ -187,6 +193,11 @@ void nguiInit() {
 	info->name = "Window size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_LAYOUT];
+	info->enumName = "NGUI_STYLE_WINDOW_LAYOUT";
+	info->name = "Window layout";
+	info->dataType = NGUI_DATA_TYPE_INT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
 	info->enumName = "NGUI_STYLE_BUTTON_SIZE";
 	info->name = "Button size";
@@ -265,6 +276,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
+	nguiPushStyleInt(NGUI_STYLE_WINDOW_LAYOUT, (int)NGUI_LAYOUT_VERTICAL);
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
