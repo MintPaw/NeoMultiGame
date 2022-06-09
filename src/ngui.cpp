@@ -1,4 +1,6 @@
 enum NguiStyleType {
+	NGUI_STYLE_WINDOW_POSITION,
+	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_WINDOW_BG_COLOR,
@@ -168,6 +170,16 @@ void nguiInit() {
 	ngui->currentStyleStack = &ngui->globalStyleStack;
 
 	NguiStyleTypeInfo *info;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_POSITION];
+	info->enumName = "NGUI_STYLE_WINDOW_POSITION";
+	info->name = "Window position";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_PIVOT];
+	info->enumName = "NGUI_STYLE_WINDOW_PIVOT";
+	info->name = "Window pivot";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_SIZE];
 	info->enumName = "NGUI_STYLE_WINDOW_SIZE";
 	info->name = "Window size";
@@ -248,6 +260,8 @@ void nguiInit() {
 	info->name = "Active sound path";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
 
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
