@@ -151,7 +151,8 @@ Vec2 nguiGetStyleVec2(NguiStyleType type)
 char *nguiGetStyleStringPtr(NguiStyleType type)
 { char *ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &ret); return ret; }
 
-void nguiPopStyleVar(int amount=1);
+void nguiPopAnyStyleVar(int amount=1);
+void nguiPopStyleVar(NguiStyleType type);
 void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type);
 
 void nguiDraw(float elapsed);
@@ -303,7 +304,7 @@ void nguiInit() {
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
 	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
-	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0.8);
+	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
 	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
@@ -388,7 +389,20 @@ void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiData
 	memcpy(ptr, srcVar->data, size);
 }
 
-void nguiPopStyleVar(int amount) {
+void nguiPopStyleVar(NguiStyleType type) {
+	if (ngui->currentStyleStack->varsNum < 1) Panic(frameSprintf("Tried to pop %d, but there were no more vars", type));
+
+	NguiStyleType topStyleType = ngui->currentStyleStack->vars[ngui->currentStyleStack->varsNum-1].type;
+	if (topStyleType != type) {
+		NguiStyleTypeInfo *topInfo = &ngui->styleTypeInfos[topStyleType];
+		NguiStyleTypeInfo *currentInfo = &ngui->styleTypeInfos[type];
+		Panic(frameSprintf("Tried to pop %s, but next was %s\n", currentInfo->enumName, topInfo->enumName));
+	}
+
+	nguiPopAnyStyleVar();
+}
+
+void nguiPopAnyStyleVar(int amount) {
 	ngui->currentStyleStack->varsNum -= amount;
 	if (ngui->currentStyleStack->varsNum < 0) {
 		logf("Ngui style stack underflow!!!!\n");
@@ -429,6 +443,9 @@ void nguiDraw(float elapsed) {
 
 	int lastLeftNum = elementsLeftNum;
 	for (;;) {
+		if (elementsLeftNum > 20) {
+			int k = 5;
+		}
 		if (elementsLeftNum == 0) break;
 		for (int i = 0; i < elementsLeftNum; i++) {
 			int windowIndex = i;
@@ -697,7 +714,7 @@ NguiElement *getNguiElement(char *name) {
 
 	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
-	if (ngui->currentWindow) element->parentId = ngui->currentWindow->id;
+	element->parentId = ngui->currentWindow ? ngui->currentWindow->id : 0;
 
 	element->styleStack.varsNum = 0;
 	for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {

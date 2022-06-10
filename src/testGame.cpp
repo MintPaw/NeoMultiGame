@@ -348,7 +348,7 @@ void updateGame() {
 	static Xform2 beeXform = {v2(), v2(1, 1), 0};
 	static Xform2 bootXform = {v2(), v2(1, 1), 0};
 
-	if (platform->frameCount > 0) {
+	if (platform->frameCount > 0 && game->debugMode) {
 		ImGui::Begin("Icon editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::DragFloat2("axe translation", &axeXform.translation.x, 0.01);
 		ImGui::DragFloat2("axe scale", &axeXform.scale.x, 0.01);
@@ -446,16 +446,16 @@ void updateGame() {
 		logf("You clicked the button!\n");
 		showingSubItems = !showingSubItems;
 	}
-	nguiPopStyleVar();
+	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
 
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
 	if (nguiButton("Dummy button 1")) ;
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xFFFF0000);
 	if (nguiButton("Dummy button 2", "This button goes red")) ;
-	nguiPopStyleVar();
+	nguiPopStyleVar(NGUI_STYLE_ACTIVE_TINT);
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
-	nguiPopStyleVar();
+	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
 
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
@@ -468,8 +468,8 @@ void updateGame() {
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
-		nguiPopStyleVar();
-		if (doIndent) nguiPopStyleVar();
+		nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+		if (doIndent) nguiPopStyleVar(NGUI_STYLE_INDENT);
 	}
 
 	if (nguiButton("Third button")) logf("You clicked the third button!\n");
@@ -479,13 +479,60 @@ void updateGame() {
 	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(-20, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 0));
-	nguiStartWindow("Second window");
-	nguiPopStyleVar(2);
+	nguiStartWindow("Combat");
+	nguiPopAnyStyleVar(2);
 
-	if (nguiButton("Another window?")) logf("Wow\n");
+	static bool attackOpen = false;
+	if (nguiButton("Attack")) attackOpen = !attackOpen;
+	if (attackOpen) {
+		nguiPushStyleFloat(NGUI_STYLE_INDENT, -80);
+		int optionChoosen = 0;
+
+		nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0x80FF0000);
+		if (nguiButton("Slash")) optionChoosen = 1;
+		if (nguiButton("Stab")) optionChoosen = 2;
+		if (nguiButton("Chop")) optionChoosen = 3;
+		nguiPopStyleVar(NGUI_STYLE_ACTIVE_TINT);
+
+		if (optionChoosen != 0) {
+			logf("Did attack %d\n", optionChoosen);
+			attackOpen = false;
+		}
+		nguiPopStyleVar(NGUI_STYLE_INDENT);
+	}
+
+	if (nguiButton("Magic")) ;
+
+	static bool itemsOpen = false;
+	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0.8);
+	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA00000FF);
+	if (nguiButton("Items")) itemsOpen = !itemsOpen;
+	nguiPopStyleVar(NGUI_STYLE_ACTIVE_TINT);
+	nguiPopStyleVar(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
 
 	nguiEndWindow();
-	nguiPopStyleVar(); // NGUI_STYLE_HOVER_OFFSET;
+	nguiPopStyleVar(NGUI_STYLE_HOVER_OFFSET);
+
+	if (itemsOpen) {
+		nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
+
+		nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth/2, platform->windowHeight));
+		nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0.5, 1));
+		nguiStartWindow("ItemsWindow");
+		nguiPopAnyStyleVar(2);
+
+		nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(50, 50));
+		for (int i = 0; i < 20; i++) {
+			if (nguiButton(frameSprintf("Item #%d", i))) {
+				logf("You clicked item %d\n", i);
+			}
+		}
+		nguiPopStyleVar(NGUI_STYLE_BUTTON_SIZE);
+
+		nguiEndWindow();
+
+		nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+	}
 
 	nguiDraw(elapsed);
 #endif
