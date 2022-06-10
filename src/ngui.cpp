@@ -621,7 +621,7 @@ void nguiDraw(float elapsed) {
 					char *iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
 					if (iconName[0]) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
-						Rect iconRect = getCenteredRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
+						Rect iconRect = getInnerRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
 						NguiIcon *icon = nguiGetIcon(iconName);
 						if (icon) {
 							setScissor(iconRect);
@@ -639,7 +639,7 @@ void nguiDraw(float elapsed) {
 
 					{
 						int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
-						Rect textRect = getCenteredRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
+						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
 						drawTextInRect(label, props, textRect, v2(0, 0));
 					}
@@ -648,7 +648,7 @@ void nguiDraw(float elapsed) {
 						int subTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 						subTextColor = lerpColor(subTextColor, 0x00FFFFFF&subTextColor, 0.25);
 
-						Rect subTextRect = getCenteredRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
+						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
 						drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
 					}

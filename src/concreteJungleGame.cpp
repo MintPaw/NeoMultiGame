@@ -4526,7 +4526,7 @@ void updateStore(Actor *player, Actor *storeActor, float elapsed) {
 			}
 		}
 
-		Rect exitRect = getCenteredRectOfSize(bgRect, getSize(bgRect)*0.07, v2(0.99, 0.99));
+		Rect exitRect = getInnerRectOfSize(bgRect, getSize(bgRect)*0.07, v2(0.99, 0.99));
 		drawRect(exitRect, 0xFF990000);
 		drawTextInRect("Exit", newDrawTextProps(game->defaultFont, 0xFFEEEEEE), exitRect);
 		if (contains(exitRect, game->mouse) && platform->mouseJustUp) {

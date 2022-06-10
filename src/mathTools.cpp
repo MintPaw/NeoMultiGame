@@ -817,8 +817,8 @@ Rect makeRect(float x=0, float y=0, float width=0, float height=0);
 Rect makeRect(Vec2 xy, Vec2 size);
 Rect makeCenteredRect(Vec2 position, Vec2 size);
 Rect makeCenteredSquare(Vec2 position, float size);
-Rect getCenteredRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity=v2(0.5, 0.5));
-Rect getCenteredRectOfSize(Rect toFit, Vec2 size, Vec2 gravity);
+Rect getInnerRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity=v2(0.5, 0.5));
+Rect getInnerRectOfSize(Rect toFit, Vec2 size, Vec2 gravity);
 Rect inflate(Rect rect, float size);
 Rect inflate(Rect rect, Vec2 size);
 Rect inflatePerc(Rect rect, float perc);
@@ -908,7 +908,7 @@ Rect makeCenteredSquare(Vec2 position, float size) {
 	return makeCenteredRect(position, v2(size, size));
 }
 
-Rect getCenteredRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity) {
+Rect getInnerRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity) {
 	Rect ret = makeRect(v2(), aspect);
 	float scaleX = toFit.width / ret.width;
 	float scaleY = toFit.height / ret.height;
@@ -925,7 +925,7 @@ Rect getCenteredRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity) {
 	return ret;
 }
 
-Rect getCenteredRectOfSize(Rect toFit, Vec2 size, Vec2 gravity) {
+Rect getInnerRectOfSize(Rect toFit, Vec2 size, Vec2 gravity) {
 	Rect ret = makeRect(v2(), size);
 	ret.x = toFit.x + toFit.width*gravity.x - ret.width*gravity.x;
 	ret.y = toFit.y + toFit.height*gravity.y - ret.height*gravity.y;

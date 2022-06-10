@@ -329,7 +329,7 @@ Vec2 drawText(const char *text, DrawTextProps props) {
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
 	Vec2 size = getTextSize(props.font, text);
 
-	Rect textRect = getCenteredRectOfAspect(toFit, size, gravity);
+	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
 
 	props.scale.x = textRect.width / size.x;
 	props.scale.y = textRect.height / size.y;

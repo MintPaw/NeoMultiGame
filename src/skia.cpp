@@ -1425,7 +1425,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 
 			Rect toFit = makeRect(cmd->position, cmd->control);
 
-			Rect textRect = getCenteredRectOfAspect(toFit, actualTextSize, cmd->gravity);
+			Rect textRect = getInnerRectOfAspect(toFit, actualTextSize, cmd->gravity);
 
 			// skiaSys->canvas->drawRect(skiaBounds, outlinePaint);
 			// skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlinePaint2);

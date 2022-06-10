@@ -639,7 +639,7 @@ void updateGame() {
 		offset.x = (float)platform->windowWidth/2 - game->size.x/2;
 		offset.y = (float)platform->windowHeight/2 - game->size.y/2;
 
-		Rect gameRect = getCenteredRectOfAspect(makeRect(0, 0, platform->windowWidth, platform->windowHeight), v2(game->size.x, game->size.y));
+		Rect gameRect = getInnerRectOfAspect(makeRect(0, 0, platform->windowWidth, platform->windowHeight), v2(game->size.x, game->size.y));
 		game->screenOverlaySize = getSize(gameRect);
 		game->screenOverlayOffset = getPosition(gameRect);
 	}
