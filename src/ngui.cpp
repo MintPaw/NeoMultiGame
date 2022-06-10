@@ -5,9 +5,9 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_PADDING,
 	NGUI_STYLE_ELEMENT_PADDING,
 	NGUI_STYLE_ELEMENTS_IN_ROW,
-	NGUI_STYLE_BUTTON_SIZE,
+	NGUI_STYLE_ELEMENT_SIZE,
 	NGUI_STYLE_BUTTON_LABEL_GRAVITY,
-	NGUI_STYLE_HOVER_OFFSET,
+	NGUI_STYLE_BUTTON_HOVER_OFFSET,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
 	NGUI_STYLE_HOVER_TINT,
@@ -235,8 +235,8 @@ void nguiInit() {
 	info->name = "Elements in row";
 	info->dataType = NGUI_DATA_TYPE_INT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_SIZE];
-	info->enumName = "NGUI_STYLE_BUTTON_SIZE";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_SIZE];
+	info->enumName = "NGUI_STYLE_ELEMENT_SIZE";
 	info->name = "Button size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
@@ -245,9 +245,9 @@ void nguiInit() {
 	info->name = "Button label gravity";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_OFFSET];
-	info->enumName = "NGUI_STYLE_HOVER_OFFSET";
-	info->name = "Hover offset";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_HOVER_OFFSET];
+	info->enumName = "NGUI_STYLE_BUTTON_HOVER_OFFSET";
+	info->name = "Hover button offset";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_BG_COLOR];
@@ -338,12 +338,12 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(20, 20));
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
-	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
+	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(20, 0));
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(20, 0));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
 	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
@@ -530,7 +530,7 @@ void nguiDraw(float elapsed) {
 					}
 				}
 				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
-				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
+				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
 				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
 				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
 
@@ -582,12 +582,11 @@ void nguiDraw(float elapsed) {
 				char *label = child->name;
 				float alpha = 1;
 				alpha *= child->alive;
+				pushAlpha(alpha);
 
 				Rect childRect = child->drawRect;
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
-					childRect = inflatePerc(childRect, -0.05);
-
 					Vec2 graphicsOffset = v2();
 					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
 
@@ -605,7 +604,7 @@ void nguiDraw(float elapsed) {
 							child->justActive = true;
 						}
 
-						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_HOVER_OFFSET) * ngui->uiScale;
+						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET) * ngui->uiScale;
 						child->hoveringTime += elapsed;
 					} else {
 						child->hoveringTime = 0;
@@ -629,7 +628,6 @@ void nguiDraw(float elapsed) {
 					graphicsRect.x += child->graphicsOffset.x;
 					graphicsRect.y += child->graphicsOffset.y;
 
-					pushAlpha(alpha);
 					{
 						drawRect(graphicsRect, child->fgColor);
 
@@ -659,15 +657,11 @@ void nguiDraw(float elapsed) {
 							Matrix3 matrix = mat3();
 							matrix.TRANSLATE(iconRect.x, iconRect.y);
 							matrix.SCALE(iconRect.width, iconRect.height);
-#if 1
 							matrix.TRANSLATE(0.5, 0.5);
 							matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
 							matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
 							matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
 							matrix.TRANSLATE(-0.5, -0.5);
-#else
-							matrix *= icon->transform;
-#endif
 							float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 							drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
 							clearScissor();
@@ -692,9 +686,9 @@ void nguiDraw(float elapsed) {
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
 						drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
 					}
-
-					popAlpha();
 				}
+
+				popAlpha();
 			}
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack

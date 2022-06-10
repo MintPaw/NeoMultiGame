@@ -454,7 +454,7 @@ void updateGame() {
 
 	nguiEndWindow();
 
-	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(-20, 0));
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(-20, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 0));
 	nguiStartWindow("Combat");
@@ -489,7 +489,7 @@ void updateGame() {
 	nguiPopStyleVar(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
 
 	nguiEndWindow();
-	nguiPopStyleVar(NGUI_STYLE_HOVER_OFFSET);
+	nguiPopStyleVar(NGUI_STYLE_BUTTON_HOVER_OFFSET);
 
 	if (itemsOpen) {
 		nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -499,17 +499,17 @@ void updateGame() {
 		nguiStartWindow("ItemsWindow");
 		nguiPopAnyStyleVar(2);
 
-		nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(50, 50));
+		nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(50, 50));
 		nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0.5, 0.5));
-		nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(0, -20));
+		nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(0, -20));
 		for (int i = 0; i < 20; i++) {
 			if (nguiButton(frameSprintf("Item #%d", i))) {
 				logf("You clicked item %d\n", i);
 			}
 		}
-		nguiPopStyleVar(NGUI_STYLE_HOVER_OFFSET);
+		nguiPopStyleVar(NGUI_STYLE_BUTTON_HOVER_OFFSET);
 		nguiPopStyleVar(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
-		nguiPopStyleVar(NGUI_STYLE_BUTTON_SIZE);
+		nguiPopStyleVar(NGUI_STYLE_ELEMENT_SIZE);
 
 		nguiEndWindow();
 
