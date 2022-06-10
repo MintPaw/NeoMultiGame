@@ -15,6 +15,9 @@ enum NguiStyleType {
 	NGUI_STYLE_TEXT_COLOR,
 	NGUI_STYLE_INDENT,
 	NGUI_STYLE_ICON_NAME_PTR,
+	NGUI_STYLE_ICON_ROTATION,
+	NGUI_STYLE_ICON_SCALE,
+	NGUI_STYLE_ICON_TRANSLATION,
 	NGUI_STYLE_ICON_ALPHA,
 	NGUI_STYLE_ICON_GRAVITY,
 	NGUI_STYLE_HIGHLIGHT_TINT,
@@ -126,33 +129,66 @@ void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform);
 NguiIcon *nguiGetIcon(char *iconName);
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
-void nguiPushStyleInt(NguiStyleType type, int value)
-{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &value); }
-void nguiPushStyleColorInt(NguiStyleType type, int value)
-{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &value); }
-void nguiPushStyleFloat(NguiStyleType type, float value)
-{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &value); }
-void nguiPushStyleVec2(NguiStyleType type, Vec2 value)
-{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &value); }
-void nguiPushStyleStringPtr(NguiStyleType type, char *value)
-{ nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value); }
+void nguiPushStyleInt(NguiStyleType type, int value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &value);
+}
+void nguiPushStyleColorInt(NguiStyleType type, int value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &value);
+}
+void nguiPushStyleFloat(NguiStyleType type, float value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &value);
+}
+void nguiPushStyleVec2(NguiStyleType type, Vec2 value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &value);
+}
+void nguiPushStyleStringPtr(NguiStyleType type, char *value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value);
+}
+void nguiPushStyleIconXform(Xform2 xform) {
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, xform.rotation);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, xform.translation);
+}
 
 //@speed These could be a lot faster if the elements didn't have randomly ordered styleStacks like the global styleStacks.
 //       Elements could have a different kind of style stack that's a fixed size index by the NguiStyleType
 void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
-int nguiGetStyleInt(NguiStyleType type)
-{ int ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &ret); return ret; }
-int nguiGetStyleColorInt(NguiStyleType type)
-{ int ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &ret); return ret; }
-float nguiGetStyleFloat(NguiStyleType type)
-{ float ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &ret); return ret; }
-Vec2 nguiGetStyleVec2(NguiStyleType type)
-{ Vec2 ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &ret); return ret; }
-char *nguiGetStyleStringPtr(NguiStyleType type)
-{ char *ret; nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &ret); return ret; }
+int nguiGetStyleInt(NguiStyleType type) {
+	int ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &ret);
+	return ret;
+}
+int nguiGetStyleColorInt(NguiStyleType type) {
+	int ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &ret); 
+	return ret;
+}
+float nguiGetStyleFloat(NguiStyleType type) {
+	float ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &ret);
+	return ret;
+}
+Vec2 nguiGetStyleVec2(NguiStyleType type) {
+	Vec2 ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &ret);
+	return ret;
+}
+char *nguiGetStyleStringPtr(NguiStyleType type) {
+	char *ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &ret);
+	return ret;
+}
+Xform2 nguiGetStyleIconXform() {
+	Xform2 ret;
+	ret.rotation = nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION);
+	ret.scale = nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE);
+	ret.translation = nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION);
+	return ret;
+}
 
 void nguiPopAnyStyleVar(int amount=1);
 void nguiPopStyleVar(NguiStyleType type);
+void nguiPopStyleIconXform();
 void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type);
 
 void nguiDraw(float elapsed);
@@ -262,6 +298,21 @@ void nguiInit() {
 	info->name = "Icon name pointer";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ROTATION];
+	info->enumName = "NGUI_STYLE_ICON_ROTATION";
+	info->name = "Icon rotation";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_SCALE];
+	info->enumName = "NGUI_STYLE_ICON_SCALE";
+	info->name = "Icon scale";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_TRANSLATION];
+	info->enumName = "NGUI_STYLE_ICON_TRANSLATION";
+	info->name = "Icon translation";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ALPHA];
 	info->enumName = "NGUI_STYLE_ICON_ALPHA";
 	info->name = "Icon alpha";
@@ -308,6 +359,9 @@ void nguiInit() {
 	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, v2(1, 1));
+	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, v2(0, 0));
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
 	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x5C000000);
@@ -400,6 +454,12 @@ void nguiPopStyleVar(NguiStyleType type) {
 	}
 
 	nguiPopAnyStyleVar();
+}
+
+void nguiPopStyleIconXform() {
+	nguiPopStyleVar(NGUI_STYLE_ICON_TRANSLATION);
+	nguiPopStyleVar(NGUI_STYLE_ICON_SCALE);
+	nguiPopStyleVar(NGUI_STYLE_ICON_ROTATION);
 }
 
 void nguiPopAnyStyleVar(int amount) {
@@ -618,19 +678,27 @@ void nguiDraw(float elapsed) {
 						drawTexture(renderer->linearGrad256, props);
 					}
 
-					char *iconName = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
-					if (iconName[0]) {
+					char *iconPath = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
+					if (iconPath[0]) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
 						Rect iconRect = getInnerRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
-						NguiIcon *icon = nguiGetIcon(iconName);
-						if (icon) {
+						Texture *iconTexture = getTexture(iconPath);
+						if (iconTexture) {
 							setScissor(iconRect);
 							Matrix3 matrix = mat3();
 							matrix.TRANSLATE(iconRect.x, iconRect.y);
 							matrix.SCALE(iconRect.width, iconRect.height);
+#if 1
+							matrix.TRANSLATE(0.5, 0.5);
+							matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
+							matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
+							matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
+							matrix.TRANSLATE(-0.5, -0.5);
+#else
 							matrix *= icon->transform;
+#endif
 							float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
-							drawSimpleTexture(icon->texture, matrix, v2(0, 0), v2(1, 1), alpha);
+							drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
 							clearScissor();
 						} else {
 							drawRect(iconRect, 0xFFFF0000);

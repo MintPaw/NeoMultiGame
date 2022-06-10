@@ -339,11 +339,6 @@ void updateGame() {
 #if 1 // ngui test
 	clearRenderer(0xFF000000);
 
-	struct Xform2 {
-		Vec2 translation;
-		Vec2 scale;
-		float rotation;
-	};
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};
 	static Xform2 beeXform = {v2(), v2(1, 1), 0};
 	static Xform2 bootXform = {v2(), v2(1, 1), 0};
@@ -441,14 +436,17 @@ void updateGame() {
 
 	nguiStartWindow("Test Window");
 
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "axeIcon");
+	nguiPushStyleIconXform(axeXform);
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/axe.png");
 	if (nguiButton("Hello", "subText")) {
 		logf("You clicked the button!\n");
 		showingSubItems = !showingSubItems;
 	}
 	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+	nguiPopStyleIconXform();
 
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "beeIcon");
+	nguiPushStyleIconXform(beeXform);
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/bee.png");
 	if (nguiButton("Dummy button 1")) ;
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xFFFF0000);
 	if (nguiButton("Dummy button 2", "This button goes red")) ;
@@ -456,6 +454,7 @@ void updateGame() {
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
 	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+	nguiPopStyleIconXform();
 
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
@@ -463,12 +462,16 @@ void updateGame() {
 		bool doIndent = false;
 		if (nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW) == 1) doIndent = true;
 		if (doIndent) nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
-		nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "bootIcon");
+
+		nguiPushStyleIconXform(bootXform);
+		nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/boot.png");
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
 		nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+		nguiPopStyleIconXform();
+
 		if (doIndent) nguiPopStyleVar(NGUI_STYLE_INDENT);
 	}
 

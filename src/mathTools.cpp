@@ -4490,6 +4490,12 @@ bool overlaps(Tri2 tri0, Tri2 tri1) {
 }
 /// / Tri2
 
+struct Xform2 {
+	Vec2 translation;
+	Vec2 scale;
+	float rotation;
+};
+
 struct Cone {
 	Vec3 position;
 	Vec3 direction;
