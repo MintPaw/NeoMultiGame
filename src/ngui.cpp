@@ -5,6 +5,7 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_LAYOUT,
 	NGUI_STYLE_ELEMENTS_IN_ROW,
 	NGUI_STYLE_BUTTON_SIZE,
+	NGUI_STYLE_HOVER_OFFSET,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
 	NGUI_STYLE_HOVER_TINT,
@@ -209,6 +210,11 @@ void nguiInit() {
 	info->name = "Button size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_OFFSET];
+	info->enumName = "NGUI_STYLE_HOVER_OFFSET";
+	info->name = "Hover offset";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_BG_COLOR];
 	info->enumName = "NGUI_STYLE_WINDOW_BG_COLOR";
 	info->name = "Window bg color";
@@ -285,6 +291,7 @@ void nguiInit() {
 	nguiPushStyleInt(NGUI_STYLE_WINDOW_LAYOUT, (int)NGUI_LAYOUT_VERTICAL);
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
+	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(20, 0));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
 	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
@@ -538,7 +545,7 @@ void nguiDraw(float elapsed) {
 							child->justActive = true;
 						}
 
-						graphicsOffset.x = 20;
+						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_HOVER_OFFSET);
 						child->hoveringTime += elapsed;
 					} else {
 						child->hoveringTime = 0;

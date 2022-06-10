@@ -460,19 +460,23 @@ void updateGame() {
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
 	if (showingSubItems) {
-		nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
+		bool doIndent = false;
+		if (nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW) == 1) doIndent = true;
+		if (doIndent) nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
 		nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "bootIcon");
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
-		nguiPopStyleVar(2);
+		nguiPopStyleVar();
+		if (doIndent) nguiPopStyleVar();
 	}
 
 	if (nguiButton("Third button")) logf("You clicked the third button!\n");
 
 	nguiEndWindow();
 
+	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(-20, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 0));
 	nguiStartWindow("Second window");
@@ -481,6 +485,7 @@ void updateGame() {
 	if (nguiButton("Another window?")) logf("Wow\n");
 
 	nguiEndWindow();
+	nguiPopStyleVar(); // NGUI_STYLE_HOVER_OFFSET;
 
 	nguiDraw(elapsed);
 #endif
