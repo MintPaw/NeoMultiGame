@@ -488,6 +488,9 @@ void updateGame() {
 	nguiPopStyleVar(NGUI_STYLE_ACTIVE_TINT);
 	nguiPopStyleVar(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
 
+	static float musicVolume = 1;
+	nguiSlider("Music", &musicVolume);
+
 	nguiEndWindow();
 	nguiPopStyleVar(NGUI_STYLE_BUTTON_HOVER_OFFSET);
 

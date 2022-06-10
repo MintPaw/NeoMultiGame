@@ -9,6 +9,7 @@ enum NguiStyleType {
 	NGUI_STYLE_BUTTON_LABEL_GRAVITY,
 	NGUI_STYLE_BUTTON_HOVER_OFFSET,
 	NGUI_STYLE_WINDOW_BG_COLOR,
+	NGUI_STYLE_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
 	NGUI_STYLE_HOVER_TINT,
 	NGUI_STYLE_ACTIVE_TINT,
@@ -62,6 +63,7 @@ struct NguiStyleStack {
 enum NguiElementType {
 	NGUI_ELEMENT_WINDOW,
 	NGUI_ELEMENT_BUTTON,
+	NGUI_ELEMENT_SLIDER,
 };
 struct NguiElement {
 	NguiElementType type;
@@ -75,10 +77,14 @@ struct NguiElement {
 	int orderIndex;
 	NguiStyleStack styleStack;
 	char *subText;
+	void *valuePtr;
+	float valueMin;
+	float valueMax;
 
 	Vec2 position;
 	Vec2 graphicsOffset;
-	int fgColor;
+	int bgColor;
+	// int fgColor;
 
 	bool active;
 	bool justActive;
@@ -87,7 +93,7 @@ struct NguiElement {
 	float hoveringTime;
 	float timeSinceLastClicked;
 
-	Rect drawRect;
+	Rect childRect;
 };
 
 struct Ngui {
@@ -101,6 +107,8 @@ struct Ngui {
 
 	int nextNguiElementId;
 	int currentOrderIndex;
+
+	int draggingId;
 
 	float uiScale;
 
@@ -187,6 +195,7 @@ void nguiSetNextWindowSize(Vec2 size);
 void nguiStartWindow(char *name, int flags = 0);
 void nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
+bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
 int getSizeForDataType(NguiDataType dataType);
 /// FUNCTIONS ^
@@ -253,6 +262,11 @@ void nguiInit() {
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_BG_COLOR];
 	info->enumName = "NGUI_STYLE_WINDOW_BG_COLOR";
 	info->name = "Window bg color";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_BG_COLOR];
+	info->enumName = "NGUI_STYLE_BG_COLOR";
+	info->name = "Bg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_FG_COLOR];
@@ -345,7 +359,8 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(20, 0));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
-	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
+	nguiPushStyleColorInt(NGUI_STYLE_BG_COLOR, 0xFF202020);
+	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF404040);
 	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
 	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
@@ -534,7 +549,7 @@ void nguiDraw(float elapsed) {
 				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
 				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
 
-				child->drawRect = childRect;
+				child->childRect = childRect;
 
 				childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
 				childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
@@ -571,8 +586,8 @@ void nguiDraw(float elapsed) {
 
 			for (int i = 0; i < childrenNum; i++) { // Window position
 				NguiElement *child = children[i];
-				child->drawRect.x += windowRect.x + windowPadding.x;
-				child->drawRect.y += windowRect.y + windowPadding.y;
+				child->childRect.x += windowRect.x + windowPadding.x;
+				child->childRect.y += windowRect.y + windowPadding.y;
 			}
 
 			for (int i = 0; i < childrenNum; i++) { // Update
@@ -584,21 +599,42 @@ void nguiDraw(float elapsed) {
 				alpha *= child->alive;
 				pushAlpha(alpha);
 
-				Rect childRect = child->drawRect;
+				Rect childRect = child->childRect;
+
+				int bgColor = nguiGetStyleColorInt(NGUI_STYLE_BG_COLOR);
+				int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
+				int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_HOVER_TINT);
+				int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
+				Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
+				int labelTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
+
+				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
+					drawRect(rect, child->bgColor);
+
+					RenderProps props = newRenderProps();
+					props.matrix.TRANSLATE(rect.x, rect.y);
+					props.matrix.SCALE(rect.width, rect.height);
+					props.uvMatrix.SCALE(nguiGetStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH));
+					props.uv0 = v2(0, 1);
+					props.uv1 = v2(1, 0);
+					props.srcWidth = props.srcHeight = 1;
+
+					int highlightTint = nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT);
+					int highlightColor = lerpColor(child->bgColor, 0xFF000000 | highlightTint, getAofArgb(highlightTint)/255.0);
+					props.tint = highlightColor;
+					drawTexture(renderer->linearGrad256, props);
+				};
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					Vec2 graphicsOffset = v2();
-					int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
 
 					if (contains(childRect, ngui->mouse)) {
 						if (child->hoveringTime == 0) playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
 
-						int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_HOVER_TINT);
-						fgColor = lerpColor(fgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
+						bgColor = lerpColor(bgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
 						if (platform->mouseJustDown) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
-							int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
-							child->fgColor = lerpColor(child->fgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
+							child->bgColor = lerpColor(child->bgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
 
 							child->timeSinceLastClicked = 0.001;
 							child->justActive = true;
@@ -616,11 +652,11 @@ void nguiDraw(float elapsed) {
 						float perc = moddedValue / modByForFlash;
 						int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
 						float flashBrightness = nguiGetStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
-						if (perc > 0.75) fgColor = lerpColor(fgColor, activeTint, flashBrightness);
+						if (perc > 0.75) bgColor = lerpColor(bgColor, activeTint, flashBrightness);
 					}
 
-					if (child->fgColor == 0) child->fgColor = fgColor;
-					child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
+					if (child->bgColor == 0) child->bgColor = bgColor;
+					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
 
 					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
 
@@ -628,24 +664,7 @@ void nguiDraw(float elapsed) {
 					graphicsRect.x += child->graphicsOffset.x;
 					graphicsRect.y += child->graphicsOffset.y;
 
-					{
-						drawRect(graphicsRect, child->fgColor);
-
-						float highlightCrush = nguiGetStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH);
-
-						RenderProps props = newRenderProps();
-						props.matrix.TRANSLATE(graphicsRect.x, graphicsRect.y);
-						props.matrix.SCALE(graphicsRect.width, graphicsRect.height);
-						props.uvMatrix.SCALE(highlightCrush);
-						props.uv0 = v2(0, 1);
-						props.uv1 = v2(1, 0);
-						props.srcWidth = props.srcHeight = 1;
-
-						int highlightTint = nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT);
-						int highlightColor = lerpColor(child->fgColor, 0xFF000000 | highlightTint, getAofArgb(highlightTint)/255.0);
-						props.tint = highlightColor;
-						drawTexture(renderer->linearGrad256, props);
-					}
+					drawElementBg(child, graphicsRect);
 
 					char *iconPath = nguiGetStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR);
 					if (iconPath[0]) {
@@ -671,10 +690,8 @@ void nguiDraw(float elapsed) {
 					}
 
 					{
-						Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
-						int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
-						DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
+						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
 						drawTextInRect(label, props, textRect, labelGravity);
 					}
 
@@ -685,6 +702,37 @@ void nguiDraw(float elapsed) {
 						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
 						drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
+					}
+				} else if (child->type == NGUI_ELEMENT_SLIDER) {
+					Rect graphicsRect = childRect;
+
+					if (child->bgColor == 0) child->bgColor = bgColor;
+					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
+
+					drawElementBg(child, graphicsRect);
+
+					{
+						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.6), v2(0, 0));
+						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
+						drawTextInRect(label, props, textRect, labelGravity);
+					}
+
+					Rect barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.2), v2(0.5, 0.8));
+					drawRect(barRect, fgColor);
+
+					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
+					Rect buttonRect = makeRect(0, 0, barRect.height*1.25, barRect.height*1.25);
+					buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
+					buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
+					drawRect(buttonRect, labelTextColor);
+
+					if (contains(buttonRect, ngui->mouse)) {
+						if (platform->mouseJustDown) ngui->draggingId = child->id;
+					}
+
+					if (ngui->draggingId == child->id) {
+						float newPerc = Clamp01(norm(barRect.x, barRect.x + barRect.width, ngui->mouse.x));
+						*(float *)child->valuePtr = lerp(child->valueMin, child->valueMax, newPerc);
 					}
 				}
 
@@ -713,6 +761,7 @@ void nguiDraw(float elapsed) {
 		element->alive -= 0.05;
 	}
 
+	if (!platform->mouseDown) ngui->draggingId = 0;
 	ngui->time += elapsed;
 }
 
@@ -781,6 +830,15 @@ bool nguiButton(char *name, char *subText) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
 	element->subText = subText;
+	return element->justActive;
+}
+
+bool nguiSlider(char *name, float *value, float min, float max) {
+	NguiElement *element = getNguiElement(name);
+	element->type = NGUI_ELEMENT_SLIDER;
+	element->valuePtr = value;
+	element->valueMin = min;
+	element->valueMax = max;
 	return element->justActive;
 }
 
