@@ -2,7 +2,8 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_POSITION,
 	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
-	NGUI_STYLE_WINDOW_LAYOUT,
+	NGUI_STYLE_WINDOW_PADDING,
+	NGUI_STYLE_ELEMENT_PADDING,
 	NGUI_STYLE_ELEMENTS_IN_ROW,
 	NGUI_STYLE_BUTTON_SIZE,
 	NGUI_STYLE_HOVER_OFFSET,
@@ -195,10 +196,15 @@ void nguiInit() {
 	info->name = "Window size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_LAYOUT];
-	info->enumName = "NGUI_STYLE_WINDOW_LAYOUT";
-	info->name = "Window layout";
-	info->dataType = NGUI_DATA_TYPE_INT;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_PADDING];
+	info->enumName = "NGUI_STYLE_WINDOW_PADDING";
+	info->name = "Window padding";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_PADDING];
+	info->enumName = "NGUI_STYLE_ELEMENT_PADDING";
+	info->name = "Element padding";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENTS_IN_ROW];
 	info->enumName = "NGUI_STYLE_ELEMENTS_IN_ROW";
@@ -288,7 +294,8 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
-	nguiPushStyleInt(NGUI_STYLE_WINDOW_LAYOUT, (int)NGUI_LAYOUT_VERTICAL);
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(20, 20));
+	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
 	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(20, 0));
@@ -477,21 +484,23 @@ void nguiDraw(float elapsed) {
 				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
 				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_BUTTON_SIZE);
 				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
-				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT);
+				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
 
 				child->drawRect = childRect;
 
 				childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
 				childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
 
+				Vec2 elementPadding = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_PADDING) * ngui->uiScale;
+
 				elementsInRow++;
 				if (!skipCursorBump) {
 					prevCursor = cursor;
 					if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
-						cursor.x += buttonSize.x;
+						cursor.x += buttonSize.x + elementPadding.x;
 					} else {
 						cursor.x = 0;
-						cursor.y += buttonSize.y;
+						cursor.y += buttonSize.y + elementPadding.y;
 						elementsInRow = 0;
 					}
 
@@ -501,9 +510,12 @@ void nguiDraw(float elapsed) {
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 
+			Vec2 windowPadding = nguiGetStyleVec2(NGUI_STYLE_WINDOW_PADDING) * ngui->uiScale;
 			// windowPosition is not multiplied by ngui->uiScale because it's given by the user as screen coords
 			Vec2 windowPosition = nguiGetStyleVec2(NGUI_STYLE_WINDOW_POSITION);
 			Vec2 windowSize = childrenSize;
+			windowSize.x += windowPadding.x*2;
+			windowSize.y += windowPadding.y*2;
 			windowPosition -= windowSize * nguiGetStyleVec2(NGUI_STYLE_WINDOW_PIVOT);
 			Rect windowRect = makeRect(windowPosition, windowSize);
 
@@ -511,8 +523,8 @@ void nguiDraw(float elapsed) {
 
 			for (int i = 0; i < childrenNum; i++) { // Window position
 				NguiElement *child = children[i];
-				child->drawRect.x += windowRect.x;
-				child->drawRect.y += windowRect.y;
+				child->drawRect.x += windowRect.x + windowPadding.x;
+				child->drawRect.y += windowRect.y + windowPadding.y;
 			}
 
 			for (int i = 0; i < childrenNum; i++) { // Update
@@ -545,7 +557,7 @@ void nguiDraw(float elapsed) {
 							child->justActive = true;
 						}
 
-						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_HOVER_OFFSET);
+						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_HOVER_OFFSET) * ngui->uiScale;
 						child->hoveringTime += elapsed;
 					} else {
 						child->hoveringTime = 0;
