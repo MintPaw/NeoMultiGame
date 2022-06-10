@@ -412,23 +412,23 @@ void updateGame() {
 	nguiStartWindow("Test Window");
 
 	nguiPushStyleIconXform(axeXform);
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/axe.png");
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "assets/images/icons/axe.png");
 	if (nguiButton("Hello", "subText")) {
 		logf("You clicked the button!\n");
 		showingSubItems = !showingSubItems;
 	}
-	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+	nguiPopStyleVar(NGUI_STYLE_ICON_PATH_PTR);
 	nguiPopStyleIconXform();
 
 	nguiPushStyleIconXform(beeXform);
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/bee.png");
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "assets/images/icons/bee.png");
 	if (nguiButton("Dummy button 1")) ;
 	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xFFFF0000);
 	if (nguiButton("Dummy button 2", "This button goes red")) ;
 	nguiPopStyleVar(NGUI_STYLE_ACTIVE_TINT);
 	if (nguiButton("Dummy button 3")) ;
 	if (nguiButton("Dummy button 4")) ;
-	nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+	nguiPopStyleVar(NGUI_STYLE_ICON_PATH_PTR);
 	nguiPopStyleIconXform();
 
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
@@ -439,12 +439,12 @@ void updateGame() {
 		if (doIndent) nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
 
 		nguiPushStyleIconXform(bootXform);
-		nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "assets/images/icons/boot.png");
+		nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "assets/images/icons/boot.png");
 		if (nguiButton("Nested item 1")) logf("You clicked the first nested button!\n");
 		if (nguiButton("Nested item 2")) logf("You clicked the second nested button!\n");
 		if (nguiButton("Nested item 3")) logf("You clicked the third nested button!\n");
 		if (nguiButton("Nested item 4")) logf("You clicked the fourth nested button!\n");
-		nguiPopStyleVar(NGUI_STYLE_ICON_NAME_PTR);
+		nguiPopStyleVar(NGUI_STYLE_ICON_PATH_PTR);
 		nguiPopStyleIconXform();
 
 		if (doIndent) nguiPopStyleVar(NGUI_STYLE_INDENT);
@@ -500,11 +500,15 @@ void updateGame() {
 		nguiPopAnyStyleVar(2);
 
 		nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(50, 50));
+		nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0.5, 0.5));
+		nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(0, -20));
 		for (int i = 0; i < 20; i++) {
 			if (nguiButton(frameSprintf("Item #%d", i))) {
 				logf("You clicked item %d\n", i);
 			}
 		}
+		nguiPopStyleVar(NGUI_STYLE_HOVER_OFFSET);
+		nguiPopStyleVar(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
 		nguiPopStyleVar(NGUI_STYLE_BUTTON_SIZE);
 
 		nguiEndWindow();

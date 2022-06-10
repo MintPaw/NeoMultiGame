@@ -6,6 +6,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ELEMENT_PADDING,
 	NGUI_STYLE_ELEMENTS_IN_ROW,
 	NGUI_STYLE_BUTTON_SIZE,
+	NGUI_STYLE_BUTTON_LABEL_GRAVITY,
 	NGUI_STYLE_HOVER_OFFSET,
 	NGUI_STYLE_WINDOW_BG_COLOR,
 	NGUI_STYLE_FG_COLOR,
@@ -239,6 +240,11 @@ void nguiInit() {
 	info->name = "Button size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_LABEL_GRAVITY];
+	info->enumName = "NGUI_STYLE_BUTTON_LABEL_GRAVITY";
+	info->name = "Button label gravity";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_OFFSET];
 	info->enumName = "NGUI_STYLE_HOVER_OFFSET";
 	info->name = "Hover offset";
@@ -336,6 +342,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_SIZE, v2(250, 80));
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_HOVER_OFFSET, v2(20, 0));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF353535);
@@ -670,10 +677,11 @@ void nguiDraw(float elapsed) {
 					}
 
 					{
+						Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
 						int textColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, textColor);
-						drawTextInRect(label, props, textRect, v2(0, 0));
+						drawTextInRect(label, props, textRect, labelGravity);
 					}
 
 					if (child->subText[0]) {
