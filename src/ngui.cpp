@@ -14,7 +14,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS,
 	NGUI_STYLE_TEXT_COLOR,
 	NGUI_STYLE_INDENT,
-	NGUI_STYLE_ICON_NAME_PTR,
+	NGUI_STYLE_ICON_PATH_PTR,
 	NGUI_STYLE_ICON_ROTATION,
 	NGUI_STYLE_ICON_SCALE,
 	NGUI_STYLE_ICON_TRANSLATION,
@@ -89,13 +89,6 @@ struct NguiElement {
 	Rect drawRect;
 };
 
-struct NguiIcon {
-#define NGUI_ICON_NAME_MAX_LEN 32
-	char name[NGUI_ICON_NAME_MAX_LEN];
-	Texture *texture;
-	Matrix3 transform;
-};
-
 struct Ngui {
 	Font *defaultFont;
 	Vec2 mouse;
@@ -115,18 +108,11 @@ struct Ngui {
 	NguiStyleStack globalStyleStack;
 	NguiStyleStack *currentStyleStack;
 
-#define NGUI_ICONS_MAX 128
-	NguiIcon icons[NGUI_ICONS_MAX];
-	int iconsNum;
-
 	NguiElement *currentWindow;
 };
 Ngui *ngui = NULL;
 
 void nguiInit();
-
-void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform);
-NguiIcon *nguiGetIcon(char *iconName);
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
 void nguiPushStyleInt(NguiStyleType type, int value) {
@@ -293,9 +279,9 @@ void nguiInit() {
 	info->name = "Indent";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_NAME_PTR];
-	info->enumName = "NGUI_STYLE_ICON_NAME_PTR";
-	info->name = "Icon name pointer";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_PATH_PTR];
+	info->enumName = "NGUI_STYLE_ICON_PATH_PTR";
+	info->name = "Icon path pointer";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ROTATION];
@@ -358,7 +344,7 @@ void nguiInit() {
 	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
 	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR, "");
+	nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "");
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, v2(1, 1));
 	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, v2(0, 0));
@@ -368,28 +354,6 @@ void nguiInit() {
 	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
 	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
 	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
-}
-
-void nguiAddIcon(char *iconName, Texture *texture, Matrix3 transform) {
-	if (ngui->iconsNum > NGUI_ICONS_MAX-1) {
-		logf("Too many ngui icons!\n");
-		return;
-	}
-
-	NguiIcon *icon = &ngui->icons[ngui->iconsNum++];
-	memset(icon, 0, sizeof(NguiIcon));
-	strncpy(icon->name, iconName, NGUI_ICON_NAME_MAX_LEN);
-	icon->texture = texture;
-	icon->transform = transform;
-}
-
-NguiIcon *nguiGetIcon(char *iconName) {
-	for (int i = 0; i < ngui->iconsNum; i++) {
-		NguiIcon *icon = &ngui->icons[i];
-		if (streq(icon->name, iconName)) return icon;
-	}
-
-	return NULL;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -678,7 +642,7 @@ void nguiDraw(float elapsed) {
 						drawTexture(renderer->linearGrad256, props);
 					}
 
-					char *iconPath = nguiGetStyleStringPtr(NGUI_STYLE_ICON_NAME_PTR);
+					char *iconPath = nguiGetStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR);
 					if (iconPath[0]) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
 						Rect iconRect = getInnerRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
@@ -747,7 +711,6 @@ void nguiDraw(float elapsed) {
 		element->alive -= 0.05;
 	}
 
-	ngui->iconsNum = 0;
 	ngui->time += elapsed;
 }
 

@@ -405,31 +405,6 @@ void updateGame() {
 		nguiInit();
 	}
 
-	Matrix3 matrix;
-	matrix = mat3();
-	matrix.TRANSLATE(0.5, 0.5);
-	matrix.ROTATE(axeXform.rotation);
-	matrix.SCALE(axeXform.scale);
-	matrix.TRANSLATE(axeXform.translation);
-	matrix.TRANSLATE(-0.5, -0.5);
-	nguiAddIcon("axeIcon", getTexture("assets/images/icons/axe.png"), matrix);
-
-	matrix = mat3();
-	matrix.TRANSLATE(0.5, 0.5);
-	matrix.ROTATE(beeXform.rotation);
-	matrix.SCALE(beeXform.scale);
-	matrix.TRANSLATE(beeXform.translation);
-	matrix.TRANSLATE(-0.5, -0.5);
-	nguiAddIcon("beeIcon", getTexture("assets/images/icons/bee.png"), matrix);
-
-	matrix = mat3();
-	matrix.TRANSLATE(0.5, 0.5);
-	matrix.ROTATE(bootXform.rotation);
-	matrix.SCALE(bootXform.scale);
-	matrix.TRANSLATE(bootXform.translation);
-	matrix.TRANSLATE(-0.5, -0.5);
-	nguiAddIcon("bootIcon", getTexture("assets/images/icons/boot.png"), matrix);
-
 	ngui->mouse = platform->mouse;
 
 	static bool showingSubItems = false;
