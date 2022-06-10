@@ -117,7 +117,7 @@ struct Ngui {
 	NguiStyleStack globalStyleStack;
 	NguiStyleStack *currentStyleStack;
 
-	NguiElement *currentWindow;
+	int currentParentId;
 };
 Ngui *ngui = NULL;
 
@@ -489,9 +489,6 @@ void nguiDraw(float elapsed) {
 
 	int lastLeftNum = elementsLeftNum;
 	for (;;) {
-		if (elementsLeftNum > 20) {
-			int k = 5;
-		}
 		if (elementsLeftNum == 0) break;
 		for (int i = 0; i < elementsLeftNum; i++) {
 			int windowIndex = i;
@@ -770,7 +767,7 @@ NguiElement *getNguiElement(char *name) {
 
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *possibleElement = &ngui->elements[i];
-		if (streq(possibleElement->name, name)) {
+		if (streq(possibleElement->name, name) && possibleElement->parentId == ngui->currentParentId) {
 			element = possibleElement;
 			break;
 		}
@@ -796,7 +793,7 @@ NguiElement *getNguiElement(char *name) {
 
 	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
-	element->parentId = ngui->currentWindow ? ngui->currentWindow->id : 0;
+	element->parentId = ngui->currentParentId;
 
 	element->styleStack.varsNum = 0;
 	for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
@@ -818,12 +815,12 @@ int getElementIndex(NguiElement *element) {
 void nguiStartWindow(char *name, int flags) {
 	NguiElement *element = getNguiElement(name);
 	element->type = NGUI_ELEMENT_WINDOW;
-	ngui->currentWindow = element;
+	ngui->currentParentId = element->id;
 	ngui->currentOrderIndex = 0;
 }
 
 void nguiEndWindow() {
-	ngui->currentWindow = NULL;
+	ngui->currentParentId = 0;
 }
 
 bool nguiButton(char *name, char *subText) {
