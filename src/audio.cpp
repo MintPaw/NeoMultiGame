@@ -420,7 +420,7 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 		char *soundName = audio->soundStoreNames[i];
 		if (streq(soundName, path)) {
 			Sound *sound = audio->soundStore[i];
-			if (!onlyLoadRaw && !sound->samples) initSound(sound);
+			if (!onlyLoadRaw && sound->length == 0) initSound(sound);
 			return sound;
 		}
 	}
