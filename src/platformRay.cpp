@@ -440,6 +440,9 @@ struct Renderer {
 	int lightingShaderAlphaLoc;
 	Raylib::Shader alphaDiscardShader;
 
+	Raylib::Shader danmakuShader;
+	int danmakuShaderHueShiftValueLoc;
+
 	int width;
 	int height;
 
@@ -592,6 +595,12 @@ void initRenderer(int width, int height) {
 		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
 		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
 		renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
+
+		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
+		renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
+		free(fs);
+
+		renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
 	}
 
 	Raylib::SetTraceLogLevel(Raylib::LOG_WARNING);

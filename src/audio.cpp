@@ -184,6 +184,12 @@ void initAudio() {
 #endif
 
 	CheckAudioError();
+
+	Sound *sound;
+	sound = getSound("assets/common/audio/tickEffect.ogg");
+	sound->tweakVolume = 0.1;
+	sound = getSound("assets/common/audio/clickEffect.ogg");
+	sound->tweakVolume = 0.1;
 }
 
 void initSound(Sound *sound) {

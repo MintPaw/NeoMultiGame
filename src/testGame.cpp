@@ -325,18 +325,34 @@ void updateGame() {
 	}
 #endif
 
-#if 0 // Tint test
+#if 1 // Hue shift test
 	static int tint = 0xFFFFFFFF;
+	static float hueShift = 0;
 	guiInputArgb("tint", &tint);
+	ImGui::SliderFloat("hueShiftRad", &hueShift, 0, 2*M_PI);
+	ImGui::SliderFloat("hueShiftDeg", &hueShift, 0, 360);
 
 	Texture *texture = getTexture("assets/images/bulletTest.png");
-	RenderProps props = newRenderProps();
-	props.matrix.SCALE(10);
-	props.tint = tint;
-	drawTexture(texture, props);
+
+	startShader(renderer->danmakuShader);
+
+	Vec4 hueShiftVec = v4(hueShift / (2*M_PI));
+	Raylib::SetShaderValue(
+		renderer->danmakuShader,
+		renderer->danmakuShaderHueShiftValueLoc,
+		&hueShiftVec,
+		Raylib::SHADER_UNIFORM_VEC4
+	);
+
+	Matrix3 matrix = mat3();
+	matrix.SCALE(getSize(texture));
+	matrix.SCALE(10);
+	drawSimpleTexture(texture, matrix);
+
+	endShader();
 #endif
 
-#if 1 // ngui test
+#if 0 // ngui test
 	clearRenderer(0xFF000000);
 
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};

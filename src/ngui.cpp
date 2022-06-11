@@ -381,8 +381,12 @@ void nguiInit() {
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
-		logf("Type mismatch on push ngui style type %d (got %d, expected %d)\n", type, dataType, styleTypeInfo.dataType);
-		return;
+		Panic(frameSprintf(
+			"Type mismatch on push ngui style type %d (got %d, expected %d)\n",
+			type,
+			dataType,
+			styleTypeInfo.dataType
+		));
 	}
 
 	if (styleStack->varsNum > styleStack->varsMax-1) {
