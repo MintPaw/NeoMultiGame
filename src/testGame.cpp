@@ -325,7 +325,7 @@ void updateGame() {
 	}
 #endif
 
-#if 1 // Hue shift test
+#if 0 // Hue shift test
 	static int tint = 0xFFFFFFFF;
 	static float hueShift = 0;
 	guiInputArgb("tint", &tint);
@@ -352,7 +352,7 @@ void updateGame() {
 	endShader();
 #endif
 
-#if 0 // ngui test
+#if 1 // ngui test
 	clearRenderer(0xFF000000);
 
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};
@@ -495,7 +495,9 @@ void updateGame() {
 		nguiPopStyleVar(NGUI_STYLE_INDENT);
 	}
 
+	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 1);
 	if (nguiButton("Magic")) ;
+	nguiPopStyleVar(NGUI_STYLE_ELEMENT_DISABLED);
 
 	static bool itemsOpen = false;
 	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0.8);

@@ -3,6 +3,8 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_WINDOW_PADDING,
+	NGUI_STYLE_ELEMENT_DISABLED,
+	NGUI_STYLE_ELEMENT_DISABLED_TINT,
 	NGUI_STYLE_ELEMENT_PADDING,
 	NGUI_STYLE_ELEMENTS_IN_ROW,
 	NGUI_STYLE_ELEMENT_SIZE,
@@ -234,6 +236,16 @@ void nguiInit() {
 	info->name = "Window padding";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DISABLED];
+	info->enumName = "NGUI_STYLE_ELEMENT_DISABLED";
+	info->name = "Element disabled";
+	info->dataType = NGUI_DATA_TYPE_INT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DISABLED_TINT];
+	info->enumName = "NGUI_STYLE_ELEMENT_DISABLED_TINT";
+	info->name = "Element disabled tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_PADDING];
 	info->enumName = "NGUI_STYLE_ELEMENT_PADDING";
 	info->name = "Element padding";
@@ -353,6 +365,8 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
+	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x20000000);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
@@ -608,6 +622,8 @@ void nguiDraw(float elapsed) {
 				int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
 				Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
 				int labelTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
+				bool disabled = nguiGetStyleInt(NGUI_STYLE_ELEMENT_DISABLED);
+				int disabledTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT);
 
 				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
 					drawRect(rect, child->bgColor);
@@ -620,8 +636,7 @@ void nguiDraw(float elapsed) {
 					props.uv1 = v2(1, 0);
 					props.srcWidth = props.srcHeight = 1;
 
-					int highlightTint = nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT);
-					int highlightColor = lerpColor(child->bgColor, 0xFF000000 | highlightTint, getAofArgb(highlightTint)/255.0);
+					int highlightColor=tintColor(child->bgColor, nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT));
 					props.tint = highlightColor;
 					drawTexture(renderer->linearGrad256, props);
 				};
@@ -629,13 +644,15 @@ void nguiDraw(float elapsed) {
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					Vec2 graphicsOffset = v2();
 
-					if (contains(childRect, ngui->mouse)) {
-						if (child->hoveringTime == 0) playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+					if (contains(childRect, ngui->mouse) && !disabled) {
+						if (child->hoveringTime == 0) {
+							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+						}
 
-						bgColor = lerpColor(bgColor, hoverTint | 0xFF000000, getAofArgb(hoverTint) / 255.0);
+						bgColor = tintColor(bgColor, hoverTint);
 						if (platform->mouseJustDown) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
-							child->bgColor = lerpColor(child->bgColor, activeTint | 0xFF000000, getAofArgb(activeTint) / 255.0);
+							child->bgColor = tintColor(child->bgColor, activeTint);
 
 							child->timeSinceLastClicked = 0.001;
 							child->justActive = true;
@@ -657,6 +674,7 @@ void nguiDraw(float elapsed) {
 					}
 
 					if (child->bgColor == 0) child->bgColor = bgColor;
+					if (disabled) child->bgColor = tintColor(child->bgColor, disabledTint);
 					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
 
 					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
