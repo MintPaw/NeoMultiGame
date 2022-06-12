@@ -86,7 +86,7 @@ struct NguiElement {
 	Vec2 position;
 	Vec2 graphicsOffset;
 	int bgColor;
-	// int fgColor;
+	int fgColor;
 
 	bool active;
 	bool justActive;
@@ -366,7 +366,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x20000000);
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x80000000);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
@@ -625,6 +625,12 @@ void nguiDraw(float elapsed) {
 				bool disabled = nguiGetStyleInt(NGUI_STYLE_ELEMENT_DISABLED);
 				int disabledTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT);
 
+				if (disabled) {
+					bgColor = tintColor(bgColor, disabledTint);
+					fgColor = tintColor(fgColor, disabledTint);
+					labelTextColor = tintColor(labelTextColor, disabledTint);
+				}
+
 				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
 					drawRect(rect, child->bgColor);
 
@@ -674,8 +680,10 @@ void nguiDraw(float elapsed) {
 					}
 
 					if (child->bgColor == 0) child->bgColor = bgColor;
-					if (disabled) child->bgColor = tintColor(child->bgColor, disabledTint);
 					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
+
+					if (child->fgColor == 0) child->fgColor = fgColor;
+					child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
 
 					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
 
@@ -737,7 +745,7 @@ void nguiDraw(float elapsed) {
 					}
 
 					Rect barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.2), v2(0.5, 0.8));
-					drawRect(barRect, fgColor);
+					drawRect(barRect, child->fgColor);
 
 					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
 					Rect buttonRect = makeRect(0, 0, barRect.height*1.25, barRect.height*1.25);
