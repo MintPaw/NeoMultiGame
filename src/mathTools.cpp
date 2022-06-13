@@ -1872,6 +1872,7 @@ float map(float value, float sourceMin, float sourceMax, float destMin, float de
 }
 
 float clampMap(float value, float sourceMin, float sourceMax, float destMin, float destMax, Ease ease) {
+	if (sourceMin == 0 && sourceMax == 0) return destMin; //@hack
 	float perc = norm(sourceMin, sourceMax, value);
 	perc = Clamp01(perc);
 	perc = tweenEase(perc, ease);
