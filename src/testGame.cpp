@@ -443,7 +443,7 @@ void updateGame() {
 
 	ngui->mouse = platform->mouse;
 
-	static bool showingSubItems = false;
+	static bool showingSubElements = false;
 
 	NguiStyleStack *styleStack = NULL;
 	if (chosenStyle == 1) styleStack = &style1;
@@ -465,7 +465,7 @@ void updateGame() {
 	nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "assets/images/icons/axe.png");
 	if (nguiButton("Hello", "subText")) {
 		logf("You clicked the button!\n");
-		showingSubItems = !showingSubItems;
+		showingSubElements = !showingSubElements;
 	}
 	nguiPopStyleVar(NGUI_STYLE_ICON_PATH_PTR);
 	nguiPopStyleIconXform();
@@ -483,7 +483,7 @@ void updateGame() {
 
 	if (nguiButton("Second button")) logf("You clicked the second button!\n");
 
-	if (showingSubItems) {
+	if (showingSubElements) {
 		bool doIndent = false;
 		if (nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW) == 1) doIndent = true;
 		if (doIndent) nguiPushStyleFloat(NGUI_STYLE_INDENT, 80);
@@ -508,7 +508,8 @@ void updateGame() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(1, 0));
 	nguiStartWindow("Combat");
-	nguiPopAnyStyleVar(2);
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_PIVOT);
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
 
 	static bool attackOpen = false;
 	if (nguiButton("Attack")) attackOpen = !attackOpen;
@@ -549,10 +550,11 @@ void updateGame() {
 	if (itemsOpen) {
 		nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
-		nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth/2, platform->windowHeight));
-		nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0.5, 1));
+		nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth/2, 0));
+		nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0.5, 0));
 		nguiStartWindow("ItemsWindow");
-		nguiPopAnyStyleVar(2);
+		nguiPopStyleVar(NGUI_STYLE_WINDOW_PIVOT);
+		nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
 
 		nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(50, 50));
 		nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0.5, 0.5));
@@ -570,6 +572,30 @@ void updateGame() {
 
 		nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 	}
+
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(platform->windowWidth/2, platform->windowHeight));
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0.5, 1));
+	nguiStartWindow("Settings");
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_PIVOT);
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
+
+	static bool settingsOpen = false;
+	if (nguiButton("Open")) {
+		settingsOpen = !settingsOpen;
+	}
+	if (settingsOpen) {
+		nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 3);
+		if (nguiButton("A")) ;
+		if (nguiButton("B")) ;
+		if (nguiButton("C")) ;
+		if (nguiButton("D")) ;
+		if (nguiButton("E")) ;
+		if (nguiButton("F")) ;
+		if (nguiButton("G")) ;
+		if (nguiButton("H")) ;
+		nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+	}
+	nguiEndWindow();
 
 	if (styleStack) {
 		for (int i = styleStack->varsNum-1; i >= 0; i--) {
