@@ -617,6 +617,13 @@ void nguiDraw(float elapsed) {
 				ngui->currentStyleStack = &child->styleStack;
 
 				char *label = child->name;
+				char *tripleHash = strstr(label, "###");
+				if (tripleHash) {
+					char *newLabel = frameStringClone(label);
+					*strstr(newLabel, "###") = 0;
+					label = newLabel;
+				}
+
 				float alpha = 1;
 				alpha *= child->alive;
 				pushAlpha(alpha);
