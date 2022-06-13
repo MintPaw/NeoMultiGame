@@ -200,6 +200,7 @@ bool nguiButton(char *name, char *subText="");
 bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
 int getSizeForDataType(NguiDataType dataType);
+void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack);
 /// FUNCTIONS ^
 
 void nguiInit() {
@@ -393,6 +394,8 @@ void nguiInit() {
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
+	if (!ptr) Panic("Null pointer given to nguiPushStyleOfType");
+
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
 		Panic(frameSprintf(
@@ -403,6 +406,10 @@ void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDat
 		));
 	}
 
+	if (styleStack->varsMax == 0) {
+		styleStack->varsMax = 1;
+		styleStack->vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * styleStack->varsMax);
+	}
 	if (styleStack->varsNum > styleStack->varsMax-1) {
 		styleStack->vars = (NguiStyleVar *)resizeArray(
 			styleStack->vars,
@@ -878,4 +885,41 @@ int getSizeForDataType(NguiDataType dataType) {
 	if (dataType == NGUI_DATA_TYPE_STRING_PTR) size = sizeof(char *);
 	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
 	return size;
+}
+
+void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
+	for (int i = 0; i < styleStack->varsNum; i++) {
+		ImGui::PushID(i);
+		NguiStyleVar *var = &styleStack->vars[i];
+		NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
+
+		char **styleTypesList = (char **)frameMalloc(sizeof(char *) * NGUI_STYLE_TYPES_MAX);
+		int styleTypesListNum = 0;
+		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
+			styleTypesList[styleTypesListNum++] = ngui->styleTypeInfos[i].enumName;
+		}
+		if (ImGui::Combo("###varType", (int *)&var->type, styleTypesList, NGUI_STYLE_TYPES_MAX, 20)) {
+			styleTypeInfo = &ngui->styleTypeInfos[var->type];
+			nguiGetStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, var->data);
+		}
+		ImGui::SameLine();
+		if (styleTypeInfo->dataType == NGUI_DATA_TYPE_INT) {
+			ImGui::InputInt(frameSprintf("###%s", styleTypeInfo->name), (int *)var->data);
+		} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_COLOR_INT) {
+			guiInputArgb(frameSprintf("###%s", styleTypeInfo->name), (int *)var->data);
+		} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_FLOAT) {
+			ImGui::DragFloat(frameSprintf("###%s", styleTypeInfo->name), (float *)var->data, 0.01);
+		} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_VEC2) {
+			ImGui::DragFloat2(frameSprintf("###%s", styleTypeInfo->name), (float *)var->data, 0.01);
+		} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_STRING_PTR) {
+			ImGui::Text("%s: %s", styleTypeInfo->name, *(char **)var->data);
+		}
+
+		ImGui::PopID();
+	}
+
+	if (ImGui::Button("Add style var")) {
+		int value = 0;
+		nguiPushStyleOfType(styleStack, NGUI_STYLE_WINDOW_BG_COLOR, NGUI_DATA_TYPE_COLOR_INT, &value);
+	}
 }

@@ -359,6 +359,10 @@ void updateGame() {
 	static Xform2 beeXform = {v2(), v2(1, 1), 0};
 	static Xform2 bootXform = {v2(), v2(1, 1), 0};
 
+	static NguiStyleStack style1;
+	static NguiStyleStack style2;
+	static int chosenStyle = 0;
+
 	if (platform->frameCount > 0 && game->debugMode) {
 		ImGui::Begin("Icon editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::DragFloat2("axe translation", &axeXform.translation.x, 0.01);
@@ -372,8 +376,8 @@ void updateGame() {
 		ImGui::DragFloat("boot rotation", &bootXform.rotation);
 		ImGui::End();
 
-		ImGui::Begin("Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
+#if 0
+		ImGui::Begin("Default Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		DataStream *codeStream = newDataStream();
 		for (int i = 0; i < ngui->globalStyleStack.varsNum; i++) {
 			ImGui::PushID(i);
@@ -415,6 +419,22 @@ void updateGame() {
 
 		destroyDataStream(codeStream);
 		ImGui::End();
+#endif
+		ImGui::Begin("Style editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+		ImGui::RadioButton("No style", &chosenStyle, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("Style 1", &chosenStyle, 1);
+		ImGui::SameLine();
+		ImGui::RadioButton("Style 2", &chosenStyle, 2);
+
+		NguiStyleStack *styleStack = NULL;
+		if (chosenStyle == 1) styleStack = &style1;
+		if (chosenStyle == 2) styleStack = &style2;
+
+		if (styleStack) nguiShowImGuiStyleEditor(styleStack);
+
+		ImGui::End();
 	}
 
 	if (platform->frameCount == 0) {
@@ -424,6 +444,20 @@ void updateGame() {
 	ngui->mouse = platform->mouse;
 
 	static bool showingSubItems = false;
+
+	NguiStyleStack *styleStack = NULL;
+	if (chosenStyle == 1) styleStack = &style1;
+	if (chosenStyle == 2) styleStack = &style2;
+	if (styleStack) {
+		for (int i = 0; i < styleStack->varsNum; i++) {
+			NguiStyleVar *var = &styleStack->vars[i];
+			NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
+
+			char data[NGUI_STYLE_VAR_DATA_SIZE];
+			nguiGetStyleOfType(styleStack, var->type, styleTypeInfo->dataType, data);
+			nguiPushStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, data);
+		}
+	}
 
 	nguiStartWindow("Test Window");
 
@@ -535,6 +569,13 @@ void updateGame() {
 		nguiEndWindow();
 
 		nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+	}
+
+	if (styleStack) {
+		for (int i = styleStack->varsNum-1; i >= 0; i--) {
+			NguiStyleVar *var = &styleStack->vars[i];
+			nguiPopStyleVar(var->type);
+		}
 	}
 
 	nguiDraw(elapsed);
