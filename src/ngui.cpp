@@ -3,6 +3,7 @@ enum NguiStyleType {
 	NGUI_STYLE_WINDOW_PIVOT,
 	NGUI_STYLE_WINDOW_SIZE,
 	NGUI_STYLE_WINDOW_PADDING,
+	NGUI_STYLE_WINDOW_LERP_SPEED,
 	NGUI_STYLE_ELEMENT_DISABLED,
 	NGUI_STYLE_ELEMENT_DISABLED_TINT,
 	NGUI_STYLE_ELEMENT_PADDING,
@@ -84,6 +85,7 @@ struct NguiElement {
 	float valueMax;
 
 	Vec2 position;
+	Vec2 size; // Only used for windows right now
 	Vec2 graphicsOffset;
 	int bgColor;
 	int fgColor;
@@ -237,6 +239,11 @@ void nguiInit() {
 	info->name = "Window padding";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_LERP_SPEED];
+	info->enumName = "NGUI_STYLE_WINDOW_LERP_SPEED";
+	info->name = "Window lerp speed";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DISABLED];
 	info->enumName = "NGUI_STYLE_ELEMENT_DISABLED";
 	info->name = "Element disabled";
@@ -366,6 +373,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
+	nguiPushStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED, 0.2);
 	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
 	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x80000000);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
@@ -602,7 +610,17 @@ void nguiDraw(float elapsed) {
 			windowSize.x += windowPadding.x*2;
 			windowSize.y += windowPadding.y*2;
 			windowPosition -= windowSize * nguiGetStyleVec2(NGUI_STYLE_WINDOW_PIVOT);
-			Rect windowRect = makeRect(windowPosition, windowSize);
+
+			float windowLerpSpeed = nguiGetStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED);
+
+			if (window->creationTime <= 0.02) { // I have to do this for 2 frames for some reason
+				window->position = windowPosition;
+				window->size = windowSize;
+			}
+			window->position = lerp(window->position, windowPosition, windowLerpSpeed);
+			window->size = lerp(window->size, windowSize, windowLerpSpeed);
+
+			Rect windowRect = makeRect(window->position, window->size);
 
 			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
