@@ -19,7 +19,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS,
 	NGUI_STYLE_TEXT_COLOR,
 	NGUI_STYLE_INDENT,
-	NGUI_STYLE_ICON_PATH_PTR,
+	NGUI_STYLE_ICON_PTR,
 	NGUI_STYLE_ICON_ROTATION,
 	NGUI_STYLE_ICON_SCALE,
 	NGUI_STYLE_ICON_TRANSLATION,
@@ -43,6 +43,7 @@ enum NguiDataType {
 	NGUI_DATA_TYPE_FLOAT,
 	NGUI_DATA_TYPE_VEC2,
 	NGUI_DATA_TYPE_STRING_PTR,
+	NGUI_DATA_TYPE_PTR,
 };
 
 struct NguiStyleTypeInfo {
@@ -143,6 +144,9 @@ void nguiPushStyleVec2(NguiStyleType type, Vec2 value) {
 void nguiPushStyleStringPtr(NguiStyleType type, char *value) {
 	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value);
 }
+void nguiPushStylePtr(NguiStyleType type, void *value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &value);
+}
 void nguiPushStyleIconXform(Xform2 xform) {
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, xform.rotation);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
@@ -175,6 +179,11 @@ Vec2 nguiGetStyleVec2(NguiStyleType type) {
 char *nguiGetStyleStringPtr(NguiStyleType type) {
 	char *ret;
 	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &ret);
+	return ret;
+}
+void *nguiGetStylePtr(NguiStyleType type) {
+	void *ret;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &ret);
 	return ret;
 }
 Xform2 nguiGetStyleIconXform() {
@@ -319,10 +328,10 @@ void nguiInit() {
 	info->name = "Indent";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_PATH_PTR];
-	info->enumName = "NGUI_STYLE_ICON_PATH_PTR";
-	info->name = "Icon path pointer";
-	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_PTR];
+	info->enumName = "NGUI_STYLE_ICON_PTR";
+	info->name = "Icon pointer";
+	info->dataType = NGUI_DATA_TYPE_PTR;
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ROTATION];
 	info->enumName = "NGUI_STYLE_ICON_ROTATION";
@@ -389,7 +398,7 @@ void nguiInit() {
 	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
 	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
-	nguiPushStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR, "");
+	nguiPushStylePtr(NGUI_STYLE_ICON_PTR, 0);
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, v2(1, 1));
 	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, v2(0, 0));
@@ -725,27 +734,22 @@ void nguiDraw(float elapsed) {
 
 					drawElementBg(child, graphicsRect);
 
-					char *iconPath = nguiGetStyleStringPtr(NGUI_STYLE_ICON_PATH_PTR);
-					if (iconPath[0]) {
+					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
+					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
 						Rect iconRect = getInnerRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
-						Texture *iconTexture = getTexture(iconPath);
-						if (iconTexture) {
-							setScissor(iconRect);
-							Matrix3 matrix = mat3();
-							matrix.TRANSLATE(iconRect.x, iconRect.y);
-							matrix.SCALE(iconRect.width, iconRect.height);
-							matrix.TRANSLATE(0.5, 0.5);
-							matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
-							matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
-							matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
-							matrix.TRANSLATE(-0.5, -0.5);
-							float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
-							drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
-							clearScissor();
-						} else {
-							drawRect(iconRect, 0xFFFF0000);
-						}
+						setScissor(iconRect);
+						Matrix3 matrix = mat3();
+						matrix.TRANSLATE(iconRect.x, iconRect.y);
+						matrix.SCALE(iconRect.width, iconRect.height);
+						matrix.TRANSLATE(0.5, 0.5);
+						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
+						matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
+						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
+						matrix.TRANSLATE(-0.5, -0.5);
+						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
+						drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
+						clearScissor();
 					}
 
 					{
@@ -908,6 +912,7 @@ int getSizeForDataType(NguiDataType dataType) {
 	if (dataType == NGUI_DATA_TYPE_FLOAT) size = sizeof(float);
 	if (dataType == NGUI_DATA_TYPE_VEC2) size = sizeof(Vec2);
 	if (dataType == NGUI_DATA_TYPE_STRING_PTR) size = sizeof(char *);
+	if (dataType == NGUI_DATA_TYPE_PTR) size = sizeof(void *);
 	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
 	return size;
 }
