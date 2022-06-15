@@ -8090,13 +8090,13 @@ void updateSim() {
 			}
 
 			if (ImGui::TreeNode("Memory")) {
-				ImGui::Text("Total chunks ever allocated: %ld", memsys->currentChunkId);
-				ImGui::Text("Currently allocted chunks: %d/%d", memsys->activeChunksNum, memsys->activeChunksMax);
-				ImGui::Text("Currently empty chunks: %d/%d", memsys->emptyChunksNum, memsys->emptyChunksMax);
+				ImGui::Text("Total chunks ever allocated: %ld", memSys->currentChunkId);
+				ImGui::Text("Currently allocted chunks: %d/%d", memSys->activeChunksNum, memSys->activeChunksMax);
+				ImGui::Text("Currently empty chunks: %d/%d", memSys->emptyChunksNum, memSys->emptyChunksMax);
 				ImGui::Separator();
-				ImGui::Text("Total mem allocated: %0.2fmb", (float)memsys->lastFrameTotal / (float)Megabytes(1));
-				ImGui::Text("All time allocated: %0.2fmb", (float)memsys->allTime / (float)Megabytes(1));
-				ImGui::Text("Frame memory max: %0.2fmb", (float)memsys->frameMemoryMax / (float)Megabytes(1));
+				ImGui::Text("Total mem allocated: %0.2fmb", (float)memSys->lastFrameTotal / (float)Megabytes(1));
+				ImGui::Text("All time allocated: %0.2fmb", (float)memSys->allTime / (float)Megabytes(1));
+				ImGui::Text("Frame memory max: %0.2fmb", (float)memSys->frameMemoryMax / (float)Megabytes(1));
 				ImGui::TreePop();
 			}
 

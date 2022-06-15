@@ -104,24 +104,24 @@ struct MemorySystem {
 };
 
 int startingFrameMemory = Megabytes(1);
-MemorySystem *memsys = NULL;
+MemorySystem *memSys = NULL;
 
 #define FRAME_CHUNKS_MAX (4096*100)
 MemoryChunk frameChunks[FRAME_CHUNKS_MAX];
 int frameChunksNum = 0;
 
 void initMemory() {
-	memsys = (MemorySystem *)(malloc)(sizeof(MemorySystem));
-	memset(memsys, 0, sizeof(MemorySystem));
+	memSys = (MemorySystem *)(malloc)(sizeof(MemorySystem));
+	memset(memSys, 0, sizeof(MemorySystem));
 
-	memsys->activeChunksMax = 1;
-	memsys->activeChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memsys->activeChunksMax);
+	memSys->activeChunksMax = 1;
+	memSys->activeChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memSys->activeChunksMax);
 
-	memsys->emptyChunksMax = 1;
-	memsys->emptyChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memsys->emptyChunksMax);
+	memSys->emptyChunksMax = 1;
+	memSys->emptyChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memSys->emptyChunksMax);
 
-	memsys->frameMemoryMax = startingFrameMemory;
-	memsys->frameMemory = (malloc)(memsys->frameMemoryMax);
+	memSys->frameMemoryMax = startingFrameMemory;
+	memSys->frameMemory = (malloc)(memSys->frameMemoryMax);
 }
 
 void *allocateFrom(Allocator *allocator, int size) {
@@ -143,23 +143,23 @@ void freeFrom(Allocator *allocator, void *data) {
 }
 
 void *allocateMemory(long size) {
-	if (!memsys) initMemory();
-	IncMutex(&memsys->_allocateFreeMutex);
+	if (!memSys) initMemory();
+	IncMutex(&memSys->_allocateFreeMutex);
 
-	memsys->total += size;
-	memsys->allTime += size;
+	memSys->total += size;
+	memSys->allTime += size;
 
-	if (memsys->activeChunksNum >= memsys->activeChunksMax) {
-		memsys->activeChunksMax++;
-		memsys->activeChunksMax *= 2;
-		memsys->activeChunks = (MemoryChunk **)(realloc)(memsys->activeChunks, sizeof(MemoryChunk *) * memsys->activeChunksMax);
+	if (memSys->activeChunksNum >= memSys->activeChunksMax) {
+		memSys->activeChunksMax++;
+		memSys->activeChunksMax *= 2;
+		memSys->activeChunks = (MemoryChunk **)(realloc)(memSys->activeChunks, sizeof(MemoryChunk *) * memSys->activeChunksMax);
 	}
 
 #if 1
 	MemoryChunk *chunk;
-	if (memsys->emptyChunksNum > 0) {
-		chunk = memsys->emptyChunks[memsys->emptyChunksNum-1];
-		memsys->emptyChunksNum--;
+	if (memSys->emptyChunksNum > 0) {
+		chunk = memSys->emptyChunks[memSys->emptyChunksNum-1];
+		memSys->emptyChunksNum--;
 	} else {
 		chunk = (MemoryChunk *)(malloc)(sizeof(MemoryChunk));
 	}
@@ -167,15 +167,15 @@ void *allocateMemory(long size) {
 	MemoryChunk *chunk = (MemoryChunk *)(malloc)(sizeof(MemoryChunk));
 #endif
 
-	memsys->activeChunks[memsys->activeChunksNum++] = chunk;
+	memSys->activeChunks[memSys->activeChunksNum++] = chunk;
 
-	chunk->id = memsys->currentChunkId++;
+	chunk->id = memSys->currentChunkId++;
 	// if (chunk->id == 100000) Panic("Break");
 	chunk->size = size;
 
 	chunk->data = (unsigned char *)(malloc)(size);
 
-	DecMutex(&memsys->_allocateFreeMutex);
+	DecMutex(&memSys->_allocateFreeMutex);
 	return chunk->data;
 }
 
@@ -188,12 +188,12 @@ void *fastMalloc(long size) {
 }
 
 void freeMemory(void *mem) {
-	if (!memsys) initMemory();
-	IncMutex(&memsys->_allocateFreeMutex);
+	if (!memSys) initMemory();
+	IncMutex(&memSys->_allocateFreeMutex);
 
 	int chunkIndex = -1;
-	for (int i = 0; i < memsys->activeChunksNum; i++) {
-		if (memsys->activeChunks[i]->data == mem) {
+	for (int i = 0; i < memSys->activeChunksNum; i++) {
+		if (memSys->activeChunks[i]->data == mem) {
 			chunkIndex = i;
 			break;
 		}
@@ -204,26 +204,26 @@ void freeMemory(void *mem) {
 	(free)(mem);
 
 	if (chunkIndex != -1) {
-		MemoryChunk *chunk = memsys->activeChunks[chunkIndex];
-		memsys->total -= chunk->size;
-		if (chunkIndex != memsys->activeChunksNum) {
-			arraySwap(memsys->activeChunks, memsys->activeChunksNum, sizeof(MemoryChunk *), chunkIndex, memsys->activeChunksNum-1);
+		MemoryChunk *chunk = memSys->activeChunks[chunkIndex];
+		memSys->total -= chunk->size;
+		if (chunkIndex != memSys->activeChunksNum) {
+			arraySwap(memSys->activeChunks, memSys->activeChunksNum, sizeof(MemoryChunk *), chunkIndex, memSys->activeChunksNum-1);
 		}
-		memsys->activeChunksNum--;
+		memSys->activeChunksNum--;
 
 #if 1
-		if (memsys->emptyChunksNum >= memsys->emptyChunksMax) {
-			memsys->emptyChunksMax++;
-			memsys->emptyChunksMax *= 2;
-			memsys->emptyChunks = (MemoryChunk **)(realloc)(memsys->emptyChunks, sizeof(MemoryChunk *) * memsys->emptyChunksMax);
+		if (memSys->emptyChunksNum >= memSys->emptyChunksMax) {
+			memSys->emptyChunksMax++;
+			memSys->emptyChunksMax *= 2;
+			memSys->emptyChunks = (MemoryChunk **)(realloc)(memSys->emptyChunks, sizeof(MemoryChunk *) * memSys->emptyChunksMax);
 		}
-		memsys->emptyChunks[memsys->emptyChunksNum++] = chunk;
+		memSys->emptyChunks[memSys->emptyChunksNum++] = chunk;
 #else
 		(free)(chunk);
 #endif
 	}
 
-	DecMutex(&memsys->_allocateFreeMutex);
+	DecMutex(&memSys->_allocateFreeMutex);
 }
 
 void fastFree(void *mem) {
@@ -236,8 +236,8 @@ void fastFree(void *mem) {
 
 void *reallocMemory(void *mem, long newSize) {
 	MemoryChunk *oldChunk = NULL;
-	for (int i = 0; i < memsys->activeChunksNum; i++) {
-		MemoryChunk *chunk = memsys->activeChunks[i];
+	for (int i = 0; i < memSys->activeChunksNum; i++) {
+		MemoryChunk *chunk = memSys->activeChunks[i];
 		if (chunk->data == mem) {
 			oldChunk = chunk;
 			break;
@@ -252,22 +252,22 @@ void *reallocMemory(void *mem, long newSize) {
 }
 
 char *frameMalloc(int size) {
-	if (!memsys) initMemory();
-	IncMutex(&memsys->_frameMemoryMutex);
+	if (!memSys) initMemory();
+	IncMutex(&memSys->_frameMemoryMutex);
 
 	while (size % 8 != 0) size++;
 
 	bool shouldUseChunk = true;
 
 #if defined(COMPRESS_FRAME_MEMORY)
-	if (memsys->frameMemoryCurrentIndex+size <= memsys->frameMemoryMax) shouldUseChunk = false;
+	if (memSys->frameMemoryCurrentIndex+size <= memSys->frameMemoryMax) shouldUseChunk = false;
 #endif
 
 	if (shouldUseChunk) {
 		if (frameChunksNum >= FRAME_CHUNKS_MAX) {
 			printf("No more frame memory\n");
 
-			DecMutex(&memsys->_frameMemoryMutex);
+			DecMutex(&memSys->_frameMemoryMutex);
 			return NULL;
 		}
 
@@ -276,14 +276,14 @@ char *frameMalloc(int size) {
 
 		chunk->data = (unsigned char *)zalloc(chunk->size);
 
-		DecMutex(&memsys->_frameMemoryMutex);
+		DecMutex(&memSys->_frameMemoryMutex);
 		return (char *)chunk->data;
 	} else {
-		void *nextMem = ((unsigned char *)memsys->frameMemory) + memsys->frameMemoryCurrentIndex;
+		void *nextMem = ((unsigned char *)memSys->frameMemory) + memSys->frameMemoryCurrentIndex;
 		memset(nextMem, 0, sizeof(char) * size);
-		memsys->frameMemoryCurrentIndex += size;
+		memSys->frameMemoryCurrentIndex += size;
 
-		DecMutex(&memsys->_frameMemoryMutex);
+		DecMutex(&memSys->_frameMemoryMutex);
 		return (char *)nextMem;
 	}
 }
@@ -327,11 +327,11 @@ char *frameStringClone(const char *str) {
 }
 
 void freeFrameMemory() {
-	if (!memsys) return;
+	if (!memSys) return;
 
-	IncMutex(&memsys->_frameMemoryMutex);
+	IncMutex(&memSys->_frameMemoryMutex);
 
-	memsys->frameMemoryCurrentIndex = 0;
+	memSys->frameMemoryCurrentIndex = 0;
 
 	int extraMemoryNeeded = 0;
 	for (int i = 0; i < frameChunksNum; i++) {
@@ -342,19 +342,19 @@ void freeFrameMemory() {
 
 #if defined(COMPRESS_FRAME_MEMORY)
 	if (extraMemoryNeeded > 0) {
-		memsys->frameMemoryMax += extraMemoryNeeded;
-		if (memsys->frameMemoryMax > startingFrameMemory * 2) {
-			printf("Overflowed frame mem *2 (%.1fmb now)\n", (float)memsys->frameMemoryMax/Megabytes(1));
-			// memsys->frameMemoryMax = startingFrameMemory * 2;
+		memSys->frameMemoryMax += extraMemoryNeeded;
+		if (memSys->frameMemoryMax > startingFrameMemory * 2) {
+			printf("Overflowed frame mem *2 (%.1fmb now)\n", (float)memSys->frameMemoryMax/Megabytes(1));
+			// memSys->frameMemoryMax = startingFrameMemory * 2;
 		}
-		free(memsys->frameMemory);
-		memsys->frameMemory = malloc(memsys->frameMemoryMax);
+		free(memSys->frameMemory);
+		memSys->frameMemory = malloc(memSys->frameMemoryMax);
 	}
 #endif
 
-	memsys->lastFrameTotal = memsys->total;
+	memSys->lastFrameTotal = memSys->total;
 
-	DecMutex(&memsys->_frameMemoryMutex);
+	DecMutex(&memSys->_frameMemoryMutex);
 }
 
 void *zalloc(u32 size) {
