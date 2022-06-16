@@ -31,11 +31,11 @@ GAME_NAME=horseGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
-# GAME_NAME=concreteJungleGame
+GAME_NAME=concreteJungleGame
 # GAME_NAME=butt2GoGame
 # GAME_NAME=horseGame
 # GAME_NAME=dynaGame
-GAME_NAME=testGame
+# GAME_NAME=testGame
 endif
 
 

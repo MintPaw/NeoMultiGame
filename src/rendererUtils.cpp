@@ -43,6 +43,8 @@ void drawRectOutline(Rect rect, float outlineSize, int color) {
 	// drawRect(makeRect(rect.x + rect.width - outlineSize, rect.y, outlineSize, rect.height - outlineSize*2), color); // right
 }
 
+RenderProps createRenderProps() { return newRenderProps(); } // One day changed everything to this
+
 RenderProps newRenderProps() {
 	RenderProps props = {};
 	props.alpha = 1;

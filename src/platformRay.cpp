@@ -491,6 +491,7 @@ Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
 RenderTexture *createRenderTexture(const char *path, int flags=0);
 RenderTexture *createRenderTexture(int width, int height, void *data=NULL, int flags=0);
+Texture *renderTextureToTexture(RenderTexture *renderTexture);
 void setTextureSmooth(Texture *texture, bool smooth);
 void setTextureSmooth(RenderTexture *renderTexture, bool smooth);
 void setTextureClamped(Texture *texture, bool clamped);
@@ -699,6 +700,14 @@ RenderTexture *createRenderTexture(int width, int height, void *data, int flags)
 	renderTexture->raylibRenderTexture = Raylib::LoadRenderTexture(width, height);
 	if (data) setTextureData(renderTexture, data, width, height, flags);
 	return renderTexture;
+}
+
+Texture *renderTextureToTexture(RenderTexture *renderTexture) {
+	u8 *data = getTextureData(renderTexture);
+	Texture *texture = createTexture(renderTexture->width, renderTexture->height, data);
+	free(data);
+	destroyTexture(renderTexture);
+	return texture;
 }
 
 void setTextureSmooth(Texture *texture, bool smooth) {
