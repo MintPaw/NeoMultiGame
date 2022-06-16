@@ -748,6 +748,7 @@ struct Game {
 	bool debugNeverTakeDamage;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
+	bool debugShowPrewarm;
 	bool debugSkipPrewarm;
 	bool debugDrawPathing;
 	bool debugPaused;
@@ -1299,7 +1300,9 @@ void updateGame() {
 	}
 
 	float fadeOutPerc = game->nextMap_t;
-	if (!game->debugSkipPrewarm) fadeOutPerc += clampMap(game->mapTime, ROOM_PREWARM_TIME, ROOM_PREWARM_TIME+0.25, 1, 0);
+	if (!game->debugSkipPrewarm && !game->debugShowPrewarm) {
+		fadeOutPerc += clampMap(game->mapTime, ROOM_PREWARM_TIME, ROOM_PREWARM_TIME+0.25, 1, 0);
+	}
 	fadeOutPerc = Clamp01(fadeOutPerc);
 	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, fadeOutPerc));
 
@@ -1407,7 +1410,9 @@ void stepGame(float elapsed) {
 	{ /// Change map
 		if (game->nextMapIndex != game->currentMapIndex) {
 			bool changeMaps = false;
-			if (game->nextMap_t <= 0) game->lookingAtMap = true;
+			if (!game->debugShowPrewarm) {
+				if (game->nextMap_t <= 0) game->lookingAtMap = true;
+			}
 			game->nextMap_t += 0.1;
 			if (game->nextMap_t > 1) changeMaps = true;
 
@@ -1607,6 +1612,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
 			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
+			ImGui::Checkbox("Show prewarm", &game->debugShowPrewarm);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);
 
