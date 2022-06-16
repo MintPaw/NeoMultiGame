@@ -3665,10 +3665,7 @@ void stepGame(float elapsed) {
 
 	{ /// Update map
 		game->timeTillNextCityTick -= elapsed;
-		float prevCityTime = game->cityTime;
-		game->cityTime += elapsed;
 		if (game->timeTillNextCityTick <= 0) {
-			// logf("Tick %d %f\n", game->cityTicks, game->cityTime); //@todo Maybe make this so time controls ticks
 			game->cityTicks++;
 			game->timeTillNextCityTick = SECS_PER_CITY_TICK;
 		}
@@ -3676,6 +3673,9 @@ void stepGame(float elapsed) {
 		float spreadAmount = 0.0005;
 		while (game->cityTicks > 0) {
 			game->cityTicks--;
+
+			float prevCityTime = game->cityTime;
+			game->cityTime += SECS_PER_CITY_TICK;
 
 			for (int y = 0; y < CITY_ROWS; y++) {
 				for (int x = 0; x < CITY_COLS; x++) {
@@ -3784,20 +3784,20 @@ void stepGame(float elapsed) {
 
 				}
 			}
-		}
 
-		{ /// Update maps (stores)
-			float prevMod = fmod(prevCityTime, 120);
-			float currentMod = fmod(game->cityTime, 120);
-			if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
-				logf("Stores have restocked\n");
-				game->debugForceRestock = false;
-				for (int i = 0; i < game->storeDatasNum; i++) {
-					StoreData *data = &game->storeDatas[i];
-					data->itemsNum = -1;
+			{ /// Update maps (stores)
+				float prevMod = fmod(prevCityTime, 120);
+				float currentMod = fmod(game->cityTime, 120);
+				if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
+					logf("Stores have restocked\n");
+					game->debugForceRestock = false;
+					for (int i = 0; i < game->storeDatasNum; i++) {
+						StoreData *data = &game->storeDatas[i];
+						data->itemsNum = -1;
+					}
 				}
-			}
-		} ///
+			} ///
+		}
 
 		{ /// Spawn enemies // Spawn npcs
 			auto createNpcUnit = [](Map *map)->Actor *{
@@ -4093,11 +4093,9 @@ void stepGame(float elapsed) {
 
 						if (ImGui::Button("Advance 60 seconds")) {
 							game->cityTicks += 60.0/SECS_PER_CITY_TICK;
-							game->cityTime += 60;
 						}
 						if (ImGui::Button("Advance 5 min")) {
 							game->cityTicks += (60.0*5)/SECS_PER_CITY_TICK;
-							game->cityTime += 60*5;
 						}
 						ImGui::Separator();
 
