@@ -356,7 +356,7 @@ enum ActorType {
 	ACTOR_UNIT=1,
 	ACTOR_GROUND=2,
 	ACTOR_WALL=3,
-	ACTOR_DUMMY=4, // Unused
+	ACTOR_BED=4,
 	ACTOR_DOOR=5,
 	ACTOR_UNIT_SPAWNER=6, // Unused
 	ACTOR_ITEM=7,
@@ -639,8 +639,7 @@ struct Game {
 	Font *defaultFont;
 	Font *particleFont;
 	Font *simpleStatsFont;
-	RenderTexture *gameTexture;
-	RenderTexture *debugTexture;
+	RenderTexture *overlayTexture;
 	RenderTexture *mapTexture;
 
 	Globals globals;
@@ -654,6 +653,7 @@ struct Game {
 
 	int hitPauseFrames;
 	bool lastStepOfFrame;
+	int extraStepsFromSleep;
 
 	ActorTypeInfo actorTypeInfos[ACTORS_MAX];
 
@@ -701,6 +701,8 @@ struct Game {
 
 	bool inInventory;
 	int draggingItemId;
+
+	bool isSleeping;
 
 	int nextItemId; //@playerSaveSerialize
 
@@ -862,6 +864,7 @@ void runGame() {
 	initTextureSystem();
 	initFonts();
 	initAnimations();
+	nguiInit();
 
 	platformUpdateLoop(updateGame);
 }
@@ -942,9 +945,7 @@ void updateGame() {
 			info = &game->actorTypeInfos[ACTOR_WALL];
 			info->isWall = true;
 
-			info = &game->actorTypeInfos[ACTOR_DUMMY];
-			info->canBeHit = true;
-			info->hasPhysics = true;
+			info = &game->actorTypeInfos[ACTOR_BED];
 
 			info = &game->actorTypeInfos[ACTOR_DOOR];
 
@@ -1148,32 +1149,23 @@ void updateGame() {
 		if (!equal(game->size, newSize)) {
 			game->size = newSize;
 
-			if (game->gameTexture) destroyTexture(game->gameTexture);
-			game->gameTexture = NULL;
-			if (game->debugTexture) destroyTexture(game->debugTexture);
-			game->debugTexture = NULL;
+			if (game->overlayTexture) destroyTexture(game->overlayTexture);
+			game->overlayTexture = NULL;
 			if (game->mapTexture) destroyTexture(game->mapTexture);
 			game->mapTexture = NULL;
 		}
 	} ///
 
-	if (!game->gameTexture) game->gameTexture = createRenderTexture(game->size.x, game->size.y);
 	if (!game->mapTexture) game->mapTexture = createRenderTexture(game->size.x, game->size.y);
-
-	if (!game->debugTexture) game->debugTexture = createRenderTexture(game->size.x, game->size.y);
-	pushTargetTexture(game->debugTexture);
-	clearRenderer();
-	popTargetTexture();
-
-	pushTargetTexture(game->gameTexture);
-	clearRenderer(0xFF101010);
+	if (!game->overlayTexture) game->overlayTexture = createRenderTexture(game->size.x, game->size.y);
 
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	// platform->disableGui = !game->inEditor;
 
-	bool shouldDraw3d = true;
+	int extraStepsThisFrame = MinNum(game->extraStepsFromSleep, 200);
+	game->extraStepsFromSleep -= extraStepsThisFrame;
 
-	int steps = 1;
+	int steps = 1 + extraStepsThisFrame;
 
 	if (!game->debugSkipPrewarm && game->mapTime < ROOM_PREWARM_TIME) {
 		steps = 20;
@@ -1187,6 +1179,94 @@ void updateGame() {
 		// 	renderer->disabled = true;
 		// }
 		stepGame(elapsed);
+
+		{ /// Draw 3d
+			if (game->lastStepOfFrame) {
+				clearRenderer();
+				start3d(game->camera3d, game->size, -10000, 10000);
+
+				Vec3 sunPosition = v3(104.000, -134.000, 66.000);
+
+				renderer->lights[0].position.x = sunPosition.x;
+				renderer->lights[0].position.y = sunPosition.y;
+				renderer->lights[0].position.z = sunPosition.z;
+				updateLightingShader(game->camera3d);
+
+				getMouseRay(game->camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
+
+				startShader(renderer->lightingShader);
+				for (int i = 0; i < game->worldCubesNum; i++) {
+					WorldCubes *cube = &game->worldCubes[i];
+
+					Vec4 alpha = v4(cube->alpha, 0, 0, 0);
+					Raylib::SetShaderValue(
+						renderer->lightingShader,
+						renderer->lightingShaderAlphaLoc,
+						&alpha.x,
+						Raylib::SHADER_UNIFORM_VEC4
+					);
+					drawAABB(cube->aabb, cube->color);
+				}
+				endShader();
+				game->worldCubesNum = 0;
+
+				if (!game->debugDrawBillboards) game->billboardsNum = 0;
+				startShader(renderer->alphaDiscardShader);
+				for (int i = 0; i < game->billboardsNum; i++) {
+					DrawBillboardCall *billboard = &game->billboards[i];
+					if (isZero(billboard->camera.up)) billboard->camera = game->camera3d;
+
+					int tint = billboard->tint;
+					Vec4 tintVec = hexToArgbFloat(billboard->tint);
+					tintVec *= billboard->alpha;
+					tint = argbToHex(tintVec);
+					// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
+
+					if (billboard->texture) {
+						drawBillboard(
+							billboard->camera,
+							billboard->texture,
+							billboard->position,
+							billboard->size,
+							tint,
+							billboard->source
+						);
+					} else {
+						drawBillboard(
+							billboard->camera,
+							billboard->renderTexture,
+							billboard->position,
+							billboard->size,
+							tint,
+							billboard->source
+						);
+					}
+				}
+
+				for (int i = 0; i < game->worldElementsNum; i++) {
+					WorldElement *element = &game->worldElements[i];
+
+					if (element->type == WORLD_ELEMENT_TRIANGLE) {
+						Vec3 *verts = element->tri.verts;
+						Raylib::DrawTriangle3D(
+							toRaylib(verts[0]),
+							toRaylib(verts[1]),
+							toRaylib(verts[2]),
+							toRaylibColor(element->color)
+						);
+					} else if (element->type == WORLD_ELEMENT_CONE) {
+						drawCone(element->cone, element->color);
+					} else if (element->type == WORLD_ELEMENT_SPHERE) {
+						drawSphere(element->sphere, element->color);
+					}
+				}
+
+				endShader();
+				end3d();
+			}
+			game->worldElementsNum = 0;
+			game->billboardsNum = 0;
+		} ///
 	}
 
 	{ /// Update world channels
@@ -1210,89 +1290,8 @@ void updateGame() {
 		}
 	} ///
 
-	popTargetTexture(); // game->gameTexture
-
-	clearRenderer();
-
 	{
-		RenderTexture *texture = game->gameTexture;
-		Matrix3 matrix = mat3();
-		matrix.SCALE(game->size);
-
-		drawSimpleTexture(texture, matrix);
-	}
-
-	{ /// Draw 3d
-		if (shouldDraw3d) {
-			Camera camera3d = game->camera3d;
-			start3d(camera3d, game->size, -10000, 10000);
-
-#if 1
-			Vec3 sunPosition = v3(104.000, -134.000, 66.000);
-#else
-			static Vec3 sunPosition = v3(104.000, -134.000, 66.000);
-			ImGui::DragFloat3("sunPosition", &sunPosition.x, 1);
-#endif
-			renderer->lights[0].position.x = sunPosition.x;
-			renderer->lights[0].position.y = sunPosition.y;
-			renderer->lights[0].position.z = sunPosition.z;
-			updateLightingShader(camera3d);
-
-			getMouseRay(camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
-
-			startShader(renderer->lightingShader);
-			for (int i = 0; i < game->worldCubesNum; i++) {
-				WorldCubes *cube = &game->worldCubes[i];
-
-				Vec4 alpha = v4(cube->alpha, 0, 0, 0);
-				Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShaderAlphaLoc, &alpha.x, Raylib::SHADER_UNIFORM_VEC4);
-				drawAABB(cube->aabb, cube->color);
-			}
-			endShader();
-			game->worldCubesNum = 0;
-
-			if (!game->debugDrawBillboards) game->billboardsNum = 0;
-			startShader(renderer->alphaDiscardShader);
-			for (int i = 0; i < game->billboardsNum; i++) {
-				DrawBillboardCall *billboard = &game->billboards[i];
-				if (isZero(billboard->camera.up)) billboard->camera = camera3d;
-
-				int tint = billboard->tint;
-				Vec4 tintVec = hexToArgbFloat(billboard->tint);
-				tintVec *= billboard->alpha;
-				tint = argbToHex(tintVec);
-				// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
-
-				if (billboard->texture) {
-					drawBillboard(billboard->camera, billboard->texture, billboard->position, billboard->size, tint, billboard->source);
-				} else {
-					drawBillboard(billboard->camera, billboard->renderTexture, billboard->position, billboard->size, tint, billboard->source);
-				}
-			}
-
-			for (int i = 0; i < game->worldElementsNum; i++) {
-				WorldElement *element = &game->worldElements[i];
-
-				if (element->type == WORLD_ELEMENT_TRIANGLE) {
-					Vec3 *verts = element->tri.verts;
-					Raylib::DrawTriangle3D(toRaylib(verts[0]), toRaylib(verts[1]), toRaylib(verts[2]), toRaylibColor(element->color));
-				} else if (element->type == WORLD_ELEMENT_CONE) {
-					drawCone(element->cone, element->color);
-				} else if (element->type == WORLD_ELEMENT_SPHERE) {
-					drawSphere(element->sphere, element->color);
-				}
-			}
-			game->worldElementsNum = 0;
-
-			endShader();
-			game->billboardsNum = 0;
-
-			end3d();
-		}
-	} ///
-
-	{
-		RenderTexture *texture = game->debugTexture;
+		RenderTexture *texture = game->overlayTexture;
 		Matrix3 matrix = mat3();
 		matrix.SCALE(game->size);
 
@@ -1313,6 +1312,9 @@ void updateGame() {
 
 		drawSimpleTexture(texture, matrix);
 	}
+
+	ngui->mouse = game->mouse;
+	nguiDraw(elapsed);
 
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
 	if (game->debugShowFrameTimes) {
@@ -1957,6 +1959,12 @@ void stepGame(float elapsed) {
 		ImGui::SameLine();
 		if (ImGui::Button("Door")) {
 			Actor *actor = createActor(map, ACTOR_DOOR);
+			actor->position = game->cameraTarget;
+			game->selectedActorId = actor->id;
+		}
+
+		if (ImGui::Button("Bed")) {
+			Actor *actor = createActor(map, ACTOR_BED);
 			actor->position = game->cameraTarget;
 			game->selectedActorId = actor->id;
 		}
@@ -3039,6 +3047,27 @@ void stepGame(float elapsed) {
 			pushAABB(getAABB(actor), 0xFFE8C572);
 		} else if (actor->type == ACTOR_WALL) {
 			pushAABB(getAABB(actor), 0xFFFFFFFF);
+		} else if (actor->type == ACTOR_BED) {
+			pushAABB(getAABB(actor), 0xFFA3FFF6);
+			if (overlaps(actor, player)) {
+				if (game->lastStepOfFrame) {
+					int hoursChosen = 0;
+					nguiStartWindow("SleepForWindow");
+
+					if (nguiButton("8 hours")) hoursChosen = 8;
+					if (nguiButton("4 hours")) hoursChosen = 4;
+					if (nguiButton("2 hours")) hoursChosen = 2;
+					if (nguiButton("1 hours")) hoursChosen = 1;
+
+					if (hoursChosen) {
+						float ticksPerSec = 1.0/SECS_PER_CITY_TICK;
+						game->extraStepsFromSleep = 60 * 60 * 60 * hoursChosen;
+						game->isSleeping = true;
+					}
+
+					nguiEndWindow();
+				}
+			}
 		} else if (actor->type == ACTOR_DOOR) {
 			if (game->mapTime == 0) {
 				actor->locked = 0;
@@ -3390,6 +3419,14 @@ void stepGame(float elapsed) {
 		}
 	} ///
 
+	{ /// Update sleeping
+		if (game->isSleeping) {
+			if (game->cityTicks == 0) {
+				game->isSleeping = false;
+			}
+		}
+	} ///
+
 	{ /// Update particles
 		for (int i = 0; i < game->particlesNum; i++) {
 			Particle *particle = &game->particles[i];
@@ -3431,8 +3468,9 @@ void stepGame(float elapsed) {
 		}
 	} ///
 
-	pushTargetTexture(game->debugTexture);
-	{ /// Draw actors (debug/overlay) //@todo rename to overlayTexture
+	pushTargetTexture(game->overlayTexture);
+	clearRenderer();
+	{ /// Draw actors (overlay)
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
 			{ // Status lines
@@ -3785,7 +3823,7 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			{ /// Update maps (stores)
+			{ /// Update stores
 				float prevMod = fmod(prevCityTime, 120);
 				float currentMod = fmod(game->cityTime, 120);
 				if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
@@ -4341,7 +4379,7 @@ void stepGame(float elapsed) {
 
 		popCamera2d();
 	} /// 
-	popTargetTexture(); // game->debugTexture
+	popTargetTexture(); // game->overlayTexture
 
 	for (int i = 0; i < map->actorsNum; i++) { /// Removed marked actors
 		Actor *actor = &map->actors[i];
