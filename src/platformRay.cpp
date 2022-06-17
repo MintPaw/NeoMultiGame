@@ -434,6 +434,9 @@ struct Camera {
 
 #define _F_TD_FLIP_Y           (1 << 1)
 #define _F_TD_SKIP_PREMULTIPLY (1 << 2)
+// #define _F_TD_SRGB8            (1 << 3)
+#define _F_TD_RGB16F           (1 << 4)
+#define _F_TD_RGBA32           (1 << 5)
 struct Renderer {
 	bool disabled;
 	int maxTextureUnits; // Does nothing
@@ -491,6 +494,7 @@ Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
 RenderTexture *createRenderTexture(const char *path, int flags=0);
 RenderTexture *createRenderTexture(int width, int height, void *data=NULL, int flags=0);
+Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags=0);
 Texture *renderTextureToTexture(RenderTexture *renderTexture);
 void setTextureSmooth(Texture *texture, bool smooth);
 void setTextureSmooth(RenderTexture *renderTexture, bool smooth);
@@ -660,7 +664,11 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	Raylib::Image raylibImage = {};
 	raylibImage.width = width;
 	raylibImage.height = height;
-	raylibImage.format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+	if (flags & _F_TD_RGBA32) {
+		raylibImage.format = Raylib::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
+	} else {
+		raylibImage.format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+	}
 	raylibImage.mipmaps = 1;
 	raylibImage.data = (u8 *)zalloc(width * height * 4);
 
@@ -693,11 +701,67 @@ RenderTexture *createRenderTexture(const char *path, int flags) {
 	return texture;
 }
 
+Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags) {
+	Raylib::RenderTexture2D target = { 0 };
+
+	target.id = Raylib::rlLoadFramebuffer(width, height);   // Load an empty framebuffer
+
+	if (target.id > 0)
+	{
+		Raylib::rlEnableFramebuffer(target.id);
+
+		// Create color texture (default to RGBA)
+		int format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+		if (flags & _F_TD_RGBA32) {
+			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
+		} else {
+			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+		}
+		target.texture.id = Raylib::rlLoadTexture(NULL, width, height, format, 1);
+		target.texture.width = width;
+		target.texture.height = height;
+		target.texture.format = format;
+		target.texture.mipmaps = 1;
+
+		// Create depth renderbuffer/texture
+		target.depth.id = Raylib::rlLoadTextureDepth(width, height, true);
+		target.depth.width = width;
+		target.depth.height = height;
+		target.depth.format = 19;       //DEPTH_COMPONENT_24BIT?
+		target.depth.mipmaps = 1;
+
+		// Attach color texture and depth renderbuffer/texture to FBO
+		Raylib::rlFramebufferAttach(
+			target.id,
+			target.texture.id,
+			Raylib::RL_ATTACHMENT_COLOR_CHANNEL0,
+			Raylib::RL_ATTACHMENT_TEXTURE2D,
+			0
+		);
+		Raylib::rlFramebufferAttach(
+			target.id,
+			target.depth.id,
+			Raylib::RL_ATTACHMENT_DEPTH,
+			Raylib::RL_ATTACHMENT_RENDERBUFFER,
+			0
+		);
+
+		// Check if fbo is complete with attachments (valid)
+		if (Raylib::rlFramebufferComplete(target.id)) TRACELOG(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully", target.id);
+
+		Raylib::rlDisableFramebuffer();
+	} else {
+		TRACELOG(LOG_WARNING, "FBO: Framebuffer object can not be created");
+	}
+
+	return target;
+}
+
 RenderTexture *createRenderTexture(int width, int height, void *data, int flags) {
 	RenderTexture *renderTexture = (RenderTexture *)zalloc(sizeof(RenderTexture));
 	renderTexture->width = width;
 	renderTexture->height = height;
-	renderTexture->raylibRenderTexture = Raylib::LoadRenderTexture(width, height);
+	renderTexture->raylibRenderTexture = myLoadRenderTexture(width, height, flags);
 	if (data) setTextureData(renderTexture, data, width, height, flags);
 	return renderTexture;
 }
@@ -925,7 +989,7 @@ void drawPixelArtFilterTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 
 }
 
 void drawRect(Rect rect, int color, int flags) {
-	unsigned char alphaByte = color >> 24;
+	unsigned char alphaByte = color >> 24; // This should be handled in drawRaylibTexture
 	if (alphaByte == 0) return;
 
 	Matrix3 matrix = mat3();

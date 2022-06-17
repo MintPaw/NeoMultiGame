@@ -30,6 +30,7 @@ struct TextProps {
 };
 
 struct FontSystem {
+	bool disabled;
 	Font *defaultFont;
 	Font *logFont;
 };
@@ -281,6 +282,7 @@ Vec2 getTextSize(Font *font, const char *string, float maxWidth) {
 }
 
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color, float maxWidth, bool skipDraw, Vec2 scale) {
+	if (fontSys->disabled) return v2(1, 1);
 	if (!text) return v2();
 	if (!font) {
 		logf("Tried to draw text '%s' with no font\n", text);

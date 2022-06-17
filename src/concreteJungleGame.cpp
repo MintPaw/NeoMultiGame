@@ -1156,7 +1156,7 @@ void updateGame() {
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	// platform->disableGui = !game->inEditor;
 
-	int extraStepsThisFrame = MinNum(game->extraStepsFromSleep, 200);
+	int extraStepsThisFrame = MinNum(game->extraStepsFromSleep, 1000);
 	game->extraStepsFromSleep -= extraStepsThisFrame;
 
 	int steps = 1 + extraStepsThisFrame;
@@ -1167,11 +1167,8 @@ void updateGame() {
 
 	for (int i = 0; i < steps; i++) {
 		game->lastStepOfFrame = i == (steps-1);
-		// if (lastStepOfFrame) {
-		// 	renderer->disabled = false;
-		// } else {
-		// 	renderer->disabled = true;
-		// }
+		renderer->disabled = !game->lastStepOfFrame;
+		fontSys->disabled = renderer->disabled;
 		stepGame(elapsed);
 
 		{ /// Draw 3d
@@ -2295,6 +2292,8 @@ void stepGame(float elapsed) {
 											game->hitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0.1, 0.5, 10, 20);
 										}
 										otherActor->hp -= damage;
+
+										if (actor->playerControlled) game->isSleeping = false;
 
 										Effect *effect = createEffect(
 											otherActor == player ? EFFECT_PLAYER_DAMAGE: EFFECT_ENEMY_DAMAGE,
@@ -3821,7 +3820,7 @@ void stepGame(float elapsed) {
 				float prevMod = fmod(prevCityTime, 120);
 				float currentMod = fmod(game->cityTime, 120);
 				if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
-					logf("Stores have restocked\n");
+					if (!game->isSleeping) logf("Stores have restocked\n");
 					game->debugForceRestock = false;
 					for (int i = 0; i < game->storeDatasNum; i++) {
 						StoreData *data = &game->storeDatas[i];
