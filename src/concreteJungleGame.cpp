@@ -534,12 +534,6 @@ const char *mapVisualizationStrings[] = {
 	"Total alliance surrounding",
 };
 
-struct WorldCubes {
-	AABB aabb;
-	int color;
-	float alpha;
-};
-
 struct WorldChannel {
 	int channelId;
 	Vec3 position;
@@ -599,15 +593,19 @@ struct DrawBillboardCall {
 };
 
 enum WorldElementType {
+	WORLD_ELEMENT_CUBE,
 	WORLD_ELEMENT_TRIANGLE,
 	WORLD_ELEMENT_CONE,
 	WORLD_ELEMENT_SPHERE,
 };
 struct WorldElement {
 	WorldElementType type;
+	// union {
 	Tri tri;
 	Cone cone;
 	Sphere sphere;
+	AABB aabb;
+	// };
 	int color;
 	float alpha;
 };
@@ -758,10 +756,6 @@ struct Game {
 
 	/// 3D
 	Vec2i cameraAngleDegrees;
-
-#define WORLD_CUBES_MAX 1024
-	WorldCubes worldCubes[WORLD_CUBES_MAX];
-	int worldCubesNum;
 
 #define LOG3_BUFFERS_MAX 256
 	Log3Buffer log3Buffers[LOG3_BUFFERS_MAX];
@@ -1192,23 +1186,41 @@ void updateGame() {
 				renderer->lights[0].position.z = sunPosition.z;
 				updateLightingShader(game->camera3d);
 
-				getMouseRay(game->camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
-
-				startShader(renderer->lightingShader);
-				for (int i = 0; i < game->worldCubesNum; i++) {
-					WorldCubes *cube = &game->worldCubes[i];
-
-					Vec4 alpha = v4(cube->alpha, 0, 0, 0);
+				{
+					Vec4 alpha = v4(1, 0, 0, 0);
 					Raylib::SetShaderValue(
 						renderer->lightingShader,
 						renderer->lightingShaderAlphaLoc,
 						&alpha.x,
 						Raylib::SHADER_UNIFORM_VEC4
 					);
-					drawAABB(cube->aabb, cube->color);
 				}
+
+				getMouseRay(game->camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
+
+				startShader(renderer->lightingShader);
+
+				for (int i = 0; i < game->worldElementsNum; i++) {
+					WorldElement *element = &game->worldElements[i];
+
+					if (element->type == WORLD_ELEMENT_CUBE) {
+						drawAABB(element->aabb, element->color);
+					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
+						Vec3 *verts = element->tri.verts;
+						Raylib::DrawTriangle3D(
+							toRaylib(verts[0]),
+							toRaylib(verts[1]),
+							toRaylib(verts[2]),
+							toRaylibColor(element->color)
+						);
+					} else if (element->type == WORLD_ELEMENT_CONE) {
+						drawCone(element->cone, element->color);
+					} else if (element->type == WORLD_ELEMENT_SPHERE) {
+						drawSphere(element->sphere, element->color);
+					}
+				}
+
 				endShader();
-				game->worldCubesNum = 0;
 
 				if (!game->debugDrawBillboards) game->billboardsNum = 0;
 				startShader(renderer->alphaDiscardShader);
@@ -1240,24 +1252,6 @@ void updateGame() {
 							tint,
 							billboard->source
 						);
-					}
-				}
-
-				for (int i = 0; i < game->worldElementsNum; i++) {
-					WorldElement *element = &game->worldElements[i];
-
-					if (element->type == WORLD_ELEMENT_TRIANGLE) {
-						Vec3 *verts = element->tri.verts;
-						Raylib::DrawTriangle3D(
-							toRaylib(verts[0]),
-							toRaylib(verts[1]),
-							toRaylib(verts[2]),
-							toRaylibColor(element->color)
-						);
-					} else if (element->type == WORLD_ELEMENT_CONE) {
-						drawCone(element->cone, element->color);
-					} else if (element->type == WORLD_ELEMENT_SPHERE) {
-						drawSphere(element->sphere, element->color);
 					}
 				}
 
@@ -5014,16 +5008,11 @@ void bringWithinBounds(Map *map, Actor *actor) {
 }
 
 void pushAABB(AABB aabb, int color, float alpha) {
-	if (game->worldCubesNum > WORLD_CUBES_MAX-1) {
-		logf("Too many debug cubes\n");
-		return;
-	}
-
-	WorldCubes *cube = &game->worldCubes[game->worldCubesNum++];
-	memset(cube, 0, sizeof(WorldCubes));
-	cube->aabb = aabb;
-	cube->color = color;
-	cube->alpha = alpha;
+	WorldElement *element = createWorldElement();
+	element->type = WORLD_ELEMENT_CUBE;
+	element->aabb = aabb;
+	element->color = color;
+	element->alpha = alpha;
 }
 
 void pushAABBOutline(AABB aabb, int lineThickness, int color) {
