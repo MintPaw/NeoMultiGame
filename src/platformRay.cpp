@@ -524,6 +524,7 @@ void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, V
 void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
 void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
+void drawTriangle(Texture *texture, Vec3 *verts, Vec2 *uvs, int tint=0xFFFFFFFF, float alpha=1);
 void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
 
 void pushTargetTexture(RenderTexture *renderTexture);
@@ -1103,6 +1104,54 @@ void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1
 }
 void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags) {
 	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+}
+
+void drawTriangle(Texture *texture, Vec3 *verts, Vec2 *uvs, int tint, float alpha) {
+	alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
+	if (renderer->disabled) return;
+	if (alpha == 0) return;
+
+	if (!texture) texture = renderer->whiteTexture;
+
+	// Matrix3 flipMatrix = {
+	// 	1,  0,  0,
+	// 	0, -1,  0,
+	// 	0,  1,  1
+	// };
+	// uvMatrix = flipMatrix * uvMatrix;
+	// for (int i = 0; i < ArrayLength(uvs); i++) {
+	// 	uvs[i] = uvMatrix * uvs[i];
+	// }
+
+	int raylibPointCount = 3;
+
+	{
+		Raylib::Texture raylibTexture = texture->raylibTexture;
+		Raylib::rlCheckRenderBatchLimit((raylibPointCount - 1)*4);
+
+		Raylib::rlSetTexture(raylibTexture.id);
+
+		Raylib::rlBegin(RL_TRIANGLES);
+
+		int a, r, g, b;
+		hexToArgb(tint, &a, &r, &g, &b);
+		a *= alpha;
+		r *= a/255.0;
+		g *= a/255.0;
+		b *= a/255.0;
+		tint = argbToHex(a, r, g, b);
+		Raylib::Color raylibTint = toRaylibColor(tint);
+		Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
+
+		for (int i = 0; i < raylibPointCount; i++) {
+			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
+			Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
+		}
+
+		Raylib::rlEnd();
+
+		Raylib::rlSetTexture(0);
+	}
 }
 
 void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha,int flags) {

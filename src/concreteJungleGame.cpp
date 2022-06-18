@@ -821,7 +821,6 @@ void pushScreenRect(Rect rect, int color);
 void pushScreenRectOutline(Rect rect, int thickness, int color);
 void pushScreenLine(Vec2 start, Vec2 end, int thickness, int color);
 
-
 int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
 Particle *createParticle(ParticleType type);
@@ -1171,6 +1170,8 @@ void updateGame() {
 		fontSys->disabled = renderer->disabled;
 		stepGame(elapsed);
 
+		pushTriangle(v3(-500, -500, -500), v3(500, -500, -500), v3(0, 0, 500), 0xFF0000FF);
+
 		{ /// Draw 3d
 			if (game->lastStepOfFrame) {
 				clearRenderer();
@@ -1203,13 +1204,8 @@ void updateGame() {
 					if (element->type == WORLD_ELEMENT_CUBE) {
 						drawAABB(element->aabb, element->color);
 					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
-						Vec3 *verts = element->tri.verts;
-						Raylib::DrawTriangle3D(
-							toRaylib(verts[0]),
-							toRaylib(verts[1]),
-							toRaylib(verts[2]),
-							toRaylibColor(element->color)
-						);
+						Vec2 uvs[3] = {};
+						drawTriangle(NULL, element->tri.verts, uvs);
 					} else if (element->type == WORLD_ELEMENT_CONE) {
 						drawCone(element->cone, element->color);
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
