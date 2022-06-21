@@ -482,7 +482,7 @@ struct Actor {
 
 	float movementPerc;
 
-	Vec2 prevInputVec; // All this is just for running lmao
+	Vec2 prevMovementVec; // All this is just for running lmao
 	float timeSinceLastLeftPress;
 	float timeSinceLastRightPress;
 	bool isRunningLeft;
@@ -510,6 +510,7 @@ struct Actor {
 	int itemsMax;
 
 	int potionsLeft;
+	bool doingSpotDodge;
 
 	Item heldItem;
 
@@ -1700,6 +1701,16 @@ void stepGame(float elapsed) {
 			}
 
 			ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
+
+			ImGui::Text("alliancesControlled: ");
+			ImGui::SameLine();
+			for (int i = 0; i < TEAMS_MAX; i++) {
+				guiPushStyleColor(ImGuiCol_FrameBg, lerpColor(teamColors[i], 0xFF000000, 0.5));
+				ImGui::Checkbox(frameSprintf("###%d", i), &game->alliancesControlled[i]);
+				guiPopStyleColor();
+				ImGui::SameLine();
+			}
+			ImGui::NewLine();
 			ImGui::TreePop();
 		}
 
@@ -2058,7 +2069,8 @@ void stepGame(float elapsed) {
 	} /// 
 
 	Vec2 inputVec = v2();
-	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed;
+	Vec2 movementVec = v2();
+	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed, dashButtonPressed, gainArmorButtonPressed;
 	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
@@ -2072,6 +2084,8 @@ void stepGame(float elapsed) {
 		changeStyle3Pressed = false;
 		changeStyle4Pressed = false;
 		drinkPotionPressed = false;
+		dashButtonPressed = false;
+		gainArmorButtonPressed = false;
 		pickupPressed = false;
 
 		bool canInput = true;
@@ -2080,24 +2094,28 @@ void stepGame(float elapsed) {
 		if (game->inEditor) canInput = false;
 		if (player->stamina <= 0) canInput = false;
 
+		if (keyPressed('W') || keyPressed(KEY_UP) || joyButtonPressed(0, JOY_PAD_UP)) inputVec.y++;
+		if (keyPressed('S') || keyPressed(KEY_DOWN) || joyButtonPressed(0, JOY_PAD_DOWN)) inputVec.y--;
+		if (keyPressed('A') || keyPressed(KEY_LEFT) || joyButtonPressed(0, JOY_PAD_LEFT)) inputVec.x--;
+		if (keyPressed('D') || keyPressed(KEY_RIGHT) || joyButtonPressed(0, JOY_PAD_RIGHT)) inputVec.x++;
+		Vec2 leftStick = joyLeftStick(0);
+		inputVec.y += clampMap(leftStick.y, -0.2, -1, 0, 1); // This doesn't actually result in smooth movement
+		inputVec.y -= clampMap(leftStick.y, 0.2, 1, 0, 1);
+		inputVec.x += clampMap(leftStick.x, 0.2, 1, 0, 1);
+		inputVec.x -= clampMap(leftStick.x, -0.2, -1, 0, 1);
+		inputVec = inputVec.normalize();
+
 		if (canInput) {
-			if (keyPressed('W') || keyPressed(KEY_UP) || joyButtonPressed(0, JOY_PAD_UP)) inputVec.y++;
-			if (keyPressed('S') || keyPressed(KEY_DOWN) || joyButtonPressed(0, JOY_PAD_DOWN)) inputVec.y--;
-			if (keyPressed('A') || keyPressed(KEY_LEFT) || joyButtonPressed(0, JOY_PAD_LEFT)) inputVec.x--;
-			if (keyPressed('D') || keyPressed(KEY_RIGHT) || joyButtonPressed(0, JOY_PAD_RIGHT)) inputVec.x++;
-			Vec2 leftStick = joyLeftStick(0);
-			inputVec.y += clampMap(leftStick.y, -0.2, -1, 0, 1); // This doesn't actually result in smooth movement
-			inputVec.y -= clampMap(leftStick.y, 0.2, 1, 0, 1);
-			inputVec.x += clampMap(leftStick.x, 0.2, 1, 0, 1);
-			inputVec.x -= clampMap(leftStick.x, -0.2, -1, 0, 1);
-			inputVec = inputVec.normalize();
+			movementVec = inputVec;
 			if (keyJustPressed(' ') || joyButtonJustPressed(0, JOY_X)) jumpPressed = true;
 			if (keyJustPressed('J') || joyButtonJustPressed(0, JOY_SQUARE)) punchPressed = true;
 			if (keyJustPressed('K') || joyButtonJustPressed(0, JOY_TRIANGLE)) kickPressed = true;
 			if (keyJustPressed('U')) special1Pressed = true;
 			if (keyJustPressed('I')) special2Pressed = true;
 			if (keyJustPressed('L') || joyButtonJustPressed(0, JOY_CIRCLE)) pickupPressed = true;
-			if (player->isOnGround && (keyJustPressed('Q') || joyButtonJustPressed(0, JOY_L1))) drinkPotionPressed = true;
+			if (game->alliancesControlled[0] && player->isOnGround && (keyJustPressed('Q') || joyButtonJustPressed(0, JOY_L1))) drinkPotionPressed = true;
+			if (game->alliancesControlled[1] && player->isOnGround && (keyJustPressed('N') || joyButtonJustPressed(0, JOY_R1))) dashButtonPressed = true;
+			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) gainArmorButtonPressed = true;
 			if (keyJustPressed('1')) changeStyle1Pressed = true;
 			if (keyJustPressed('2')) changeStyle2Pressed = true;
 			if (keyJustPressed('3')) changeStyle3Pressed = true;
@@ -2238,6 +2256,7 @@ void stepGame(float elapsed) {
 							if (otherActor->actionsNum != 0) otherActorActionType = otherActor->actions[0].type;
 
 							if (otherActorActionType == ACTION_KNOCKDOWN) continue;
+							if (otherActorActionType == ACTION_DASH_FORWARD) continue;
 
 							bool alreadyBeenHit = false;
 							for (int i = 0; i < ACTION_IDS_HIT_BY_MAX; i++) {
@@ -2355,6 +2374,8 @@ void stepGame(float elapsed) {
 				) usesCustomLength = true;
 
 				float maxTime;
+				float actionTimeScale = getStatPoints(actor, STAT_ATTACK_SPEED)*0.1;
+
 				if (usesCustomLength) {
 					maxTime = action->customLength;
 				} else {
@@ -2385,6 +2406,19 @@ void stepGame(float elapsed) {
 
 				if (action->type == ACTION_FORCED_LEAVE) {
 					maxTime = 1;
+				}
+
+				if (action->type == ACTION_DASH_FORWARD) {
+					if (actor->doingSpotDodge) {
+						actionTimeScale *= 0.3;
+					} else {
+						float perc = action->time / maxTime;
+						if (perc < 0.5) {
+							Vec3 velo = v3(15, 0, 0);
+							if (actor->facingLeft) velo.x *= -1;
+							actor->velo += velo;
+						}
+					}
 				}
 
 				if (action->time >= maxTime) actionDone = true;
@@ -2437,13 +2471,23 @@ void stepGame(float elapsed) {
 						} else {
 							addAction(actor, ACTION_DRINK_POTION_FAIL);
 						}
+					} else if (action->type == ACTION_DASH_START) {
+						if (actor->playerControlled) {
+							if (fabs(inputVec.x) > 0.75) {
+								actor->facingLeft = false;
+								if (inputVec.x < 0) actor->facingLeft = true;
+								actor->doingSpotDodge = false;
+							} else {
+								actor->doingSpotDodge = true;
+							}
+							addAction(actor, ACTION_DASH_FORWARD);
+						}
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
 					actor->actionsNum--;
 				}
 
-				float actionTimeScale = getStatPoints(actor, STAT_ATTACK_SPEED)*0.1;
 				if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
 				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
 
@@ -2500,8 +2544,8 @@ void stepGame(float elapsed) {
 				if (!game->inEditor) game->cameraTarget = actor->position;
 
 				{ // Figure out running
-					if (inputVec.x < -0.5) {
-						if (actor->prevInputVec.x >= -0.5) {
+					if (movementVec.x < -0.5) {
+						if (actor->prevMovementVec.x >= -0.5) {
 							if (actor->timeSinceLastLeftPress < 0.25) {
 								actor->isRunningLeft = true;
 							}
@@ -2511,8 +2555,8 @@ void stepGame(float elapsed) {
 						actor->isRunningLeft = false;
 					}
 
-					if (inputVec.x > 0.5) {
-						if (actor->prevInputVec.x <= 0.5) {
+					if (movementVec.x > 0.5) {
+						if (actor->prevMovementVec.x <= 0.5) {
 							if (actor->timeSinceLastRightPress < 0.25) {
 								actor->isRunningRight = true;
 							}
@@ -2523,10 +2567,10 @@ void stepGame(float elapsed) {
 					}
 				}
 
-				actor->movementAccel.x += inputVec.x * speed.x;
-				actor->movementAccel.y += inputVec.y * speed.y;
+				actor->movementAccel.x += movementVec.x * speed.x;
+				actor->movementAccel.y += movementVec.y * speed.y;
 
-				actor->prevInputVec = inputVec;
+				actor->prevMovementVec = movementVec;
 
 				if (jumpPressed && actor->isOnGround) actor->velo.z += 20;
 
@@ -2634,6 +2678,10 @@ void stepGame(float elapsed) {
 
 				if (drinkPotionPressed) {
 					addAction(actor, ACTION_DRINK_POTION_START);
+				}
+
+				if (dashButtonPressed) {
+					addAction(actor, ACTION_DASH_START);
 				}
 
 				actor->timeSinceLastLeftPress += elapsed;
@@ -4329,10 +4377,16 @@ void stepGame(float elapsed) {
 				textLines[textLinesNum++] = "Square - Punch";
 				textLines[textLinesNum++] = "Triangle - Kick";
 				textLines[textLinesNum++] = "Select - Map";
+				if (game->alliancesControlled[0]) textLines[textLinesNum++] = "L1 - Quaff potion";
+				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "R1 - Dash";
+				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "L3 - Armor up";
 			} else {
 				textLines[textLinesNum++] = "J - Punch";
 				textLines[textLinesNum++] = "K - Kick";
 				textLines[textLinesNum++] = "M - Map";
+				if (game->alliancesControlled[0]) textLines[textLinesNum++] = "Q - Quaff potion";
+				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "N - Dash";
+				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "B - Armor up";
 			}
 			// game->alliancesControlled
 
