@@ -201,8 +201,14 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["runningKick"], outPath, "runningKick");
         exportAction(armature, actions["runningPunch"], outPath, "runningPunch");
 
-        exportAction(armature, actions["upTest"], outPath, "upTest");
-        exportAction(armature, actions["duckTest"], outPath, "duckTest");
+        exportAction(armature, actions["dashStart"], outPath, "dashStart");
+        exportAction(armature, actions["dashForward"], outPath, "dashForward");
+        exportAction(armature, actions["armorGain"], outPath, "armorGain");
+        exportAction(armature, actions["drinkPotionStart"], outPath, "drinkPotionStart");
+        exportAction(armature, actions["drinkPotionFinish"], outPath, "drinkPotionFinish");
+        exportAction(armature, actions["drinkPotionFail"], outPath, "drinkPotionFail");
+        # exportAction(armature, actions["upTest"], outPath, "upTest");
+        # exportAction(armature, actions["duckTest"], outPath, "duckTest");
 
         bpy.data.scenes[0].objects["sword"].hide_render = False
 
@@ -221,6 +227,13 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["airThrow"], outPath, "airThrow_sword");
         exportAction(armature, actions["toss"], outPath, "toss_sword");
 
+        exportAction(armature, actions["dashStart"], outPath, "dashStart_sword");
+        exportAction(armature, actions["dashForward"], outPath, "dashForward_sword");
+        exportAction(armature, actions["armorGain"], outPath, "armorGain_sword");
+        exportAction(armature, actions["drinkPotionStart"], outPath, "drinkPotionStart_sword");
+        exportAction(armature, actions["drinkPotionFinish"], outPath, "drinkPotionFinish_sword");
+        exportAction(armature, actions["drinkPotionFail"], outPath, "drinkPotionFail_sword");
+
         bpy.data.scenes[0].objects["sword"].hide_render = True
         bpy.data.scenes[0].objects["knife"].hide_render = False
 
@@ -237,6 +250,13 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["throw"], outPath, "throw_knife")
         exportAction(armature, actions["airThrow"], outPath, "airThrow_knife")
         exportAction(armature, actions["toss"], outPath, "toss_knife");
+
+        exportAction(armature, actions["dashStart"], outPath, "dashStart_knife");
+        exportAction(armature, actions["dashForward"], outPath, "dashForward_knife");
+        exportAction(armature, actions["armorGain"], outPath, "armorGain_knife");
+        exportAction(armature, actions["drinkPotionStart"], outPath, "drinkPotionStart_knife");
+        exportAction(armature, actions["drinkPotionFinish"], outPath, "drinkPotionFinish_knife");
+        exportAction(armature, actions["drinkPotionFail"], outPath, "drinkPotionFail_knife");
 
         dumpPoseMarkers(armature)
         return {"FINISHED"}

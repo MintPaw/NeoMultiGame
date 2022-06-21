@@ -379,7 +379,7 @@ void platformUpdate() {
 	freeFrameMemory();
 	// freeFrameTextures();
 
-	{ /// Calcuate frame times
+	{ // Calcuate frame times
 		float frameMs = getMsPassed(platform->frameNano);
 		platform->frameTime = frameMs;
 		platform->frameTimes[platform->frameCount % platform->frameTimesMax] = frameMs;
@@ -387,7 +387,7 @@ void platformUpdate() {
 		platform->frameTimeAvg = 0;
 		for (int i = 0; i < platform->frameTimesMax; i++) platform->frameTimeAvg += platform->frameTimes[i];
 		platform->frameTimeAvg /= platform->frameTimesMax;
-	}
+	} //
 }
 
 void updateEvents() {

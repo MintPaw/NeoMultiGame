@@ -22,6 +22,10 @@ struct NanoTime {
 };
 
 struct Platform {
+#ifdef _WIN32
+	HANDLE processHandle;
+#endif
+
 	bool sleepWait; // Does nothing?
 	bool isCommandLineOnly; // Does nothing?
 	bool usingSkia; // Does nothing?
@@ -63,6 +67,8 @@ struct Platform {
 	int frameTimesMax;
 	float frameTimeAvg;
 
+	int memoryUsage;
+
 #if defined(_WIN32)
 	LARGE_INTEGER performanceFrequency;
 #endif
@@ -93,6 +99,14 @@ enum JoyButtons {
 	JOY_PAD_RIGHT = Raylib::GAMEPAD_BUTTON_LEFT_FACE_RIGHT,
 	JOY_PAD_UP = Raylib::GAMEPAD_BUTTON_LEFT_FACE_UP,
 	JOY_PAD_DOWN = Raylib::GAMEPAD_BUTTON_LEFT_FACE_DOWN,
+	JOY_L1 = Raylib::GAMEPAD_BUTTON_LEFT_TRIGGER_1,
+	JOY_L2 = Raylib::GAMEPAD_BUTTON_LEFT_TRIGGER_2,
+	JOY_L3 = Raylib:: GAMEPAD_BUTTON_LEFT_THUMB,
+	JOY_R1 = Raylib::GAMEPAD_BUTTON_RIGHT_TRIGGER_1,
+	JOY_R2 = Raylib::GAMEPAD_BUTTON_RIGHT_TRIGGER_2,
+	JOY_R3 = Raylib:: GAMEPAD_BUTTON_RIGHT_THUMB,
+	JOY_START = Raylib::GAMEPAD_BUTTON_MIDDLE_RIGHT,
+	JOY_SELECT = Raylib::GAMEPAD_BUTTON_MIDDLE_LEFT,
 };
 
 Platform *platform = NULL;
@@ -127,6 +141,10 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform = (Platform *)zalloc(sizeof(Platform));
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
+
+#ifdef _WIN32
+	platform->processHandle = GetCurrentProcess();
+#endif
 
 	initLoggingSystem();
 	pushRndSeed(time(NULL));
@@ -246,6 +264,15 @@ void platformUpdate() {
 		platform->frameTimeAvg = 0;
 		for (int i = 0; i < platform->frameTimesMax; i++) platform->frameTimeAvg += platform->frameTimes[i];
 		platform->frameTimeAvg /= platform->frameTimesMax;
+	}
+
+	{ // Calculate memory usage
+#if _WIN32
+    PROCESS_MEMORY_COUNTERS pmc;
+		if (GetProcessMemoryInfo(platform->processHandle, &pmc, sizeof(pmc))) {
+			platform->memoryUsage = pmc.WorkingSetSize;
+		}
+#endif
 	}
 
 	Raylib::EndDrawing();

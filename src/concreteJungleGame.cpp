@@ -25,15 +25,34 @@
 
 /*
 
+Anims:
+dashStart
+dashForward
+armorGain
+drinkPotionStart
+drinkPotionFinish
+drinkPotionFail
+Fail drink potion
+Shotgun fire
+Shotgun reload
+Create sword
+Create knife
+
 Ending items:
-	- Statis attack
-	- [Hold pickup] Create weapon (costs 1/2 of remaining hp)
-	- [Triple tap (left+right)] Dash (Parry if neutral?)
-	- Warp strike dagger
-	- Weapon stash?
-	- Hyper armor
-	- [L2] Shotgun
 	- [L1] Estus
+	- [R1] Dash (Parry if neutral?)
+	- [L3?] Hyper armor
+	- [R2] Statis attack
+	- [Hold pickup] Create weapon (costs 1/2 of remaining hp)
+	- [Down] Weapon stash?
+	- [L2] Shotgun
+	- [Left, Right, Up] Weapon oil?
+		- Damage (sharpening)
+		- Burning
+		- Lightning
+		- Speed (wind)
+		- Unbreaking
+
 
 Street/room types:
 	- Snowy (slowed, slippery?)
@@ -183,10 +202,15 @@ enum ActionType {
 	ACTION_HEAVEN_STEP=18,
 	ACTION_SHADOW_STEP=19,
 	ACTION_BUDDHA_PALM=20,
-	ACTION_DASH=21,
+	ACTION_UNUSED_1=21,
 	ACTION_BRAIN_SAP=22,
 	ACTION_CULLING_BLADE=23,
 	ACTION_STICKY_NAPALM=24,
+	ACTION_DASH_START=25,
+	ACTION_DASH_FORWARD=26,
+	ACTION_DRINK_POTION_START=27,
+	ACTION_DRINK_POTION_FINISH=28,
+	ACTION_DRINK_POTION_FAIL=29,
 
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
@@ -485,6 +509,8 @@ struct Actor {
 	int itemsNum;
 	int itemsMax;
 
+	int potionsLeft;
+
 	Item heldItem;
 
 #define STYLES_MAX 4
@@ -657,6 +683,8 @@ struct Game {
 	float prevMapTime;
 	float mapTime;
 
+	bool alliancesControlled[TEAMS_MAX];
+
 	Vec3 cameraTarget;
 	Vec3 visualCameraTarget;
 	Matrix3 isoMatrix3;
@@ -691,8 +719,6 @@ struct Game {
 
 	bool inInventory;
 	int draggingItemId;
-
-	bool isSleeping;
 
 	int nextItemId; //@playerSaveSerialize
 
@@ -1039,7 +1065,7 @@ void updateGame() {
 			strcpy(info->name, "dash");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 90;
-			info->actionType = ACTION_DASH;
+			// info->actionType = ACTION_DASH;
 
 			info = &game->itemTypeInfos[ITEM_BRAIN_SAP];
 			strcpy(info->name, "brain sap");
@@ -1351,6 +1377,9 @@ void stepGame(float elapsed) {
 			game->inStore = false;
 			game->inInventory = false;
 			game->lookingAtMap = false;
+
+			memset(game->alliancesControlled, 0, sizeof(bool) * TEAMS_MAX);
+			game->alliancesControlled[0] = true;
 		}
 	} ///
 
@@ -2029,7 +2058,7 @@ void stepGame(float elapsed) {
 	} /// 
 
 	Vec2 inputVec = v2();
-	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed;
+	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed;
 	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
@@ -2042,6 +2071,7 @@ void stepGame(float elapsed) {
 		changeStyle2Pressed = false;
 		changeStyle3Pressed = false;
 		changeStyle4Pressed = false;
+		drinkPotionPressed = false;
 		pickupPressed = false;
 
 		bool canInput = true;
@@ -2067,6 +2097,7 @@ void stepGame(float elapsed) {
 			if (keyJustPressed('U')) special1Pressed = true;
 			if (keyJustPressed('I')) special2Pressed = true;
 			if (keyJustPressed('L') || joyButtonJustPressed(0, JOY_CIRCLE)) pickupPressed = true;
+			if (player->isOnGround && (keyJustPressed('Q') || joyButtonJustPressed(0, JOY_L1))) drinkPotionPressed = true;
 			if (keyJustPressed('1')) changeStyle1Pressed = true;
 			if (keyJustPressed('2')) changeStyle2Pressed = true;
 			if (keyJustPressed('3')) changeStyle3Pressed = true;
@@ -2262,7 +2293,9 @@ void stepGame(float elapsed) {
 										}
 										otherActor->hp -= damage;
 
-										if (actor->playerControlled) game->isSleeping = false;
+										if (actor->playerControlled) {
+											game->extraStepsFromSleep = 0;
+										}
 
 										Effect *effect = createEffect(
 											otherActor == player ? EFFECT_PLAYER_DAMAGE: EFFECT_ENEMY_DAMAGE,
@@ -2372,7 +2405,7 @@ void stepGame(float elapsed) {
 							initItem(&actor->heldItem, itemActor->itemType, 1);
 							itemActor->markedForDeletion = true;
 						}
-					} else if (action->type == ACTION_THROW) {
+					} else if (action->type == ACTION_THROW || action->type == ACTION_AIR_THROW) {
 						Actor *itemActor = createActor(map, ACTOR_ITEM);
 						itemActor->itemType = actor->heldItem.type;
 						itemActor->position = actor->position;
@@ -2396,6 +2429,14 @@ void stepGame(float elapsed) {
 							itemActor->velo.x = -5;
 						}
 						actor->heldItem.type = ITEM_NONE;
+					} else if (action->type == ACTION_DRINK_POTION_START) {
+						if (actor->potionsLeft > 0) {
+							actor->potionsLeft--;
+							actor->hp += actor->maxHp*0.5;
+							addAction(actor, ACTION_DRINK_POTION_FINISH);
+						} else {
+							addAction(actor, ACTION_DRINK_POTION_FAIL);
+						}
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2589,6 +2630,10 @@ void stepGame(float elapsed) {
 					if (actor->heldItem.type != ITEM_NONE) {
 						addAction(actor, ACTION_TOSS);
 					}
+				}
+
+				if (drinkPotionPressed) {
+					addAction(actor, ACTION_DRINK_POTION_START);
 				}
 
 				actor->timeSinceLastLeftPress += elapsed;
@@ -3024,7 +3069,6 @@ void stepGame(float elapsed) {
 					if (hoursChosen) {
 						float ticksPerSec = 1.0/SECS_PER_CITY_TICK;
 						game->extraStepsFromSleep = 60 * 60 * 60 * hoursChosen;
-						game->isSleeping = true;
 					}
 
 					nguiEndWindow();
@@ -3382,11 +3426,11 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Update sleeping
-		if (game->isSleeping) {
-			if (game->cityTicks == 0) {
-				game->isSleeping = false;
-			}
-		}
+		// if (game->isSleeping) {
+		// 	if (game->cityTicks == 0) {
+		// 		game->isSleeping = false;
+		// 	}
+		// }
 	} ///
 
 	{ /// Update particles
@@ -3789,7 +3833,7 @@ void stepGame(float elapsed) {
 				float prevMod = fmod(prevCityTime, 120);
 				float currentMod = fmod(game->cityTime, 120);
 				if (prevMod > currentMod || prevCityTime == 0 || game->debugForceRestock) {
-					if (!game->isSleeping) logf("Stores have restocked\n");
+					if (game->extraStepsFromSleep <= 0) logf("Stores have restocked\n");
 					game->debugForceRestock = false;
 					for (int i = 0; i < game->storeDatasNum; i++) {
 						StoreData *data = &game->storeDatas[i];
@@ -3963,7 +4007,7 @@ void stepGame(float elapsed) {
 		{ /// Draw map
 			pushTargetTexture(game->mapTexture);
 			clearRenderer();
-			if (keyJustPressed('M')) game->lookingAtMap = !game->lookingAtMap;
+			if (keyJustPressed('M') || joyButtonJustPressed(0, JOY_SELECT)) game->lookingAtMap = !game->lookingAtMap;
 			if (game->lookingAtMap) {
 				Vec2 mapTileSize = v2(100, 100);
 				Vec2 totalSize = v2(CITY_COLS, CITY_ROWS) * mapTileSize;
@@ -4280,9 +4324,17 @@ void stepGame(float elapsed) {
 			char *textLines[TEXT_LINES_MAX];
 			int textLinesNum = 0;
 
-			textLines[textLinesNum++] = "J - Punch";
-			textLines[textLinesNum++] = "K - Kick";
-			textLines[textLinesNum++] = "M - Kick";
+			bool usingController = false;
+			if (usingController) {
+				textLines[textLinesNum++] = "Square - Punch";
+				textLines[textLinesNum++] = "Triangle - Kick";
+				textLines[textLinesNum++] = "Select - Map";
+			} else {
+				textLines[textLinesNum++] = "J - Punch";
+				textLines[textLinesNum++] = "K - Kick";
+				textLines[textLinesNum++] = "M - Map";
+			}
+			// game->alliancesControlled
 
 #if 0
 			Style *style = &player->styles[player->styleIndex];
@@ -4627,6 +4679,7 @@ Actor *createActor(Map *map, ActorType type) {
 		actor->stats[STAT_MOVEMENT_SPEED] = 10;
 		actor->stats[STAT_ATTACK_SPEED] = 10;
 		actor->level = 30;
+		actor->potionsLeft = 3;
 	} else if (actor->type == ACTOR_ITEM) {
 		actor->size = v3(50, 50, 50);
 	}

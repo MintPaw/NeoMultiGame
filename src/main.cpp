@@ -86,6 +86,7 @@ int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); 
 #include <tchar.h>
 #include <sys/stat.h> // Missing from the non-raylib version for some reason???
 #include <io.h>
+#include <psapi.h>
 #elif defined(__EMSCRIPTEN__)
 # include <emscripten.h>
 # include <emscripten/html5.h>
@@ -204,6 +205,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 # include <wchar.h>
 # include <tchar.h>
 # include <io.h>
+# include <psapi.h>
 
 #endif
 
