@@ -27,13 +27,13 @@
 
 Ending items:
 	- Statis attack
-	- Create weapon (costs 1/2 of remaining hp)
-	- Dash (Parry if neutral?)
+	- [Hold pickup] Create weapon (costs 1/2 of remaining hp)
+	- [Triple tap (left+right)] Dash (Parry if neutral?)
 	- Warp strike dagger
 	- Weapon stash?
 	- Hyper armor
-	- Shotgun
-	- Estus
+	- [L2] Shotgun
+	- [L1] Estus
 
 Street/room types:
 	- Snowy (slowed, slippery?)
@@ -361,23 +361,15 @@ enum ActorType {
 	ACTOR_UNIT_SPAWNER=6, // Unused
 	ACTOR_ITEM=7,
 	ACTOR_STORE=8,
-	ACTORS_MAX,
-};
-char *actorTypeStrings[] = {
-	"None",
-	"Player",
-	"Ground",
-	"Wall",
-	"Dummy",
-	"Door",
-	"Spawner",
-	"Item",
-	"Store",
+	ACTOR_TYPES_MAX,
 };
 struct ActorTypeInfo {
+#define ACTOR_TYPE_NAME_MAX_LEN 64
+	char name[ACTOR_TYPE_NAME_MAX_LEN];
 	bool isWall;
 	bool canBeHit;
 	bool hasPhysics;
+	bool canBeCreatedInEdtior;
 };
 
 enum AiState {
@@ -653,7 +645,7 @@ struct Game {
 	bool lastStepOfFrame;
 	int extraStepsFromSleep;
 
-	ActorTypeInfo actorTypeInfos[ACTORS_MAX];
+	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 
 #define MAPS_MAX 128
 	Map maps[MAPS_MAX];
@@ -929,25 +921,37 @@ void updateGame() {
 			ActorTypeInfo *info;
 
 			info = &game->actorTypeInfos[ACTOR_UNIT];
+			strcpy(info->name, "Unit");
 			info->canBeHit = true;
 			info->hasPhysics = true;
 
 			info = &game->actorTypeInfos[ACTOR_GROUND];
+			strcpy(info->name, "Ground");
 			info->isWall = true;
 
 			info = &game->actorTypeInfos[ACTOR_WALL];
+			strcpy(info->name, "Wall");
+			info->canBeCreatedInEdtior = true;
 			info->isWall = true;
 
 			info = &game->actorTypeInfos[ACTOR_BED];
+			info->canBeCreatedInEdtior = true;
+			strcpy(info->name, "Bed");
 
 			info = &game->actorTypeInfos[ACTOR_DOOR];
+			info->canBeCreatedInEdtior = true;
+			strcpy(info->name, "Door");
 
 			info = &game->actorTypeInfos[ACTOR_UNIT_SPAWNER];
+			strcpy(info->name, "Unit spawner");
 
 			info = &game->actorTypeInfos[ACTOR_ITEM];
+			strcpy(info->name, "Item");
 			info->hasPhysics = true;
 
 			info = &game->actorTypeInfos[ACTOR_STORE];
+			info->canBeCreatedInEdtior = true;
+			strcpy(info->name, "Store");
 		}
 
 		{
@@ -972,43 +976,36 @@ void updateGame() {
 			strcpy(info->name, "damage boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_HP_BOOST];
 			strcpy(info->name, "hp boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_STAMINA_REGEN_BOOST];
 			strcpy(info->name, "stamina regen boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MAX_STAMINA_BOOST];
 			strcpy(info->name, "max stamina boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MOVEMENT_SPEED_BOOST];
 			strcpy(info->name, "movement speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_ATTACK_SPEED_BOOST];
 			strcpy(info->name, "attack speed boost");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
-			info->maxAmountFromStore = 2;
 
 			info = &game->itemTypeInfos[ITEM_MAGNET];
 			strcpy(info->name, "magnet");
 			info->slotType = ITEM_SLOT_PASSIVE;
 			info->basePrice = 30;
-			info->maxAmountFromStore = 1;
 
 			info = &game->itemTypeInfos[ITEM_HYPER_ARMOR];
 			strcpy(info->name, "hyper armor");
@@ -1043,7 +1040,6 @@ void updateGame() {
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 90;
 			info->actionType = ACTION_DASH;
-			info->maxAmountFromStore = 1;
 
 			info = &game->itemTypeInfos[ITEM_BRAIN_SAP];
 			strcpy(info->name, "brain sap");
@@ -1169,8 +1165,6 @@ void updateGame() {
 		renderer->disabled = !game->lastStepOfFrame;
 		fontSys->disabled = renderer->disabled;
 		stepGame(elapsed);
-
-		pushTriangle(v3(-500, -500, -500), v3(500, -500, -500), v3(0, 0, 500), 0xFF0000FF);
 
 		{ /// Draw 3d
 			if (game->lastStepOfFrame) {
@@ -1922,7 +1916,7 @@ void stepGame(float elapsed) {
 		ImGui::BeginChild("ActorListChild", ImVec2(300, 200));
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
-			char *name = frameSprintf("%s###%d", actorTypeStrings[actor->type], i);
+			char *name = frameSprintf("%s###%d", actor->info->name, i);
 			if (ImGui::Selectable(name, game->selectedActorId == actor->id)) {
 				game->selectedActorId = actor->id;
 			}
@@ -1930,38 +1924,17 @@ void stepGame(float elapsed) {
 		ImGui::EndChild();
 
 		ImGui::Text("Create:");
-		if (ImGui::Button("Spawn point")) {
-			Actor *actor = createActor(map, ACTOR_UNIT_SPAWNER);
-			actor->position = game->cameraTarget;
-			game->selectedActorId = actor->id;
+		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+			ActorTypeInfo *actorTypeInfo = &game->actorTypeInfos[i];
+			if (!actorTypeInfo->canBeCreatedInEdtior) continue;
+			if (ImGui::Button(actorTypeInfo->name)) {
+				Actor *actor = createActor(map, (ActorType)i);
+				actor->position = game->cameraTarget;
+				game->selectedActorId = actor->id;
+			}
+			if (i % 4 != 3) ImGui::SameLine();
 		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Wall")) {
-			Actor *actor = createActor(map, ACTOR_WALL);
-			actor->position = game->cameraTarget;
-			game->selectedActorId = actor->id;
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Door")) {
-			Actor *actor = createActor(map, ACTOR_DOOR);
-			actor->position = game->cameraTarget;
-			game->selectedActorId = actor->id;
-		}
-
-		if (ImGui::Button("Bed")) {
-			Actor *actor = createActor(map, ACTOR_BED);
-			actor->position = game->cameraTarget;
-			game->selectedActorId = actor->id;
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Store")) {
-			Actor *actor = createActor(map, ACTOR_STORE);
-			actor->position = game->cameraTarget;
-			game->selectedActorId = actor->id;
-		}
+		ImGui::NewLine();
 
 		ImGui::Separator();
 		ImGui::Separator();
@@ -1978,11 +1951,11 @@ void stepGame(float elapsed) {
 				logf("Dupped\n");
 			}
 
-			ImGui::Combo("Actor type", (int *)&actor->type, actorTypeStrings, ArrayLength(actorTypeStrings));
-			// ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
-			// ImGui::SameLine();
-			ImGui::Text("Id: %d", actor->id);
+			ImGui::Text("Actor type: %s", actor->info->name);
+			// ImGui::Combo("Actor type", (int *)&actor->type, actorTypeStrings, ArrayLength(actorTypeStrings));
 			ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
+			ImGui::Text("Id: %d", actor->id);
+			ImGui::SameLine();
 			ImGui::DragFloat3("Position", &actor->position.x);
 			ImGui::DragFloat3("Size", &actor->size.x);
 
@@ -4162,7 +4135,7 @@ void stepGame(float elapsed) {
 		} ///
 
 		{ /// Update inventory
-			if (keyJustPressed('N')) game->inInventory = !game->inInventory;
+			if (keyPressed(KEY_CTRL) && keyJustPressed('N')) game->inInventory = !game->inInventory;
 			if (game->inInventory) {
 				auto drawItemIcon = [](Item *item, Rect rect) {
 					drawRect(rect, 0xFF444444);
@@ -4309,7 +4282,9 @@ void stepGame(float elapsed) {
 
 			textLines[textLinesNum++] = "J - Punch";
 			textLines[textLinesNum++] = "K - Kick";
+			textLines[textLinesNum++] = "M - Kick";
 
+#if 0
 			Style *style = &player->styles[player->styleIndex];
 			Item *item0 = getItem(player, style->activeItem0);
 			Item *item1 = getItem(player, style->activeItem1);
@@ -4318,6 +4293,7 @@ void stepGame(float elapsed) {
 
 			textLines[textLinesNum++] = frameSprintf("U - %s", info0->name);
 			textLines[textLinesNum++] = frameSprintf("I - %s", info1->name);
+#endif
 
 			Vec2 cursor = v2(3, game->size.y);
 			for (int i = textLinesNum-1; i >= 0; i--) {

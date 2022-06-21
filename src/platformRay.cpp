@@ -220,7 +220,7 @@ void platformUpdate() {
 			platform->rightMouseDown = false;
 			platform->mouseWheel = 0;
 		}
-	}
+	} ///
 
 	void updateAudio(); //@headerHack
 	updateAudio();
@@ -240,7 +240,7 @@ void platformUpdate() {
 	void freeFrameTextures(); //@headerHack
 	freeFrameTextures();
 
-	{ /// Calcuate frame times
+	{ // Calcuate frame times
 		platform->frameTimes[platform->frameCount % platform->frameTimesMax] = getMsPassed(platform->frameNano);
 
 		platform->frameTimeAvg = 0;
@@ -609,7 +609,7 @@ void initRenderer(int width, int height) {
 		free(fs);
 
 		renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
-	}
+	} ///
 
 	Raylib::SetTraceLogLevel(Raylib::LOG_WARNING);
 
