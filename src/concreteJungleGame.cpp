@@ -211,6 +211,7 @@ enum ActionType {
 	ACTION_DRINK_POTION_START=27,
 	ACTION_DRINK_POTION_FINISH=28,
 	ACTION_DRINK_POTION_FAIL=29,
+	ACTION_ARMOR_GAIN=30,
 
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
@@ -511,6 +512,7 @@ struct Actor {
 
 	int potionsLeft;
 	bool doingSpotDodge;
+	bool hasHyperArmor;
 
 	Item heldItem;
 
@@ -2070,7 +2072,7 @@ void stepGame(float elapsed) {
 
 	Vec2 inputVec = v2();
 	Vec2 movementVec = v2();
-	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed, dashButtonPressed, gainArmorButtonPressed;
+	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed, dashButtonPressed, armorGainButtonPressed;
 	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
@@ -2085,7 +2087,7 @@ void stepGame(float elapsed) {
 		changeStyle4Pressed = false;
 		drinkPotionPressed = false;
 		dashButtonPressed = false;
-		gainArmorButtonPressed = false;
+		armorGainButtonPressed = false;
 		pickupPressed = false;
 
 		bool canInput = true;
@@ -2115,7 +2117,7 @@ void stepGame(float elapsed) {
 			if (keyJustPressed('L') || joyButtonJustPressed(0, JOY_CIRCLE)) pickupPressed = true;
 			if (game->alliancesControlled[0] && player->isOnGround && (keyJustPressed('Q') || joyButtonJustPressed(0, JOY_L1))) drinkPotionPressed = true;
 			if (game->alliancesControlled[1] && player->isOnGround && (keyJustPressed('N') || joyButtonJustPressed(0, JOY_R1))) dashButtonPressed = true;
-			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) gainArmorButtonPressed = true;
+			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) armorGainButtonPressed = true;
 			if (keyJustPressed('1')) changeStyle1Pressed = true;
 			if (keyJustPressed('2')) changeStyle2Pressed = true;
 			if (keyJustPressed('3')) changeStyle3Pressed = true;
@@ -2272,6 +2274,12 @@ void stepGame(float elapsed) {
 
 									memmove(&otherActor->actionIdsHitBy[1], &otherActor->actionIdsHitBy[0], sizeof(int) * (ACTION_IDS_HIT_BY_MAX-1));
 									otherActor->actionIdsHitBy[0] = action->id;
+
+									if (otherActor->hasHyperArmor) {
+										playWorldSound("assets/audio/hyperArmorBreak.ogg", getCenter(otherActorAABB));
+										otherActor->hasHyperArmor = false;
+										continue;
+									}
 
 									float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
 
@@ -2682,6 +2690,11 @@ void stepGame(float elapsed) {
 
 				if (dashButtonPressed) {
 					addAction(actor, ACTION_DASH_START);
+				}
+
+				if (armorGainButtonPressed) {
+					actor->hasHyperArmor = true;
+					addAction(actor, ACTION_ARMOR_GAIN);
 				}
 
 				actor->timeSinceLastLeftPress += elapsed;
