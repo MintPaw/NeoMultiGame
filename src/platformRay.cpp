@@ -900,10 +900,14 @@ u8 *getTextureData(RenderTexture *renderTexture, int flags) {
 }
 
 u8 *getTextureData(Texture *texture, int flags) {
+	Raylib::rlDrawRenderBatchActive();
 	Raylib::Image raylibImage = Raylib::LoadImageFromTexture(texture->raylibTexture);
+	u8 *colors = (u8 *)Raylib::LoadImageColors(raylibImage);
 
 	u8 *data = (u8 *)zalloc(texture->width * texture->height * 4);
-	memcpy(data, raylibImage.data, texture->width * texture->height * 4);
+	memcpy(data, colors, texture->width * texture->height * 4);
+
+	RL_FREE(colors);
 
 	Raylib::UnloadImage(raylibImage);
 	return data;

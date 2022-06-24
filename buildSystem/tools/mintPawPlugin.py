@@ -109,7 +109,7 @@ def saveSubMesh(obj, meshName, path, materialIndex):
                 vertexGroupName = obj.vertex_groups[groupIndex].name
                 if vertexGroupName in boneNames:
                     boneIndex = boneNames.index(obj.vertex_groups[groupIndex].name)
-                    print("Bone: "+str(boneIndex))
+                    # print("Bone: "+str(boneIndex))
                     ba.append(boneIndex)
                     boneIndexCount += 1
                     # print(str(boneIndexCount) + " Bone: "+str(boneIndex))
@@ -165,20 +165,15 @@ def saveSubMesh(obj, meshName, path, materialIndex):
     ba.append(0) # Normal texture
     ba.append(0) # Specular texture
 
-    
-    outputFile = open(bpy.path.abspath("//")+"/"+path+".mesh", "wb")
+    outputFile = open(path+".mesh", "wb")
     outputFile.write(ba)
     outputFile.close()
 
-def writeModel(ba, obj, meshPath):
+def writeModel(ba, obj, modelPath):
     ba.append(1) # Version
-    if len(meshPath) != 0:
-        meshPath += "."+obj.name
-    else:
-        meshPath += obj.name[2:]
-    print("Mesh path: "+meshPath)
 
-    writeString(ba, obj.name)
+    modelName = obj.name
+    writeString(ba, modelName)
 
     if obj.name.startswith("M_"):
         writeMatrix(ba, mathutils.Matrix());
@@ -216,10 +211,11 @@ def writeModel(ba, obj, meshPath):
             if poly.material_index not in materialInds:
                 materialInds.append(poly.material_index)
 
-    ba.append(0) # meshPath
+    ba.append(0) # meshPath for root model
     ba.extend(struct.pack("<1i", len(obj.children) + len(materialInds)))
 
     for ind in materialInds:
+        ba.append(1) # Version
         writeString(ba, str(ind))
         writeMatrix(ba, mathutils.Matrix())
         meshName = None
@@ -227,11 +223,12 @@ def writeModel(ba, obj, meshPath):
             meshName = obj.data.name+"."+str(ind)
         else:
             meshName = obj.data.name
-        # realMeshPath = meshPath+"."+meshName
-        realMeshPath = meshName
-        writeString(ba, realMeshPath)
-        ba.extend(struct.pack("<1i", 0))
-        saveSubMesh(newObj, meshName, realMeshPath, ind)
+        meshName = modelName + "." + meshName
+        # meshName = meshName
+        # print("meshName: "+meshName)
+        writeString(ba, meshName) # Actually meshPath, which is in the same dir
+        ba.extend(struct.pack("<1i", 0)) # childrenNum
+        saveSubMesh(newObj, meshName, modelPath + "/" + meshName, ind)
 
     if newObj != None:
         for thing in bpy.data.objects:
@@ -310,6 +307,11 @@ def writeSkeleton(ba, obj, skeleName):
         ba.extend(struct.pack("<1i", framesInAction))
         firstFrameCount += framesInAction
 
+def writeBaToFile(ba, path):
+    outputFile = open(path, "wb")
+    outputFile.write(ba)
+    outputFile.close()
+
 
 
 class ExportMeshesOp(bpy.types.Operator):
@@ -332,21 +334,37 @@ class ExportMeshesOp(bpy.types.Operator):
             if obj.name[0:2] == "M_":
                 ba = bytearray()
                 writeModel(ba, obj, "")
-                outputFile = open(bpy.path.abspath("//")+"/"+obj.name[2:] + ".model", "wb")
-                outputFile.write(ba)
-                outputFile.close()
+                writeBaToFile(ba, bpy.path.abspath("//")+"/"+obj.name[2:] + ".model")
             if obj.type == "ARMATURE":
                 if obj.data.name.startswith("S_"):
                     ba = bytearray()
                     writeSkeleton(ba, obj, obj.data.name[2:])
-                    outputFile = open(bpy.path.abspath("//")+"/"+obj.data.name[2:] + ".skele", "wb")
-                    outputFile.write(ba)
-                    outputFile.close()
+                    writeBaToFile(ba, bpy.path.abspath("//")+"/"+obj.data.name[2:] + ".skele")
 
         for arm in arms:
             arm.data.pose_position = "POSE"
 
         return {'FINISHED'}
+
+class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
+    bl_idname = "mesh.export_content_for_concrete_jungle"
+    bl_label = "export_content_for_concrete_jungle"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scn = bpy.data.scenes[0]
+        world = bpy.data.worlds["World"]
+
+        unitMesh = bpy.data.objects["MESH_Unit"]
+        ba = bytearray()
+        writeModel(ba, unitMesh, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models")
+        writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models/unit.model")
+
+        # unitArm = bpy.data.objects["ARM_Unit"]
+        # ba = bytearray()
+        # writeSkeleton(ba, unitArm, "Unit");
+        # writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons/unit.skele")
+        return {"FINISHED"}
 
 class ExportPanel:
     bl_space_type = "VIEW_3D"
@@ -366,9 +384,11 @@ class ExportSubPanel(ExportPanel, bpy.types.Panel):
 def register():
     bpy.utils.register_class(ExportSubPanel)
     bpy.utils.register_class(ExportMeshesOp)
+    bpy.utils.register_class(MESH_OP_export_content_for_concrete_jungle)
 
 def unregister():
     bpy.utils.unregister_class(ExportSubPanel)
     bpy.utils.unregister_class(ExportMeshesOp)
+    bpy.utils.unregister_class(MESH_OP_export_content_for_concrete_jungle)
 
 register()

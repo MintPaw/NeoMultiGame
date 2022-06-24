@@ -130,6 +130,8 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "textureSystem.cpp"
 #include "audio.cpp"
 #include "font.cpp"
+#include "mesh.cpp"
+#include "models.cpp"
 
 #include "threads.cpp"
 #include "stringSave.cpp"
@@ -144,7 +146,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #endif
 #include "utils.cpp"
 
-#else
+#else // !RAYLIB_MODE
 
 #include <signal.h>
 #include <functional>

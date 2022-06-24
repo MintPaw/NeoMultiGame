@@ -352,7 +352,7 @@ void updateGame() {
 	endShader();
 #endif
 
-#if 1 // ngui test
+#if 0 // ngui test
 	clearRenderer(0xFF000000);
 
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};
@@ -605,6 +605,131 @@ void updateGame() {
 	}
 
 	nguiDraw(elapsed);
+#endif
+
+#if 1 // Assemble Dalle 2 mini images
+	static Font *hugeFont = createFont("assets/common/arial.ttf", 120);
+	if (platform->frameCount == 2) {
+		int filesNum;
+		char **files = getDirectoryList("D:/vmShared/dalle/images", &filesNum);
+
+		char **paths = (char **)frameMalloc(sizeof(char *) * filesNum);
+		int pathsNum = filesNum;
+		for (int i = 0; i < filesNum; i++) paths[i] = files[i];
+
+		auto getOnlyFileName = [](char *path)->char * {
+			path = frameStringClone(path);
+
+			char *lastSlash = strrchr(path, '/');
+			if (lastSlash) path = lastSlash+1;
+
+			char *dotPtr = strrchr(path, '.');
+			if (dotPtr) *dotPtr = 0;
+			return path;
+		};
+
+		for (;;) {
+			if (pathsNum == 0) break;
+			char *currentPrefix = getOnlyFileName(paths[0]);
+			stripNumbersFromEndOfString(currentPrefix);
+
+			Texture *textures[9];
+			int texturesNum = 0;
+
+			logf("Prefix: %s\n", currentPrefix);
+			for (int i = 0; i < pathsNum; i++) {
+				char *fullPath = paths[i];
+				char *path = getOnlyFileName(fullPath);
+
+				char *strippedPath = frameStringClone(path);
+				stripNumbersFromEndOfString(strippedPath);
+				if (streq(currentPrefix, strippedPath)) {
+					textures[texturesNum++] = createTexture(fullPath);
+					logf("%s\n", path);
+					arraySpliceIndex(paths, pathsNum, sizeof(char *), i);
+					pathsNum--;
+					i--;
+					continue;
+				}
+			}
+
+			int bgColor = 0xFF040524;
+
+			int rows = 3;
+			int cols = 3;
+
+			float textHeight = 128;
+
+			Vec2 edgePadding = v2(16, 16);
+			Vec2 innerPadding = v2(8, 8);
+			Vec2 textureSize = v2(256, 256);
+
+			Vec2 size;
+			size.x = textureSize.x * cols + edgePadding.x*2 + ((cols-1) * innerPadding.x);
+			size.y = textureSize.y * rows + edgePadding.y*2 + ((rows-1) * innerPadding.y);
+			size.y += textHeight;
+			RenderTexture *finalTexture = createRenderTexture(size.x, size.y);
+
+			pushTargetTexture(finalTexture);
+			clearRenderer(bgColor);
+
+			Rect textRect = makeRect(0, 0, finalTexture->width, textHeight);
+			DrawTextProps props = newDrawTextProps(hugeFont, 0xFFFFFFFF);
+			drawTextInRect(currentPrefix, props, textRect);
+
+			Rect bottomRect = makeRect(finalTexture);
+			bottomRect.height -= textHeight;
+			bottomRect.y += textHeight;
+			// drawRect(bottomRect, 0xFFFF0000);
+
+			int textureIndex = 0;
+			for (int y = 0; y < rows; y++) {
+				for (int x = 0; x < cols; x++) {
+					if (textureIndex > texturesNum-1) break;
+					Texture *texture = textures[textureIndex];
+					if (!texture) {
+						logf("Texture is NULL\n");
+						break;
+					}
+
+					Rect rect;
+					rect.width = texture->width;
+					rect.height = texture->height;
+					rect.x = x * (rect.width+innerPadding.x) + edgePadding.x/2 + bottomRect.x;
+					rect.y = y * (rect.height+innerPadding.y) + edgePadding.y/2 + bottomRect.y;
+
+					// drawRect(rect, 0xFF00FF00);
+
+					RenderProps props = newRenderProps();
+					props.matrix.TRANSLATE(rect.x, rect.y);
+					props.matrix.SCALE(rect.width, rect.height);
+					props.srcWidth = props.srcHeight = 1;
+					drawTexture(texture, props);
+
+					textureIndex++;
+				}
+			}
+
+			popTargetTexture();
+
+#if 1
+			Raylib::Image raylibImage = Raylib::LoadImageFromTexture(finalTexture->raylibRenderTexture.texture);
+			Raylib::ImageFlipVertical(&raylibImage);
+			if (!Raylib::ExportImage(raylibImage, frameSprintf("%s/assets/images/dalle/%s.png", filePathPrefix, currentPrefix))) {
+				logf("Failed to save\n");
+			}
+#else
+			u8 *data = getTextureData(finalTexture);
+			if (!stbi_write_png(frameSprintf("%s/assets/images/dalle/%s.png", filePathPrefix, currentPrefix), finalTexture->width, finalTexture->width, 4, data, finalTexture->width * 4)) {
+				logf("Failed to write image\n");
+			}
+			free(data);
+#endif
+			// destroyTexture(finalTexture);
+		}
+
+		exit(0);
+	}
 #endif
 
 	game->time += elapsed;

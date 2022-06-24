@@ -2549,7 +2549,10 @@ void stepGame(float elapsed) {
 			}
 
 			if (actor->playerControlled) {
-				if (!game->inEditor) game->cameraTarget = actor->position;
+				if (!game->inEditor) {
+					game->cameraTarget = actor->position;
+					game->cameraTarget.z += platform->windowHeight*0.15;
+				}
 
 				{ // Figure out running
 					if (movementVec.x < -0.5) {
@@ -2796,10 +2799,11 @@ void stepGame(float elapsed) {
 										totalUnits++;
 										if (actor->team == otherActor->team) alliedUnits++;
 									}
-									float currentTeamPerc = (float)totalUnits / (float)alliedUnits;
+									float currentTeamPerc = (float)alliedUnits / (float)totalUnits;
+									float extraPerc = currentTeamPerc - map->alliances[actor->team];
 
 									bool shouldLeave = false;
-									if (currentTeamPerc > 0.95 && rndPerc(0.1)) shouldLeave = true;
+									if (extraPerc > 0.01 && totalUnits > 2 && rndPerc(0.3)) shouldLeave = true;
 
 									if (shouldLeave) {
 										Actor **possilbeDoor = (Actor **)frameMalloc(sizeof(Actor *) * ACTORS_MAX);
@@ -2935,6 +2939,7 @@ void stepGame(float elapsed) {
 					if (item->info->slotType == ITEM_SLOT_CONSUMABLE) {
 						for (int i = 0; i < STATS_MAX; i++) {
 							actor->stats[i] += item->info->statsToGive[i];
+							actor->level += item->info->statsToGive[i];
 						}
 						actor->hp += item->info->extraHpFromConsume;
 						removeItem(actor, item->type, 1);
