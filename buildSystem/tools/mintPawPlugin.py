@@ -360,10 +360,10 @@ class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
         writeModel(ba, unitMesh, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models")
         writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models/unit.model")
 
-        # unitArm = bpy.data.objects["ARM_Unit"]
-        # ba = bytearray()
-        # writeSkeleton(ba, unitArm, "Unit");
-        # writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons/unit.skele")
+        unitArm = bpy.data.objects["ARM_Unit"]
+        ba = bytearray()
+        writeSkeleton(ba, unitArm, "Unit");
+        writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons/unit.skele")
         return {"FINISHED"}
 
 class ExportPanel:

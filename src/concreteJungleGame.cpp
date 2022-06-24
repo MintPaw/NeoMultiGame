@@ -1236,6 +1236,14 @@ void updateGame() {
 					}
 				}
 
+				{
+					Model *model = getModel("assets/models/unit.model");
+					Matrix4 matrix = mat4();
+					matrix.SCALE(20);
+					matrix.ROTATE_EULER(0, 0, M_PI/2);
+					drawModel(model, matrix);
+				}
+
 				endShader();
 
 				if (!game->debugDrawBillboards) game->billboardsNum = 0;

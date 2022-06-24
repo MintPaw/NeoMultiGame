@@ -50,6 +50,8 @@ void initModel() {
 }
 
 Model *getModel(char *path) {
+	if (!modelSys) initModel();
+
 	if (!path) return NULL;
 	if (path[0] == 0) return NULL;
 
@@ -153,8 +155,9 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, Model *parent) 
 	// matrix = matrix * model->localMatrix;
 
 	if (model->mesh) {
-		Matrix4 matrix = model->modelMatrix * matrix;
-		drawMesh(model->mesh, matrix, skeleton);
+		// Matrix4 meshMatrix = model->modelMatrix * matrix;
+		Matrix4 meshMatrix = matrix;
+		drawMesh(model->mesh, meshMatrix, skeleton);
 	}
 
 	for (int i = 0; i < model->childrenNum; i++) {
