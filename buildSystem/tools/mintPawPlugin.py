@@ -238,7 +238,7 @@ def writeModel(ba, obj, modelPath):
         bpy.ops.object.delete()
 
     for child in obj.children:
-        writeModel(ba, child, meshPath)
+        writeModel(ba, child, modelPath)
 
 def writeBone(ba, arm, bone, transformList):
     writeString(ba, bone.name)
@@ -346,6 +346,25 @@ class ExportMeshesOp(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def setAllArmsPoseMode(mode):
+    for obj in bpy.data.objects:
+        if (obj.type == 'ARMATURE'):
+            obj.data.pose_position = mode
+
+def saveModel(obj, name, path):
+    setAllArmsPoseMode("REST")
+    ba = bytearray()
+    writeModel(ba, obj, path)
+    writeBaToFile(ba, path + "/" + name + ".model")
+    setAllArmsPoseMode("POSE")
+
+def saveSkeleton(obj, name, path):
+    setAllArmsPoseMode("REST")
+    ba = bytearray()
+    writeSkeleton(ba, obj, name);
+    writeBaToFile(ba, path + "/" + name + ".skele")
+    setAllArmsPoseMode("POSE")
+
 class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
     bl_idname = "mesh.export_content_for_concrete_jungle"
     bl_label = "export_content_for_concrete_jungle"
@@ -355,15 +374,15 @@ class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
         scn = bpy.data.scenes[0]
         world = bpy.data.worlds["World"]
 
-        unitMesh = bpy.data.objects["MESH_Unit"]
-        ba = bytearray()
-        writeModel(ba, unitMesh, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models")
-        writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models/unit.model")
+        saveModel(bpy.data.objects["MESH_Unit"], "unit", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
+        saveSkeleton(bpy.data.objects["ARM_Unit"], "unit", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
 
-        unitArm = bpy.data.objects["ARM_Unit"]
-        ba = bytearray()
-        writeSkeleton(ba, unitArm, "Unit");
-        writeBaToFile(ba, "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons/unit.skele")
+        # saveModel(bpy.data.objects["M_Cube"], "simpler", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
+        # saveSkeleton(bpy.data.objects["S_Cube"], "simpler", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
+
+        # saveModel(bpy.data.objects["M_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
+        # saveSkeleton(bpy.data.objects["S_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
+
         return {"FINISHED"}
 
 class ExportPanel:

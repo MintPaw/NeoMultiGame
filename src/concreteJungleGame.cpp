@@ -781,6 +781,8 @@ struct Game {
 #define LOG3_BUFFERS_MAX 256
 	Log3Buffer log3Buffers[LOG3_BUFFERS_MAX];
 	int log3BuffersNum;
+
+	Skeleton *testSkeleton;
 };
 Game *game = NULL;
 
@@ -1237,11 +1239,41 @@ void updateGame() {
 				}
 
 				{
+					if (!game->testSkeleton) {
+						game->testSkeleton = deriveSkeleton("assets/skeletons/unit.skele");
+						// game->testSkeleton = deriveSkeleton("assets/skeletons/simpler.skele");
+						// game->testSkeleton = deriveSkeleton("assets/skeletons/simple.skele");
+						// createSkeletonBlend(game->testSkeleton, "root", SKELETON_BLEND_MANUAL_BONES);
+						createSkeletonBlend(game->testSkeleton, "main", SKELETON_BLEND_ANIMATION);
+					}
+
+					Skeleton *skeleton = game->testSkeleton;
+
+					SkeletonBlend *blend = NULL;
+					// blend = getSkeletonBlend(skeleton, "root");
+
+					blend = getSkeletonBlend(skeleton, "main");
+					if (blend) {
+						blend->animation = getAnimation(skeleton, "run");
+						// blend->animation = getAnimation(skeleton, "Action");
+						// blend->playing = false;
+					}
+
+					updateSkeleton(skeleton, elapsed);
+
 					Model *model = getModel("assets/models/unit.model");
+					// Model *model = getModel("assets/models/simpler.model");
+					// Model *model = getModel("assets/models/simple.model");
+
 					Matrix4 matrix = mat4();
 					matrix.SCALE(20);
-					matrix.ROTATE_EULER(0, 0, M_PI/2);
-					drawModel(model, matrix);
+
+					// matrix.ROTATE_EULER(0, 0, M_PI/2);
+					// matrix.ROTATE_EULER(0, 0, lerp(0, M_PI/2, timePhase(platform->time)));
+
+					// matrix.TRANSLATE(0, 0, 50);
+
+					drawModel(model, matrix, skeleton);
 				}
 
 				endShader();
@@ -2004,8 +2036,8 @@ void stepGame(float elapsed) {
 			ImGui::Text("Actor type: %s", actor->info->name);
 			// ImGui::Combo("Actor type", (int *)&actor->type, actorTypeStrings, ArrayLength(actorTypeStrings));
 			ImGui::InputText("Name", actor->name, ACTOR_NAME_MAX_LEN);
-			ImGui::Text("Id: %d", actor->id);
 			ImGui::SameLine();
+			ImGui::Text("Id: %d", actor->id);
 			ImGui::DragFloat3("Position", &actor->position.x);
 			ImGui::DragFloat3("Size", &actor->size.x);
 

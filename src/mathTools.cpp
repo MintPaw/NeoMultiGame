@@ -797,6 +797,13 @@ struct Matrix4 {
 	void ROTATE_EULER(float x, float y, float z) { this->ROTATE_EULER(v3(x, y, z)); }
 
 	void print(const char *label=NULL);
+
+	Matrix4 operator+= (Matrix4 b) { 
+		for (int i = 0; i < 16; i++) {
+			this->data[i] += b.data[i];
+		}
+		return *this;
+	}
 };
 
 struct Line3 {
@@ -808,6 +815,7 @@ Matrix4 operator* (Matrix4 a, Matrix4 b) { return a.multiply(b); }
 Vec3 operator* (Matrix4 a, Vec3 b) { return a.multiply(b); }
 Vec4 operator* (Matrix4 a, Vec4 b) { return a.multiply(b); }
 AABB operator* (Matrix4 a, AABB b) { return a.multiply(b); }
+Matrix4 operator* (Matrix4 a, float b) { return a.multiply(b); }
 
 Matrix4 getPerspectiveMatrix(float fovYDeg, float aspect, float nearPlane, float farPlane);
 

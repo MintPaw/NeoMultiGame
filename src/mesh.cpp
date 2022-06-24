@@ -163,6 +163,20 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 }
 
 void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton) {
+	Matrix4 *boneTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
+	if (skeleton) {
+		for (int i = 0; i < mesh->boneNamesNum; i++) {
+			int meshIndex = i;
+			for (int i = 0; i < skeleton->base->bonesNum; i++) {
+				Bone *bone = &skeleton->base->bones[i];
+				int boneIndex = i;
+				if (streq(bone->name, mesh->boneNames[meshIndex])) {
+					boneTransforms[meshIndex] = skeleton->meshTransforms[boneIndex];
+				}
+			}
+		}
+	}
+
 	for (int i = 0; i < mesh->indsNum/3; i++) {
 		MeshVertex meshVerts[3] = {
 			mesh->verts[mesh->inds[i * 3 + 0]],
@@ -182,7 +196,23 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton) {
 			meshVerts[2].uv,
 		};
 
-		for (int i = 0; i < 3; i++) verts[i] = matrix * verts[i];
+		for (int i = 0; i < 3; i++) {
+			if (skeleton) {
+				MeshVertex meshVert = meshVerts[i];
+				Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
+				boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
+				boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
+				boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
+				verts[i] = boneTrans * verts[i];
+				verts[i] = matrix * verts[i];
+
+				// Vec4 vert4 = v4(verts[i], 1);
+				// vert4 = boneTrans * vert4;
+				// verts[i] = v3(vert4);
+			} else {
+				verts[i] = matrix * verts[i];
+			}
+		}
 
 		drawTriangle(renderer->whiteTexture, verts, uvs);
 	}

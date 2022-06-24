@@ -171,6 +171,8 @@ void initSkeleton() {
 }
 
 BaseSkeleton *getBaseSkeleton(char *path) {
+	if (!skeletonSys) initSkeleton();
+
 	for (int i = 0; i < skeletonSys->baseSkeletonsNum; i++) {
 		BaseSkeleton *base = &skeletonSys->baseSkeletons[i];
 		if (streq(base->name, path)) return base;
