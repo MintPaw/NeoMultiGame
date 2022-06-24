@@ -430,6 +430,7 @@ struct Actor {
 
 	Vec3 position;
 	Vec3 size;
+	Skeleton *skeleton;
 
 #define MAP_NAME_MAX_LEN 64
 	char destMapName[MAP_NAME_MAX_LEN];
@@ -618,6 +619,7 @@ enum WorldElementType {
 	WORLD_ELEMENT_TRIANGLE,
 	WORLD_ELEMENT_CONE,
 	WORLD_ELEMENT_SPHERE,
+	WORLD_ELEMENT_MODEL,
 };
 struct WorldElement {
 	WorldElementType type;
@@ -626,9 +628,13 @@ struct WorldElement {
 	Cone cone;
 	Sphere sphere;
 	AABB aabb;
+	Model *model;
 	// };
 	int color;
 	float alpha;
+
+	Skeleton *skeleton;
+	Matrix4 modelMatrix;
 };
 
 enum ScreenElementType {
@@ -834,6 +840,7 @@ void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushCone(Cone cone, int color, float alpha=1);
 void pushSphere(Sphere sphere, int color, float alpha=1);
+void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int color=0xFFFFFFFF);
 void pushBillboard(DrawBillboardCall billboard);
 void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped);
 WorldElement *createWorldElement();
@@ -1235,6 +1242,8 @@ void updateGame() {
 						drawCone(element->cone, element->color);
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
+					} else if (element->type == WORLD_ELEMENT_MODEL) {
+						drawModel(element->model, element->modelMatrix, element->skeleton);
 					}
 				}
 
@@ -1273,7 +1282,7 @@ void updateGame() {
 
 					// matrix.TRANSLATE(0, 0, 50);
 
-					drawModel(model, matrix, skeleton);
+					// drawModel(model, matrix, skeleton);
 				}
 
 				endShader();
@@ -3043,8 +3052,7 @@ void stepGame(float elapsed) {
 
 					int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
 					int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
-					int animationRecoveryEndFrame = 0;
-					animationRecoveryEndFrame = anim->framesNum-1;
+					int animationRecoveryEndFrame = anim->framesNum-1;
 
 					if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
 						if (action->time < actionStartupEndTime) {
@@ -3106,6 +3114,17 @@ void stepGame(float elapsed) {
 				billboard.alpha = 1;
 				if (frame) {
 					pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+
+					Matrix4 modelMatrix = mat4();
+					modelMatrix.SCALE(25);
+					pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton);
+
+					SkeletonBlend *blend = getSkeletonBlend(actor->skeleton, "main");
+					if (blend) {
+						blend->animation = getAnimation(actor->skeleton, "run");
+					}
+					updateSkeleton(actor->skeleton, elapsed);
+					// void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int color);
 				}
 
 				if (!frame || game->debugDrawPlayerBox) {
@@ -4792,6 +4811,9 @@ Actor *createActor(Map *map, ActorType type) {
 		actor->stats[STAT_ATTACK_SPEED] = 10;
 		actor->level = 30;
 		actor->potionsLeft = 3;
+
+		actor->skeleton = deriveSkeleton("assets/skeletons/unit.skele");
+		createSkeletonBlend(actor->skeleton, "main", SKELETON_BLEND_ANIMATION);
 	} else if (actor->type == ACTOR_ITEM) {
 		actor->size = v3(50, 50, 50);
 	}
@@ -4854,9 +4876,13 @@ void removeActorById(Map *map, int id) {
 
 void removeActorByIndex(Map *map, int index) {
 	Actor *actor = &map->actors[index];
-	if (actor->type == ACTOR_UNIT) {
+	if (actor->items) {
 		free(actor->items);
 		actor->items = NULL;
+	}
+	if (actor->skeleton) {
+		destroySkeleton(actor->skeleton);
+		actor->skeleton = NULL;
 	}
 	arraySpliceIndex(map->actors, map->actorsNum, sizeof(Actor), index);
 	map->actorsNum--;
@@ -5264,6 +5290,15 @@ void pushSphere(Sphere sphere, int color, float alpha) {
 	element->sphere = sphere;
 	element->color = color;
 	element->alpha = alpha;
+}
+
+void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int color) {
+	WorldElement *element = createWorldElement();
+	element->type = WORLD_ELEMENT_MODEL;
+	element->model = model;
+	element->skeleton = skeleton;
+	element->color = color;
+	element->modelMatrix = matrix;
 }
 
 Log3Buffer *log3f(Vec3 position, const char *msg, ...) {
