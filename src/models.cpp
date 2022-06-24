@@ -17,25 +17,12 @@ struct Model {
 	Matrix4 invMatrix;
 };
 
-struct ModelProps {
-	Matrix4 matrix;
-	Skeleton *skeleton;
-
-	Vec3 ambientLight;
-	Vec3 diffuseLight;
-	Vec3 specularLight;
-
-	float alpha;
-
-	int layer;
-};
-
 struct ModelSystem {
 #define MODELS_MAX 512
 	Model models[MODELS_MAX];
 	int modelsNum;
 
-	Framebuffer *debugFramebuffer;
+	// Framebuffer *debugFramebuffer;
 	Texture *debugModelTexture;
 	bool debugShowModelBounds;
 	int debugSelectedModel;
@@ -50,10 +37,9 @@ void readModel(DataStream *stream, Model *model, char *modelDir);
 void computeBounds(Model *model, Matrix4 matrix=mat4());
 void writeModel(DataStream *stream, Model *model);
 
-ModelProps newModelProps();
-void drawModel(Model *model, ModelProps modelProps, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, Model *parent=NULL); //@todo remove matrix, it does nothing
+void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, Model *parent=NULL);
 
-bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
+// bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
 void showModelsGui();
 
 // void reloadAllMeshesForModels(); // Actually declared in draw3d.cpp
@@ -157,17 +143,7 @@ void writeModel(DataStream *stream, Model *model) {
 	}
 }
 
-ModelProps newModelProps() {
-	ModelProps props = {};
-	props.matrix = mat4();
-	props.ambientLight = defaultWorld->ambientLight;
-	props.diffuseLight = defaultWorld->diffuseLight;
-	props.specularLight = defaultWorld->specularLight;
-	props.alpha = 1;
-	return props;
-}
-
-void drawModel(Model *model, ModelProps modelProps, Matrix4 matrix, Skeleton *skeleton, Model *parent) {
+void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, Model *parent) {
 	if (!model) {
 		logf("Called drawModel with NULL model\n");
 		return;
@@ -175,73 +151,61 @@ void drawModel(Model *model, ModelProps modelProps, Matrix4 matrix, Skeleton *sk
 
 	// if (!parent) matrix = matrix * modelProps.matrix;
 	// matrix = matrix * model->localMatrix;
-	// if (platform->frameCount == 1) {
-	// 	logf("Draw matrix %s:\n", model->name);
-	// 	matrix.print("");
-	// }
 
 	if (model->mesh) {
-		MeshProps meshProps = newMeshProps();
-		meshProps.matrix = model->modelMatrix * modelProps.matrix;
-		meshProps.layer = modelProps.layer;
-		// meshProps.matrix = matrix;
-		meshProps.skeleton = modelProps.skeleton;
-		meshProps.ambientLight = modelProps.ambientLight;
-		meshProps.diffuseLight = modelProps.diffuseLight;
-		meshProps.specularLight = modelProps.specularLight;
-		meshProps.alpha = modelProps.alpha;
-		drawMesh(model->mesh, meshProps);
+		Matrix4 matrix = model->modelMatrix * matrix;
+		drawMesh(model->mesh, matrix, skeleton);
 	}
 
 	for (int i = 0; i < model->childrenNum; i++) {
 		Model *child = &model->children[i];
-		drawModel(child, modelProps, matrix, skeleton, model);
+		drawModel(child, matrix, skeleton, model);
 	}
 }
 
-bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri) {
-	start = model->invMatrix * start;
-	end = model->invMatrix * end;
+// bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri) {
+// 	start = model->invMatrix * start;
+// 	end = model->invMatrix * end;
 
-	float closestHit = -1;
-	Vec2 closestUv;
-	MeshTri *closestMeshTri;
+// 	float closestHit = -1;
+// 	Vec2 closestUv;
+// 	MeshTri *closestMeshTri;
 
-	if (model->mesh) {
-		float rayDist;
-		Vec2 uv;
-		MeshTri *meshTri;
-		if (intersectsLine(model->mesh, start, end, &rayDist, &uv, &meshTri)) {
-			if (closestHit == -1 || rayDist < closestHit) {
-				closestHit = rayDist;
-				closestUv = uv;
-				closestMeshTri = meshTri;
-			}
-		}
-	}
+// 	if (model->mesh) {
+// 		float rayDist;
+// 		Vec2 uv;
+// 		MeshTri *meshTri;
+// 		if (intersectsLine(model->mesh, start, end, &rayDist, &uv, &meshTri)) {
+// 			if (closestHit == -1 || rayDist < closestHit) {
+// 				closestHit = rayDist;
+// 				closestUv = uv;
+// 				closestMeshTri = meshTri;
+// 			}
+// 		}
+// 	}
 
-	for (int i = 0; i < model->childrenNum; i++) {
-		float rayDist;
-		Vec2 uv;
-		MeshTri *meshTri;
-		if (intersectsLine(&model->children[i], start, end, &rayDist, &uv, &meshTri)) {
-			if (closestHit == -1 || rayDist < closestHit) {
-				closestHit = rayDist;
-				closestUv = uv;
-				closestMeshTri = meshTri;
-			}
-		}
-	}
+// 	for (int i = 0; i < model->childrenNum; i++) {
+// 		float rayDist;
+// 		Vec2 uv;
+// 		MeshTri *meshTri;
+// 		if (intersectsLine(&model->children[i], start, end, &rayDist, &uv, &meshTri)) {
+// 			if (closestHit == -1 || rayDist < closestHit) {
+// 				closestHit = rayDist;
+// 				closestUv = uv;
+// 				closestMeshTri = meshTri;
+// 			}
+// 		}
+// 	}
 
-	if (closestHit == -1) {
-		return false;
-	} else {
-		*outDist = closestHit;
-		*outUv = closestUv;
-		*outMeshTri = closestMeshTri;
-		return true;
-	}
-}
+// 	if (closestHit == -1) {
+// 		return false;
+// 	} else {
+// 		*outDist = closestHit;
+// 		*outUv = closestUv;
+// 		*outMeshTri = closestMeshTri;
+// 		return true;
+// 	}
+// }
 
 // void intersects(Model *model, Capsule cap, IntersectionResult *outResults, int *outResultsNum, int outResultsMax, Matrix4 matrix=mat4());
 // void intersects(Model *model, Capsule cap, IntersectionResult *outResults, int *outResultsNum, int outResultsMax, Matrix4 matrix) {
@@ -290,80 +254,80 @@ void reloadMeshes(Model *model, char *modelDir) {
 	}
 }
 
-void showModelsGui() {
-	if (!modelSys->debugFramebuffer) {
-		modelSys->debugFramebuffer = createFramebuffer();
+// void showModelsGui() {
+// 	if (!modelSys->debugFramebuffer) {
+// 		modelSys->debugFramebuffer = createFramebuffer();
 
-		setFramebuffer(modelSys->debugFramebuffer);
-		addDepthAttachment(DEBUG_DEPTH_WIDTH, DEBUG_DEPTH_HEIGHT);
-		setFramebuffer(NULL);
-	}
+// 		setFramebuffer(modelSys->debugFramebuffer);
+// 		addDepthAttachment(DEBUG_DEPTH_WIDTH, DEBUG_DEPTH_HEIGHT);
+// 		setFramebuffer(NULL);
+// 	}
 
-	if (!modelSys->debugModelTexture) modelSys->debugModelTexture = createTexture(128, 128);
+// 	if (!modelSys->debugModelTexture) modelSys->debugModelTexture = createTexture(128, 128);
 
-	ImGui::Checkbox("Show mesh bounds", &modelSys->debugShowModelBounds);
+// 	ImGui::Checkbox("Show mesh bounds", &modelSys->debugShowModelBounds);
 
-	ImGui::BeginChild("Model list child", ImVec2(400, 500), true, 0); 
-	for (int i = 0; i < modelSys->modelsNum; i++) {
-		Model *model = &modelSys->models[i];
-		char *label = frameSprintf("%s###%d", model->name, i);
-		if (ImGui::Selectable(label, modelSys->debugSelectedModel == i)) {
-			modelSys->debugSelectedModel = i;
-		}
-	}
-	ImGui::EndChild();
+// 	ImGui::BeginChild("Model list child", ImVec2(400, 500), true, 0); 
+// 	for (int i = 0; i < modelSys->modelsNum; i++) {
+// 		Model *model = &modelSys->models[i];
+// 		char *label = frameSprintf("%s###%d", model->name, i);
+// 		if (ImGui::Selectable(label, modelSys->debugSelectedModel == i)) {
+// 			modelSys->debugSelectedModel = i;
+// 		}
+// 	}
+// 	ImGui::EndChild();
 
-	ImGui::SameLine();
+// 	ImGui::SameLine();
 
-	ImGui::BeginChild("Model child", ImVec2(400, 500), true, 0); 
-	Model *model = &modelSys->models[modelSys->debugSelectedModel];
+// 	ImGui::BeginChild("Model child", ImVec2(400, 500), true, 0); 
+// 	Model *model = &modelSys->models[modelSys->debugSelectedModel];
 
-	ImGui::Text("Name: %s", model->name);
-	ImGui::Text("Path: %s", model->path);
-	ImGui::Text(
-		"Bounds: (%.1f,%.1f,%.1f) (%.1f,%.1f,%.1f)",
-		model->bounds.min.x,
-		model->bounds.min.y,
-		model->bounds.min.z,
-		model->bounds.max.x,
-		model->bounds.max.y,
-		model->bounds.max.z
-	);
+// 	ImGui::Text("Name: %s", model->name);
+// 	ImGui::Text("Path: %s", model->path);
+// 	ImGui::Text(
+// 		"Bounds: (%.1f,%.1f,%.1f) (%.1f,%.1f,%.1f)",
+// 		model->bounds.min.x,
+// 		model->bounds.min.y,
+// 		model->bounds.min.z,
+// 		model->bounds.max.x,
+// 		model->bounds.max.y,
+// 		model->bounds.max.z
+// 	);
 
-	{
-		WorldProps oldWorld = *defaultWorld;
+// 	{
+// 		WorldProps oldWorld = *defaultWorld;
 
-		float dist = getSize(model->bounds).length();
-		Vec3 center = getCenter(model->bounds);
+// 		float dist = getSize(model->bounds).length();
+// 		Vec3 center = getCenter(model->bounds);
 
-		Vec3 camPos;
-		camPos.x = cos(platform->time) * dist;
-		camPos.y = sin(platform->time) * dist;
-		camPos.z = dist;
-		defaultWorld->viewMatrix = lookAt(center + camPos, center).invert();
+// 		Vec3 camPos;
+// 		camPos.x = cos(platform->time) * dist;
+// 		camPos.y = sin(platform->time) * dist;
+// 		camPos.z = dist;
+// 		defaultWorld->viewMatrix = lookAt(center + camPos, center).invert();
 
-		float aspect = (float)modelSys->debugModelTexture->width/modelSys->debugModelTexture->height;
-		defaultWorld->projectionMatrix = getPerspectiveMatrix(60, aspect, 0.1, FAR_PLANE);
+// 		float aspect = (float)modelSys->debugModelTexture->width/modelSys->debugModelTexture->height;
+// 		defaultWorld->projectionMatrix = getPerspectiveMatrix(60, aspect, 0.1, FAR_PLANE);
 
-		Framebuffer *oldFramebuffer = renderer->currentFramebuffer;
-		setFramebuffer(modelSys->debugFramebuffer);
-		setColorAttachment(modelSys->debugFramebuffer, modelSys->debugModelTexture, 0);
+// 		Framebuffer *oldFramebuffer = renderer->currentFramebuffer;
+// 		setFramebuffer(modelSys->debugFramebuffer);
+// 		setColorAttachment(modelSys->debugFramebuffer, modelSys->debugModelTexture, 0);
 
-		clearRenderer();
-		ModelProps props = newModelProps();
-		drawModel(model, props);
-		if (modelSys->debugShowModelBounds) drawBoundsOutline(model->bounds, 0.01*dist, 0xFFFF0000);
-		process3dDrawQueue();
+// 		clearRenderer();
+// 		ModelProps props = newModelProps();
+// 		drawModel(model, props);
+// 		if (modelSys->debugShowModelBounds) drawBoundsOutline(model->bounds, 0.01*dist, 0xFFFF0000);
+// 		process3dDrawQueue();
 
-		*defaultWorld = oldWorld;
-		setFramebuffer(oldFramebuffer);
-	}
+// 		*defaultWorld = oldWorld;
+// 		setFramebuffer(oldFramebuffer);
+// 	}
 
-	guiTexture(modelSys->debugModelTexture);
+// 	guiTexture(modelSys->debugModelTexture);
 
-	if (ImGui::Button("Destroy")) {
-		// destroyModel(model);
-	}
+// 	if (ImGui::Button("Destroy")) {
+// 		// destroyModel(model);
+// 	}
 
-	ImGui::EndChild();
-}
+// 	ImGui::EndChild();
+// }
