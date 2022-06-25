@@ -268,6 +268,8 @@ struct Globals {
 	Vec3 actorSpriteOffset;
 	float actorSpriteScale;
 	float actorSpriteScaleMultiplier;
+	Vec3 actorModelOffset;
+	float actorModelScale;
 	float movementPercDistanceWalkingRatio;
 	float movementPercDistanceRunningRatio;
 };
@@ -566,6 +568,7 @@ struct AnimationMarkerData {
 #define ANIMATION_MARKER_MAX_LEN 64
 	char markerName[ANIMATION_MARKER_MAX_LEN];
 	int frame;
+	float perc;
 };
 
 enum EffectType {
@@ -770,7 +773,8 @@ struct Game {
 	bool debugDrawActorStatsSimple;
 	bool debugDrawActorFacingDirection;
 	bool debugDrawActorTargets;
-	bool debugDrawBillboards;
+	bool debugDrawUnitBillboards;
+	bool debugDrawUnitModels;
 	bool debugDrawVision;
 	bool debugNeverTakeDamage;
 	bool debugForceRestock;
@@ -944,9 +948,10 @@ void updateGame() {
 				marker->animName[spacePtr1 - line] = 0;
 
 				char *spacePtr2 = strchr(spacePtr1+1, ' ');
-				char frameStr[8] = {};
+				char frameStr[32] = {};
 				strncpy(frameStr, spacePtr1+1, spacePtr2 - spacePtr1 - 1);
-				marker->frame = atoi(frameStr);
+				// marker->frame = atoi(frameStr);
+				marker->perc = atof(frameStr);
 
 				char *spacePtr3 = &line[strlen(line)-1];
 				strncpy(marker->markerName, spacePtr2+1, spacePtr3 - spacePtr2);
@@ -1135,7 +1140,8 @@ void updateGame() {
 		game->particles = (Particle *)zalloc(sizeof(Particle) * game->particlesMax);
 
 		game->debugTimeScale = 1;
-		game->debugDrawBillboards = true;
+		game->debugDrawUnitBillboards = true;
+		game->debugDrawUnitModels = true;
 		game->debugDrawHitboxes = true;
 		game->debugDrawActorStatsSimple = true;
 
@@ -1243,7 +1249,9 @@ void updateGame() {
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
-						drawModel(element->model, element->modelMatrix, element->skeleton);
+						// Vec4 color = hexToArgbFloat(element->color);
+						Vec4 color = v4(1, 0, 0, 1);
+						drawModel(element->model, element->modelMatrix, element->skeleton, 0xFF00FF00);
 					}
 				}
 
@@ -1287,7 +1295,6 @@ void updateGame() {
 
 				endShader();
 
-				if (!game->debugDrawBillboards) game->billboardsNum = 0;
 				startShader(renderer->alphaDiscardShader);
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
@@ -1674,7 +1681,8 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
 			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
-			ImGui::Checkbox("Draw billboards", &game->debugDrawBillboards);
+			ImGui::Checkbox("Draw unit billboards", &game->debugDrawUnitBillboards);
+			ImGui::Checkbox("Draw unit models", &game->debugDrawUnitModels);
 			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
 			ImGui::Checkbox("Show prewarm", &game->debugShowPrewarm);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
@@ -1996,6 +2004,8 @@ void stepGame(float elapsed) {
 			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
 			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
 			ImGui::DragFloat("Actor sprite scale multiplier", &globals->actorSpriteScaleMultiplier, 0.01);
+			ImGui::DragFloat3("Actor model offset", &globals->actorModelOffset.x);
+			ImGui::DragFloat("Actor model scale", &globals->actorModelScale, 0.01);
 			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01, 0, 0, "%.4f");
 			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01, 0, 0, "%.4f");
 			ImGui::TreePop();
@@ -3007,10 +3017,10 @@ void stepGame(float elapsed) {
 			}
 
 			{ /// Set animation
-				auto getMarkerFrame = [](char *animName, char *markerName)->int {
+				auto getMarkerFrame = [](char *animName, char *markerName)->float {
 					for (int i = 0; i < game->animationMarkerDataNum; i++) {
 						AnimationMarkerData *marker = &game->animationMarkerData[i];
-						if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->frame;
+						if (streq(marker->animName, animName) && streq(marker->markerName, markerName)) return marker->perc;
 					}
 
 					return 0;
@@ -3036,59 +3046,64 @@ void stepGame(float elapsed) {
 					return anim;
 				};
 
-				Animation *anim = NULL;
+				char *animName = NULL;
 				float animTime = 0;
-				int animFrameOverride = -1;
+				float animPercOverride = -1;
+				bool animLoops = true;
 
 				if (usesFrameData) {
 					Action *action = &actor->actions[0];
-					anim = getActorAnimation(actor, frameSprintf("Unit/%s", action->info->animationName));
+					animName = action->info->animationName;
 					animTime = action->time;
-					anim->loops = action->info->animationLoops;
+					animLoops = action->info->animationLoops;
 
 					float actionStartupEndTime = action->info->startupFrames / 60.0;
 					float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
 					float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
 
-					int animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
-					int animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
-					int animationRecoveryEndFrame = anim->framesNum-1;
+					float animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
+					float animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
 
 					if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
 						if (action->time < actionStartupEndTime) {
-							animFrameOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
+							animPercOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
 						} else if (action->time < actionActiveEndTime) { 
-							animFrameOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
+							animPercOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
 						} else {
-							animFrameOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, animationRecoveryEndFrame);
+							animPercOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, 1);
 						}
 					} else {
 						float maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames)/60.0;
-						animFrameOverride = roundf(clampMap(action->time, 0, maxTime, 0, animationRecoveryEndFrame));
+						animPercOverride = clampMap(action->time, 0, maxTime, 0, 1);
 					}
 				} else {
 					if (actor->timeMoving) {
 						if (actor->isRunningLeft || actor->isRunningRight) {
-							anim = getActorAnimation(actor, "Unit/run");
-							animFrameOverride = anim->framesNum * actor->movementPerc;
+							animName = "run";
+							animPercOverride = actor->movementPerc;
 						} else {
-							anim = getActorAnimation(actor, "Unit/walk");
-							animFrameOverride = anim->framesNum * actor->movementPerc;
+							animName = "walk";
+							animPercOverride = actor->movementPerc;
 						}
 					} else if (actor->timeInAir) {
-						anim = getActorAnimation(actor, "Unit/jump");
+						animName = "jump";
 						animTime = actor->timeInAir * FRAME_SUBSTEPS * 2; // * 2 because it's slow...
-						anim->loops = false;
+						animLoops = false;
 					} else {
-						anim = getActorAnimation(actor, "Unit/idle");
+						animName = "idle";
 						animTime = actor->timeNotMoving * FRAME_SUBSTEPS;
 					}
 				}
 
 				Frame *frame = NULL;
+				Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
 				if (anim) {
+					anim->loops = animLoops;
 					frame = getAnimFrameAtSecond(anim, animTime);
-					if (animFrameOverride != -1) frame = anim->frames[animFrameOverride];
+					if (animPercOverride != -1) {
+						int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
+						frame = anim->frames[frameInt];
+					}
 				}
 
 				AABB aabb = getAABB(actor);
@@ -3113,18 +3128,34 @@ void stepGame(float elapsed) {
 				billboard.tint = teamColors[actor->team];
 				billboard.alpha = 1;
 				if (frame) {
-					pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+					if (game->debugDrawUnitBillboards) {
+						pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+					}
 
 					Matrix4 modelMatrix = mat4();
-					modelMatrix.SCALE(25);
-					pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton);
+					modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
+					modelMatrix.TRANSLATE(globals->actorModelOffset);
+
+					if (actor->facingLeft) {
+						modelMatrix.ROTATE_EULER(0, 0, M_PI/2);
+					} else {
+						modelMatrix.ROTATE_EULER(0, 0, -M_PI/2);
+					}
+					modelMatrix.SCALE(1, -1, 1);
+					modelMatrix.SCALE(globals->actorModelScale);
 
 					SkeletonBlend *blend = getSkeletonBlend(actor->skeleton, "main");
-					if (blend) {
-						blend->animation = getAnimation(actor->skeleton, "run");
+					blend->animation = getAnimation(actor->skeleton, animName);
+					blend->loops = animLoops;
+					blend->playing = false;
+
+					blend->time = animTime;
+					if (animPercOverride != -1) {
+						blend->time = animPercOverride * (blend->animation->frameCount / blend->animation->frameRate);
 					}
+
 					updateSkeleton(actor->skeleton, elapsed);
-					// void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int color);
+					if (game->debugDrawUnitModels) pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, teamColors[actor->team]);
 				}
 
 				if (!frame || game->debugDrawPlayerBox) {
@@ -5508,7 +5539,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 11;
+	int globalsVersion = 12;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -5539,6 +5570,8 @@ void saveGlobals() {
 	writeVec3(stream, globals->actorSpriteOffset);
 	writeFloat(stream, globals->actorSpriteScale);
 	writeFloat(stream, globals->actorSpriteScaleMultiplier);
+	writeVec3(stream, globals->actorModelOffset);
+	writeFloat(stream, globals->actorModelScale);
 	writeFloat(stream, globals->movementPercDistanceWalkingRatio);
 	writeFloat(stream, globals->movementPercDistanceRunningRatio);
 
@@ -5585,6 +5618,8 @@ void loadGlobals() {
 	globals->actorSpriteOffset = readVec3(stream);
 	globals->actorSpriteScale = readFloat(stream);
 	if (globalsVersion >= 10) globals->actorSpriteScaleMultiplier = readFloat(stream);
+	if (globalsVersion >= 12) globals->actorModelOffset = readVec3(stream);
+	if (globalsVersion >= 12) globals->actorModelScale = readFloat(stream);
 	if (globalsVersion >= 11) globals->movementPercDistanceWalkingRatio = readFloat(stream);
 	if (globalsVersion >= 11) globals->movementPercDistanceRunningRatio = readFloat(stream);
 

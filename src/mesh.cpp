@@ -47,7 +47,7 @@ MeshSystem *meshSys = NULL;
 void initMesh();
 Mesh *getMesh(char *path);
 void readMesh(DataStream *stream, char *meshDir, Mesh *mesh);
-void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL);
+void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int tint=0xFFFFFFFF);
 
 /// FUNCTIONS ^
 
@@ -162,7 +162,7 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 	} ///
 }
 
-void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton) {
+void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	Matrix4 *boneTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
 	if (skeleton) {
 		for (int i = 0; i < mesh->boneNamesNum; i++) {
@@ -175,6 +175,27 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton) {
 				}
 			}
 		}
+	}
+
+	Raylib::Color raylibTint;
+	{
+		float alpha = 1;
+		int a, r, g, b;
+		hexToArgb(tint, &a, &r, &g, &b);
+		a *= alpha;
+		r *= a/255.0;
+		g *= a/255.0;
+		b *= a/255.0;
+		tint = argbToHex(a, r, g, b);
+		raylibTint = toRaylibColor(tint);
+
+		Texture *texture = renderer->whiteTexture;
+		Raylib::Texture raylibTexture = texture->raylibTexture;
+		Raylib::rlCheckRenderBatchLimit((mesh->indsNum/3 - 1)*4);
+
+		Raylib::rlSetTexture(raylibTexture.id);
+
+		Raylib::rlBegin(RL_TRIANGLES);
 	}
 
 	for (int i = 0; i < mesh->indsNum/3; i++) {
@@ -212,8 +233,16 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton) {
 			} else {
 				verts[i] = matrix * verts[i];
 			}
+
+			Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
+			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
+			Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
 		}
 
-		drawTriangle(renderer->whiteTexture, verts, uvs);
+		// drawTriangle(renderer->whiteTexture, verts, uvs);
 	}
+
+	Raylib::rlEnd();
+
+	Raylib::rlSetTexture(0);
 }

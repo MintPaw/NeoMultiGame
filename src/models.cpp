@@ -37,7 +37,7 @@ void readModel(DataStream *stream, Model *model, char *modelDir);
 void computeBounds(Model *model, Matrix4 matrix=mat4());
 void writeModel(DataStream *stream, Model *model);
 
-void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, Model *parent=NULL);
+void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int tint=0xFFFFFFFF, Model *parent=NULL);
 
 // bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
 void showModelsGui();
@@ -145,7 +145,7 @@ void writeModel(DataStream *stream, Model *model) {
 	}
 }
 
-void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, Model *parent) {
+void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model *parent) {
 	if (!model) {
 		logf("Called drawModel with NULL model\n");
 		return;
@@ -157,12 +157,12 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, Model *parent) 
 	if (model->mesh) {
 		// Matrix4 meshMatrix = model->modelMatrix * matrix;
 		Matrix4 meshMatrix = matrix;
-		drawMesh(model->mesh, meshMatrix, skeleton);
+		drawMesh(model->mesh, meshMatrix, skeleton, tint);
 	}
 
 	for (int i = 0; i < model->childrenNum; i++) {
 		Model *child = &model->children[i];
-		drawModel(child, matrix, skeleton, model);
+		drawModel(child, matrix, skeleton, tint, model);
 	}
 }
 

@@ -106,11 +106,15 @@ def exportAction(armature, action, outPath, altName=None):
             exportImage(outPath, animFileName)
             totalFrameCount += 1
 
+    frameCount = int(realAction.frame_range.y) - int(realAction.frame_range.x)
+    print("Has "+str(frameCount)+" frames (without subSteps)")
+    frameCount *= subSteps
+
     global poseMarkersOutString
     for i in range(0, len(realAction.pose_markers)):
         marker = realAction.pose_markers[i]
         poseMarkersOutString += animName + " "
-        poseMarkersOutString += str(marker.frame*subSteps) + " "
+        poseMarkersOutString += str((marker.frame*subSteps)/frameCount) + " "
         poseMarkersOutString += marker.name
         poseMarkersOutString += "\n"
 
@@ -207,8 +211,8 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["drinkPotionStart"], outPath, "drinkPotionStart");
         exportAction(armature, actions["drinkPotionFinish"], outPath, "drinkPotionFinish");
         exportAction(armature, actions["drinkPotionFail"], outPath, "drinkPotionFail");
-        # exportAction(armature, actions["upTest"], outPath, "upTest");
-        # exportAction(armature, actions["duckTest"], outPath, "duckTest");
+        exportAction(armature, actions["upTest"], outPath, "upTest");
+        exportAction(armature, actions["duckTest"], outPath, "duckTest");
 
         bpy.data.scenes[0].objects["sword"].hide_render = False
 

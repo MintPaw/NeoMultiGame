@@ -6,7 +6,6 @@ struct SkeletonAnimation {
 	int frameCount; 
 	/// Unserialized
 	float frameRate;
-	float length;
 };
 
 struct Bone {
@@ -20,8 +19,6 @@ struct Bone {
 	/// Unserialized
 	Matrix4 modelSpaceMatrix;
 	Matrix4 invModelSpaceMatrix;
-
-	float length;
 };
 
 #define BONES_MAX 32
@@ -312,8 +309,8 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 				framesIn += anim->firstFrame;
 				nextFramesIn += anim->firstFrame;
 			} else {
-				if (framesIn >= anim->frameCount) framesIn = anim->frameCount;
-				if (nextFramesIn >= anim->frameCount) nextFramesIn = anim->frameCount;
+				if (framesIn > anim->frameCount-1) framesIn = anim->frameCount-1;
+				if (nextFramesIn > anim->frameCount-1) nextFramesIn = anim->frameCount-1;
 				framesIn += anim->firstFrame;
 				nextFramesIn += anim->firstFrame;
 			}

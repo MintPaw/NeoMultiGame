@@ -470,6 +470,7 @@ struct Renderer {
 
 	Raylib::Shader lightingShader;
 	int lightingShaderAlphaLoc;
+
 	Raylib::Shader alphaDiscardShader;
 
 	Raylib::Shader danmakuShader;
