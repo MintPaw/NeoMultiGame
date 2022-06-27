@@ -32,14 +32,24 @@ struct DrawSpriteRecurseData {
 	int swapsNum;
 };
 
+struct SpriteLayerProperties {
+	char *name;
+	float alpha;
+};
+
 struct DrawSpriteCall;
 struct SpriteTransform {
 #define SPRITE_TRANSFORM_PATHS_MAX 32
 	char *paths[SPRITE_TRANSFORM_PATHS_MAX];
 	int pathsNum;
+
+	SpriteLayerProperties *layerProps;
+	int layerPropsNum;
+
 #define LAYERS_TO_HIDE_MAX 8
 	char *layersToHide[LAYERS_TO_HIDE_MAX];
 	int layersToHideNum;
+
 	bool isInstanceName;
 	int frame;
 	Matrix3 matrix;
@@ -977,10 +987,12 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				SwfDrawable *drawable = &depths[i];
 				if (drawable->type == SWF_DRAWABLE_NONE) canSubDraw = false;
 
+				float alphaMultiplier = 1;
 				if (currentLayerName && matchingTransform) {
-					for (int i = 0; i < matchingTransform->layersToHideNum; i++) {
-						if (streq(currentLayerName, matchingTransform->layersToHide[i])) {
-							canSubDraw = false;
+					for (int i = 0; i < matchingTransform->layerPropsNum; i++) {
+						SpriteLayerProperties *layerProps = &matchingTransform->layerProps[i];
+						if (streq(currentLayerName, layerProps->name)) {
+							alphaMultiplier *= layerProps->alpha;
 						}
 					}
 				}
@@ -1008,7 +1020,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					if (drawable->type == SWF_DRAWABLE_SHAPE) {
 						DrawShapeProps props = {};
 						props.useClip = nextUseClip;
-						props.alpha = recurse.alpha;
+						props.alpha = recurse.alpha * alphaMultiplier;
 						props.tint = recurse.tint;
 						props.colorTransform = recurse.colorTransform;
 
@@ -1057,6 +1069,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						DrawSpriteRecurseData newRecurse = recurse;
 						newRecurse.useClip = nextUseClip;
 						newRecurse.altName = drawable->name;
+						newRecurse.alpha *= alphaMultiplier;
 						if (drawable->colorTransform) newRecurse.colorTransform = applyColorTransform(newRecurse.colorTransform, *drawable->colorTransform);
 
 						bool shouldStopBlur = false;

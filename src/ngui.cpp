@@ -152,6 +152,10 @@ void nguiPushStyleIconXform(Xform2 xform) {
 	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, xform.translation);
 }
+void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot) {
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, position);
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, pivot);
+}
 
 //@speed These could be a lot faster if the elements didn't have randomly ordered styleStacks like the global styleStacks.
 //       Elements could have a different kind of style stack that's a fixed size index by the NguiStyleType
@@ -197,6 +201,8 @@ Xform2 nguiGetStyleIconXform() {
 void nguiPopAnyStyleVar(int amount=1);
 void nguiPopStyleVar(NguiStyleType type);
 void nguiPopStyleIconXform();
+void nguiPopWindowPositionAndPivot();
+
 void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type);
 
 void nguiDraw(float elapsed);
@@ -488,6 +494,11 @@ void nguiPopStyleIconXform() {
 	nguiPopStyleVar(NGUI_STYLE_ICON_TRANSLATION);
 	nguiPopStyleVar(NGUI_STYLE_ICON_SCALE);
 	nguiPopStyleVar(NGUI_STYLE_ICON_ROTATION);
+}
+
+void nguiPopWindowPositionAndPivot() {
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_PIVOT);
+	nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
 }
 
 void nguiPopAnyStyleVar(int amount) {

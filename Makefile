@@ -11,13 +11,13 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=towerGame
 # GAME_NAME=dynaGame
 # GAME_NAME=rtsClient2
-GAME_NAME=testGame
+# GAME_NAME=testGame
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=chessGame
 # GAME_NAME=tdSlasherGame
 # GAME_NAME=zooBoundGame
-# GAME_NAME=horseGame
+GAME_NAME=horseGame
 # GAME_NAME=gladiators2Game
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=animationToolsGame
