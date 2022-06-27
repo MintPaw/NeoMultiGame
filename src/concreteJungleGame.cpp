@@ -791,8 +791,6 @@ struct Game {
 #define LOG3_BUFFERS_MAX 256
 	Log3Buffer log3Buffers[LOG3_BUFFERS_MAX];
 	int log3BuffersNum;
-
-	Skeleton *testSkeleton;
 };
 Game *game = NULL;
 
@@ -1254,44 +1252,6 @@ void updateGame() {
 					}
 				}
 
-				{
-					if (!game->testSkeleton) {
-						game->testSkeleton = deriveSkeleton("assets/skeletons/unit.skele");
-						// game->testSkeleton = deriveSkeleton("assets/skeletons/simpler.skele");
-						// game->testSkeleton = deriveSkeleton("assets/skeletons/simple.skele");
-						// createSkeletonBlend(game->testSkeleton, "root", SKELETON_BLEND_MANUAL_BONES);
-						createSkeletonBlend(game->testSkeleton, "main", SKELETON_BLEND_ANIMATION);
-					}
-
-					Skeleton *skeleton = game->testSkeleton;
-
-					SkeletonBlend *blend = NULL;
-					// blend = getSkeletonBlend(skeleton, "root");
-
-					blend = getSkeletonBlend(skeleton, "main");
-					if (blend) {
-						blend->animation = getAnimation(skeleton, "run");
-						// blend->animation = getAnimation(skeleton, "Action");
-						// blend->playing = false;
-					}
-
-					updateSkeleton(skeleton, elapsed);
-
-					Model *model = getModel("assets/models/unit.model");
-					// Model *model = getModel("assets/models/simpler.model");
-					// Model *model = getModel("assets/models/simple.model");
-
-					Matrix4 matrix = mat4();
-					matrix.SCALE(20);
-
-					// matrix.ROTATE_EULER(0, 0, M_PI/2);
-					// matrix.ROTATE_EULER(0, 0, lerp(0, M_PI/2, timePhase(platform->time)));
-
-					// matrix.TRANSLATE(0, 0, 50);
-
-					// drawModel(model, matrix, skeleton);
-				}
-
 				endShader();
 
 				startShader(renderer->alphaDiscardShader);
@@ -1506,11 +1466,13 @@ void stepGame(float elapsed) {
 				if (player) { // There always has to be a player???
 					Actor *newActor = createActor(destMap, ACTOR_UNIT); // Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird
 					int id = newActor->id;
+					Skeleton *skeleton = newActor->skeleton;
 					Item *itemsPtr = newActor->items;
 					memcpy(itemsPtr, player->items, sizeof(Item) * player->itemsNum);
 					*newActor = *player;
 					newActor->id = id;
 					newActor->items = itemsPtr;
+					newActor->skeleton = skeleton;
 					removeActorByIndex(srcMap, playerSrcIndex);
 
 					Vec3 playerSpawnPos = v3();
@@ -1585,6 +1547,13 @@ void stepGame(float elapsed) {
 	{ /// Initial iteration
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
+
+			if (actor->markedForDeletion) {
+				removeActorByIndex(map, i);
+				i--;
+				continue;
+			}
+
 			// actor->info = &game->actorTypeInfos[actor->type]; // I don't think I need this anymore
 			if (actor->type == ACTOR_UNIT && actor->playerControlled) {
 				if (player) logf("Multiple players!?\n");
@@ -3540,7 +3509,28 @@ void stepGame(float elapsed) {
 					player->markedForDeletion = false;
 				} else {
 					map->alliances[actor->team] -= actor->allianceCost;
-					if (actor->team != player->team) game->leftToBeatTillUnlock--;
+
+					if (actor->team != player->team) {
+						game->leftToBeatTillUnlock--;
+
+						int moneyToGive = clampMap(actor->level, 1, 100, 1, 50);
+						for (;;) {
+							int chunkSize = rndInt(1, 3);
+							if (chunkSize > moneyToGive) chunkSize = moneyToGive;
+
+							Actor *money = createActor(map, ACTOR_ITEM);
+							money->position = actor->position;
+							money->itemType = ITEM_MONEY;
+							money->itemAmount = chunkSize;
+							money->velo.x = rndFloat(-1, 1);
+							money->velo.y = rndFloat(-1, 1);
+							money->velo.z = rndFloat(0.2, 1)*2;
+							money->velo *= v3(7, 7, 12);
+
+							moneyToGive -= chunkSize;
+							if (moneyToGive <= 0) break;
+						}
+					}
 				}
 			}
 		}
@@ -4559,34 +4549,6 @@ void stepGame(float elapsed) {
 	} /// 
 	popTargetTexture(); // game->overlayTexture
 
-	for (int i = 0; i < map->actorsNum; i++) { /// Removed marked actors
-		Actor *actor = &map->actors[i];
-		if (actor->markedForDeletion) {
-			if (actor->type == ACTOR_UNIT && actor->team != player->team) {
-				int moneyToGive = clampMap(actor->level, 1, 100, 1, 50);
-				for (;;) {
-					int chunkSize = rndInt(1, 3);
-					if (chunkSize > moneyToGive) chunkSize = moneyToGive;
-
-					Actor *money = createActor(map, ACTOR_ITEM);
-					money->position = actor->position;
-					money->itemType = ITEM_MONEY;
-					money->itemAmount = chunkSize;
-					money->velo.x = rndFloat(-1, 1);
-					money->velo.y = rndFloat(-1, 1);
-					money->velo.z = rndFloat(0.2, 1)*2;
-					money->velo *= v3(7, 7, 12);
-
-					moneyToGive -= chunkSize;
-					if (moneyToGive <= 0) break;
-				}
-			}
-			removeActorByIndex(map, i);
-			i--;
-			continue;
-		}
-	} ///
-
 	popCamera2d();
 
 	game->prevMapTime = game->mapTime;
@@ -4906,14 +4868,23 @@ void removeActorById(Map *map, int id) {
 
 void removeActorByIndex(Map *map, int index) {
 	Actor *actor = &map->actors[index];
-	if (actor->items) {
-		free(actor->items);
-		actor->items = NULL;
-	}
-	if (actor->skeleton) {
-		destroySkeleton(actor->skeleton);
-		actor->skeleton = NULL;
-	}
+
+	// if (actor->skeleton) {
+	// 	for (int i = 0; i < game->worldElementsNum; i++) {
+	// 		WorldElement *element = &game->worldElements[i];
+
+	// 		if (element->skeleton == actor->skeleton) {
+	// 			arraySpliceIndex(game->worldElements, game->worldElementsNum, sizeof(WorldElement), i);
+	// 			game->worldElementsNum--;
+	// 			i--;
+	// 			continue;
+	// 		}
+	// 	}
+	// }
+
+
+	if (actor->items) free(actor->items);
+	if (actor->skeleton) destroySkeleton(actor->skeleton);
 	arraySpliceIndex(map->actors, map->actorsNum, sizeof(Actor), index);
 	map->actorsNum--;
 }

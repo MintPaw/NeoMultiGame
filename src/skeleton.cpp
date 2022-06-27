@@ -316,10 +316,6 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 			}
 			int lowerFrame = (int)framesIn;
 			int upperFrame = (int)nextFramesIn;
-			// framesIn = 74;
-			// nextFramesIn = 74;
-			// lowerFrame = 74;
-			// upperFrame = 74;
 			float framePerc = framesIn - lowerFrame;
 			// logf("%f %f %d %d\n", framesIn, nextFramesIn, anim->firstFrame, anim->frameCount);
 
@@ -339,7 +335,7 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 
 				Xform lowerXform = bone->poseXforms[lowerFrame];
 				Xform upperXform = bone->poseXforms[upperFrame];
-				//@todo Lerp toggle
+				//@todo Lerp toggle (And fix it...)
 				// blend->poseXforms[boneIndex] = lerp(lowerXform, upperXform, framePerc);
 				blend->poseXforms[boneIndex] = lowerXform;
 			}
