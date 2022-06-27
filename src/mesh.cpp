@@ -40,6 +40,8 @@ struct MeshSystem {
 #define MESHES_MAX 512
 	Mesh meshes[MESHES_MAX];
 	int meshesNum;
+
+	Raylib::Mesh raylibDynamicMesh;
 };
 
 MeshSystem *meshSys = NULL;
@@ -162,6 +164,12 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 	} ///
 }
 
+Raylib::Matrix toRaylib(Matrix4 matrix) {
+	Raylib::Matrix raylibMatrix = {};
+	memcpy(&raylibMatrix.m0, matrix.transpose().data, sizeof(float) * 16);
+	return raylibMatrix;
+}
+
 void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	Matrix4 *boneTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
 	if (skeleton) {
@@ -177,30 +185,41 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 		}
 	}
 
-	Texture *texture = renderer->whiteTexture;
-	Raylib::rlSetTexture(texture->raylibTexture.id);
-
-	Raylib::rlCheckRenderBatchLimit((mesh->indsNum/3 - 1)*4);
-	Raylib::rlBegin(RL_TRIANGLES);
+	// This could be much faster if it was global and resizable
+	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
+	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
 
 	for (int i = 0; i < mesh->indsNum; i++) {
 		MeshVertex meshVert = mesh->verts[mesh->inds[i]];
-		Vec3 position = meshVert.position;
-		Vec2 uv = meshVert.uv;
 		if (skeleton) {
 			Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
 			boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
 			boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
 			boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
-			position = matrix * boneTrans * position;
+			positions[i] = boneTrans * meshVert.position;
 		} else {
-			position = matrix * position;
+			positions[i] = meshVert.position;
 		}
-
-		Raylib::rlTexCoord2f(uv.x, uv.y);
-		Raylib::rlVertex3f(position.x, position.y, position.z);
+		uvs[i] = meshVert.uv;
 	}
 
-	Raylib::rlEnd();
-	Raylib::rlSetTexture(0);
+	Raylib::Mesh raylibMesh = {};
+	raylibMesh.vertices = &positions[0].x;
+	raylibMesh.texcoords = &uvs[0].x;
+	raylibMesh.triangleCount = mesh->indsNum/3;
+	raylibMesh.vertexCount = mesh->vertsNum;
+
+	Raylib::UploadMesh(&raylibMesh, false);
+
+	Raylib::Material raylibMaterial = Raylib::LoadMaterialDefault();
+
+	Raylib::Matrix raylibMatrix = toRaylib(matrix);
+	DrawMesh(raylibMesh, raylibMaterial, raylibMatrix);
+
+	// Unload
+	Raylib::rlUnloadVertexArray(raylibMesh.vaoId);
+	const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
+	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(raylibMesh.vboId[i]);
+
+	Raylib::UnloadMaterial(raylibMaterial);
 }
