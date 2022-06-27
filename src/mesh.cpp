@@ -177,72 +177,30 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 		}
 	}
 
-	Raylib::Color raylibTint;
-	{
-		float alpha = 1;
-		int a, r, g, b;
-		hexToArgb(tint, &a, &r, &g, &b);
-		a *= alpha;
-		r *= a/255.0;
-		g *= a/255.0;
-		b *= a/255.0;
-		tint = argbToHex(a, r, g, b);
-		raylibTint = toRaylibColor(tint);
+	Texture *texture = renderer->whiteTexture;
+	Raylib::rlSetTexture(texture->raylibTexture.id);
 
-		Texture *texture = renderer->whiteTexture;
-		Raylib::Texture raylibTexture = texture->raylibTexture;
-		Raylib::rlCheckRenderBatchLimit((mesh->indsNum/3 - 1)*4);
+	Raylib::rlCheckRenderBatchLimit((mesh->indsNum/3 - 1)*4);
+	Raylib::rlBegin(RL_TRIANGLES);
 
-		Raylib::rlSetTexture(raylibTexture.id);
-
-		Raylib::rlBegin(RL_TRIANGLES);
-	}
-
-	for (int i = 0; i < mesh->indsNum/3; i++) {
-		MeshVertex meshVerts[3] = {
-			mesh->verts[mesh->inds[i * 3 + 0]],
-			mesh->verts[mesh->inds[i * 3 + 1]],
-			mesh->verts[mesh->inds[i * 3 + 2]],
-		};
-
-		Vec3 verts[3] = {
-			meshVerts[0].position,
-			meshVerts[1].position,
-			meshVerts[2].position,
-		};
-
-		Vec2 uvs[3] = {
-			meshVerts[0].uv,
-			meshVerts[1].uv,
-			meshVerts[2].uv,
-		};
-
-		for (int i = 0; i < 3; i++) {
-			if (skeleton) {
-				MeshVertex meshVert = meshVerts[i];
-				Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
-				boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
-				boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
-				boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
-				verts[i] = boneTrans * verts[i];
-				verts[i] = matrix * verts[i];
-
-				// Vec4 vert4 = v4(verts[i], 1);
-				// vert4 = boneTrans * vert4;
-				// verts[i] = v3(vert4);
-			} else {
-				verts[i] = matrix * verts[i];
-			}
-
-			Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
-			Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
+	for (int i = 0; i < mesh->indsNum; i++) {
+		MeshVertex meshVert = mesh->verts[mesh->inds[i]];
+		Vec3 position = meshVert.position;
+		Vec2 uv = meshVert.uv;
+		if (skeleton) {
+			Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
+			boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
+			boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
+			boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
+			position = matrix * boneTrans * position;
+		} else {
+			position = matrix * position;
 		}
 
-		// drawTriangle(renderer->whiteTexture, verts, uvs);
+		Raylib::rlTexCoord2f(uv.x, uv.y);
+		Raylib::rlVertex3f(position.x, position.y, position.z);
 	}
 
 	Raylib::rlEnd();
-
 	Raylib::rlSetTexture(0);
 }
