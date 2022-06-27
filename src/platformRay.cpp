@@ -138,6 +138,8 @@ void pngQuantImage(const char *path);
 /// FUNCTIONS ^
 
 void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
+	Raylib::SetTraceLogLevel(Raylib::LOG_WARNING);
+
 	platform = (Platform *)zalloc(sizeof(Platform));
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
@@ -638,8 +640,6 @@ void initRenderer(int width, int height) {
 
 		renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
 	} ///
-
-	Raylib::SetTraceLogLevel(Raylib::LOG_WARNING);
 
 	u64 whiteData = 0xFFFFFFFF;
 	renderer->whiteTexture = createTexture(1, 1, &whiteData);

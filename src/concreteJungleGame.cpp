@@ -1140,7 +1140,6 @@ void updateGame() {
 		game->particles = (Particle *)zalloc(sizeof(Particle) * game->particlesMax);
 
 		game->debugTimeScale = 1;
-		game->debugDrawUnitBillboards = true;
 		game->debugDrawUnitModels = true;
 		game->debugDrawHitboxes = true;
 		game->debugDrawActorStatsSimple = true;

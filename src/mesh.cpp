@@ -41,7 +41,7 @@ struct MeshSystem {
 	Mesh meshes[MESHES_MAX];
 	int meshesNum;
 
-	Raylib::Mesh raylibDynamicMesh;
+	Raylib::Material raylibMaterial;
 };
 
 MeshSystem *meshSys = NULL;
@@ -55,6 +55,8 @@ void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int ti
 
 void initMesh() {
 	meshSys = (MeshSystem *)zalloc(sizeof(MeshSystem));
+
+	meshSys->raylibMaterial = Raylib::LoadMaterialDefault();
 }
 
 Mesh *getMesh(char *path) {
@@ -188,6 +190,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	// This could be much faster if it was global and resizable
 	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
 	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
+	Vec3 *normals = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
 
 	for (int i = 0; i < mesh->indsNum; i++) {
 		MeshVertex meshVert = mesh->verts[mesh->inds[i]];
@@ -197,29 +200,35 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 			boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
 			boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
 			positions[i] = boneTrans * meshVert.position;
+			normals[i] = boneTrans.invert().transpose() * meshVert.normal;
 		} else {
 			positions[i] = meshVert.position;
+			normals[i] = meshVert.normal;
 		}
 		uvs[i] = meshVert.uv;
+		normals[i] = meshVert.normal;
 	}
 
 	Raylib::Mesh raylibMesh = {};
 	raylibMesh.vertices = &positions[0].x;
 	raylibMesh.texcoords = &uvs[0].x;
+	raylibMesh.normals = &normals[0].x;
 	raylibMesh.triangleCount = mesh->indsNum/3;
 	raylibMesh.vertexCount = mesh->vertsNum;
 
 	Raylib::UploadMesh(&raylibMesh, false);
 
-	Raylib::Material raylibMaterial = Raylib::LoadMaterialDefault();
+	meshSys->raylibMaterial.shader = renderer->lightingShader;
+	// meshSys->raylibMaterial.maps[MATERIAL_MAP_DIFFUSE] =
+	meshSys->raylibMaterial.maps[Raylib::MATERIAL_MAP_DIFFUSE].color = toRaylibColor(tint);
+
+	Raylib::rlDisableBackfaceCulling(); //@hack Triangle winding is backwards for me, and Raylib doesn't have a way of changing it
 
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
-	DrawMesh(raylibMesh, raylibMaterial, raylibMatrix);
+	DrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
 
-	// Unload
+	// Unload mesh
 	Raylib::rlUnloadVertexArray(raylibMesh.vaoId);
 	const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
 	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(raylibMesh.vboId[i]);
-
-	Raylib::UnloadMaterial(raylibMaterial);
 }
