@@ -53,38 +53,6 @@ void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int ti
 namespace Raylib {
 	void MyDrawMesh(Mesh mesh, Material material, Matrix transform) {
     const int MAX_MATERIAL_MAPS = 12;
-#if defined(GRAPHICS_API_OPENGL_11)
-#define GL_VERTEX_ARRAY         0x8074
-#define GL_NORMAL_ARRAY         0x8075
-#define GL_COLOR_ARRAY          0x8076
-#define GL_TEXTURE_COORD_ARRAY  0x8078
-
-		rlEnableTexture(material.maps[MATERIAL_MAP_DIFFUSE].texture.id);
-
-		rlEnableStatePointer(GL_VERTEX_ARRAY, mesh.vertices);
-		rlEnableStatePointer(GL_TEXTURE_COORD_ARRAY, mesh.texcoords);
-		rlEnableStatePointer(GL_NORMAL_ARRAY, mesh.normals);
-		rlEnableStatePointer(GL_COLOR_ARRAY, mesh.colors);
-
-		rlPushMatrix();
-		rlMultMatrixf(MatrixToFloat(transform));
-		rlColor4ub(material.maps[MATERIAL_MAP_DIFFUSE].color.r,
-			material.maps[MATERIAL_MAP_DIFFUSE].color.g,
-			material.maps[MATERIAL_MAP_DIFFUSE].color.b,
-			material.maps[MATERIAL_MAP_DIFFUSE].color.a);
-
-		if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, mesh.indices);
-		else rlDrawVertexArray(0, mesh.vertexCount);
-		rlPopMatrix();
-
-		rlDisableStatePointer(GL_VERTEX_ARRAY);
-		rlDisableStatePointer(GL_TEXTURE_COORD_ARRAY);
-		rlDisableStatePointer(GL_NORMAL_ARRAY);
-		rlDisableStatePointer(GL_COLOR_ARRAY);
-
-		rlDisableTexture();
-#endif
-
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
 		// Bind shader program
 		rlEnableShader(material.shader.id);
@@ -92,8 +60,7 @@ namespace Raylib {
 		// Send required data to shader (matrices, values)
 		//-----------------------------------------------------
 		// Upload to shader material.colDiffuse
-		if (material.shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1)
-		{
+		if (material.shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1) {
 			float values[4] = {
 				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.r/255.0f,
 				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.g/255.0f,
@@ -105,8 +72,7 @@ namespace Raylib {
 		}
 
 		// Upload to shader material.colSpecular (if location available)
-		if (material.shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1)
-		{
+		if (material.shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1) {
 			float values[4] = {
 				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.r/255.0f,
 				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.g/255.0f,
@@ -147,10 +113,8 @@ namespace Raylib {
 		//-----------------------------------------------------
 
 		// Bind active texture maps (if available)
-		for (int i = 0; i < MAX_MATERIAL_MAPS; i++)
-		{
-			if (material.maps[i].texture.id > 0)
-			{
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
+			if (material.maps[i].texture.id > 0) {
 				// Select current shader texture slot
 				rlActiveTextureSlot(i);
 
@@ -165,91 +129,24 @@ namespace Raylib {
 		}
 
 		// Try binding vertex array objects (VAO)
-		// or use VBOs if not possible
-		if (!rlEnableVertexArray(mesh.vaoId))
-		{
-			// Bind mesh VBO data: vertex position (shader-location = 0)
-			rlEnableVertexBuffer(mesh.vboId[0]);
-			rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_POSITION], 3, RL_FLOAT, 0, 0, 0);
-			rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_POSITION]);
-
-			// Bind mesh VBO data: vertex texcoords (shader-location = 1)
-			rlEnableVertexBuffer(mesh.vboId[1]);
-			rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01], 2, RL_FLOAT, 0, 0, 0);
-			rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01]);
-
-			if (material.shader.locs[SHADER_LOC_VERTEX_NORMAL] != -1)
-			{
-				// Bind mesh VBO data: vertex normals (shader-location = 2)
-				rlEnableVertexBuffer(mesh.vboId[2]);
-				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_NORMAL], 3, RL_FLOAT, 0, 0, 0);
-				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_NORMAL]);
-			}
-
-			// Bind mesh VBO data: vertex colors (shader-location = 3, if available)
-			if (material.shader.locs[SHADER_LOC_VERTEX_COLOR] != -1)
-			{
-				if (mesh.vboId[3] != 0)
-				{
-					rlEnableVertexBuffer(mesh.vboId[3]);
-					rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR], 4, RL_UNSIGNED_BYTE, 0, 0, 0);
-					rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR]);
-				}
-				else
-				{
-					// Set default value for unused attribute
-					// NOTE: Required when using default shader and no VAO support
-					float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-					rlSetVertexAttributeDefault(material.shader.locs[SHADER_LOC_VERTEX_COLOR], value, SHADER_ATTRIB_VEC2, 4);
-					rlDisableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR]);
-				}
-			}
-
-			// Bind mesh VBO data: vertex tangents (shader-location = 4, if available)
-			if (material.shader.locs[SHADER_LOC_VERTEX_TANGENT] != -1)
-			{
-				rlEnableVertexBuffer(mesh.vboId[4]);
-				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TANGENT], 4, RL_FLOAT, 0, 0, 0);
-				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TANGENT]);
-			}
-
-			// Bind mesh VBO data: vertex texcoords2 (shader-location = 5, if available)
-			if (material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02] != -1)
-			{
-				rlEnableVertexBuffer(mesh.vboId[5]);
-				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02], 2, RL_FLOAT, 0, 0, 0);
-				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02]);
-			}
-
-			if (mesh.indices != NULL) rlEnableVertexBufferElement(mesh.vboId[6]);
+		// or use VBOs if not possible (just return actually lol)
+		if (!rlEnableVertexArray(mesh.vaoId)) {
+			logf("Couldn't bind vao (bad gpu support?)\n");
+			return;
 		}
 
-		int eyeCount = 1;
-		if (rlIsStereoRenderEnabled()) eyeCount = 2;
+		// Calculate model-view-projection matrix (MVP)
+		Matrix matModelViewProjection = MatrixMultiply(matModelView, matProjection);
 
-		for (int eye = 0; eye < eyeCount; eye++)
-		{
-			// Calculate model-view-projection matrix (MVP)
-			Matrix matModelViewProjection = MatrixIdentity();
-			if (eyeCount == 1) matModelViewProjection = MatrixMultiply(matModelView, matProjection);
-			else
-			{
-				// Setup current eye viewport (half screen width)
-				rlViewport(eye*rlGetFramebufferWidth()/2, 0, rlGetFramebufferWidth()/2, rlGetFramebufferHeight());
-				matModelViewProjection = MatrixMultiply(MatrixMultiply(matModelView, rlGetMatrixViewOffsetStereo(eye)), rlGetMatrixProjectionStereo(eye));
-			}
+		// Send combined model-view-projection matrix to shader
+		rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MVP], matModelViewProjection);
 
-			// Send combined model-view-projection matrix to shader
-			rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MVP], matModelViewProjection);
-
-			// Draw mesh
-			if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, 0);
-			else rlDrawVertexArray(0, mesh.vertexCount);
-		}
+		// Draw mesh
+		if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, 0);
+		else rlDrawVertexArray(0, mesh.vertexCount);
 
 		// Unbind all binded texture maps
-		for (int i = 0; i < MAX_MATERIAL_MAPS; i++)
-		{
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
 			// Select current shader texture slot
 			rlActiveTextureSlot(i);
 
@@ -271,13 +168,13 @@ namespace Raylib {
 		// Restore rlgl internal modelview and projection matrices
 		rlSetMatrixModelview(matView);
 		rlSetMatrixProjection(matProjection);
+#else
+		logf("Can't use meshes in gles!\n");
 #endif
 	}
 
-	void MyUploadMesh(Mesh *mesh, bool dynamic)
-	{
-		if (mesh->vaoId > 0)
-		{
+	void MyUploadMesh(Mesh *mesh, bool dynamic) {
+		if (mesh->vaoId > 0) {
 			// Check if mesh has already been loaded in GPU
 			TRACELOG(LOG_WARNING, "VAO: [ID %i] Trying to re-load an already loaded mesh", mesh->vaoId);
 			return;
@@ -295,7 +192,6 @@ namespace Raylib {
 		mesh->vboId[5] = 0;     // Vertex buffer: texcoords2
 		mesh->vboId[6] = 0;     // Vertex buffer: indices
 
-#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
 		mesh->vaoId = rlLoadVertexArray();
 		rlEnableVertexArray(mesh->vaoId);
 
@@ -312,77 +208,60 @@ namespace Raylib {
 		rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
 		rlEnableVertexAttribute(1);
 
-		if (mesh->normals != NULL)
-		{
+		if (mesh->normals != NULL) {
 			// Enable vertex attributes: normals (shader-location = 2)
 			void *normals = mesh->animNormals != NULL ? mesh->animNormals : mesh->normals;
 			mesh->vboId[2] = rlLoadVertexBuffer(normals, mesh->vertexCount*3*sizeof(float), dynamic);
 			rlSetVertexAttribute(2, 3, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(2);
-		}
-		else
-		{
+		} else {
 			// Default color vertex attribute set to WHITE
 			float value[3] = { 1.0f, 1.0f, 1.0f };
 			rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
 			rlDisableVertexAttribute(2);
 		}
 
-		if (mesh->colors != NULL)
-		{
+		if (mesh->colors != NULL) {
 			// Enable vertex attribute: color (shader-location = 3)
 			mesh->vboId[3] = rlLoadVertexBuffer(mesh->colors, mesh->vertexCount*4*sizeof(unsigned char), dynamic);
 			rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, 0, 0, 0);
 			rlEnableVertexAttribute(3);
-		}
-		else
-		{
+		} else {
 			// Default color vertex attribute set to WHITE
 			float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 			rlSetVertexAttributeDefault(3, value, SHADER_ATTRIB_VEC4, 4);
 			rlDisableVertexAttribute(3);
 		}
 
-		if (mesh->tangents != NULL)
-		{
+		if (mesh->tangents != NULL) {
 			// Enable vertex attribute: tangent (shader-location = 4)
 			mesh->vboId[4] = rlLoadVertexBuffer(mesh->tangents, mesh->vertexCount*4*sizeof(float), dynamic);
 			rlSetVertexAttribute(4, 4, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(4);
-		}
-		else
-		{
+		} else {
 			// Default tangents vertex attribute
 			float value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 			rlSetVertexAttributeDefault(4, value, SHADER_ATTRIB_VEC4, 4);
 			rlDisableVertexAttribute(4);
 		}
 
-		if (mesh->texcoords2 != NULL)
-		{
+		if (mesh->texcoords2 != NULL) {
 			// Enable vertex attribute: texcoord2 (shader-location = 5)
 			mesh->vboId[5] = rlLoadVertexBuffer(mesh->texcoords2, mesh->vertexCount*2*sizeof(float), dynamic);
 			rlSetVertexAttribute(5, 2, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(5);
-		}
-		else
-		{
+		} else {
 			// Default texcoord2 vertex attribute
 			float value[2] = { 0.0f, 0.0f };
 			rlSetVertexAttributeDefault(5, value, SHADER_ATTRIB_VEC2, 2);
 			rlDisableVertexAttribute(5);
 		}
 
-		if (mesh->indices != NULL)
-		{
-			mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned short), dynamic);
-		}
+		if (mesh->indices != NULL) mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned short), dynamic);
 
-		if (mesh->vaoId > 0) TRACELOG(LOG_INFO, "VAO: [ID %i] Mesh uploaded successfully to VRAM (GPU)", mesh->vaoId);
-		else TRACELOG(LOG_INFO, "VBO: Mesh uploaded successfully to VRAM (GPU)");
+		if (!mesh->vaoId) logf("Failed to upload mesh (no vao support?)");
 
 		rlDisableVertexArray();
-#endif
 	}
 }
 
@@ -584,4 +463,3 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
 	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(raylibMesh.vboId[i]);
 }
-

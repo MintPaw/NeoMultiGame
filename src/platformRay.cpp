@@ -653,7 +653,6 @@ void initRenderer(int width, int height) {
 
 			int ambientLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
 			renderer->lightingAnimatedShaderBoneTransformsLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "boneTransforms");
-			logf("%d\n", renderer->lightingAnimatedShaderBoneTransformsLoc);
 
 			Raylib::SetShaderValue(renderer->lightingAnimatedShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
 			renderer->lightsAnimated[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
@@ -1381,7 +1380,9 @@ void updateLightingShader(Camera camera) {
 	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[1]);
 	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[2]);
 	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[3]);
-	Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+
+	// This happens automatically because of drawMesh
+	// Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
 }
 
 void resetRenderContext() {
