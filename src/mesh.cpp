@@ -54,12 +54,8 @@ namespace Raylib {
 	void MyDrawMesh(Mesh mesh, Material material, Matrix transform) {
     const int MAX_MATERIAL_MAPS = 12;
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
-		// Bind shader program
 		rlEnableShader(material.shader.id);
 
-		// Send required data to shader (matrices, values)
-		//-----------------------------------------------------
-		// Upload to shader material.colDiffuse
 		if (material.shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1) {
 			float values[4] = {
 				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.r/255.0f,
@@ -71,7 +67,6 @@ namespace Raylib {
 			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_DIFFUSE], values, SHADER_UNIFORM_VEC4, 1);
 		}
 
-		// Upload to shader material.colSpecular (if location available)
 		if (material.shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1) {
 			float values[4] = {
 				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.r/255.0f,
@@ -83,42 +78,25 @@ namespace Raylib {
 			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_SPECULAR], values, SHADER_UNIFORM_VEC4, 1);
 		}
 
-		// Get a copy of current matrices to work with,
-		// just in case stereo render is required and we need to modify them
-		// NOTE: At this point the modelview matrix just contains the view matrix (camera)
-		// That's because BeginMode3D() sets it and there is no model-drawing function
-		// that modifies it, all use rlPushMatrix() and rlPopMatrix()
 		Matrix matModel = MatrixIdentity();
 		Matrix matView = rlGetMatrixModelview();
 		Matrix matModelView = MatrixIdentity();
 		Matrix matProjection = rlGetMatrixProjection();
 
-		// Upload view and projection matrices (if locations available)
 		if (material.shader.locs[SHADER_LOC_MATRIX_VIEW] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_VIEW], matView);
 		if (material.shader.locs[SHADER_LOC_MATRIX_PROJECTION] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_PROJECTION], matProjection);
-
-		// Model transformation matrix is send to shader uniform location: SHADER_LOC_MATRIX_MODEL
 		if (material.shader.locs[SHADER_LOC_MATRIX_MODEL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MODEL], transform);
 
-		// Accumulate several model transformations:
-		//    transform: model transformation provided (includes DrawModel() params combined with model.transform)
-		//    rlGetMatrixTransform(): rlgl internal transform matrix due to push/pop matrix stack
 		matModel = MatrixMultiply(transform, rlGetMatrixTransform());
 
-		// Get model-view matrix
 		matModelView = MatrixMultiply(matModel, matView);
 
-		// Upload model normal matrix (if locations available)
 		if (material.shader.locs[SHADER_LOC_MATRIX_NORMAL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
-		//-----------------------------------------------------
 
-		// Bind active texture maps (if available)
 		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
 			if (material.maps[i].texture.id > 0) {
-				// Select current shader texture slot
 				rlActiveTextureSlot(i);
 
-				// Enable texture for active slot
 				if ((i == MATERIAL_MAP_IRRADIANCE) ||
 					(i == MATERIAL_MAP_PREFILTER) ||
 					(i == MATERIAL_MAP_CUBEMAP)) rlEnableTextureCubemap(material.maps[i].texture.id);
@@ -128,44 +106,33 @@ namespace Raylib {
 			}
 		}
 
-		// Try binding vertex array objects (VAO)
-		// or use VBOs if not possible (just return actually lol)
 		if (!rlEnableVertexArray(mesh.vaoId)) {
 			logf("Couldn't bind vao (bad gpu support?)\n");
 			return;
 		}
 
-		// Calculate model-view-projection matrix (MVP)
 		Matrix matModelViewProjection = MatrixMultiply(matModelView, matProjection);
 
-		// Send combined model-view-projection matrix to shader
 		rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MVP], matModelViewProjection);
 
-		// Draw mesh
 		if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, 0);
 		else rlDrawVertexArray(0, mesh.vertexCount);
 
-		// Unbind all binded texture maps
 		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
-			// Select current shader texture slot
 			rlActiveTextureSlot(i);
 
-			// Disable texture for active slot
 			if ((i == MATERIAL_MAP_IRRADIANCE) ||
 				(i == MATERIAL_MAP_PREFILTER) ||
 				(i == MATERIAL_MAP_CUBEMAP)) rlDisableTextureCubemap();
 			else rlDisableTexture();
 		}
 
-		// Disable all possible vertex array objects (or VBOs)
 		rlDisableVertexArray();
 		rlDisableVertexBuffer();
 		rlDisableVertexBufferElement();
 
-		// Disable shader program
 		rlDisableShader();
 
-		// Restore rlgl internal modelview and projection matrices
 		rlSetMatrixModelview(matView);
 		rlSetMatrixProjection(matProjection);
 #else
@@ -175,7 +142,6 @@ namespace Raylib {
 
 	void MyUploadMesh(Mesh *mesh, bool dynamic) {
 		if (mesh->vaoId > 0) {
-			// Check if mesh has already been loaded in GPU
 			TRACELOG(LOG_WARNING, "VAO: [ID %i] Trying to re-load an already loaded mesh", mesh->vaoId);
 			return;
 		}
@@ -195,63 +161,51 @@ namespace Raylib {
 		mesh->vaoId = rlLoadVertexArray();
 		rlEnableVertexArray(mesh->vaoId);
 
-		// NOTE: Attributes must be uploaded considering default locations points
-
-		// Enable vertex attributes: position (shader-location = 0)
 		void *vertices = mesh->animVertices != NULL ? mesh->animVertices : mesh->vertices;
 		mesh->vboId[0] = rlLoadVertexBuffer(vertices, mesh->vertexCount*3*sizeof(float), dynamic);
 		rlSetVertexAttribute(0, 3, RL_FLOAT, 0, 0, 0);
 		rlEnableVertexAttribute(0);
 
-		// Enable vertex attributes: texcoords (shader-location = 1)
 		mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
 		rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
 		rlEnableVertexAttribute(1);
 
 		if (mesh->normals != NULL) {
-			// Enable vertex attributes: normals (shader-location = 2)
 			void *normals = mesh->animNormals != NULL ? mesh->animNormals : mesh->normals;
 			mesh->vboId[2] = rlLoadVertexBuffer(normals, mesh->vertexCount*3*sizeof(float), dynamic);
 			rlSetVertexAttribute(2, 3, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(2);
 		} else {
-			// Default color vertex attribute set to WHITE
 			float value[3] = { 1.0f, 1.0f, 1.0f };
 			rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
 			rlDisableVertexAttribute(2);
 		}
 
 		if (mesh->colors != NULL) {
-			// Enable vertex attribute: color (shader-location = 3)
 			mesh->vboId[3] = rlLoadVertexBuffer(mesh->colors, mesh->vertexCount*4*sizeof(unsigned char), dynamic);
 			rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, 0, 0, 0);
 			rlEnableVertexAttribute(3);
 		} else {
-			// Default color vertex attribute set to WHITE
 			float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 			rlSetVertexAttributeDefault(3, value, SHADER_ATTRIB_VEC4, 4);
 			rlDisableVertexAttribute(3);
 		}
 
 		if (mesh->tangents != NULL) {
-			// Enable vertex attribute: tangent (shader-location = 4)
 			mesh->vboId[4] = rlLoadVertexBuffer(mesh->tangents, mesh->vertexCount*4*sizeof(float), dynamic);
 			rlSetVertexAttribute(4, 4, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(4);
 		} else {
-			// Default tangents vertex attribute
 			float value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 			rlSetVertexAttributeDefault(4, value, SHADER_ATTRIB_VEC4, 4);
 			rlDisableVertexAttribute(4);
 		}
 
 		if (mesh->texcoords2 != NULL) {
-			// Enable vertex attribute: texcoord2 (shader-location = 5)
 			mesh->vboId[5] = rlLoadVertexBuffer(mesh->texcoords2, mesh->vertexCount*2*sizeof(float), dynamic);
 			rlSetVertexAttribute(5, 2, RL_FLOAT, 0, 0, 0);
 			rlEnableVertexAttribute(5);
 		} else {
-			// Default texcoord2 vertex attribute
 			float value[2] = { 0.0f, 0.0f };
 			rlSetVertexAttributeDefault(5, value, SHADER_ATTRIB_VEC2, 2);
 			rlDisableVertexAttribute(5);
