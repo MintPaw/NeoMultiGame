@@ -473,6 +473,9 @@ struct Renderer {
 	Raylib::Shader lightingShader;
 	int lightingShaderAlphaLoc;
 
+	Raylib::Shader lightingAnimatedShader;
+	int lightingAnimatedShaderBoneTransformsLoc;
+
 	Raylib::Shader alphaDiscardShader;
 
 	Raylib::Shader danmakuShader;
@@ -501,6 +504,7 @@ struct Renderer {
 	Texture *linearGrad256;
 
 	Raylib::Light lights[MAX_LIGHTS];
+	Raylib::Light lightsAnimated[MAX_LIGHTS];
 	Raylib::Model cubeModel;
 	Raylib::Model coneModel;
 	Raylib::Model sphereModel;
@@ -516,6 +520,12 @@ Renderer *renderer = NULL;
 Raylib::Color toRaylibColor(int color) { return Raylib::GetColor(argbToRgba(color)); }
 Raylib::Vector3 toRaylib(Vec3 vec) { return {vec.x, vec.y, vec.z}; }
 Vec3 v3(Raylib::Vector3 vec) { return v3(vec.x, vec.y, vec.z); }
+Raylib::Matrix toRaylib(Matrix4 matrix) {
+	Raylib::Matrix raylibMatrix = {};
+	memcpy(&raylibMatrix.m0, matrix.transpose().data, sizeof(float) * 16);
+	return raylibMatrix;
+}
+
 
 void initRenderer(int width, int height);
 void clearRenderer(int color=0);
@@ -633,6 +643,21 @@ void initRenderer(int width, int height) {
 		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
 		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
 		renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
+
+		{
+			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.vs", glslFolder));
+			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.fs", glslFolder));
+			renderer->lightingAnimatedShader = Raylib::LoadShaderFromMemory(vs, fs);
+			free(vs);
+			free(fs);
+
+			int ambientLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
+			renderer->lightingAnimatedShaderBoneTransformsLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "boneTransforms");
+			logf("%d\n", renderer->lightingAnimatedShaderBoneTransformsLoc);
+
+			Raylib::SetShaderValue(renderer->lightingAnimatedShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+			renderer->lightsAnimated[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
+		}
 
 		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
 		renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
@@ -1351,6 +1376,12 @@ void updateLightingShader(Camera camera) {
 	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[2]);
 	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[3]);
 	Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+
+	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[0]);
+	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[1]);
+	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[2]);
+	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[3]);
+	Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
 }
 
 void resetRenderContext() {

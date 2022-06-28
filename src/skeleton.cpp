@@ -1,5 +1,3 @@
-#define BONES_PER_ANIMATION_LIMIT 64 // Must match shader
-
 struct SkeletonAnimation {
 	char *name;
 	int firstFrame;
@@ -35,67 +33,6 @@ struct BaseSkeleton {
 
 	/// Unserialized
 };
-
-void readAnimation(DataStream *stream, SkeletonAnimation *anim) {
-	anim->name = readString(stream);
-	anim->firstFrame = readU32(stream);
-	anim->frameCount = readU32(stream);
-	anim->frameRate = 60;
-}
-
-void readBone(DataStream *stream, Bone *bone, int frameCount) {
-	bone->name = readString(stream);
-	// logf("Bone name: %s\n", bone->name);
-	bone->parent = (s8)readU8(stream);
-	bone->modelSpaceMatrix = readMatrix4(stream);
-	bone->localSpaceMatrix = bone->modelSpaceMatrix;
-	bone->invModelSpaceMatrix = bone->modelSpaceMatrix.invert();
-	bone->poseXforms = (Xform *)zalloc(sizeof(Xform) * frameCount);
-	// logf("%s would read %d matrices\n", bone->name, frameCount);
-	for (int i = 0; i < frameCount; i++) {
-		Matrix4 matrix = readMatrix4(stream);
-		bone->poseXforms[i] = toXform(matrix);
-	}
-}
-
-void readBaseSkeleton(DataStream *stream, BaseSkeleton *base) {
-	base->version = readU8(stream);
-	char *name = readString(stream);
-	strncpy(base->name, name, PATH_MAX_LEN);
-	free(name);
-
-	base->frameCount = readU32(stream);
-
-	base->bonesNum = readU32(stream);
-	base->bones = (Bone *)zalloc(sizeof(Bone) * base->bonesNum);
-	for (int i = 0; i < base->bonesNum; i++) {
-		Bone *bone = &base->bones[i];
-		readBone(stream, bone, base->frameCount);
-	}
-
-	base->animationsNum = readU32(stream);
-	base->animations = (SkeletonAnimation *)zalloc(sizeof(SkeletonAnimation) * base->animationsNum);
-	for (int i = 0; i < base->animationsNum; i++) {
-		SkeletonAnimation *anim = &base->animations[i];
-		readAnimation(stream, anim);
-	}
-
-	for (int i = 0; i < base->bonesNum; i++) {
-		Bone *bone = &base->bones[i];
-		if (bone->parent < 0) continue;
-		Bone *parent = &base->bones[bone->parent];
-		bone->localSpaceMatrix = parent->modelSpaceMatrix.invert() * bone->modelSpaceMatrix;
-	}
-
-	// for (int i = 0; i < base->bonesNum; i++) {
-	// 	Bone *bone = &base->bones[i];
-	// 	for (int i = 0; i < base->frameCount; i++) {
-	// 		if (bone->parent < 0) continue;
-	// 		Bone *parent = &base->bones[bone->parent];
-	// 		bone->poseXforms[i] = toXform(parent->invModelSpaceMatrix * toMatrix(bone->poseXforms[i]));
-	// 	}
-	// }
-}
 
 enum SkeletonBlendType {
 	SKELETON_BLEND_ANIMATION,
@@ -196,6 +133,60 @@ BaseSkeleton *getBaseSkeleton(char *path) {
 	destroyDataStream(stream);
 
 	return base;
+}
+
+void readAnimation(DataStream *stream, SkeletonAnimation *anim) {
+	anim->name = readString(stream);
+	anim->firstFrame = readU32(stream);
+	anim->frameCount = readU32(stream);
+	anim->frameRate = 60;
+}
+
+void readBone(DataStream *stream, Bone *bone, int frameCount) {
+	bone->name = readString(stream);
+	// logf("Bone name: %s\n", bone->name);
+	bone->parent = (s8)readU8(stream);
+	bone->modelSpaceMatrix = readMatrix4(stream);
+	bone->localSpaceMatrix = bone->modelSpaceMatrix;
+	bone->invModelSpaceMatrix = bone->modelSpaceMatrix.invert();
+	bone->poseXforms = (Xform *)zalloc(sizeof(Xform) * frameCount);
+	// logf("%s would read %d matrices\n", bone->name, frameCount);
+	for (int i = 0; i < frameCount; i++) {
+		Matrix4 matrix = readMatrix4(stream);
+		bone->poseXforms[i] = toXform(matrix);
+	}
+}
+
+void readBaseSkeleton(DataStream *stream, BaseSkeleton *base) {
+	base->version = readU8(stream);
+	char *name = readString(stream);
+	strncpy(base->name, name, PATH_MAX_LEN);
+	free(name);
+
+	base->frameCount = readU32(stream);
+
+	base->bonesNum = readU32(stream);
+	base->bones = (Bone *)zalloc(sizeof(Bone) * base->bonesNum);
+	for (int i = 0; i < base->bonesNum; i++) {
+		Bone *bone = &base->bones[i];
+		readBone(stream, bone, base->frameCount);
+	}
+
+	base->animationsNum = readU32(stream);
+	base->animations = (SkeletonAnimation *)zalloc(sizeof(SkeletonAnimation) * base->animationsNum);
+	for (int i = 0; i < base->animationsNum; i++) {
+		SkeletonAnimation *anim = &base->animations[i];
+		readAnimation(stream, anim);
+	}
+
+	for (int i = 0; i < base->bonesNum; i++) {
+		Bone *bone = &base->bones[i];
+		if (bone->parent < 0) continue;
+		Bone *parent = &base->bones[bone->parent];
+		bone->localSpaceMatrix = parent->modelSpaceMatrix.invert() * bone->modelSpaceMatrix;
+	}
+
+	if (base->bonesNum > BONES_MAX) logf ("Too many bones (%d on %s)!!!\n", base->bonesNum, base->name);
 }
 
 Skeleton *deriveSkeleton(char *skeletonPath) {

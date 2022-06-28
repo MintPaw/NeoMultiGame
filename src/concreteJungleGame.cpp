@@ -1246,9 +1246,7 @@ void updateGame() {
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
-						// Vec4 color = hexToArgbFloat(element->color);
-						Vec4 color = v4(1, 0, 0, 1);
-						drawModel(element->model, element->modelMatrix, element->skeleton, 0xFF00FF00);
+						drawModel(element->model, element->modelMatrix, element->skeleton, element->color);
 					}
 				}
 
@@ -4868,20 +4866,6 @@ void removeActorById(Map *map, int id) {
 
 void removeActorByIndex(Map *map, int index) {
 	Actor *actor = &map->actors[index];
-
-	// if (actor->skeleton) {
-	// 	for (int i = 0; i < game->worldElementsNum; i++) {
-	// 		WorldElement *element = &game->worldElements[i];
-
-	// 		if (element->skeleton == actor->skeleton) {
-	// 			arraySpliceIndex(game->worldElements, game->worldElementsNum, sizeof(WorldElement), i);
-	// 			game->worldElementsNum--;
-	// 			i--;
-	// 			continue;
-	// 		}
-	// 	}
-	// }
-
 
 	if (actor->items) free(actor->items);
 	if (actor->skeleton) destroySkeleton(actor->skeleton);

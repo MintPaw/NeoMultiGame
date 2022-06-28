@@ -50,6 +50,341 @@ void initMesh();
 Mesh *getMesh(char *path);
 void readMesh(DataStream *stream, char *meshDir, Mesh *mesh);
 void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int tint=0xFFFFFFFF);
+namespace Raylib {
+	void MyDrawMesh(Mesh mesh, Material material, Matrix transform) {
+    const int MAX_MATERIAL_MAPS = 12;
+#if defined(GRAPHICS_API_OPENGL_11)
+#define GL_VERTEX_ARRAY         0x8074
+#define GL_NORMAL_ARRAY         0x8075
+#define GL_COLOR_ARRAY          0x8076
+#define GL_TEXTURE_COORD_ARRAY  0x8078
+
+		rlEnableTexture(material.maps[MATERIAL_MAP_DIFFUSE].texture.id);
+
+		rlEnableStatePointer(GL_VERTEX_ARRAY, mesh.vertices);
+		rlEnableStatePointer(GL_TEXTURE_COORD_ARRAY, mesh.texcoords);
+		rlEnableStatePointer(GL_NORMAL_ARRAY, mesh.normals);
+		rlEnableStatePointer(GL_COLOR_ARRAY, mesh.colors);
+
+		rlPushMatrix();
+		rlMultMatrixf(MatrixToFloat(transform));
+		rlColor4ub(material.maps[MATERIAL_MAP_DIFFUSE].color.r,
+			material.maps[MATERIAL_MAP_DIFFUSE].color.g,
+			material.maps[MATERIAL_MAP_DIFFUSE].color.b,
+			material.maps[MATERIAL_MAP_DIFFUSE].color.a);
+
+		if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, mesh.indices);
+		else rlDrawVertexArray(0, mesh.vertexCount);
+		rlPopMatrix();
+
+		rlDisableStatePointer(GL_VERTEX_ARRAY);
+		rlDisableStatePointer(GL_TEXTURE_COORD_ARRAY);
+		rlDisableStatePointer(GL_NORMAL_ARRAY);
+		rlDisableStatePointer(GL_COLOR_ARRAY);
+
+		rlDisableTexture();
+#endif
+
+#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+		// Bind shader program
+		rlEnableShader(material.shader.id);
+
+		// Send required data to shader (matrices, values)
+		//-----------------------------------------------------
+		// Upload to shader material.colDiffuse
+		if (material.shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1)
+		{
+			float values[4] = {
+				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.r/255.0f,
+				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.g/255.0f,
+				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.b/255.0f,
+				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.a/255.0f
+			};
+
+			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_DIFFUSE], values, SHADER_UNIFORM_VEC4, 1);
+		}
+
+		// Upload to shader material.colSpecular (if location available)
+		if (material.shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1)
+		{
+			float values[4] = {
+				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.r/255.0f,
+				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.g/255.0f,
+				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.b/255.0f,
+				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.a/255.0f
+			};
+
+			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_SPECULAR], values, SHADER_UNIFORM_VEC4, 1);
+		}
+
+		// Get a copy of current matrices to work with,
+		// just in case stereo render is required and we need to modify them
+		// NOTE: At this point the modelview matrix just contains the view matrix (camera)
+		// That's because BeginMode3D() sets it and there is no model-drawing function
+		// that modifies it, all use rlPushMatrix() and rlPopMatrix()
+		Matrix matModel = MatrixIdentity();
+		Matrix matView = rlGetMatrixModelview();
+		Matrix matModelView = MatrixIdentity();
+		Matrix matProjection = rlGetMatrixProjection();
+
+		// Upload view and projection matrices (if locations available)
+		if (material.shader.locs[SHADER_LOC_MATRIX_VIEW] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_VIEW], matView);
+		if (material.shader.locs[SHADER_LOC_MATRIX_PROJECTION] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_PROJECTION], matProjection);
+
+		// Model transformation matrix is send to shader uniform location: SHADER_LOC_MATRIX_MODEL
+		if (material.shader.locs[SHADER_LOC_MATRIX_MODEL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MODEL], transform);
+
+		// Accumulate several model transformations:
+		//    transform: model transformation provided (includes DrawModel() params combined with model.transform)
+		//    rlGetMatrixTransform(): rlgl internal transform matrix due to push/pop matrix stack
+		matModel = MatrixMultiply(transform, rlGetMatrixTransform());
+
+		// Get model-view matrix
+		matModelView = MatrixMultiply(matModel, matView);
+
+		// Upload model normal matrix (if locations available)
+		if (material.shader.locs[SHADER_LOC_MATRIX_NORMAL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
+		//-----------------------------------------------------
+
+		// Bind active texture maps (if available)
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++)
+		{
+			if (material.maps[i].texture.id > 0)
+			{
+				// Select current shader texture slot
+				rlActiveTextureSlot(i);
+
+				// Enable texture for active slot
+				if ((i == MATERIAL_MAP_IRRADIANCE) ||
+					(i == MATERIAL_MAP_PREFILTER) ||
+					(i == MATERIAL_MAP_CUBEMAP)) rlEnableTextureCubemap(material.maps[i].texture.id);
+				else rlEnableTexture(material.maps[i].texture.id);
+
+				rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
+			}
+		}
+
+		// Try binding vertex array objects (VAO)
+		// or use VBOs if not possible
+		if (!rlEnableVertexArray(mesh.vaoId))
+		{
+			// Bind mesh VBO data: vertex position (shader-location = 0)
+			rlEnableVertexBuffer(mesh.vboId[0]);
+			rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_POSITION], 3, RL_FLOAT, 0, 0, 0);
+			rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_POSITION]);
+
+			// Bind mesh VBO data: vertex texcoords (shader-location = 1)
+			rlEnableVertexBuffer(mesh.vboId[1]);
+			rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01], 2, RL_FLOAT, 0, 0, 0);
+			rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01]);
+
+			if (material.shader.locs[SHADER_LOC_VERTEX_NORMAL] != -1)
+			{
+				// Bind mesh VBO data: vertex normals (shader-location = 2)
+				rlEnableVertexBuffer(mesh.vboId[2]);
+				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_NORMAL], 3, RL_FLOAT, 0, 0, 0);
+				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_NORMAL]);
+			}
+
+			// Bind mesh VBO data: vertex colors (shader-location = 3, if available)
+			if (material.shader.locs[SHADER_LOC_VERTEX_COLOR] != -1)
+			{
+				if (mesh.vboId[3] != 0)
+				{
+					rlEnableVertexBuffer(mesh.vboId[3]);
+					rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR], 4, RL_UNSIGNED_BYTE, 0, 0, 0);
+					rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR]);
+				}
+				else
+				{
+					// Set default value for unused attribute
+					// NOTE: Required when using default shader and no VAO support
+					float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+					rlSetVertexAttributeDefault(material.shader.locs[SHADER_LOC_VERTEX_COLOR], value, SHADER_ATTRIB_VEC2, 4);
+					rlDisableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_COLOR]);
+				}
+			}
+
+			// Bind mesh VBO data: vertex tangents (shader-location = 4, if available)
+			if (material.shader.locs[SHADER_LOC_VERTEX_TANGENT] != -1)
+			{
+				rlEnableVertexBuffer(mesh.vboId[4]);
+				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TANGENT], 4, RL_FLOAT, 0, 0, 0);
+				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TANGENT]);
+			}
+
+			// Bind mesh VBO data: vertex texcoords2 (shader-location = 5, if available)
+			if (material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02] != -1)
+			{
+				rlEnableVertexBuffer(mesh.vboId[5]);
+				rlSetVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02], 2, RL_FLOAT, 0, 0, 0);
+				rlEnableVertexAttribute(material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD02]);
+			}
+
+			if (mesh.indices != NULL) rlEnableVertexBufferElement(mesh.vboId[6]);
+		}
+
+		int eyeCount = 1;
+		if (rlIsStereoRenderEnabled()) eyeCount = 2;
+
+		for (int eye = 0; eye < eyeCount; eye++)
+		{
+			// Calculate model-view-projection matrix (MVP)
+			Matrix matModelViewProjection = MatrixIdentity();
+			if (eyeCount == 1) matModelViewProjection = MatrixMultiply(matModelView, matProjection);
+			else
+			{
+				// Setup current eye viewport (half screen width)
+				rlViewport(eye*rlGetFramebufferWidth()/2, 0, rlGetFramebufferWidth()/2, rlGetFramebufferHeight());
+				matModelViewProjection = MatrixMultiply(MatrixMultiply(matModelView, rlGetMatrixViewOffsetStereo(eye)), rlGetMatrixProjectionStereo(eye));
+			}
+
+			// Send combined model-view-projection matrix to shader
+			rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MVP], matModelViewProjection);
+
+			// Draw mesh
+			if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, 0);
+			else rlDrawVertexArray(0, mesh.vertexCount);
+		}
+
+		// Unbind all binded texture maps
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++)
+		{
+			// Select current shader texture slot
+			rlActiveTextureSlot(i);
+
+			// Disable texture for active slot
+			if ((i == MATERIAL_MAP_IRRADIANCE) ||
+				(i == MATERIAL_MAP_PREFILTER) ||
+				(i == MATERIAL_MAP_CUBEMAP)) rlDisableTextureCubemap();
+			else rlDisableTexture();
+		}
+
+		// Disable all possible vertex array objects (or VBOs)
+		rlDisableVertexArray();
+		rlDisableVertexBuffer();
+		rlDisableVertexBufferElement();
+
+		// Disable shader program
+		rlDisableShader();
+
+		// Restore rlgl internal modelview and projection matrices
+		rlSetMatrixModelview(matView);
+		rlSetMatrixProjection(matProjection);
+#endif
+	}
+
+	void MyUploadMesh(Mesh *mesh, bool dynamic)
+	{
+		if (mesh->vaoId > 0)
+		{
+			// Check if mesh has already been loaded in GPU
+			TRACELOG(LOG_WARNING, "VAO: [ID %i] Trying to re-load an already loaded mesh", mesh->vaoId);
+			return;
+		}
+
+		const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
+		mesh->vboId = (unsigned int *)RL_CALLOC(MAX_MESH_VERTEX_BUFFERS, sizeof(unsigned int));
+
+		mesh->vaoId = 0;        // Vertex Array Object
+		mesh->vboId[0] = 0;     // Vertex buffer: positions
+		mesh->vboId[1] = 0;     // Vertex buffer: texcoords
+		mesh->vboId[2] = 0;     // Vertex buffer: normals
+		mesh->vboId[3] = 0;     // Vertex buffer: colors
+		mesh->vboId[4] = 0;     // Vertex buffer: tangents
+		mesh->vboId[5] = 0;     // Vertex buffer: texcoords2
+		mesh->vboId[6] = 0;     // Vertex buffer: indices
+
+#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+		mesh->vaoId = rlLoadVertexArray();
+		rlEnableVertexArray(mesh->vaoId);
+
+		// NOTE: Attributes must be uploaded considering default locations points
+
+		// Enable vertex attributes: position (shader-location = 0)
+		void *vertices = mesh->animVertices != NULL ? mesh->animVertices : mesh->vertices;
+		mesh->vboId[0] = rlLoadVertexBuffer(vertices, mesh->vertexCount*3*sizeof(float), dynamic);
+		rlSetVertexAttribute(0, 3, RL_FLOAT, 0, 0, 0);
+		rlEnableVertexAttribute(0);
+
+		// Enable vertex attributes: texcoords (shader-location = 1)
+		mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
+		rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
+		rlEnableVertexAttribute(1);
+
+		if (mesh->normals != NULL)
+		{
+			// Enable vertex attributes: normals (shader-location = 2)
+			void *normals = mesh->animNormals != NULL ? mesh->animNormals : mesh->normals;
+			mesh->vboId[2] = rlLoadVertexBuffer(normals, mesh->vertexCount*3*sizeof(float), dynamic);
+			rlSetVertexAttribute(2, 3, RL_FLOAT, 0, 0, 0);
+			rlEnableVertexAttribute(2);
+		}
+		else
+		{
+			// Default color vertex attribute set to WHITE
+			float value[3] = { 1.0f, 1.0f, 1.0f };
+			rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
+			rlDisableVertexAttribute(2);
+		}
+
+		if (mesh->colors != NULL)
+		{
+			// Enable vertex attribute: color (shader-location = 3)
+			mesh->vboId[3] = rlLoadVertexBuffer(mesh->colors, mesh->vertexCount*4*sizeof(unsigned char), dynamic);
+			rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, 0, 0, 0);
+			rlEnableVertexAttribute(3);
+		}
+		else
+		{
+			// Default color vertex attribute set to WHITE
+			float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			rlSetVertexAttributeDefault(3, value, SHADER_ATTRIB_VEC4, 4);
+			rlDisableVertexAttribute(3);
+		}
+
+		if (mesh->tangents != NULL)
+		{
+			// Enable vertex attribute: tangent (shader-location = 4)
+			mesh->vboId[4] = rlLoadVertexBuffer(mesh->tangents, mesh->vertexCount*4*sizeof(float), dynamic);
+			rlSetVertexAttribute(4, 4, RL_FLOAT, 0, 0, 0);
+			rlEnableVertexAttribute(4);
+		}
+		else
+		{
+			// Default tangents vertex attribute
+			float value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			rlSetVertexAttributeDefault(4, value, SHADER_ATTRIB_VEC4, 4);
+			rlDisableVertexAttribute(4);
+		}
+
+		if (mesh->texcoords2 != NULL)
+		{
+			// Enable vertex attribute: texcoord2 (shader-location = 5)
+			mesh->vboId[5] = rlLoadVertexBuffer(mesh->texcoords2, mesh->vertexCount*2*sizeof(float), dynamic);
+			rlSetVertexAttribute(5, 2, RL_FLOAT, 0, 0, 0);
+			rlEnableVertexAttribute(5);
+		}
+		else
+		{
+			// Default texcoord2 vertex attribute
+			float value[2] = { 0.0f, 0.0f };
+			rlSetVertexAttributeDefault(5, value, SHADER_ATTRIB_VEC2, 2);
+			rlDisableVertexAttribute(5);
+		}
+
+		if (mesh->indices != NULL)
+		{
+			mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned short), dynamic);
+		}
+
+		if (mesh->vaoId > 0) TRACELOG(LOG_INFO, "VAO: [ID %i] Mesh uploaded successfully to VRAM (GPU)", mesh->vaoId);
+		else TRACELOG(LOG_INFO, "VBO: Mesh uploaded successfully to VRAM (GPU)");
+
+		rlDisableVertexArray();
+#endif
+	}
+}
 
 /// FUNCTIONS ^
 
@@ -166,12 +501,6 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 	} ///
 }
 
-Raylib::Matrix toRaylib(Matrix4 matrix) {
-	Raylib::Matrix raylibMatrix = {};
-	memcpy(&raylibMatrix.m0, matrix.transpose().data, sizeof(float) * 16);
-	return raylibMatrix;
-}
-
 void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	Matrix4 *boneTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
 	if (skeleton) {
@@ -191,16 +520,28 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
 	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
 	Vec3 *normals = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
+	u8 *boneIndices = (u8 *)frameMalloc(sizeof(u8) * 4 * mesh->vertsNum);
+	Vec4 *boneWeights = (Vec4 *)frameMalloc(sizeof(Vec4) * mesh->vertsNum);
 
-	for (int i = 0; i < mesh->indsNum; i++) {
-		MeshVertex meshVert = mesh->verts[mesh->inds[i]];
+	for (int i = 0; i < mesh->vertsNum; i++) {
+		MeshVertex meshVert = mesh->verts[i];
 		if (skeleton) {
-			Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
-			boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
-			boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
-			boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
-			positions[i] = boneTrans * meshVert.position;
-			normals[i] = boneTrans.invert().transpose() * meshVert.normal;
+			// Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
+			// boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
+			// boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
+			// boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
+			// positions[i] = boneTrans * meshVert.position;
+			// normals[i] = boneTrans.invert().transpose() * meshVert.normal;
+			boneIndices[i * 4 + 0] = meshVert.boneIndices[0];
+			boneIndices[i * 4 + 1] = meshVert.boneIndices[1];
+			boneIndices[i * 4 + 2] = meshVert.boneIndices[2];
+			boneIndices[i * 4 + 3] = meshVert.boneIndices[3];
+			boneWeights[i].x = meshVert.boneWeights[0];
+			boneWeights[i].y = meshVert.boneWeights[1];
+			boneWeights[i].z = meshVert.boneWeights[2];
+			boneWeights[i].w = meshVert.boneWeights[3];
+			positions[i] = meshVert.position;
+			normals[i] = meshVert.normal;
 		} else {
 			positions[i] = meshVert.position;
 			normals[i] = meshVert.normal;
@@ -213,22 +554,34 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	raylibMesh.vertices = &positions[0].x;
 	raylibMesh.texcoords = &uvs[0].x;
 	raylibMesh.normals = &normals[0].x;
+	raylibMesh.indices = mesh->inds;
+	raylibMesh.colors = boneIndices;
+	raylibMesh.tangents = &boneWeights[0].x;
 	raylibMesh.triangleCount = mesh->indsNum/3;
 	raylibMesh.vertexCount = mesh->vertsNum;
 
-	Raylib::UploadMesh(&raylibMesh, false);
+	Raylib::rlEnableShader(renderer->lightingAnimatedShader.id);
+	glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
+	// glUniformMatrix4fv(shader->u_projection, 1, false, props.projectionMatrix.data);
+	// Raylib::SetShaderValueV(renderer->lightingAnimatedShader, renderer->lightingAnimatedShaderBoneTransformsLoc, boneTransforms, int uniformType, int count)
 
-	meshSys->raylibMaterial.shader = renderer->lightingShader;
+	// Raylib::UploadMesh(&raylibMesh, false);
+	Raylib::MyUploadMesh(&raylibMesh, false);
+
+	// meshSys->raylibMaterial.shader = renderer->lightingShader;
+	meshSys->raylibMaterial.shader = renderer->lightingAnimatedShader;
 	// meshSys->raylibMaterial.maps[MATERIAL_MAP_DIFFUSE] =
 	meshSys->raylibMaterial.maps[Raylib::MATERIAL_MAP_DIFFUSE].color = toRaylibColor(tint);
 
 	Raylib::rlDisableBackfaceCulling(); //@hack Triangle winding is backwards for me, and Raylib doesn't have a way of changing it
 
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
-	DrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
+	// DrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
+	Raylib::MyDrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
 
 	// Unload mesh
 	Raylib::rlUnloadVertexArray(raylibMesh.vaoId);
 	const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
 	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(raylibMesh.vboId[i]);
 }
+
