@@ -770,7 +770,6 @@ struct Game {
 
 	bool debugShowFrameTimes;
 	bool debugAlwaysShowWireframes;
-	bool debugDrawPlayerBox;
 	bool debugDrawHitboxes;
 	bool debugDrawActorStatus;
 	bool debugDrawActorAction;
@@ -778,6 +777,7 @@ struct Game {
 	bool debugDrawActorStatsSimple;
 	bool debugDrawActorFacingDirection;
 	bool debugDrawActorTargets;
+	bool debugDrawUnitBoxes;
 	bool debugDrawUnitBillboards;
 	bool debugDrawUnitModels;
 	bool debugDrawVision;
@@ -787,6 +787,7 @@ struct Game {
 	bool debugShowPrewarm;
 	bool debugSkipPrewarm;
 	bool debugDrawPathing;
+	bool debugDisableSkeletonFrameBlending;
 	bool debugPaused;
 	float debugTimeScale;
 
@@ -1644,7 +1645,6 @@ void stepGame(float elapsed) {
 
 		if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Always show wireframes", &game->debugAlwaysShowWireframes);
-			ImGui::Checkbox("Show player box", &game->debugDrawPlayerBox);
 			ImGui::Checkbox("Draw hitboxes", &game->debugDrawHitboxes);
 			ImGui::Checkbox("Draw actor status", &game->debugDrawActorStatus);
 			ImGui::Checkbox("Draw actor action", &game->debugDrawActorAction);
@@ -1652,20 +1652,22 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
 			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
+			ImGui::Checkbox("Draw unit boxes", &game->debugDrawUnitBoxes);
 			ImGui::Checkbox("Draw unit billboards", &game->debugDrawUnitBillboards);
 			ImGui::Checkbox("Draw unit models", &game->debugDrawUnitModels);
 			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
 			ImGui::Checkbox("Show prewarm", &game->debugShowPrewarm);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);
+			ImGui::Checkbox("Disable skeleton frame blending", &game->debugDisableSkeletonFrameBlending);
+			skeletonSys->disableFrameBlending = game->debugDisableSkeletonFrameBlending;
 
 			ImGui::SliderInt("Degs1", &game->cameraAngleDegrees.x, 0, 90);
 			ImGui::SliderInt("Degs2", &game->cameraAngleDegrees.y, -90, 90);
-
-			ImGui::Text("timeSinceLastLeftPress: %f", player->timeSinceLastLeftPress);
-			ImGui::Text("timeSinceLastRightPress: %f", player->timeSinceLastRightPress);
-			ImGui::Text("isRunningLeft: %d", player->isRunningLeft);
-			ImGui::Text("isRunningRight: %d", player->isRunningRight);
+			if (ImGui::Button("Reset")) {
+				game->cameraAngleDegrees.x = 75;
+				game->cameraAngleDegrees.y = 3;
+			}
 
 			if (ImGui::Button("Spawn low max hp enemy")) {
 				Actor *actor = createActor(map, ACTOR_UNIT);
@@ -3045,7 +3047,11 @@ void stepGame(float elapsed) {
 						}
 					} else {
 						float maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames)/60.0;
-						animPercOverride = clampMap(action->time, 0, maxTime, 0, 1);
+						if (maxTime) {
+							animPercOverride = clampMap(action->time, 0, maxTime, 0, 1);
+						} else {
+							animTime = action->time;
+						}
 					}
 				} else {
 					if (actor->timeMoving) {
@@ -3151,7 +3157,7 @@ void stepGame(float elapsed) {
 						int targetBoneIndex = getBoneIndex(actor->skeleton, "weapon.r");
 						Bone *bone = &actor->skeleton->base->bones[targetBoneIndex];
 						Matrix4 heldItemMatrix = modelMatrix * actor->skeleton->meshTransforms[targetBoneIndex] * bone->modelSpaceMatrix;
-						Vec3 pos = heldItemMatrix * v3();
+						// Vec3 pos = heldItemMatrix * v3();
 						// pushSphere(makeSphere(pos, 20), 0xFFFF0000);
 
 						if (actor->heldItem.type == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), heldItemMatrix);
@@ -3159,7 +3165,7 @@ void stepGame(float elapsed) {
 					}
 				} ///
 
-				if (game->debugDrawPlayerBox) pushAABB(aabb, teamColors[actor->team]);
+				if (game->debugDrawUnitBoxes) pushAABB(aabb, teamColors[actor->team]);
 
 			} ///
 
@@ -3225,6 +3231,7 @@ void stepGame(float elapsed) {
 					if (hoursChosen) {
 						float ticksPerSec = 1.0/SECS_PER_CITY_TICK;
 						game->extraStepsFromSleep = 60 * 60 * 60 * hoursChosen;
+						player->potionsLeft = 3;
 					}
 
 					nguiEndWindow();
@@ -3319,7 +3326,6 @@ void stepGame(float elapsed) {
 			matrix.SCALE(globals->actorModelScale);
 			if (actor->itemType == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), matrix);
 			else if (actor->itemType == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), matrix);
-			// pushAABB(getAABB(actor), lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5));
 		} else if (actor->type == ACTOR_STORE) {
 			bool overlappingStore = overlaps(actor, player);
 
@@ -4510,19 +4516,20 @@ void stepGame(float elapsed) {
 			if (usingController) {
 				textLines[textLinesNum++] = "Square - Punch";
 				textLines[textLinesNum++] = "Triangle - Kick";
+				textLines[textLinesNum++] = "Circle - Pickup";
 				textLines[textLinesNum++] = "Select - Map";
-				if (game->alliancesControlled[0]) textLines[textLinesNum++] = "L1 - Quaff potion";
+				if (game->alliancesControlled[0]) textLines[textLinesNum++] = frameSprintf("L1 - Quaff potion (%d/3)", player->potionsLeft);
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "R1 - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "L3 - Armor up";
 			} else {
 				textLines[textLinesNum++] = "J - Punch";
 				textLines[textLinesNum++] = "K - Kick";
+				textLines[textLinesNum++] = "L - Pickup";
 				textLines[textLinesNum++] = "M - Map";
-				if (game->alliancesControlled[0]) textLines[textLinesNum++] = "Q - Quaff potion";
+				if (game->alliancesControlled[0]) textLines[textLinesNum++] = frameSprintf("Q - Quaff potion (%d/3)", player->potionsLeft);
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "N - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "B - Armor up";
 			}
-			// game->alliancesControlled
 
 #if 0
 			Style *style = &player->styles[player->styleIndex];

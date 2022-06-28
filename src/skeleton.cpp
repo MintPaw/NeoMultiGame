@@ -77,6 +77,8 @@ struct SkeletonSystem {
 #define BASE_SKELETONS_MAX 128
 	BaseSkeleton baseSkeletons[BASE_SKELETONS_MAX];
 	int baseSkeletonsNum;
+
+	bool disableFrameBlending;
 };
 
 SkeletonSystem *skeletonSys = NULL;
@@ -291,31 +293,22 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 
 			if (blend->playing) blend->time += elapsed*blend->timeScale;
 
-			float framesIn = blend->time / (1.0/anim->frameRate);
-			float nextFramesIn = framesIn+1;
+			float floatFramesIn = blend->time * anim->frameRate;
+			int framesIn = blend->time * anim->frameRate;
+			int nextFramesIn = framesIn+1;
+			float framePerc = floatFramesIn - framesIn;
+
 			if (blend->loops) {
-				while (framesIn >= anim->frameCount) framesIn -= anim->frameCount;
-				while (nextFramesIn >= anim->frameCount) nextFramesIn -= anim->frameCount;
-				framesIn += anim->firstFrame;
-				nextFramesIn += anim->firstFrame;
+				framesIn = fmod(framesIn, anim->frameCount);
+				nextFramesIn = fmod(nextFramesIn, anim->frameCount);
 			} else {
 				if (framesIn > anim->frameCount-1) framesIn = anim->frameCount-1;
 				if (nextFramesIn > anim->frameCount-1) nextFramesIn = anim->frameCount-1;
-				framesIn += anim->firstFrame;
-				nextFramesIn += anim->firstFrame;
 			}
-			int lowerFrame = (int)framesIn;
-			int upperFrame = (int)nextFramesIn;
-			float framePerc = framesIn - lowerFrame;
-			// logf("%f %f %d %d\n", framesIn, nextFramesIn, anim->firstFrame, anim->frameCount);
-
-			blend->justStartedAnimationFrame = -1;
-			int relativeFramesIn = framesIn - anim->firstFrame;
-			if (relativeFramesIn != blend->animationFrame) {
-				blend->prevAnimationFrame = blend->animationFrame;
-				blend->animationFrame = relativeFramesIn;
-				blend->justStartedAnimationFrame = blend->animationFrame;
-			}
+			framesIn += anim->firstFrame;
+			nextFramesIn += anim->firstFrame;
+			int lowerFrame = framesIn;
+			int upperFrame = nextFramesIn;
 
 			for (int i = 0; i < skeleton->base->bonesNum; i++) {
 				blend->controlMask[i] = true;
@@ -325,9 +318,11 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 
 				Xform lowerXform = bone->poseXforms[lowerFrame];
 				Xform upperXform = bone->poseXforms[upperFrame];
-				//@todo Lerp toggle (And fix it...)
-				// blend->poseXforms[boneIndex] = lerp(lowerXform, upperXform, framePerc);
-				blend->poseXforms[boneIndex] = lowerXform;
+				if (skeletonSys->disableFrameBlending) {
+					blend->poseXforms[boneIndex] = lowerXform;
+				} else {
+					blend->poseXforms[boneIndex] = lerp(lowerXform, upperXform, framePerc);
+				}
 			}
 		} else if (blend->type == SKELETON_BLEND_MANUAL_BONES) {
 		} else {
@@ -397,6 +392,7 @@ bool skeletonBlendJustPlayedFrame(Skeleton *skeleton, char *blendName, char *ani
 }
 
 bool skeletonBlendJustPlayedFrame(SkeletonBlend *blend, int frameIndex) {
+	logf("skeletonBlendJustPlayedFrame doesn't work anymore\n");
 	if (blend->justStartedAnimationFrame == -1) return false;
 	if (blend->justStartedAnimationFrame == frameIndex) return true;
 

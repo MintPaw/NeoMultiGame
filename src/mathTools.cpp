@@ -1715,12 +1715,15 @@ Xform lerp(Xform min, Xform max, float perc) {
 
 	result.translation = lerp(min.translation, max.translation, perc);
 
-	result.rotation = slerpQuaternions(min.rotation, max.rotation, perc);
-	// if (min.rotation.dot(max.rotation) < 0) {
-	// 	result.rotation = nlerpQuaternions(min.rotation, max.rotation.negate(), perc);
-	// } else {
-	// 	result.rotation = nlerpQuaternions(min.rotation, max.rotation, perc);
-	// }
+#if 0
+	result.rotation = slerpQuaternions(min.rotation, max.rotation, perc); // This creates weird discontinues
+#else
+	if (min.rotation.dot(max.rotation) < 0) {
+		result.rotation = nlerpQuaternions(min.rotation, max.rotation.negate(), perc);
+	} else {
+		result.rotation = nlerpQuaternions(min.rotation, max.rotation, perc);
+	}
+#endif
 
 	result.scale = lerp(min.scale, max.scale, perc);
 
