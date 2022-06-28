@@ -4517,6 +4517,14 @@ struct Sphere {
 	float radius;
 };
 
+Sphere makeSphere(Vec3 position, float radius);
+Sphere makeSphere(Vec3 position, float radius) {
+	Sphere sphere = {};
+	sphere.position = position;
+	sphere.radius = radius;
+	return sphere;
+}
+
 bool overlaps(AABB aabb, Sphere sphere) {
 	// https://web.archive.org/web/19991129023147/http://www.gamasutra.com/features/19991018/Gomez_4.htm
 	float d = 0;

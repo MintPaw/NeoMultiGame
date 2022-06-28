@@ -3079,34 +3079,36 @@ void stepGame(float elapsed) {
 					}
 				}
 
-				Frame *frame = NULL;
-				Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
-				if (anim) {
-					anim->loops = animLoops;
-					frame = getAnimFrameAtSecond(anim, animTime);
-					if (animPercOverride != -1) {
-						int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
-						frame = anim->frames[frameInt];
+				{ /// 2d
+					Frame *frame = NULL;
+					Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
+					if (anim) {
+						anim->loops = animLoops;
+						frame = getAnimFrameAtSecond(anim, animTime);
+						if (animPercOverride != -1) {
+							int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
+							frame = anim->frames[frameInt];
+						}
 					}
-				}
 
-				float scale = 1;
-				bool flipped = false;
-				if (actor->facingLeft) flipped = true;
+					float scale = 1;
+					bool flipped = false;
+					if (actor->facingLeft) flipped = true;
 
-				DrawBillboardCall billboard = {};
-				billboard.camera = game->camera3d;
-				billboard.tint = teamColors[actor->team];
-				billboard.alpha = 1;
-				if (game->debugDrawUnitBillboards) {
-					if (frame) {
-						pushBillboardFrame(billboard, frame, aabb, scale, flipped);
-					} else {
-						pushAABB(aabb, teamColors[actor->team]);
+					DrawBillboardCall billboard = {};
+					billboard.camera = game->camera3d;
+					billboard.tint = teamColors[actor->team];
+					billboard.alpha = 1;
+					if (game->debugDrawUnitBillboards) {
+						if (frame) {
+							pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+						} else {
+							pushAABB(aabb, teamColors[actor->team]);
+						}
 					}
-				}
+				} ///
 
-				{
+				{ /// 3d
 					Matrix4 modelMatrix = mat4();
 					modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
 					modelMatrix.TRANSLATE(globals->actorModelOffset);
@@ -3145,8 +3147,17 @@ void stepGame(float elapsed) {
 					updateSkeleton(actor->skeleton, elapsed);
 					if (game->debugDrawUnitModels) {
 						pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, teamColors[actor->team]);
+
+						int targetBoneIndex = getBoneIndex(actor->skeleton, "weapon.r");
+						Bone *bone = &actor->skeleton->base->bones[targetBoneIndex];
+						Matrix4 heldItemMatrix = modelMatrix * actor->skeleton->meshTransforms[targetBoneIndex] * bone->modelSpaceMatrix;
+						Vec3 pos = heldItemMatrix * v3();
+						// pushSphere(makeSphere(pos, 20), 0xFFFF0000);
+
+						if (actor->heldItem.type == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), heldItemMatrix);
+						else if (actor->heldItem.type == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), heldItemMatrix);
 					}
-				}
+				} ///
 
 				if (game->debugDrawPlayerBox) pushAABB(aabb, teamColors[actor->team]);
 
@@ -3303,7 +3314,12 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			pushAABB(getAABB(actor), lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5));
+			Matrix4 matrix = mat4();
+			matrix.TRANSLATE(getCenter(getAABB(actor)));
+			matrix.SCALE(globals->actorModelScale);
+			if (actor->itemType == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), matrix);
+			else if (actor->itemType == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), matrix);
+			// pushAABB(getAABB(actor), lerpColor(0xFFFFD86B, 0xFFFFFFFF, 0.5));
 		} else if (actor->type == ACTOR_STORE) {
 			bool overlappingStore = overlaps(actor, player);
 

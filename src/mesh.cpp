@@ -347,6 +347,8 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 				}
 			}
 		}
+	} else {
+		boneTransforms[0] = mat4();
 	}
 
 	// This could be much faster if it was global and resizable
@@ -359,12 +361,6 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	for (int i = 0; i < mesh->vertsNum; i++) {
 		MeshVertex meshVert = mesh->verts[i];
 		if (skeleton) {
-			// Matrix4 boneTrans = boneTransforms[meshVert.boneIndices[0]] * meshVert.boneWeights[0];
-			// boneTrans += boneTransforms[meshVert.boneIndices[1]] * meshVert.boneWeights[1];
-			// boneTrans += boneTransforms[meshVert.boneIndices[2]] * meshVert.boneWeights[2];
-			// boneTrans += boneTransforms[meshVert.boneIndices[3]] * meshVert.boneWeights[3];
-			// positions[i] = boneTrans * meshVert.position;
-			// normals[i] = boneTrans.invert().transpose() * meshVert.normal;
 			boneIndices[i * 4 + 0] = meshVert.boneIndices[0];
 			boneIndices[i * 4 + 1] = meshVert.boneIndices[1];
 			boneIndices[i * 4 + 2] = meshVert.boneIndices[2];
@@ -376,6 +372,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 			positions[i] = meshVert.position;
 			normals[i] = meshVert.normal;
 		} else {
+			boneWeights[i].x = 1;
 			positions[i] = meshVert.position;
 			normals[i] = meshVert.normal;
 		}

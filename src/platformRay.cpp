@@ -1472,6 +1472,7 @@ void drawCone(Cone cone, int color) {
 	Raylib::DrawModelEx(renderer->coneModel, toRaylib(position), toRaylib(rotationAxis), toDeg(rotationAngle), toRaylib(size), toRaylibColor(color));
 }
 
+void drawSphere(Vec3 position, float radius, int color) { drawSphere(makeSphere(position, radius), color); };
 void drawSphere(Sphere sphere, int color) {
 	Vec3 position = sphere.position;
 	Vec3 size = v3(1, 1, 1) * sphere.radius;
