@@ -33,10 +33,15 @@ drinkPotionStart
 drinkPotionFinish
 drinkPotionFail
 Fail drink potion
-Shotgun fire
-Shotgun reload
+Stun snap
+Stun press
 Create sword
 Create knife
+Weapon stash
+Weapon unstash
+Shotgun fire
+Shotgun reload
+Apply blade oil
 
 Ending items:
 	- [L1] Estus
@@ -3061,17 +3066,6 @@ void stepGame(float elapsed) {
 					}
 				}
 
-				Frame *frame = NULL;
-				Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
-				if (anim) {
-					anim->loops = animLoops;
-					frame = getAnimFrameAtSecond(anim, animTime);
-					if (animPercOverride != -1) {
-						int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
-						frame = anim->frames[frameInt];
-					}
-				}
-
 				AABB aabb = getAABB(actor);
 				if (actor->actionsNum > 0) {
 					Action *action = &actor->actions[0];
@@ -3085,6 +3079,17 @@ void stepGame(float elapsed) {
 					}
 				}
 
+				Frame *frame = NULL;
+				Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
+				if (anim) {
+					anim->loops = animLoops;
+					frame = getAnimFrameAtSecond(anim, animTime);
+					if (animPercOverride != -1) {
+						int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
+						frame = anim->frames[frameInt];
+					}
+				}
+
 				float scale = 1;
 				bool flipped = false;
 				if (actor->facingLeft) flipped = true;
@@ -3093,11 +3098,15 @@ void stepGame(float elapsed) {
 				billboard.camera = game->camera3d;
 				billboard.tint = teamColors[actor->team];
 				billboard.alpha = 1;
-				if (frame) {
-					if (game->debugDrawUnitBillboards) {
+				if (game->debugDrawUnitBillboards) {
+					if (frame) {
 						pushBillboardFrame(billboard, frame, aabb, scale, flipped);
+					} else {
+						pushAABB(aabb, teamColors[actor->team]);
 					}
+				}
 
+				{
 					Matrix4 modelMatrix = mat4();
 					modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
 					modelMatrix.TRANSLATE(globals->actorModelOffset);
@@ -3111,7 +3120,20 @@ void stepGame(float elapsed) {
 					modelMatrix.SCALE(globals->actorModelScale);
 
 					SkeletonBlend *blend = getSkeletonBlend(actor->skeleton, "main");
-					blend->animation = getAnimation(actor->skeleton, animName);
+
+					char *altAnimName = NULL;
+					if (actor->heldItem.type == ITEM_SWORD) altAnimName = frameSprintf("%s_sword", animName);
+					if (actor->heldItem.type == ITEM_KNIFE) altAnimName = frameSprintf("%s_knife", animName);
+
+					blend->animation = getAnimation(actor->skeleton, altAnimName);
+					if (!blend->animation) blend->animation = getAnimation(actor->skeleton, animName);
+
+					if (!blend->animation) {
+						blend->animation = getAnimation(actor->skeleton, "idle");
+						logf("Anim '%s'/'%s' not found\n", altAnimName, animName);
+						pushAABB(aabb, teamColors[actor->team]);
+					}
+
 					blend->loops = animLoops;
 					blend->playing = false;
 
@@ -3121,12 +3143,13 @@ void stepGame(float elapsed) {
 					}
 
 					updateSkeleton(actor->skeleton, elapsed);
-					if (game->debugDrawUnitModels) pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, teamColors[actor->team]);
+					if (game->debugDrawUnitModels) {
+						pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, teamColors[actor->team]);
+					}
 				}
 
-				if (!frame || game->debugDrawPlayerBox) {
-					pushAABB(aabb, teamColors[actor->team]);
-				}
+				if (game->debugDrawPlayerBox) pushAABB(aabb, teamColors[actor->team]);
+
 			} ///
 
 			{ /// Draw overlay

@@ -245,12 +245,11 @@ int getSkeletonAnimationIndexByName(Skeleton *skeleton, const char *name) {
 	for (int i = 0; i < skeleton->base->animationsNum; i++) {
 		SkeletonAnimation *anim = &skeleton->base->animations[i];
 		char *animName = anim->name;
-		if (strchr(animName, '_')) animName = strchr(animName, '_')+1;
+		// if (strchr(animName, '_')) animName = strchr(animName, '_')+1;
 
 		if (streq(animName, name)) return i;
 	}
 
-	logf("Animation %s doesn't exist\n", name);
 	return -1;
 }
 
