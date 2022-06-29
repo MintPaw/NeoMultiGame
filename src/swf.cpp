@@ -930,7 +930,7 @@ Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, int id, SwfTagType *tagType);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 bool hasLabel(SwfSprite *sprite, char *label);
-char *getLabelThatStartsWith(SwfSprite *sprite, char *prefix);
+char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 /// FUNCTIONS ^
@@ -1626,7 +1626,7 @@ Swf *loadSwf(char *path) {
 								bool preserveAlpha = readUB(&stream, 1);
 							} else if (filter->type == SWF_FILTER_COLOR_MATRIX) {
 								for (int i = 0; i < 20; i++) {
-									float matrixValue = readFloat(&stream);
+									filter->colorMatrixFilter.matrix[i] = readFloat(&stream);
 								}
 							} else if (filter->type == SWF_FILTER_GRADIENT_BEVEL) {
 								int numColors = read(&stream);
@@ -2295,7 +2295,7 @@ bool hasLabel(SwfSprite *sprite, char *label) {
 	return false;
 }
 
-char *getLabelThatStartsWith(SwfSprite *sprite, char *prefix) {
+char *getLabelWithPrefix(SwfSprite *sprite, char *prefix) {
 	char **possible = (char **)frameMalloc(sprite->labelsInOrderNum * sizeof(char *));
 	int possibleNum = 0;
 

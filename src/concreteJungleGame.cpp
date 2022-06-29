@@ -3326,6 +3326,7 @@ void stepGame(float elapsed) {
 			matrix.SCALE(globals->actorModelScale);
 			if (actor->itemType == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), matrix);
 			else if (actor->itemType == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), matrix);
+			else if (actor->itemType == ITEM_MONEY) pushAABB(getAABB(actor), 0xFFFFFB94);
 		} else if (actor->type == ACTOR_STORE) {
 			bool overlappingStore = overlaps(actor, player);
 

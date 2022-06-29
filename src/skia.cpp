@@ -100,6 +100,8 @@ enum VDrawCommandType {
 	VDRAW_END_SPRITE,
 	VDRAW_START_BLUR,
 	VDRAW_END_BLUR,
+	VDRAW_START_COLOR_MATRIX,
+	VDRAW_END_COLOR_MATRIX,
 	VDRAW_SET_BLEND_MODE,
 	VDRAW_SET_SOLID_FILL,
 	VDRAW_SET_LINEAR_GRADIENT_FILL,
@@ -1073,6 +1075,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						if (drawable->colorTransform) newRecurse.colorTransform = applyColorTransform(newRecurse.colorTransform, *drawable->colorTransform);
 
 						bool shouldStopBlur = false;
+						bool shouldStopColorMatrix = false;
 						for (int i = 0; i < drawable->filtersNum; i++) {
 							SwfFilter *filter = &drawable->filters[i];
 							if (filter->type == SWF_FILTER_BLUR) {
@@ -1081,11 +1084,16 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 									cmd->position = v2(filter->blurFilter.blurX, filter->blurFilter.blurY);
 									shouldStopBlur = true;
 								}
+							} else if (filter->type == SWF_FILTER_COLOR_MATRIX) {
+								VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_COLOR_MATRIX);
+								memcpy(cmd->colors, filter->colorMatrixFilter.matrix, sizeof(float) * 20);
+								shouldStopColorMatrix = true;
 							}
 						}
 						if (drawable->spriteBlendMode != SWF_BLEND_NORMAL) newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
 						genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
 						if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
+						if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
 					} else {
 						logf("Bad place object character\n");
 					}
@@ -1332,6 +1340,14 @@ void execCommands(VDrawCommandsList *cmdList) {
 #else
 			skiaSys->currentBlur = v2();
 #endif
+		} else if (cmd->type == VDRAW_START_COLOR_MATRIX) {
+			// float *colorMatrix = (float *)frameMalloc(sizeof(float) * 20);
+			// memcpy(colorMatrix, cmd->colors, sizeof(float) * 20);
+			// for (int i = 0; i < 20; i++) colorMatrix[i] /= 255;
+			// sk_sp<SkColorFilter> skiaColorFilter = SkColorFilters::Matrix(colorMatrix);
+			// paint.setColorFilter(skiaColorFilter);
+		} else if (cmd->type == VDRAW_END_COLOR_MATRIX) {
+			// paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
 			if (cmd->blendMode == BLEND_NORMAL) {
 				paint.setBlendMode(SkBlendMode::kSrcOver);

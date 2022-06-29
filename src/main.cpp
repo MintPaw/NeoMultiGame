@@ -22,6 +22,8 @@
 #include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkPixelRef.h"
+#include "include/core/SkPixelRef.h"
+#include "include/core/SkColorFilter.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/gpu/GrDirectContext.h"
