@@ -31,6 +31,11 @@ def writeMatrix(ba, matrix):
     ba.extend(struct.pack("<1f", matrix[3][2]))
     ba.extend(struct.pack("<1f", matrix[3][3]))
 
+def writeVec3(ba, vec):
+    ba.extend(struct.pack("<1f", vec.x))
+    ba.extend(struct.pack("<1f", vec.y))
+    ba.extend(struct.pack("<1f", vec.z))
+
 def findArmature(obj):
     if obj.type == "ARMATURE": return obj
     if obj.parent == None: return None
@@ -256,14 +261,18 @@ def writeBone(ba, arm, bone, transformList):
         if found == False:
             print("Couldn't find parent for "+bone.name)
 
-    writeMatrix(ba, bone.matrix_local.transposed())
+    writeVec3(ba, bone.matrix_local.to_translation())
+    writeVec3(ba, bone.matrix_local.to_euler("XYZ"))
+    writeVec3(ba, bone.matrix_local.to_scale())
 
-    print(bone.name+" would add "+str(len(transformList))+" matrices")
-    for transform in transformList:
-        writeMatrix(ba, transform)
+    print(bone.name+" would add "+str(len(transformList))+" transforms")
+    for vecs in transformList:
+        writeVec3(ba, vecs[0]);
+        writeVec3(ba, vecs[1]);
+        writeVec3(ba, vecs[2]);
 
 def writeSkeleton(ba, obj, skeleName):
-    ba.append(1) # Version
+    ba.append(2) # Version
     arm = obj.data
     arm.pose_position = "POSE"
 
@@ -287,7 +296,12 @@ def writeSkeleton(ba, obj, skeleName):
                 matrix = poseBone.matrix
                 if poseBone.parent:
                     matrix = poseBone.parent.matrix.inverted() @ matrix
-                framesMap[poseBone.bone.name].append(matrix.transposed())
+
+                vecs = list();
+                vecs.append(matrix.to_translation());
+                vecs.append(matrix.to_euler("XYZ"));
+                vecs.append(matrix.to_scale());
+                framesMap[poseBone.bone.name].append(vecs);
             frameCount += 1
 
     writeString(ba, skeleName) 

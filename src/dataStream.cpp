@@ -20,6 +20,7 @@ u16 readU16(DataStream *stream);
 float readFloat(DataStream *stream);
 double readDouble(DataStream *stream);
 Rect readRect(DataStream *stream);
+Vec4 readVec4(DataStream *stream);
 Vec3 readVec3(DataStream *stream);
 Vec2 readVec2(DataStream *stream);
 Vec2i readVec2i(DataStream *stream);
@@ -155,6 +156,12 @@ double readDouble(DataStream *stream) {
 Rect readRect(DataStream *stream) {
 	Rect ret;
 	readBytes(stream, &ret, sizeof(Rect));
+	return ret;
+}
+
+Vec4 readVec4(DataStream *stream) {
+	Vec4 ret;
+	readBytes(stream, &ret, sizeof(Vec4));
 	return ret;
 }
 

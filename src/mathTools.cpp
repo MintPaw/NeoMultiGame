@@ -381,22 +381,10 @@ float dot(Vec3 a, Vec3 b) {
 }
 
 struct Vec4 {
-	union {
-		float x;
-		float a;
-	};
-	union {
-		float y;
-		float r;
-	};
-	union {
-		float z;
-		float g;
-	};
-	union {
-		float w;
-		float b;
-	};
+	float x;
+	float y;
+	float z;
+	float w;
 
 	float dot(Vec4 other);
 	Vec4 normalize();
@@ -420,10 +408,14 @@ struct Vec4 {
 	}
 
 	Vec4 operator*= (float b);
+	Vec4 operator+= (float b);
+	Vec4 operator+= (Vec4 b);
 };
 Vec4 operator+ (Vec4 a, Vec4 b) { return { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w }; }
 Vec4 operator+ (Vec4 a, float b) { return { a.x + b, a.y + b, a.z + b, a.w + b }; }
 Vec4 operator+ (float a, Vec4 b) { return { a + b.x, a + b.y, a + b.z, a + b.w }; }
+Vec4 Vec4::operator+= (float b) { *this = (*this) + b; return *this; }
+Vec4 Vec4::operator+= (Vec4 b) { *this = (*this) + b; return *this; }
 
 Vec4 operator- (Vec4 a, Vec4 b) { return { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w }; }
 
@@ -1025,7 +1017,7 @@ Matrix3 mat3FromQuat(Vec4 quat) {
 }
 
 Matrix4 toMatrix(Xform xform) {
-#if 1
+#if 0
 	Matrix3 matrix3 = mat3FromQuat(xform.rotation);
 
 	matrix3.data[0] *= xform.scale.x;
@@ -1054,11 +1046,11 @@ Matrix4 toMatrix(Xform xform) {
 	mat.data[14] = xform.translation.z;
 
 	return mat;
-#else // Was the same last I checked
+#else // Was the same last I checked // UNTRUE
 	Matrix4 mat = mat4();
-	mat = mat.translate(xform.translation);
-	mat = mat.scale(xform.scale);
-	mat = mat.rotateQuaternion(xform.rotation);
+	mat.TRANSLATE(xform.translation);
+	mat.SCALE(xform.scale);
+	mat.ROTATE_QUAT(xform.rotation);
 	return mat;
 #endif
 }
@@ -1193,6 +1185,25 @@ Vec2 vectorBetween(Vec2 p1, Vec2 p2) {
 }
 
 Vec4 eulerToQuaternion(Vec3 angle) {
+#if 0
+	float x = angle.x;
+	float y = angle.y;
+	float z = angle.z;
+	float c1 = cos(x/2);
+	float c2 = cos(y/2);
+	float c3 = cos(z/2);
+
+	float s1 = sin(x/2);
+	float s2 = sin(y/2);
+	float s3 = sin(z/2);
+	Vec4 quat;
+	quat.x = s1 * c2 * c3 + c1 * s2 * s3;
+	quat.y = c1 * s2 * c3 - s1 * c2 * s3;
+	quat.z = c1 * c2 * s3 + s1 * s2 * c3;
+	quat.w = c1 * c2 * c3 - s1 * s2 * s3;
+
+	return quat;
+#else
 	float yaw = angle.z * 0.5;
 	float pitch = angle.y * 0.5;
 	float roll = angle.x * 0.5;
@@ -1211,6 +1222,7 @@ Vec4 eulerToQuaternion(Vec3 angle) {
 	quat.z = sy*cp*cr - cy*sp*sr;
 
 	return quat;
+#endif
 }
 
 Vec3 quaternionToEuler(Vec4 quat) {
@@ -1387,7 +1399,7 @@ Vec4 slerpQuaternions(Vec4 q1, Vec4 q2, float perc) {
 	float dotProduct = q1.dot(q2);
 
 	if (dotProduct < 0) {
-		q2.setTo(-q2.x, -q2.y, -q2.z, -q2.w);
+		q2 = v4(-q2.x, -q2.y, -q2.z, -q2.w);
 		dotProduct = -dotProduct;
 	}
 
@@ -1426,6 +1438,8 @@ Vec4 slerpQuaternions(Vec4 q1, Vec4 q2, float perc) {
 }
 
 Vec4 nlerpQuaternions(Vec4 q1, Vec4 q2, float perc) {
+	if (q2.dot(q1) < 0) q1 = q1.negate();
+
 	Vec4 result = lerp(q1, q2, perc);
 	result = result.normalize();
 	return result;
@@ -1718,11 +1732,7 @@ Xform lerp(Xform min, Xform max, float perc) {
 #if 0
 	result.rotation = slerpQuaternions(min.rotation, max.rotation, perc); // This creates weird discontinues
 #else
-	if (min.rotation.dot(max.rotation) < 0) {
-		result.rotation = nlerpQuaternions(min.rotation, max.rotation.negate(), perc);
-	} else {
-		result.rotation = nlerpQuaternions(min.rotation, max.rotation, perc);
-	}
+	result.rotation = nlerpQuaternions(min.rotation, max.rotation, perc);
 #endif
 
 	result.scale = lerp(min.scale, max.scale, perc);
@@ -3022,7 +3032,7 @@ Vec4 Matrix4::getQuaternion() {
 	// 03 13 23 33
 
 	Vec4 ret = {};
-#if 1
+#if 0
 	float m00 = mat->data[0];
 	float m10 = mat->data[1];
 	float m20 = mat->data[2];

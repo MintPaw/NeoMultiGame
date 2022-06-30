@@ -21,7 +21,6 @@ struct Bone {
 
 #define BONES_MAX 32
 struct BaseSkeleton {
-	char version;
 	char name[PATH_MAX_LEN];
 	int frameCount;
 
@@ -87,6 +86,7 @@ void initSkeleton();
 BaseSkeleton *getBaseSkeleton(char *path);
 void readAnimation(DataStream *stream, SkeletonAnimation *anim);
 void readBone(DataStream *stream, Bone *bone, int frameCount);
+void readBone2(DataStream *stream, Bone *bone, int frameCount);
 void readBaseSkeleton(DataStream *stream, BaseSkeleton *base);
 Skeleton *deriveSkeleton(char *skeletonPath);
 Skeleton *deriveSkeleton(BaseSkeleton *base);
@@ -159,8 +159,44 @@ void readBone(DataStream *stream, Bone *bone, int frameCount) {
 	}
 }
 
+void readBone2(DataStream *stream, Bone *bone, int frameCount) {
+	bone->name = readString(stream);
+	// logf("Bone name: %s\n", bone->name);
+	bone->parent = (s8)readU8(stream);
+	Xform xform;
+	xform.translation = readVec3(stream);
+	xform.rotation = eulerToQuaternion(readVec3(stream));
+	xform.scale = readVec3(stream);
+
+	if (streq(bone->name, "leg1.r")) {
+		xform.print("Local xform");
+	}
+
+	bone->modelSpaceMatrix = toMatrix(xform);
+
+	bone->localSpaceMatrix = bone->modelSpaceMatrix;
+	bone->invModelSpaceMatrix = bone->modelSpaceMatrix.invert();
+	bone->poseXforms = (Xform *)zalloc(sizeof(Xform) * frameCount);
+	// logf("%s would read %d matrices\n", bone->name, frameCount);
+	for (int i = 0; i < frameCount; i++) {
+		bone->poseXforms[i].translation = readVec3(stream);
+		Vec3 eu = readVec3(stream);
+		bone->poseXforms[i].rotation = eulerToQuaternion(eu);
+		bone->poseXforms[i].scale = readVec3(stream);
+
+		int min = 824;
+		int max = 824+80;
+		if (i >= min && i <= max && streq(bone->name, "leg1.r")) {
+			bone->poseXforms[i].rotation.print(frameSprintf("Frame %d", i-min));
+			eu.print("eu");
+		}
+	}
+}
+
 void readBaseSkeleton(DataStream *stream, BaseSkeleton *base) {
-	base->version = readU8(stream);
+	int version = readU8(stream);
+	if (version == 1) logf("Loading version 1 skeleton\n");
+
 	char *name = readString(stream);
 	strncpy(base->name, name, PATH_MAX_LEN);
 	free(name);
@@ -171,7 +207,11 @@ void readBaseSkeleton(DataStream *stream, BaseSkeleton *base) {
 	base->bones = (Bone *)zalloc(sizeof(Bone) * base->bonesNum);
 	for (int i = 0; i < base->bonesNum; i++) {
 		Bone *bone = &base->bones[i];
-		readBone(stream, bone, base->frameCount);
+		if (version == 1) {
+			readBone(stream, bone, base->frameCount);
+		} else {
+			readBone2(stream, bone, base->frameCount);
+		}
 	}
 
 	base->animationsNum = readU32(stream);
@@ -189,6 +229,7 @@ void readBaseSkeleton(DataStream *stream, BaseSkeleton *base) {
 	}
 
 	if (base->bonesNum > BONES_MAX) logf ("Too many bones (%d on %s)!!!\n", base->bonesNum, base->name);
+	platformSleep(2000);
 }
 
 Skeleton *deriveSkeleton(char *skeletonPath) {
@@ -340,12 +381,104 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 		poseXforms[i] = newXform();
 	}
 
+	auto jBlowLerpQuaternions = [](Vec4 v0, Vec4 v1, float t) {
+		// v0 and v1 should be unit length or else
+		// something broken will happen.
+
+		// Compute the cosine of the angle between the two vectors.
+		double dot = v0.dot(v1);
+
+		const double DOT_THRESHOLD = 0.9995;
+		if (dot > DOT_THRESHOLD) {
+			// If the inputs are too close for comfort, linearly interpolate
+			// and normalize the result.
+
+			Vec4 result = v0 + t*(v1 - v0);
+			result.normalize();
+			return result;
+		}
+
+		dot = mathClamp(dot, -1, 1);           // Robustness: Stay within domain of acos()
+		double theta_0 = acos(dot);  // theta_0 = angle between input vectors
+		double theta = theta_0*t;    // theta = angle between v0 and result 
+
+		Vec4 v2 = v1 - v0*dot;
+		v2.normalize();              // { v0, v2 } is now an orthonormal basis
+
+		return v0*cos(theta) + v2*sin(theta);
+	};
+
+	auto newLerpQuaternions = [](Vec4 a, Vec4 b, float t) {
+		// negate second quat if dot product is negative
+		const float l2 = a.dot(b);
+		if(l2 < 0.0f) {
+			b = b.negate();
+		}
+		Vec4 c;
+		// c = a + t(b - a)  -->   c = a - t(a - b)
+		// the latter is slightly better on x64
+		c.x = a.x - t*(a.x - b.x);
+		c.y = a.y - t*(a.y - b.y);
+		c.z = a.z - t*(a.z - b.z);
+		c.w = a.w - t*(a.w - b.w);
+		return c;
+	};
+
+	logf("---\n");
 	for (int i = 0; i < skeleton->blendsNum; i++) {
 		SkeletonBlend *blend = &skeleton->blends[i];
+		int blendPassIndex = i;
 		for (int i = 0; i < skeleton->base->bonesNum; i++) {
 			if (!blend->controlMask[i]) continue;
 			Xform xform = blend->poseXforms[i];
+#if 1
+			float perc = blend->weight;
+
+			Xform innerXform;
+
+			poseXforms[i].translation += xform.translation*perc;
+
+			if (streq(skeleton->base->bones[i].name, "leg1.r")) {
+				poseXforms[i].rotation.print("from");
+				xform.rotation.print("with");
+			}
+
+			{
+				if (blendPassIndex == 0) {
+					poseXforms[i].rotation = v4();
+					poseXforms[i].scale = v3();
+				}
+
+				Vec4 in = xform.rotation;
+				if (blendPassIndex == 0) {
+					poseXforms[i].rotation += in*perc;
+				} else {
+					if (poseXforms[i].rotation.dot(in) < 0) in = in.negate();
+					poseXforms[i].rotation += in*perc;
+				}
+
+			}
+
+			// innerXform.rotation = nlerpQuaternions(v4(0, 0, 0, 1), xform.rotation, perc);
+			// poseXforms[i].rotation = multiplyQuaternions(poseXforms[i].rotation, innerXform.rotation);
+
+			// poseXforms[i].rotation = nlerpQuaternions(poseXforms[i].rotation, xform.rotation, perc);
+
+			// poseXforms[i].rotation = jBlowLerpQuaternions(poseXforms[i].rotation, xform.rotation, perc);
+
+			// poseXforms[i].rotation = newLerpQuaternions(poseXforms[i].rotation, xform.rotation, perc);
+
+			// poseXforms[i].rotation = lerp(poseXforms[i].rotation, xform.rotation, perc).normalize();
+
+			if (streq(skeleton->base->bones[i].name, "leg1.r")) {
+				poseXforms[i].rotation.print("to");
+			}
+
+			poseXforms[i].scale += xform.scale*perc;
+
+#else
 			poseXforms[i] = multiplyXforms(poseXforms[i], lerp(newXform(), xform, blend->weight));
+#endif
 		}
 	}
 
@@ -358,18 +491,18 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 	for (int i = 0; i < skeleton->base->bonesNum; i++) {
 		Bone *bone = &skeleton->base->bones[i];
 
-		Matrix4 mat = mat4();
 		if (bone->parent >= 0) {
-			mat = currentTransforms[bone->parent] * mat;
+			currentTransforms[i] = currentTransforms[bone->parent] * toMatrix(poseXforms[i]);
+		} else {
+			currentTransforms[i] = toMatrix(poseXforms[i]);
 		}
 
-		mat = mat * toMatrix(poseXforms[i]);
+		skeleton->meshTransforms[i] = currentTransforms[i] * bone->invModelSpaceMatrix;
 
-		currentTransforms[i] = mat;
+		if (streq(skeleton->base->bones[i].name, "leg1.r")) {
+			currentTransforms[i].getQuaternion().print("final");
+		}
 
-		mat = mat * bone->invModelSpaceMatrix;
-
-		skeleton->meshTransforms[i] = mat;
 	}
 
 	skeleton->time += elapsed;
