@@ -3144,59 +3144,27 @@ void stepGame(float elapsed) {
 						pushAABB(aabb, teamColors[actor->team]);
 					}
 
-#if 1
-					SkeletonAnimation *anim0 = getAnimation(actor->skeleton, "walk");
-					SkeletonAnimation *anim1 = getAnimation(actor->skeleton, "run");
-					static float w0 = 0;
-					static float anim0Time;
-					static float anim1Time = 0;
+					{ // Blend trees
+						float timeScale = elapsed / (1/60.0);
+						if (strstr(mainAnim->name, "idle")) {
+							idleBlend->animation = mainAnim;
+							idleBlend->weight += 0.1*timeScale;
+							mainBlend->loops = false;
+						} else {
+							mainBlend->animation = mainAnim;
+							idleBlend->weight -= 0.1*timeScale;
+							mainBlend->loops = animLoops;
+						}
+						idleBlend->weight = Clamp01(idleBlend->weight);
+						mainBlend->weight = 1 - idleBlend->weight;
+						// logf("%f\n", mainBlend->weight);
+						mainBlend->playing = false;
 
-					ImGui::SliderFloat("w0", &w0, 0, 1);
-					ImGui::SliderFloat("anim0Time", &anim0Time, 0, anim0->frameCount/60.0);
-
-					float w1 = 1 - w0;
-					ImGui::Text("w1: %f\n", w1);
-					// ImGui::SliderFloat("anim1Time", &anim1Time, 0.19, 0.25);
-					ImGui::SliderFloat("anim1Time", &anim1Time, 0, anim1->frameCount/60.0);
-
-					idleBlend->animation = getAnimation(actor->skeleton, "walk");
-					idleBlend->time = anim0Time;
-					idleBlend->weight = w0;
-					idleBlend->playing = false;
-
-					mainBlend->animation = getAnimation(actor->skeleton, "run");
-					mainBlend->time = anim1Time;
-					mainBlend->loops = true;
-					mainBlend->weight = w1;
-					mainBlend->playing = false;
-
-					// for (int i = 0; i < mainBlend->animation->frameCount; i++) {
-					// 	Bone *bone = &actor->skeleton->base->bones[getBoneIndex(actor->skeleton, "leg1.r")];
-					// 	Xform xform = bone->poseXforms[i + mainBlend->animation->firstFrame];
-					// 	xform.rotation.print(frameSprintf("Frame %d", i));
-					// }
-					// exit(0);
-#else
-					if (strstr(mainAnim->name, "idle")) {
-						idleBlend->animation = mainAnim;
-						mainBlend->weight -= 0.05;
-						idleBlend->weight += 0.05;
-					} else {
-						mainBlend->animation = mainAnim;
-						mainBlend->weight += 0.05;
-						idleBlend->weight -= 0.05;
+						mainBlend->time = animTime;
+						if (animPercOverride != -1) {
+							mainBlend->time = animPercOverride * (mainBlend->animation->frameCount / mainBlend->animation->frameRate);
+						}
 					}
-					mainBlend->weight = Clamp01(mainBlend->weight);
-					idleBlend->weight = Clamp01(idleBlend->weight);
-
-					mainBlend->loops = animLoops;
-					mainBlend->playing = false;
-
-					mainBlend->time = animTime;
-					if (animPercOverride != -1) {
-						mainBlend->time = animPercOverride * (mainBlend->animation->frameCount / mainBlend->animation->frameRate);
-					}
-#endif
 
 					updateSkeleton(actor->skeleton, elapsed);
 					if (game->debugDrawUnitModels) {

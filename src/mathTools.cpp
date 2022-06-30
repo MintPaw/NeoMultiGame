@@ -1017,46 +1017,16 @@ Matrix3 mat3FromQuat(Vec4 quat) {
 }
 
 Matrix4 toMatrix(Xform xform) {
-#if 0
-	Matrix3 matrix3 = mat3FromQuat(xform.rotation);
-
-	matrix3.data[0] *= xform.scale.x;
-	matrix3.data[3] *= xform.scale.x;
-	matrix3.data[6] *= xform.scale.x;
-	matrix3.data[1] *= xform.scale.y;
-	matrix3.data[4] *= xform.scale.y;
-	matrix3.data[7] *= xform.scale.y;
-	matrix3.data[2] *= xform.scale.z;
-	matrix3.data[5] *= xform.scale.z;
-	matrix3.data[8] *= xform.scale.z;
-
-	Matrix4 mat = mat4();
-	mat.data[0] = matrix3.data[0];
-	mat.data[1] = matrix3.data[1];
-	mat.data[2] = matrix3.data[2];
-	mat.data[4] = matrix3.data[3];
-	mat.data[5] = matrix3.data[4];
-	mat.data[6] = matrix3.data[5];
-	mat.data[8] = matrix3.data[6];
-	mat.data[9] = matrix3.data[7];
-	mat.data[10] = matrix3.data[8];
-
-	mat.data[12] = xform.translation.x;
-	mat.data[13] = xform.translation.y;
-	mat.data[14] = xform.translation.z;
-
-	return mat;
-#else // Was the same last I checked // UNTRUE
 	Matrix4 mat = mat4();
 	mat.TRANSLATE(xform.translation);
 	mat.SCALE(xform.scale);
 	mat.ROTATE_QUAT(xform.rotation);
 	return mat;
-#endif
 }
 
 Xform multiplyXforms(Xform xform1, Xform xform2);
 Xform multiplyXforms(Xform xform1, Xform xform2) {
+	logf("multiplyXforms is a very bad function!\n");
 	Xform result;
 	result.translation = xform1.translation.add(xform2.translation);
 	result.rotation = multiplyQuaternions(xform1.rotation, xform2.rotation);
@@ -1185,25 +1155,6 @@ Vec2 vectorBetween(Vec2 p1, Vec2 p2) {
 }
 
 Vec4 eulerToQuaternion(Vec3 angle) {
-#if 0
-	float x = angle.x;
-	float y = angle.y;
-	float z = angle.z;
-	float c1 = cos(x/2);
-	float c2 = cos(y/2);
-	float c3 = cos(z/2);
-
-	float s1 = sin(x/2);
-	float s2 = sin(y/2);
-	float s3 = sin(z/2);
-	Vec4 quat;
-	quat.x = s1 * c2 * c3 + c1 * s2 * s3;
-	quat.y = c1 * s2 * c3 - s1 * c2 * s3;
-	quat.z = c1 * c2 * s3 + s1 * s2 * c3;
-	quat.w = c1 * c2 * c3 - s1 * s2 * s3;
-
-	return quat;
-#else
 	float yaw = angle.z * 0.5;
 	float pitch = angle.y * 0.5;
 	float roll = angle.x * 0.5;
@@ -1222,7 +1173,6 @@ Vec4 eulerToQuaternion(Vec3 angle) {
 	quat.z = sy*cp*cr - cy*sp*sr;
 
 	return quat;
-#endif
 }
 
 Vec3 quaternionToEuler(Vec4 quat) {

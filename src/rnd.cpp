@@ -4,7 +4,7 @@ u32 rnd();
 float FORCE_INLINE rndFloat(float min, float max);
 int FORCE_INLINE rndInt(int min, int max);
 bool FORCE_INLINE rndBool();
-// bool FORCE_INLINE rndPerc(float perc);
+bool FORCE_INLINE rndPerc(float perc);
 int rndPick(int *weights, int weightsNum);
 void rndTest();
 
