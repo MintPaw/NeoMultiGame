@@ -3034,16 +3034,16 @@ void stepGame(float elapsed) {
 					float actionActiveEndTime = actionStartupEndTime + (action->info->activeFrames / 60.0);
 					float actionRecoveryEndTime = actionActiveEndTime + (action->info->recoveryFrames / 60.0);
 
-					float animationStartupEndFrame = getMarkerFrame(action->info->animationName, "active");
-					float animationActiveEndFrame = getMarkerFrame(action->info->animationName, "recovery");
+					float animationStartupEndPerc = getMarkerFrame(action->info->animationName, "active");
+					float animationActiveEndPerc = getMarkerFrame(action->info->animationName, "recovery");
 
-					if (animationStartupEndFrame != 0 || animationActiveEndFrame != 0) {
+					if (animationStartupEndPerc != 0 || animationActiveEndPerc != 0) {
 						if (action->time < actionStartupEndTime) {
-							animPercOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndFrame);
+							animPercOverride = clampMap(action->time, 0, actionStartupEndTime, 0, animationStartupEndPerc);
 						} else if (action->time < actionActiveEndTime) { 
-							animPercOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndFrame, animationActiveEndFrame);
+							animPercOverride = clampMap(action->time, actionStartupEndTime, actionActiveEndTime, animationStartupEndPerc, animationActiveEndPerc);
 						} else {
-							animPercOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndFrame, 1);
+							animPercOverride = clampMap(action->time, actionActiveEndTime, actionRecoveryEndTime, animationActiveEndPerc, 1);
 						}
 					} else {
 						float maxTime = (action->info->startupFrames + action->info->activeFrames + action->info->recoveryFrames)/60.0;
