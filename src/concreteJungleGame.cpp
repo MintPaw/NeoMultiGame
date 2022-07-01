@@ -3127,9 +3127,6 @@ void stepGame(float elapsed) {
 					// modelMatrix.SCALE(1, -1, 1);
 					modelMatrix.SCALE(globals->actorModelScale);
 
-					SkeletonBlend *mainBlend = getSkeletonBlend(actor->skeleton, "main");
-					SkeletonBlend *idleBlend = getSkeletonBlend(actor->skeleton, "idle");
-
 					char *altAnimName = NULL;
 					if (actor->heldItem.type == ITEM_SWORD) altAnimName = frameSprintf("%s_sword", animName);
 					if (actor->heldItem.type == ITEM_KNIFE) altAnimName = frameSprintf("%s_knife", animName);
@@ -3145,24 +3142,35 @@ void stepGame(float elapsed) {
 					}
 
 					{ // Blend trees
+						SkeletonBlend *mainBlend = getSkeletonBlend(actor->skeleton, "main");
+						SkeletonBlend *nextBlend = getSkeletonBlend(actor->skeleton, "next");
 						float timeScale = elapsed / (1/60.0);
-						if (strstr(mainAnim->name, "idle")) {
-							idleBlend->animation = mainAnim;
-							idleBlend->weight += 0.1*timeScale;
-							mainBlend->loops = false;
-						} else {
-							mainBlend->animation = mainAnim;
-							idleBlend->weight -= 0.1*timeScale;
-							mainBlend->loops = animLoops;
-						}
-						idleBlend->weight = Clamp01(idleBlend->weight);
-						mainBlend->weight = 1 - idleBlend->weight;
-						// logf("%f\n", mainBlend->weight);
-						mainBlend->playing = false;
 
-						mainBlend->time = animTime;
+						SkeletonBlend *currentBlend = NULL;
+
+						float weightChange = 0.1 * timeScale;
+
+						if (mainBlend->animation == mainAnim) {
+							currentBlend = mainBlend;
+							nextBlend->weight -= weightChange;
+						} else {
+							currentBlend = nextBlend;
+							mainBlend->loops = false;
+							nextBlend->weight += weightChange;
+							if (nextBlend->weight >= 1) {
+								currentBlend = mainBlend;
+							}
+						}
+
+						nextBlend->weight = Clamp01(nextBlend->weight);
+						mainBlend->weight = 1 - nextBlend->weight;
+
+						currentBlend->animation = mainAnim;
+						currentBlend->loops = animLoops;
+						currentBlend->playing = false;
+						currentBlend->time = animTime;
 						if (animPercOverride != -1) {
-							mainBlend->time = animPercOverride * (mainBlend->animation->frameCount / mainBlend->animation->frameRate);
+							currentBlend->time = animPercOverride * (currentBlend->animation->frameCount / currentBlend->animation->frameRate);
 						}
 					}
 
@@ -4868,8 +4876,8 @@ Actor *createActor(Map *map, ActorType type) {
 		actor->skeleton = deriveSkeleton("assets/skeletons/unit.skele");
 		createSkeletonBlend(actor->skeleton, "main", SKELETON_BLEND_ANIMATION);
 
-		SkeletonBlend *idleBlend = createSkeletonBlend(actor->skeleton, "idle", SKELETON_BLEND_ANIMATION);
-		idleBlend->animation = getAnimation(actor->skeleton, "idle");
+		SkeletonBlend *nextBlend = createSkeletonBlend(actor->skeleton, "next", SKELETON_BLEND_ANIMATION);
+		nextBlend->animation = getAnimation(actor->skeleton, "idle");
 
 	} else if (actor->type == ACTOR_ITEM) {
 		actor->size = v3(50, 50, 50);
