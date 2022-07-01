@@ -53,12 +53,6 @@ struct SkeletonBlend {
 
 	Xform *poseXforms;
 	bool *controlMask;
-
-	int prevAnimationFrame;
-	int animationFrame;
-	int justStartedAnimationFrame;
-
-	float noAnimTime;
 };
 
 struct Skeleton {
@@ -97,7 +91,6 @@ SkeletonAnimation *getAnimation(Skeleton *skeleton, const char *name);
 int getBoneIndex(BaseSkeleton *base, const char *boneName);
 int getBoneIndex(Skeleton *skeleton, const char *boneName);
 void updateSkeleton(Skeleton *skeleton, float elapsed);
-bool skeletonBlendJustPlayedFrame(SkeletonBlend *blend, int frameIndex);
 void destroySkeleton(Skeleton *skeleton);
 
 /// FUNCTIONS ^
@@ -304,131 +297,91 @@ int getBoneIndex(BaseSkeleton *base, const char *boneName) {
 }
 
 void updateSkeleton(Skeleton *skeleton, float elapsed) {
-	for (int i = 0; i < skeleton->blendsNum; i++) {
-		SkeletonBlend *blend = &skeleton->blends[i];
-		if (blend->type == SKELETON_BLEND_ANIMATION) {
-			SkeletonAnimation *anim = blend->animation;
-			if (!anim) {
-				if (blend->noAnimTime > 0) logf("Skeleton blend %s has no animation\n", blend->name);
-				blend->noAnimTime += elapsed;
-				continue;
-			}
-			blend->noAnimTime = 0;
-
-			if (blend->playing) blend->time += elapsed*blend->timeScale;
-
-			float floatFramesIn = blend->time * anim->frameRate;
-			int framesIn = blend->time * anim->frameRate;
-			int nextFramesIn = framesIn+1;
-			float framePerc = floatFramesIn - framesIn;
-
-			if (blend->loops) {
-				framesIn = fmod(framesIn, anim->frameCount);
-				nextFramesIn = fmod(nextFramesIn, anim->frameCount);
-			} else {
-				if (framesIn > anim->frameCount-1) framesIn = anim->frameCount-1;
-				if (nextFramesIn > anim->frameCount-1) nextFramesIn = anim->frameCount-1;
-			}
-			framesIn += anim->firstFrame;
-			nextFramesIn += anim->firstFrame;
-			int lowerFrame = framesIn;
-			int upperFrame = nextFramesIn;
-
-			for (int i = 0; i < skeleton->base->bonesNum; i++) {
-				blend->controlMask[i] = true;
-
-				Bone *bone = &skeleton->base->bones[i];
-				int boneIndex = i;
-
-				Xform lowerXform = bone->poseXforms[lowerFrame];
-				Xform upperXform = bone->poseXforms[upperFrame];
-				if (skeletonSys->disableFrameBlending) {
-					blend->poseXforms[boneIndex] = lowerXform;
-				} else {
-					blend->poseXforms[boneIndex] = lerp(lowerXform, upperXform, framePerc);
+	{ /// Generate pose per layer
+		for (int i = 0; i < skeleton->blendsNum; i++) {
+			SkeletonBlend *blend = &skeleton->blends[i];
+			if (blend->type == SKELETON_BLEND_ANIMATION) {
+				SkeletonAnimation *anim = blend->animation;
+				if (!anim) {
+					if (blend->time > 0) logf("Skeleton blend %s has no animation\n", blend->name);
+					continue;
 				}
+
+				if (blend->playing) blend->time += elapsed*blend->timeScale;
+
+				float floatFramesIn = blend->time * anim->frameRate;
+				int framesIn = blend->time * anim->frameRate;
+				int nextFramesIn = framesIn+1;
+				float framePerc = floatFramesIn - framesIn;
+
+				if (blend->loops) {
+					framesIn = fmod(framesIn, anim->frameCount);
+					nextFramesIn = fmod(nextFramesIn, anim->frameCount);
+				} else {
+					if (framesIn > anim->frameCount-1) framesIn = anim->frameCount-1;
+					if (nextFramesIn > anim->frameCount-1) nextFramesIn = anim->frameCount-1;
+				}
+				framesIn += anim->firstFrame;
+				nextFramesIn += anim->firstFrame;
+
+				for (int i = 0; i < skeleton->base->bonesNum; i++) {
+					blend->controlMask[i] = true;
+
+					Bone *bone = &skeleton->base->bones[i];
+
+					if (skeletonSys->disableFrameBlending) {
+						blend->poseXforms[i] = bone->poseXforms[framesIn];
+					} else {
+						blend->poseXforms[i] = lerp(bone->poseXforms[framesIn], bone->poseXforms[nextFramesIn], framePerc);
+					}
+				}
+			} else if (blend->type == SKELETON_BLEND_MANUAL_BONES) {
+			} else {
+				logf("Unknown blend type\n");
 			}
-		} else if (blend->type == SKELETON_BLEND_MANUAL_BONES) {
-		} else {
-			logf("Unknown blend type\n");
 		}
-	}
+	} ///
 
-	const int POSE_XFORM_MAX = 128;
-	Xform poseXforms[POSE_XFORM_MAX];
-	if (skeleton->base->bonesNum > POSE_XFORM_MAX) {
-		logf("Too many pose xform\n");
-		return;
-	}
-	memset(poseXforms, 0, sizeof(Xform)*skeleton->base->bonesNum);
+	Xform *poseXforms = (Xform *)frameMalloc(sizeof(Xform) * BONES_MAX);
+	{ /// Blend layers together
+		if (skeleton->base->bonesNum > BONES_MAX) {
+			logf("Too many pose xform\n");
+			return;
+		}
 
-	for (int i = 0; i < skeleton->blendsNum; i++) {
-		SkeletonBlend *blend = &skeleton->blends[i];
+		for (int i = 0; i < skeleton->blendsNum; i++) {
+			SkeletonBlend *blend = &skeleton->blends[i];
+			for (int i = 0; i < skeleton->base->bonesNum; i++) {
+				if (!blend->controlMask[i]) continue;
+				Xform xform = blend->poseXforms[i];
+
+				poseXforms[i].translation += xform.translation*blend->weight;
+
+				if (poseXforms[i].rotation.dot(xform.rotation) < 0) xform.rotation = xform.rotation.negate();
+				poseXforms[i].rotation += xform.rotation*blend->weight;
+
+				poseXforms[i].scale += xform.scale*blend->weight;
+			}
+		}
+	} ///
+
+	{ /// Convert local space poses to model space
+		Matrix4 *currentTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
+
 		for (int i = 0; i < skeleton->base->bonesNum; i++) {
-			if (!blend->controlMask[i]) continue;
-			Xform xform = blend->poseXforms[i];
+			Bone *bone = &skeleton->base->bones[i];
 
-			poseXforms[i].translation += xform.translation*blend->weight;
+			if (bone->parent >= 0) {
+				currentTransforms[i] = currentTransforms[bone->parent] * toMatrix(poseXforms[i]);
+			} else {
+				currentTransforms[i] = toMatrix(poseXforms[i]);
+			}
 
-			if (poseXforms[i].rotation.dot(xform.rotation) < 0) xform.rotation = xform.rotation.negate();
-			poseXforms[i].rotation += xform.rotation*blend->weight;
-
-			poseXforms[i].scale += xform.scale*blend->weight;
+			skeleton->meshTransforms[i] = currentTransforms[i] * bone->invModelSpaceMatrix;
 		}
-	}
-
-	for (int i = 0; i < skeleton->base->bonesNum; i++) {
-		skeleton->meshTransforms[i] = mat4();
-	}
-
-	Matrix4 currentTransforms[BONES_MAX];
-
-	for (int i = 0; i < skeleton->base->bonesNum; i++) {
-		Bone *bone = &skeleton->base->bones[i];
-
-		if (bone->parent >= 0) {
-			currentTransforms[i] = currentTransforms[bone->parent] * toMatrix(poseXforms[i]);
-		} else {
-			currentTransforms[i] = toMatrix(poseXforms[i]);
-		}
-
-		skeleton->meshTransforms[i] = currentTransforms[i] * bone->invModelSpaceMatrix;
-	}
+	} ///
 
 	skeleton->time += elapsed;
-}
-
-bool skeletonIsPlayingAnimation(Skeleton *skeleton, char *blendName, char *animName);
-bool skeletonIsPlayingAnimation(Skeleton *skeleton, char *blendName, char *animName) {
-	SkeletonBlend *blend = getSkeletonBlend(skeleton, blendName);
-	if (!blend) return false;
-	if (streq(blend->animation->name, animName)) return true;
-	return false;
-}
-
-bool skeletonBlendJustPlayedFrame(Skeleton *skeleton, char *blendName, char *animName, int frameIndex);
-bool skeletonBlendJustPlayedFrame(Skeleton *skeleton, char *blendName, char *animName, int frameIndex) {
-	SkeletonBlend *blend = getSkeletonBlend(skeleton, blendName);
-	if (!blend) return false;
-	if (!strstr(blend->animation->name, animName)) return false;
-	return skeletonBlendJustPlayedFrame(blend, frameIndex);
-}
-
-bool skeletonBlendJustPlayedFrame(SkeletonBlend *blend, int frameIndex) {
-	logf("skeletonBlendJustPlayedFrame doesn't work anymore\n");
-	if (blend->justStartedAnimationFrame == -1) return false;
-	if (blend->justStartedAnimationFrame == frameIndex) return true;
-
-	int prev = blend->prevAnimationFrame;
-	int cur = blend->animationFrame;
-	if (prev > cur) {
-		int temp = prev;
-		prev = cur;
-		cur = prev;
-	}
-	if (prev < frameIndex && cur > frameIndex) return true;
-
-	return false;
 }
 
 void destroySkeleton(Skeleton *skeleton) {
