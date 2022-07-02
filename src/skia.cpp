@@ -115,7 +115,7 @@ struct VDrawCommand {
 	VDrawCommandType type;
 
 	Matrix3 matrix;
-	BlendMode blendMode;
+	SwfBlendMode blendMode;
 	Vec2 control;
 	Vec2 position;
 	float width;
@@ -842,7 +842,6 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 #endif
 }
 
-int usingInvalidBlendModeWarnings = 0;
 void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse, VDrawCommandsList *cmdList, bool isNested) {
 	int startingCmdIndex = cmdList->cmdsNum;
 	Matrix3 localMatrix = mat3();
@@ -1027,44 +1026,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						props.colorTransform = recurse.colorTransform;
 
 						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE); //@todo This could be a bit faster if you didn't set blend mode every shape
-						if (recurse.blendMode == SWF_BLEND_NORMAL) {
-							cmd->blendMode = BLEND_NORMAL;
-						} else if (recurse.blendMode == SWF_BLEND_MULTIPLY) {
-							cmd->blendMode = BLEND_MULTIPLY;
-						} else if (recurse.blendMode == SWF_BLEND_SCREEN) {
-							cmd->blendMode = BLEND_SCREEN;
-						} else if (recurse.blendMode == SWF_BLEND_LIGHTEN) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_DARKEN) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_DIFFERENCE) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_ADD) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_SUBTRACT) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_INVERT) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode invert\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_ALPHA) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode alpha\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_ERASE) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode erase\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_OVERLAY) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						} else if (recurse.blendMode == SWF_BLEND_HARDLIGHT) {
-							if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-							usingInvalidBlendModeWarnings++;
-						}
-						if (usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
+						cmd->blendMode = recurse.blendMode;
 
 						genDrawShape(drawable->shape, props, cmdList);
 					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
@@ -1167,6 +1129,7 @@ void cairo_quadratic_to (cairo_t *cr, double x1, double y1, double x2, double y2
 }
 #endif
 
+int usingInvalidBlendModeWarnings = 0;
 void execCommands(VDrawCommandsList *cmdList) {
 	if (skiaSys->width == 0) {
 		logf("You have to call resize at least once to draw\n");
@@ -1341,23 +1304,54 @@ void execCommands(VDrawCommandsList *cmdList) {
 			skiaSys->currentBlur = v2();
 #endif
 		} else if (cmd->type == VDRAW_START_COLOR_MATRIX) {
-			// float *colorMatrix = (float *)frameMalloc(sizeof(float) * 20);
-			// memcpy(colorMatrix, cmd->colors, sizeof(float) * 20);
-			// for (int i = 0; i < 20; i++) colorMatrix[i] /= 255;
-			// sk_sp<SkColorFilter> skiaColorFilter = SkColorFilters::Matrix(colorMatrix);
-			// paint.setColorFilter(skiaColorFilter);
+			float *colorMatrix = (float *)frameMalloc(sizeof(float) * 20);
+			memcpy(colorMatrix, cmd->colors, sizeof(float) * 20);
+			colorMatrix[4] /= 255.0;
+			colorMatrix[9] /= 255.0;
+			colorMatrix[14] /= 255.0;
+			colorMatrix[19] /= 255.0;
+			sk_sp<SkColorFilter> skiaColorFilter = SkColorFilters::Matrix(colorMatrix);
+			paint.setColorFilter(skiaColorFilter);
 		} else if (cmd->type == VDRAW_END_COLOR_MATRIX) {
-			// paint.setColorFilter(NULL);
+			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
-			if (cmd->blendMode == BLEND_NORMAL) {
+			if (cmd->blendMode == SWF_BLEND_NORMAL) {
 				paint.setBlendMode(SkBlendMode::kSrcOver);
-			} else if (cmd->blendMode == BLEND_MULTIPLY) {
+			} else if (cmd->blendMode == SWF_BLEND_MULTIPLY) {
 				paint.setBlendMode(SkBlendMode::kMultiply);
-			} else if (cmd->blendMode == BLEND_SCREEN) {
+			} else if (cmd->blendMode == SWF_BLEND_SCREEN) {
 				paint.setBlendMode(SkBlendMode::kScreen);
-			} else {
-				logf("Unknown blend mode\n");
+			} else if (cmd->blendMode == SWF_BLEND_LIGHTEN) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_DARKEN) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_DIFFERENCE) {
+				paint.setBlendMode(SkBlendMode::kDifference);
+			} else if (cmd->blendMode == SWF_BLEND_ADD) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_SUBTRACT) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_INVERT) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode invert\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_ALPHA) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode alpha\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_ERASE) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode erase\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_OVERLAY) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
+			} else if (cmd->blendMode == SWF_BLEND_HARDLIGHT) {
+				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				usingInvalidBlendModeWarnings++;
 			}
+			if (usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
 		} else if (cmd->type == VDRAW_SET_SOLID_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
 			paint.setColor(cmd->colors[0]);
@@ -1666,10 +1660,10 @@ void drawSwfAnalyzer() {
 	static SwfASys *aSys = NULL;
 	if (!aSys) {
 		aSys = (SwfASys *)zalloc(sizeof(SwfASys));
-		aSys->spriteTexture = createRenderTexture(256, 256);
+		aSys->spriteTexture = createRenderTexture(512, 512);
 		aSys->spriteScale = 1;
 
-		aSys->shapeTexture = createRenderTexture(256, 256);
+		aSys->shapeTexture = createRenderTexture(512, 512);
 		aSys->shapeScale = 1;
 		strcpy(aSys->inputPath, "assets/swf/Shared.swf");
 	}

@@ -3142,28 +3142,29 @@ void stepGame(float elapsed) {
 					}
 
 					{ // Blend trees
+						Skeleton *skeleton = actor->skeleton;
 						SkeletonBlend *mainBlend = getSkeletonBlend(actor->skeleton, "main");
 						SkeletonBlend *nextBlend = getSkeletonBlend(actor->skeleton, "next");
+						SkeletonBlend *fadeOutBlend = getSkeletonBlend(actor->skeleton, "fadeOut");
 						float timeScale = elapsed / (1/60.0);
 
 						SkeletonBlend *currentBlend = NULL;
 
 						float weightChange = 0.1 * timeScale;
 
-						if (mainBlend->animation == mainAnim) {
-							currentBlend = mainBlend;
-							nextBlend->weight -= weightChange;
-						} else {
-							currentBlend = nextBlend;
-							mainBlend->loops = false;
-							nextBlend->weight += weightChange;
-							if (nextBlend->weight >= 1) {
-								currentBlend = mainBlend;
+						nextBlend->weight = 0;
+
+						currentBlend = mainBlend;
+						if (mainBlend->animation != mainAnim) {
+							for (int i = 0; i < skeleton->base->bonesNum; i++) {
+								fadeOutBlend->poseXforms[i] = skeleton->currentPoseXforms[i];
+								fadeOutBlend->controlMask[i] = 1;
 							}
+							fadeOutBlend->weight = 1;
 						}
 
-						nextBlend->weight = Clamp01(nextBlend->weight);
-						mainBlend->weight = 1 - nextBlend->weight;
+						fadeOutBlend->weight = Clamp01(fadeOutBlend->weight - weightChange);
+						mainBlend->weight = 1 - fadeOutBlend->weight;
 
 						currentBlend->animation = mainAnim;
 						currentBlend->loops = animLoops;
@@ -4878,6 +4879,9 @@ Actor *createActor(Map *map, ActorType type) {
 
 		SkeletonBlend *nextBlend = createSkeletonBlend(actor->skeleton, "next", SKELETON_BLEND_ANIMATION);
 		nextBlend->animation = getAnimation(actor->skeleton, "idle");
+
+		SkeletonBlend *fadeOutBlend = createSkeletonBlend(actor->skeleton, "fadeOut", SKELETON_BLEND_MANUAL_BONES);
+		fadeOutBlend->weight = 0;
 
 	} else if (actor->type == ACTOR_ITEM) {
 		actor->size = v3(50, 50, 50);

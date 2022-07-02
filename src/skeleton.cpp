@@ -62,6 +62,7 @@ struct Skeleton {
 	SkeletonBlend blends[SKELETON_BLENDS_MAX];
 	int blendsNum;
 
+	Xform *currentPoseXforms;
 	Matrix4 *meshTransforms;
 	float time;
 };
@@ -222,8 +223,10 @@ Skeleton *deriveSkeleton(BaseSkeleton *base) {
 	Skeleton *skeleton = (Skeleton *)zalloc(sizeof(Skeleton));
 	skeleton->base = base;
 	skeleton->meshTransforms = (Matrix4 *)zalloc(sizeof(Matrix4) * base->bonesNum);
+	skeleton->currentPoseXforms = (Xform *)zalloc(sizeof(Xform) * base->bonesNum);
 	for (int i = 0; i < base->bonesNum; i++) {
 		skeleton->meshTransforms[i] = mat4();
+		skeleton->currentPoseXforms[i] = newXform();
 	}
 	return skeleton;
 }
@@ -342,6 +345,7 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 		}
 	} ///
 
+	memset(skeleton->currentPoseXforms, 0, sizeof(Xform) * skeleton->base->bonesNum);
 	Xform *poseXforms = (Xform *)frameMalloc(sizeof(Xform) * BONES_MAX);
 	{ /// Blend layers together
 		if (skeleton->base->bonesNum > BONES_MAX) {
@@ -355,12 +359,12 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 				if (!blend->controlMask[i]) continue;
 				Xform xform = blend->poseXforms[i];
 
-				poseXforms[i].translation += xform.translation*blend->weight;
+				skeleton->currentPoseXforms[i].translation += xform.translation*blend->weight;
 
-				if (poseXforms[i].rotation.dot(xform.rotation) < 0) xform.rotation = xform.rotation.negate();
-				poseXforms[i].rotation += xform.rotation*blend->weight;
+				if (skeleton->currentPoseXforms[i].rotation.dot(xform.rotation) < 0) xform.rotation = xform.rotation.negate();
+				skeleton->currentPoseXforms[i].rotation += xform.rotation*blend->weight;
 
-				poseXforms[i].scale += xform.scale*blend->weight;
+				skeleton->currentPoseXforms[i].scale += xform.scale*blend->weight;
 			}
 		}
 	} ///
@@ -372,9 +376,9 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 			Bone *bone = &skeleton->base->bones[i];
 
 			if (bone->parent >= 0) {
-				currentTransforms[i] = currentTransforms[bone->parent] * toMatrix(poseXforms[i]);
+				currentTransforms[i] = currentTransforms[bone->parent] * toMatrix(skeleton->currentPoseXforms[i]);
 			} else {
-				currentTransforms[i] = toMatrix(poseXforms[i]);
+				currentTransforms[i] = toMatrix(skeleton->currentPoseXforms[i]);
 			}
 
 			skeleton->meshTransforms[i] = currentTransforms[i] * bone->invModelSpaceMatrix;
@@ -391,6 +395,6 @@ void destroySkeleton(Skeleton *skeleton) {
 		free(blend->controlMask);
 	}
 
-	// free(skeleton->currentTransforms);
+	// free(skeleton->currentTransforms); //@incomplete //@leak Why? Because despawning with a pushed model?
 	free(skeleton);
 }
