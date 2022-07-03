@@ -3515,11 +3515,9 @@ void stepGame(float elapsed) {
 
 			for (int i = 0; i < actor->thrustersNum; i++) {
 				Thruster *thruster = &actor->thrusters[i];
-				float perc = 1;
-				if (thruster->maxTime > 0) perc = thruster->time / thruster->maxTime;
+				if (thruster->maxTime == 0) thruster->maxTime = 1/60.0;
 
-				Vec3 accel = thruster->accel * perc;
-				actor->accel += accel;
+				actor->accel += thruster->accel;
 
 				thruster->time += elapsed;
 				if (thruster->time >= thruster->maxTime) {
