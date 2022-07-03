@@ -1700,10 +1700,13 @@ void stepGame(float elapsed) {
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Spawn low max stamina enemy")) {
+			if (ImGui::Button("Spawn Dummy")) {
 				Actor *actor = createActor(map, ACTOR_UNIT);
 				actor->stats[STAT_MAX_STAMINA] = 1;
 				actor->stats[STAT_STAMINA_REGEN] = 1;
+				actor->stats[STAT_HP] = 50;
+				actor->stats[STAT_MOVEMENT_SPEED] = 1;
+				actor->stats[STAT_ATTACK_SPEED] = 1;
 				actor->team = 1;
 				actor->position = v3(0, 0, 10);
 			}
@@ -1983,6 +1986,7 @@ void stepGame(float elapsed) {
 									Thruster *thruster = &trigger->thruster;
 									ImGui::InputFloat3("Accel", &thruster->accel.x);
 									ImGui::InputFloat("Max time", &thruster->maxTime);
+									ImGui::Separator();
 								}
 								ImGui::InputInt("Thuster triggers num", &info->thrusterTriggersNum);
 								info->thrusterTriggersNum = mathClamp(info->thrusterTriggersNum, 0, THRUSTER_TRIGGERS_MAX);
@@ -2572,7 +2576,10 @@ void stepGame(float elapsed) {
 				}
 
 				if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
+
 				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
+				if (usesCustomLength) actionTimeScale = 1;
+				if (action->type == ACTION_RAISING) actionTimeScale = 1;
 
 				action->prevTime = action->time;
 				action->time += elapsed * actionTimeScale;
@@ -2609,6 +2616,7 @@ void stepGame(float elapsed) {
 			for (int i = 0; i < getBuffCount(actor, BUFF_STICKY_NAPALM_STACK); i++) speed *= 0.8;
 			actor->isBlocking = true;
 			if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
+			if (!actor->isOnGround) actor->isBlocking = false;
 
 			if (actor->isRunningLeft || actor->isRunningRight) {
 				if (fmod(game->time, 0.2) < fmod(game->prevTime, 0.2)) {
