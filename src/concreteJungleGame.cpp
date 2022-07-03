@@ -468,6 +468,7 @@ struct Actor {
 	bool playerControlled;
 	int team;
 	bool facingLeft;
+	float facingAngle;
 	bool markedForDeletion;
 
 	float hp;
@@ -3016,6 +3017,47 @@ void stepGame(float elapsed) {
 				} ///
 			}
 
+			{ /// Update facing
+				bool canTurn = false;
+				float turnSpeed = 0.3;
+
+				if (actor->actionsNum == 0) {
+					canTurn = true;
+				} else {
+					if (actor->actions[0].type == ACTION_FORCED_MOVE) canTurn = true;
+					if (actor->actions[0].type == ACTION_RAISING) {
+						turnSpeed *= 0.5;
+						canTurn = true;
+					}
+				}
+
+				if (canTurn) {
+					if (actor->playerControlled) {
+						if (actor->movementAccel.x < -0.1) actor->facingLeft = true;
+						if (actor->movementAccel.x > 0.1) actor->facingLeft = false;
+					} else {
+						Actor *target = getActor(map, actor->aiTarget);
+						if (target) {
+							Vec3 dir = target->position - actor->position;
+							actor->facingLeft = dir.x <= 0;
+						} else {
+							if (actor->movementAccel.x < -0.1) actor->facingLeft = true;
+							if (actor->movementAccel.x > 0.1) actor->facingLeft = false;
+						}
+					}
+				}
+
+				float targetRads = M_PI/2 - 0.01;
+				if (actor->facingLeft) targetRads *= -1;
+
+				if (actor->actionsNum > 0) turnSpeed *= 1.25;
+
+				float timeScale = elapsed / (1/60.0);
+				turnSpeed *= timeScale;
+
+				actor->facingAngle = lerpRad(actor->facingAngle, targetRads, turnSpeed);
+			} ///
+
 			{ /// Update items
 				for (int i = 0; i < actor->itemsNum; i++) {
 					Item *item = &actor->items[i];
@@ -3170,12 +3212,15 @@ void stepGame(float elapsed) {
 					modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
 					modelMatrix.TRANSLATE(globals->actorModelOffset);
 
+#if 1
+					modelMatrix.ROTATE_EULER(0, 0, actor->facingAngle);
+#else
 					if (actor->facingLeft) {
 						modelMatrix.ROTATE_EULER(0, 0, -M_PI/2);
 					} else {
 						modelMatrix.ROTATE_EULER(0, 0, M_PI/2);
 					}
-					// modelMatrix.SCALE(1, -1, 1);
+#endif
 					modelMatrix.SCALE(globals->actorModelScale);
 
 					char *altAnimName = NULL;
@@ -3456,8 +3501,6 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			if (actor->movementAccel.x < -0.1) actor->facingLeft = true;
-			if (actor->movementAccel.x > 0.1) actor->facingLeft = false;
 			if (actor->isOnGround) actor->accel += actor->movementAccel;
 			if (!isZero(actor->movementAccel)) {
 				actor->movementAccel = v3();
@@ -3574,18 +3617,6 @@ void stepGame(float elapsed) {
 					if (actor->type == ACTOR_UNIT && actor->actionsNum > 0 && actor->actions[0].type == ACTION_HITSTUN) {
 						playWorldSound("assets/audio/wallThump.ogg", getCenter(newAABB));
 					}
-				}
-			}
-		}
-
-		if (actor->type == ACTOR_UNIT) { // We have to flip around ai actors here because physics flips them if they're moving slightly backwards
-			Actor *target = getActor(map, actor->aiTarget);
-			if (target) {
-				Vec3 dir = target->position - actor->position;
-				if (dir.x <= 0) {
-					actor->facingLeft = true;
-				} else {
-					actor->facingLeft = false;
 				}
 			}
 		}

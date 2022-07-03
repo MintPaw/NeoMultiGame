@@ -99,6 +99,7 @@ float lerpDeg(float min, float max, float perc);
 Vec2 lerpVec2(Vec2 min, Vec2 max, float perc); //@hack Change all these to use the overloaded lerp() instead
 Vec3 lerpVec3(Vec3 min, Vec3 max, float perc);
 int lerpColor(int colour1, int colour2, float perc);
+
 float cubicBezier(float x2, float y2, float x3, float y3, float t);
 float moveTowards(float value, float target, float speed);
 Vec2 moveTowards(Vec2 value, Vec2 target, float speed);
@@ -112,6 +113,7 @@ s16 FORCE_INLINE clampedS16Add(int left, int right);
 
 float map(float value, float sourceMin, float sourceMax, float destMin, float destMax, Ease ease = LINEAR);
 float clampMap(float value, float sourceMin, float sourceMax, float destMin, float destMax, Ease ease = LINEAR);
+float FORCE_INLINE dot(Vec2 a, Vec2 b);
 
 int argbToHex(unsigned char a, unsigned char r, unsigned char g, unsigned char b);
 int argbToHex(Vec4 argb);
@@ -1848,6 +1850,10 @@ float clampMap(float value, float sourceMin, float sourceMax, float destMin, flo
 	perc = Clamp01(perc);
 	perc = tweenEase(perc, ease);
 	return lerp(destMin, destMax, perc);
+}
+
+float dot(Vec2 a, Vec2 b) {
+	return a.x*b.x + a.x*b.y;
 }
 
 //Vec3 getRGBFromHSV(float hue, float sat, float lum) {
