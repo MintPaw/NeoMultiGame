@@ -233,6 +233,20 @@ enum ActionType {
 	ACTION_TYPES_MAX=128,
 };
 
+struct Thruster {
+	Vec3 accel;
+	float maxTime;
+
+	/// Unserialized
+	float time;
+};
+
+struct ThrusterTrigger {
+	int frame;
+	bool requiresHit;
+	Thruster thruster;
+};
+
 #define _F_AT_ALLOWED_ON_GROUND    (1 << 0)
 #define _F_AT_ALLOWED_IN_AIR       (1 << 1)
 struct ActionTypeInfo {
@@ -253,19 +267,20 @@ struct ActionTypeInfo {
 	AABB hitboxes[HITBOXES_MAX];
 	int hitboxesNum;
 
-	Vec3 hitVelo;
-	Vec3 blockVelo;
 	float damage;
-
-	Vec3 thrust;
-	int thrustFrame;
-
 	float staminaUsage;
 
 	BuffType buffToGet;
 	float buffToGetTime;
 	BuffType buffToGive;
 	float buffToGiveTime;
+
+#define THRUSTER_TRIGGERS_MAX 4
+	ThrusterTrigger thrusterTriggers[THRUSTER_TRIGGERS_MAX];
+	int thrusterTriggersNum;
+
+	Thruster hitThruster;
+	Thruster blockThruster;
 };
 
 struct Globals {
@@ -381,6 +396,8 @@ struct Action {
 	float customLength;
 	Vec3 targetPosition;
 	int relatedActorId;
+
+	bool didHitATarget;
 };
 
 enum ActorType {
@@ -529,6 +546,10 @@ struct Actor {
 	int styleIndex;
 
 	float awareness;
+
+#define THRUSTERS_MAX 8
+	Thruster thrusters[THRUSTERS_MAX];
+	int thrustersNum;
 };
 
 struct Map {
@@ -829,6 +850,7 @@ Item *getItem(Actor *actor, int id);
 int getStashedItemCount(Actor *actor, ItemType type);
 int getEquippedItemCount(Actor *actor, ItemType type);
 float getStatPoints(Actor *actor, StatType stat);
+
 int getSurroundingAtMaxAlliance(Vec2i startingIndex, int team);
 int getTeamWithMostAlliance(Map *map);
 float countSurroundingAlliance(Vec2i startingIndex, int team);
@@ -862,6 +884,7 @@ void pushScreenLine(Vec2 start, Vec2 end, int thickness, int color);
 int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
 Particle *createParticle(ParticleType type);
+void applyThruster(Actor *actor, Thruster newThruster, bool flipX=false);
 
 void saveMap(Map *map, int mapFileIndex);
 void loadMap(Map *map, int mapFileIndex);
@@ -1942,11 +1965,30 @@ void stepGame(float elapsed) {
 						ImGui::InputInt("Hitboxes num", &info->hitboxesNum);
 						info->hitboxesNum = mathClamp(info->hitboxesNum, 0, HITBOXES_MAX);
 
-						if (ImGui::TreeNode("Velos")) {
-							ImGui::DragFloat3("Hit velo", &info->hitVelo.x);
-							ImGui::DragFloat3("Block velo", &info->blockVelo.x);
-							ImGui::DragFloat3("Thrust", &info->thrust.x);
-							ImGui::InputInt("Thrust frame", &info->thrustFrame);
+						if (ImGui::TreeNode("Thrusters")) {
+							ImGui::Text("Hit thruster");
+							ImGui::InputFloat3("Accel###hitThrusterAccel", &info->hitThruster.accel.x);
+							ImGui::InputFloat("Max time###hitThrusterMaxTime", &info->hitThruster.maxTime);
+							ImGui::Separator();
+							ImGui::Text("Block thruster");
+							ImGui::InputFloat3("Accel###blockThrusterAccel", &info->blockThruster.accel.x);
+							ImGui::InputFloat("Max time###blockThrusterMaxTime", &info->blockThruster.maxTime);
+							ImGui::Separator();
+							if (ImGui::TreeNode("Triggers")) {
+								for (int i = 0; i < info->thrusterTriggersNum; i++) {
+									ThrusterTrigger *trigger = &info->thrusterTriggers[i];
+									ImGui::InputInt("Frame", &trigger->frame);
+									ImGui::Checkbox("Requires hit", &trigger->requiresHit);
+
+									Thruster *thruster = &trigger->thruster;
+									ImGui::InputFloat3("Accel", &thruster->accel.x);
+									ImGui::InputFloat("Max time", &thruster->maxTime);
+								}
+								ImGui::InputInt("Thuster triggers num", &info->thrusterTriggersNum);
+								info->thrusterTriggersNum = mathClamp(info->thrusterTriggersNum, 0, THRUSTER_TRIGGERS_MAX);
+								ImGui::TreePop();
+							}
+
 							ImGui::TreePop();
 						}
 						ImGui::InputFloat("Damage", &info->damage);
@@ -2215,10 +2257,10 @@ void stepGame(float elapsed) {
 						if (action->time == 0) justHitFrame = 0;
 					}
 
-					if (justHitFrame == action->info->thrustFrame) {
-						Vec3 velo = action->info->thrust;
-						if (actor->facingLeft) velo.x *= -1;
-						actor->velo += velo;
+					for (int i = 0; i < action->info->thrusterTriggersNum; i++) {
+						ThrusterTrigger *trigger = &action->info->thrusterTriggers[i];
+						if (trigger->requiresHit && !action->didHitATarget) continue;
+						if (trigger->frame == justHitFrame) applyThruster(actor, trigger->thruster, actor->facingLeft);
 					}
 
 					if (justHitFrame == action->info->startupFrames+1) {
@@ -2303,9 +2345,10 @@ void stepGame(float elapsed) {
 							for (int i = 0; i < worldSpaceHitboxesNum; i++) {
 								AABB hitbox = worldSpaceHitboxs[i];
 								if (intersects(otherActorAABB, hitbox)) {
-
 									memmove(&otherActor->actionIdsHitBy[1], &otherActor->actionIdsHitBy[0], sizeof(int) * (ACTION_IDS_HIT_BY_MAX-1));
 									otherActor->actionIdsHitBy[0] = action->id;
+
+									action->didHitATarget = true;
 
 									if (otherActor->hasHyperArmor) {
 										playWorldSound("assets/audio/hyperArmorBreak.ogg", getCenter(otherActorAABB));
@@ -2329,10 +2372,12 @@ void stepGame(float elapsed) {
 										Effect *effect = createEffect(EFFECT_BLOCK_DAMAGE, otherActor->position + v3(0, 0, otherActor->size.z*0.5));
 										effect->value = damage;
 
-										Vec3 blockVelo = action->info->blockVelo;
-										if (isZero(blockVelo)) blockVelo = action->info->hitVelo * 0.25;
-										if (actor->facingLeft) blockVelo.x *= -1;
-										otherActor->velo += blockVelo;
+										Thruster blockThruster = action->info->blockThruster;
+										if (isZero(blockThruster.accel)) {
+											blockThruster = action->info->hitThruster;
+											blockThruster.accel *= 0.25;
+										}
+										applyThruster(otherActor, blockThruster, actor->facingLeft);
 
 										otherActor->actionsNum = 0;
 										Action *newAction = addAction(otherActor, ACTION_BLOCKSTUN);
@@ -2371,9 +2416,7 @@ void stepGame(float elapsed) {
 											addBuff(otherActor, BUFF_STICKY_NAPALM_STACK, 5);
 										}
 
-										Vec3 hitVelo = action->info->hitVelo;
-										if (actor->facingLeft) hitVelo.x *= -1;
-										otherActor->velo += hitVelo;
+										applyThruster(otherActor, action->info->hitThruster, actor->facingLeft);
 
 										otherActor->actionsNum = 0;
 										Action *newAction = addAction(otherActor, ACTION_HITSTUN);
@@ -3417,15 +3460,31 @@ void stepGame(float elapsed) {
 
 			float grav = 0.75;
 			for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
-
 			actor->accel.z -= grav;
+
+			for (int i = 0; i < actor->thrustersNum; i++) {
+				Thruster *thruster = &actor->thrusters[i];
+				float perc = 1;
+				if (thruster->maxTime > 0) perc = thruster->time / thruster->maxTime;
+
+				Vec3 accel = thruster->accel * perc;
+				actor->accel += accel;
+
+				thruster->time += elapsed;
+				if (thruster->time >= thruster->maxTime) {
+					arraySpliceIndex(actor->thrusters, actor->thrustersNum, sizeof(Thruster), i);
+					actor->thrustersNum--;
+					i--;
+					continue;
+				}
+			}
 
 			Vec3 damping = v3();
 			if (actor->isOnGround) {
-				damping.x = 0.2;
-				damping.y = 0.2;
+				damping = v3(0.2, 0.2, 0);
+			} else {
+				damping = v3(0, 0, 0.02);
 			}
-			damping.z = 0.02;
 
 			actor->velo += (actor->accel - damping*actor->velo) * timeScale;
 			actor->accel = v3();
@@ -5473,6 +5532,17 @@ Particle *createParticle(ParticleType type) {
 	return particle;
 }
 
+void applyThruster(Actor *actor, Thruster newThruster, bool flipX) {
+	if (actor->thrustersNum > THRUSTERS_MAX) {
+		logf("Too many thrusters\n");
+		actor->thrustersNum--;
+	}
+	Thruster *thruster = &actor->thrusters[actor->thrustersNum++];
+	*thruster = newThruster;
+	if (flipX) thruster->accel.x *= -1;
+	thruster->time = 0; // This shouldn't actually be needed
+}
+
 void saveMap(Map *map, int mapFileIndex) {
 	DataStream *stream = newDataStream();
 
@@ -5572,7 +5642,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 12;
+	int globalsVersion = 14;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -5588,16 +5658,32 @@ void saveGlobals() {
 		writeU8(stream, info->animationLoops);
 		for (int i = 0; i < HITBOXES_MAX; i++) writeAABB(stream, info->hitboxes[i]);
 		writeU32(stream, info->hitboxesNum);
-		writeVec3(stream, info->hitVelo);
-		writeVec3(stream, info->blockVelo);
+		writeVec3(stream, v3()); // @todo remove
+		writeVec3(stream, v3()); // @todo remove
 		writeFloat(stream, info->damage);
-		writeVec3(stream, info->thrust);
-		writeU32(stream, info->thrustFrame);
+		writeVec3(stream, v3()); //@todo remove
+		writeU32(stream, 0); //@todo remove
 		writeFloat(stream, info->staminaUsage);
 		writeU32(stream, info->buffToGet);
 		writeFloat(stream, info->buffToGetTime);
 		writeU32(stream, info->buffToGive);
 		writeFloat(stream, info->buffToGiveTime);
+
+		writeU32(stream, info->thrusterTriggersNum);
+		for (int i = 0; i < info->thrusterTriggersNum; i++) {
+			ThrusterTrigger *trigger = &info->thrusterTriggers[i];
+			writeU32(stream, trigger->frame);
+			writeU8(stream, trigger->requiresHit);
+
+			Thruster *thruster = &trigger->thruster;
+			writeVec3(stream, thruster->accel);
+			writeFloat(stream, thruster->maxTime);
+		}
+
+		writeVec3(stream, info->hitThruster.accel);
+		writeFloat(stream, info->hitThruster.maxTime);
+		writeVec3(stream, info->blockThruster.accel);
+		writeFloat(stream, info->blockThruster.maxTime);
 	}
 
 	writeVec3(stream, globals->actorSpriteOffset);
@@ -5636,16 +5722,37 @@ void loadGlobals() {
 		info->animationLoops = readU8(stream);
 		for (int i = 0; i < HITBOXES_MAX; i++) info->hitboxes[i] = readAABB(stream);
 		info->hitboxesNum = readU32(stream);
-		info->hitVelo = readVec3(stream);
-		info->blockVelo = readVec3(stream);
+		readVec3(stream); // @todo remove
+		readVec3(stream); // @todo remove
 		info->damage = readFloat(stream);
-		info->thrust = readVec3(stream);
-		info->thrustFrame = readU32(stream);
+		readVec3(stream); // @todo remove
+		readU32(stream); // @todo remove
 		info->staminaUsage = readFloat(stream);
 		info->buffToGet = (BuffType)readU32(stream);
 		info->buffToGetTime = readFloat(stream);
 		info->buffToGive = (BuffType)readU32(stream);
 		info->buffToGiveTime = readFloat(stream);
+
+		if (globalsVersion >= 13) {
+			info->thrusterTriggersNum = readU32(stream);
+			for (int i = 0; i < info->thrusterTriggersNum; i++) {
+				ThrusterTrigger *trigger = &info->thrusterTriggers[i];
+				memset(trigger, 0, sizeof(ThrusterTrigger));
+				trigger->frame = readU32(stream);
+				trigger->requiresHit = readU8(stream);
+
+				Thruster *thruster = &trigger->thruster;
+				thruster->accel = readVec3(stream);
+				thruster->maxTime = readFloat(stream);
+			}
+		}
+
+		if (globalsVersion >= 14) {
+			info->hitThruster.accel = readVec3(stream);
+			info->hitThruster.maxTime = readFloat(stream);
+			info->blockThruster.accel = readVec3(stream);
+			info->blockThruster.maxTime = readFloat(stream);
+		}
 	}
 
 	globals->actorSpriteOffset = readVec3(stream);
