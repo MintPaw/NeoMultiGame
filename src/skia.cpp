@@ -4,12 +4,6 @@
 #define DO_DRAW_AFTER_CONTEXT_SWITCH 0
 #define USE_MSAA_RENDERBUFFER 1
 
-#define USING_CAIROVG 0
-
-#if USING_CAIROVG
-#include "cairo/cairo.h"
-#endif
-
 struct VDrawPaletteSwap {
 	int from;
 	int to;
@@ -145,11 +139,6 @@ struct VDrawCommandsList {
 };
 
 struct SkiaSys {
-#if USING_CAIROVG
-	cairo_surface_t *cairoSurface;
-	cairo_t *cairoContext;
-#endif
-
 	SkBitmap bitmap;
 	SkCanvas *mainCanvas;
 	SkCanvas *canvas;
@@ -232,10 +221,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->blurEnabled = true;
 #endif
 
-#if USING_CAIROVG
-#else
 		SkGraphics::Init();
-#endif
 	}
 
 	if (size.x == -1) {
@@ -257,16 +243,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 	if (skiaSys->backTexture) destroyTexture(skiaSys->backTexture);
 	skiaSys->backTexture = createRenderTexture(size.x, size.y);
 
-#if USING_CAIROVG
-	if (skiaSys->cairoSurface) cairo_surface_destroy(skiaSys->cairoSurface);
-	skiaSys->cairoSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size.x, size.y);
-
-	if (skiaSys->cairoContext) cairo_destroy(skiaSys->cairoContext);
-	skiaSys->cairoContext = cairo_create(skiaSys->cairoSurface);
-
-	cairo_set_antialias(skiaSys->cairoContext, CAIRO_ANTIALIAS_NONE);
-	cairo_set_fill_rule(skiaSys->cairoContext, CAIRO_FILL_RULE_EVEN_ODD);
-#else
 	bool oldUseGpu = skiaSys->useGpu;
 	skiaSys->useGpu = useGpu;
 	if (!oldUseGpu && skiaSys->mainCanvas) {
@@ -418,7 +394,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->mainCanvas = new SkCanvas(skiaSys->bitmap);
 	}
 	skiaSys->canvas = skiaSys->mainCanvas;
-#endif
 
 	if (skiaSys->cpuFramePixels) free(skiaSys->cpuFramePixels);
 	skiaSys->cpuFramePixels = (u8 *)malloc(skiaSys->width * skiaSys->height * 4);
@@ -1115,20 +1090,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	createCommand(cmdList, VDRAW_END_SPRITE);
 }
 
-#if USING_CAIROVG
-void cairo_quadratic_to (cairo_t *cr, double x1, double y1, double x2, double y2);
-void cairo_quadratic_to (cairo_t *cr, double x1, double y1, double x2, double y2) {
-	double x0, y0;
-	cairo_get_current_point (cr, &x0, &y0);
-	cairo_curve_to (cr,
-		2.0 / 3.0 * x1 + 1.0 / 3.0 * x0,
-		2.0 / 3.0 * y1 + 1.0 / 3.0 * y0,
-		2.0 / 3.0 * x1 + 1.0 / 3.0 * x2,
-		2.0 / 3.0 * y1 + 1.0 / 3.0 * y2,
-		x2, y2);
-}
-#endif
-
 int usingInvalidBlendModeWarnings = 0;
 void execCommands(VDrawCommandsList *cmdList) {
 	if (skiaSys->width == 0) {
@@ -1136,113 +1097,6 @@ void execCommands(VDrawCommandsList *cmdList) {
 		return;
 	}
 
-#if USING_CAIROVG
-	cairo_t *cr = skiaSys->cairoContext;
-
-	bool doStroke = false;
-
-	for (int i = 0; i < cmdList->cmdsNum; i++) {
-		VDrawCommand *cmd = &cmdList->cmds[i];
-		if (cmd->type == VDRAW_SET_MATRIX) {
-			float sx = cmd->matrix.data[0];
-			float sy = cmd->matrix.data[4];
-			float kx = cmd->matrix.data[1];
-			float ky = cmd->matrix.data[3];
-			float tx = cmd->matrix.data[6];
-			float ty = cmd->matrix.data[7];
-
-			cairo_matrix_t cairoMatrix;
-			cairo_matrix_init(&cairoMatrix, sx, kx, ky, sy, tx, ty);
-			cairo_set_matrix(cr, &cairoMatrix);
-		} else if (cmd->type == VDRAW_MOVE_TO) {
-			cairo_move_to(cr, cmd->position.x, cmd->position.y);
-		} else if (cmd->type == VDRAW_LINE_TO) {
-			cairo_line_to(cr, cmd->position.x, cmd->position.y);
-		} else if (cmd->type == VDRAW_QUAD_TO) {
-			cairo_quadratic_to(cr, cmd->control.x, cmd->control.y, cmd->position.x, cmd->position.y);
-			// cairo_quadratic_to(cr, cmd->position.x, cmd->position.y, cmd->control.x, cmd->control.y);
-		} else if (cmd->type == VDRAW_DRAW_PATH) {
-			if (doStroke) {
-				cairo_stroke(cr);
-			} else {
-				cairo_fill(cr);
-			}
-		} else if (cmd->type == VDRAW_CLIP_PATH) {
-			cairo_clip(cr);
-			cairo_new_path(cr);
-		} else if (cmd->type == VDRAW_RESET_PATH) {
-			cairo_new_path(cr);
-		} else if (cmd->type == VDRAW_SAVE) {
-			cairo_save(cr);
-		} else if (cmd->type == VDRAW_RESTORE) {
-			cairo_restore(cr);
-		} else if (cmd->type == VDRAW_END_SHAPE) {
-		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
-		} else if (cmd->type == VDRAW_SET_SOLID_FILL) {
-			doStroke = false;
-			Vec4 color = hexToArgbFloat(cmd->colors[0]);
-			float a = color.x;
-			float r = color.y;
-			float g = color.z;
-			float b = color.w;
-			cairo_set_source_rgba(cr, r, g, b, a);
-		} else if (cmd->type == VDRAW_SET_LINEAR_GRADIENT_FILL) {
-			doStroke = false;
-			Vec4 color = hexToArgbFloat(cmd->colors[0]);
-			float a = color.x;
-			float r = color.y;
-			float g = color.z;
-			float b = color.w;
-			cairo_set_source_rgba(cr, r, g, b, a);
-		} else if (cmd->type == VDRAW_SET_RADIAL_GRADIENT_FILL) {
-			doStroke = false;
-			Vec4 color = hexToArgbFloat(cmd->colors[0]);
-			float a = color.x;
-			float r = color.y;
-			float g = color.z;
-			float b = color.w;
-			cairo_set_source_rgba(cr, r, g, b, a);
-		} else if (cmd->type == VDRAW_SET_FOCAL_GRADIENT_FILL) {
-			doStroke = false;
-			Vec4 color = hexToArgbFloat(cmd->colors[0]);
-			float a = color.x;
-			float r = color.y;
-			float g = color.z;
-			float b = color.w;
-			cairo_set_source_rgba(cr, r, g, b, a);
-		} else if (cmd->type == VDRAW_SET_LINE_STYLE) {
-			doStroke = true;
-
-			cairo_line_cap_t capStyle = CAIRO_LINE_CAP_ROUND;
-			if (cmd->startCapStyle == CAP_STYLE_NONE) capStyle = CAIRO_LINE_CAP_BUTT;
-			if (cmd->startCapStyle == CAP_STYLE_SQUARE) capStyle = CAIRO_LINE_CAP_SQUARE;
-
-			cairo_set_line_cap(cr, capStyle);
-			cairo_set_miter_limit(cr, cmd->miterLimitFactor);
-
-			cairo_line_join_t joinStyle = CAIRO_LINE_JOIN_MITER;
-			if (cmd->joinStyle == JOIN_STYLE_ROUND) joinStyle = CAIRO_LINE_JOIN_ROUND;
-			if (cmd->joinStyle == JOIN_STYLE_BEVEL) joinStyle = CAIRO_LINE_JOIN_BEVEL;
-
-			cairo_set_line_join(cr, joinStyle);
-
-			float width = cmd->width;
-			if (cmd->width == 0.0) logf("Why 0 width??\n");
-			cairo_set_line_width(cr, cmd->width);
-
-			Vec4 color = hexToArgbFloat(cmd->colors[0]);
-			float a = color.x;
-			float r = color.y;
-			float g = color.z;
-			float b = color.w;
-			cairo_set_source_rgba(cr, r, g, b, a);
-		} else if (cmd->type == VDRAW_BITMAP_FILL) {
-		} else if (cmd->type == VDRAW_TEXT) {
-		} else {
-			logf("Unknown VDrawCommandType %d\n", cmd->type);
-		}
-	}
-#else
 	SkPaint paint = SkPaint();
 	if (skiaSys->useGpu) {
 		// if (skiaSys->msaaSamples > 0) paint.setAntiAlias(true);
@@ -1469,64 +1323,19 @@ void execCommands(VDrawCommandsList *cmdList) {
 			logf("Unknown VDrawCommandType %d\n", cmd->type);
 		}
 	}
-#endif
 }
 
 void clearSkia(int color) {
-#if USING_CAIROVG
-	cairo_save(skiaSys->cairoContext);
-	cairo_set_source_rgba(skiaSys->cairoContext, 1, 0, 0, 1);
-	cairo_set_operator(skiaSys->cairoContext, CAIRO_OPERATOR_SOURCE);
-	cairo_paint(skiaSys->cairoContext);
-	cairo_restore(skiaSys->cairoContext);
-#else
 	skiaSys->canvas->clear(color);
-#endif
 }
 
 void startSkiaFrame() {
 	if (skiaSys->matrixStackNum != 1) logf("Matrix stack mismatch\n");
 
-#if USING_CAIROVG
-	clearSkia(0);
-#else
 	skiaSys->canvas->clear(0);
-#endif
 }
 
 void endSkiaFrame() {
-#if USING_CAIROVG
-	cairo_t *cr = skiaSys->cairoContext;
-	// cairo_select_font_face (cr, "serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-	// cairo_set_font_size (cr, 32.0);
-	// cairo_set_source_rgb (cr, 0.0, 0.0, 1.0);
-	// cairo_move_to (cr, 10.0, 50.0);
-	// cairo_show_text (cr, "Hello, world");
-
-	// clearSkia();
-	// cairo_new_path(cr);
-	// cairo_rectangle(cr, 100, 100, 200, 200);
-	// cairo_set_source_rgba(cr, 0, 1, 0, 1);
-	// cairo_fill(cr);
-
-	u8 *pixels = cairo_image_surface_get_data(skiaSys->cairoSurface);
-	for (int y = 0; y < skiaSys->height; y++) {
-		for (int x = 0; x < skiaSys->width; x++) {
-			u8 b = pixels[(y * skiaSys->width + x)*4 + 0];
-			u8 g = pixels[(y * skiaSys->width + x)*4 + 1];
-			u8 r = pixels[(y * skiaSys->width + x)*4 + 2];
-			u8 a = pixels[(y * skiaSys->width + x)*4 + 3];
-
-			skiaSys->cpuFramePixels[(y * skiaSys->width + x)*4 + 0] = r;
-			skiaSys->cpuFramePixels[(y * skiaSys->width + x)*4 + 1] = g;
-			skiaSys->cpuFramePixels[(y * skiaSys->width + x)*4 + 2] = b;
-			skiaSys->cpuFramePixels[(y * skiaSys->width + x)*4 + 3] = a;
-		}
-	}
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, skiaSys->backTexture->id);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, skiaSys->cpuFramePixels);
-#else // USING_CAIROVG == 0
 	if (skiaSys->useGpu) {
 		setRendererBlendMode(BLEND_SKIA);
 
@@ -1611,7 +1420,6 @@ void endSkiaFrame() {
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
 #endif
 	}
-#endif
 }
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {
