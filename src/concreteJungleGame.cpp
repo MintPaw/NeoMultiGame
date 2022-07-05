@@ -2132,7 +2132,7 @@ void stepGame(float elapsed) {
 				if (model) {
 					ImGui::SameLine();
 					if (ImGui::Button("Match size")) {
-						actor->size = getSize(model);
+						actor->size = getSize(model) * globals->actorModelScale;
 					}
 				}
 			}
@@ -3361,7 +3361,7 @@ void stepGame(float elapsed) {
 				Matrix4 matrix = mat4();
 				matrix.TRANSLATE(actor->position);
 				matrix.SCALE(1/getSize(model->bounds));
-				matrix.SCALE(actor->size * globals->actorModelScale);
+				matrix.SCALE(actor->size);
 				pushModel(model, matrix);
 			} else {
 				pushAABB(getAABB(actor), 0xFFFFFFFF);
