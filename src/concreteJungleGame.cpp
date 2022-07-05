@@ -407,7 +407,7 @@ enum ActorType {
 	ACTOR_WALL=3,
 	ACTOR_BED=4,
 	ACTOR_DOOR=5,
-	ACTOR_UNIT_SPAWNER=6, // Unused
+	ACTOR_MODEL=6,
 	ACTOR_ITEM=7,
 	ACTOR_STORE=8,
 	ACTOR_TYPES_MAX,
@@ -461,7 +461,7 @@ struct Actor {
 	StoreType destMapStoreType;
 	float locked;
 
-	int unitsToSpawn;
+	char modelPath[PATH_MAX_LEN];
 
 	/// Unserialized
 	ActorTypeInfo *info;
@@ -1013,8 +1013,9 @@ void updateGame() {
 			info->canBeCreatedInEdtior = true;
 			strcpy(info->name, "Door");
 
-			info = &game->actorTypeInfos[ACTOR_UNIT_SPAWNER];
-			strcpy(info->name, "Unit spawner");
+			info = &game->actorTypeInfos[ACTOR_MODEL];
+			info->canBeCreatedInEdtior = true;
+			strcpy(info->name, "Model");
 
 			info = &game->actorTypeInfos[ACTOR_ITEM];
 			strcpy(info->name, "Item");
@@ -1786,8 +1787,8 @@ void stepGame(float elapsed) {
 						Map *templateMap = NULL;
 						char *choices[] = {
 							"#basicTemplate",
-							"#cornerBuildings",
-							"#longRoom",
+							// "#cornerBuildings",
+							// "#longRoom",
 						};
 						templateMap = getMapByName(choices[rndInt(0, ArrayLength(choices)-1)]);
 						float totalBaseAlliance = 0;
@@ -1878,6 +1879,14 @@ void stepGame(float elapsed) {
 						Map *map = &game->maps[mapIndex];
 						saveMap(map, mapIndex);
 					}
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Save all maps")) {
+				for (int i = 0; i < MAPS_MAX; i++) {
+					Map *map = &game->maps[i];
+					saveMap(map, i);
 				}
 			}
 			ImGui::TreePop();
@@ -2045,15 +2054,17 @@ void stepGame(float elapsed) {
 		ImGui::EndChild();
 
 		ImGui::Text("Create:");
+		int buttonCount = 0;
 		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
 			ActorTypeInfo *actorTypeInfo = &game->actorTypeInfos[i];
 			if (!actorTypeInfo->canBeCreatedInEdtior) continue;
+			buttonCount++;
 			if (ImGui::Button(actorTypeInfo->name)) {
 				Actor *actor = createActor(map, (ActorType)i);
 				actor->position = game->cameraTarget;
 				game->selectedActorId = actor->id;
 			}
-			if (i % 4 != 3) ImGui::SameLine();
+			if (buttonCount % 5 != 4) ImGui::SameLine();
 		}
 		ImGui::NewLine();
 
@@ -2079,6 +2090,8 @@ void stepGame(float elapsed) {
 			ImGui::Text("Id: %d", actor->id);
 			ImGui::DragFloat3("Position", &actor->position.x);
 			ImGui::DragFloat3("Size", &actor->size.x);
+
+			if (ImGui::Button("bringWithinBounds")) bringWithinBounds(map, actor);
 
 			if (actor->type == ACTOR_UNIT) {
 				ImGui::InputInt("Team", &actor->team);
@@ -2113,11 +2126,16 @@ void stepGame(float elapsed) {
 				ImGui::InputText("Destination map", actor->destMapName, MAP_NAME_MAX_LEN);
 			}
 
-			if (actor->type == ACTOR_UNIT_SPAWNER) {
-				ImGui::InputInt("Unit to spawn", &actor->unitsToSpawn);
+			if (actor->type == ACTOR_WALL || actor->type == ACTOR_MODEL) {
+				ImGui::InputText("Model path", actor->modelPath, PATH_MAX_LEN);
+				Model *model = getModel(frameSprintf("assets/models/%s", actor->modelPath));
+				if (model) {
+					ImGui::SameLine();
+					if (ImGui::Button("Match size")) {
+						actor->size = getSize(model);
+					}
+				}
 			}
-
-			if (ImGui::Button("bringWithinBounds")) bringWithinBounds(map, actor);
 
 			ImGui::Separator();
 		}
@@ -3337,6 +3355,17 @@ void stepGame(float elapsed) {
 			pushAABB(getAABB(actor), 0xFFE8C572);
 		} else if (actor->type == ACTOR_WALL) {
 			pushAABB(getAABB(actor), 0xFFFFFFFF);
+		} else if (actor->type == ACTOR_MODEL) {
+			Model *model = getModel(frameSprintf("assets/models/%s", actor->modelPath));
+			if (model) {
+				Matrix4 matrix = mat4();
+				matrix.TRANSLATE(actor->position);
+				matrix.SCALE(1/getSize(model->bounds));
+				matrix.SCALE(actor->size * globals->actorModelScale);
+				pushModel(model, matrix);
+			} else {
+				pushAABB(getAABB(actor), 0xFFFFFFFF);
+			}
 		} else if (actor->type == ACTOR_BED) {
 			pushAABB(getAABB(actor), 0xFFA3FFF6);
 			if (overlaps(actor, player)) {
@@ -4187,95 +4216,6 @@ void stepGame(float elapsed) {
 			for (int i = 0; i < TEAMS_MAX; i++) totalAlliance += map->alliances[i];
 			int maxNpcs = clampMap(totalAlliance, 0, 2, 2, 20);
 			if (totalAlliance <= 0.01) maxNpcs = 0;
-
-			// int startingNpcs = maxNpcs * 0.8;
-			int startingNpcs = 0; // This is disabled because I think prewarming is better
-			if (game->mapTime == 0 && startingNpcs > 0) {
-				auto generatePoissonPoints = [](AABB surface, Vec2 cellSize, int *outPointsNum)->Vec3 *{
-					Vec3 surfaceSize = getSize(surface);
-
-					int cellsWide = surfaceSize.x / cellSize.x;
-					int cellsHigh = surfaceSize.y / cellSize.y;
-
-					Vec3 *points = (Vec3 *)frameMalloc(sizeof(Vec3) * (cellsWide * cellsHigh));
-					int pointsNum = 0;
-					for (int y = 0; y < cellsHigh; y++) {
-						for (int x = 0; x < cellsWide; x++) {
-							Rect cell = makeRect(v2(), cellSize);
-							cell.x = surface.min.x + (x * cellSize.x);
-							cell.y = surface.min.y + (y * cellSize.y);
-							Vec2 pos;
-							pos.x = rndFloat(cell.x, cell.x+cell.width);
-							pos.y = rndFloat(cell.y, cell.y+cell.height);
-
-							points[pointsNum++] = v3(pos, surface.max.z + 1);
-						}
-					}
-
-					*outPointsNum = pointsNum;
-					return points;
-				};
-
-				auto removeInvalidSpawnPoints = [](Map *map, Vec3 *points, int pointsNum)->int {
-					for (int i = 0; i < pointsNum; i++) {
-						Vec3 point = points[i];
-						AABB aabb = getAABBFromSizePosition(UNIT_SIZE, point);
-						bool shouldRemove = false;
-						Actor *ground = getActorOfType(map, ACTOR_GROUND);
-						if (!equal(aabb, bringWithinBounds(getAABB(ground), aabb))) shouldRemove = true;
-						for (int i = 0; i < map->actorsNum; i++) {
-							Actor *actor = &map->actors[i];
-							if (overlaps(actor, aabb)) {
-								shouldRemove = true;
-								break;
-							}
-						}
-
-						if (shouldRemove) {
-							arraySpliceIndex(points, pointsNum, sizeof(Vec3), i);
-							pointsNum--;
-							i--;
-							continue;
-						}
-					}
-
-					return pointsNum;
-				};
-
-				Vec2 cellSize = v2(getSize(groundAABB)) / 2;
-
-				Vec3 *points;
-				int pointsNum;
-				for (int i = 0; ; i++) {
-					if (i > 100) {
-						logf("Failed 100 times to spawn units...\n");
-						pointsNum = 0;
-						break;
-					}
-
-					points = generatePoissonPoints(groundAABB, cellSize, &pointsNum);
-					pointsNum = removeInvalidSpawnPoints(map, points, pointsNum);
-
-					if (pointsNum >= startingNpcs) {
-						break;
-					} else {
-						cellSize.x *= 0.01;
-						cellSize.y *= 0.01;
-					}
-				}
-
-				if (pointsNum > 0) {
-					for (int i = 0; i < startingNpcs; i++) {
-						int pointIndex = rndInt(0, pointsNum-1);
-						Vec3 point = points[pointIndex];
-						arraySpliceIndex(points, pointsNum, sizeof(Vec3), pointIndex);
-						pointsNum--;
-
-						Actor *newActor = createNpcUnit(map);
-						newActor->position = point;
-					}
-				}
-			}
 
 			game->timeTillNextSpawn -= elapsed;
 			float fullPerc = currentNpcs / (float)maxNpcs;
@@ -5583,7 +5523,7 @@ void applyThruster(Actor *actor, Thruster newThruster, bool flipX) {
 void saveMap(Map *map, int mapFileIndex) {
 	DataStream *stream = newDataStream();
 
-	int mapVersion = 7;
+	int mapVersion = 8;
 	writeU32(stream, mapVersion);
 
 	writeString(stream, map->name);
@@ -5615,7 +5555,8 @@ void saveMap(Map *map, int mapFileIndex) {
 		writeVec3(stream, actor->size);
 		writeString(stream, actor->destMapName);
 		writeU32(stream, actor->destMapStoreType);
-		writeU32(stream, actor->unitsToSpawn);
+		writeU32(stream, 0);
+		writeString(stream, actor->modelPath);
 	}
 
 	writeU32(stream, map->nextActorId);
@@ -5638,7 +5579,7 @@ void loadMap(Map *map, int mapFileIndex) {
 	int mapVersion = readU32(stream);
 
 	readStringInto(stream, map->name, MAP_NAME_MAX_LEN);
-	if (mapVersion >= 5) map->isTemplatized = readU8(stream);
+	map->isTemplatized = readU8(stream);
 
 	map->actorsNum = readU32(stream);
 	memset(map->actors, 0, sizeof(Actor) * ACTORS_MAX);
@@ -5647,19 +5588,18 @@ void loadMap(Map *map, int mapFileIndex) {
 		actor->type = (ActorType)readU32(stream);
 		actor->info = &game->actorTypeInfos[actor->type];
 		actor->id = readU32(stream);
-		if (mapVersion >= 4) readStringInto(stream, actor->name, ACTOR_NAME_MAX_LEN);
+		readStringInto(stream, actor->name, ACTOR_NAME_MAX_LEN);
 		actor->position = readVec3(stream);
 		actor->size = readVec3(stream);
-		if (mapVersion >= 2) readStringInto(stream, actor->destMapName, MAP_NAME_MAX_LEN);
-		if (mapVersion >= 7) actor->destMapStoreType = (StoreType)readU32(stream);
-		if (mapVersion >= 3) actor->unitsToSpawn = readU32(stream);
+		readStringInto(stream, actor->destMapName, MAP_NAME_MAX_LEN);
+		actor->destMapStoreType = (StoreType)readU32(stream);
+		readU32(stream);
+		readStringInto(stream, actor->modelPath, MAP_NAME_MAX_LEN);
 	}
 
 	map->nextActorId = readU32(stream);
 
-	if (mapVersion >= 6) {
-		for (int i = 0; i < TEAMS_MAX; i++) map->baseAlliances[i] = readFloat(stream);
-	}
+	for (int i = 0; i < TEAMS_MAX; i++) map->baseAlliances[i] = readFloat(stream);
 
 	destroyDataStream(stream);
 }

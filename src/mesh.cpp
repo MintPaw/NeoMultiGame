@@ -335,6 +335,10 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 }
 
 void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
 	Matrix4 *boneTransforms = (Matrix4 *)frameMalloc(sizeof(Matrix4) * BONES_MAX);
 	if (skeleton) {
 		for (int i = 0; i < mesh->boneNamesNum; i++) {

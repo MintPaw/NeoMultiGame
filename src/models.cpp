@@ -37,6 +37,7 @@ void readModel(DataStream *stream, Model *model, char *modelDir);
 void computeBounds(Model *model, Matrix4 matrix=mat4());
 void writeModel(DataStream *stream, Model *model);
 
+Vec3 getSize(Model *model);
 void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int tint=0xFFFFFFFF, Model *parent=NULL);
 
 // bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
@@ -60,10 +61,7 @@ Model *getModel(char *path) {
 		if (streq(model->path, path)) return model;
 	}
 
-	if (!fileExists(path)) {
-		logf("No model at %s\n", path);
-		return NULL;
-	}
+	if (!fileExists(path)) return NULL;
 
 	if (modelSys->modelsNum > MODELS_MAX-1) {
 		logf("Too many models\n");
@@ -145,7 +143,19 @@ void writeModel(DataStream *stream, Model *model) {
 	}
 }
 
+Vec3 getSize(Model *model) {
+	if (!model) {
+		Panic("getSize called with NULL model");
+	}
+	return getSize(model->bounds);
+}
+
 void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model *parent) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
 	if (!model) {
 		logf("Called drawModel with NULL model\n");
 		return;

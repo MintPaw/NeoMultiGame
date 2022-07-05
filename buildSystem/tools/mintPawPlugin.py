@@ -394,8 +394,7 @@ class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
         saveModel(bpy.data.objects["Sword"], "sword", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
         saveModel(bpy.data.objects["Knife"], "knife", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
 
-        # saveModel(bpy.data.objects["M_Cube"], "simpler", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
-        # saveSkeleton(bpy.data.objects["S_Cube"], "simpler", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
+        saveModel(bpy.data.objects["Road"], "road", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
 
         # saveModel(bpy.data.objects["M_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
         # saveSkeleton(bpy.data.objects["S_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")

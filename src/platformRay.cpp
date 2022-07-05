@@ -467,6 +467,7 @@ struct Camera {
 #define _F_TD_RGB16F           (1 << 4)
 #define _F_TD_RGBA32           (1 << 5)
 struct Renderer {
+	bool in3dPass;
 	bool disabled;
 	int maxTextureUnits; // Does nothing
 
@@ -1394,7 +1395,9 @@ void resetRenderContext() {
 }
 
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
-	Raylib::rlDrawRenderBatchActive();
+	renderer->in3dPass = true;
+
+	Raylib::rlDrawRenderBatchActive(); // Why do I need this?
 
 	Raylib::rlMatrixMode(RL_PROJECTION);
 	Raylib::rlPushMatrix();
@@ -1416,6 +1419,7 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 }
 
 void end3d() {
+	renderer->in3dPass = false;
 	Raylib::EndMode3D();
 }
 
@@ -1452,12 +1456,22 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 }
 
 void drawAABB(AABB aabb, int color) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
 	Vec3 size = getSize(aabb);
 	Vec3 pos = aabb.min + size/2;
 	Raylib::DrawModelEx(renderer->cubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
 }
 
 void drawCone(Cone cone, int color) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
 	Vec3 origDir = v3(0, -1, 0);
 	Vec3 newDir = cone.direction;
 	float rotationAngle = acos(dot(origDir, newDir)/(length(origDir)*length(newDir)));
@@ -1474,6 +1488,11 @@ void drawCone(Cone cone, int color) {
 
 void drawSphere(Vec3 position, float radius, int color) { drawSphere(makeSphere(position, radius), color); };
 void drawSphere(Sphere sphere, int color) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
 	Vec3 position = sphere.position;
 	Vec3 size = v3(1, 1, 1) * sphere.radius;
 	Raylib::DrawModelEx(renderer->sphereModel, toRaylib(position), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
