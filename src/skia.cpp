@@ -1052,7 +1052,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 								shouldStopColorMatrix = true;
 							}
 						}
-						if (drawable->spriteBlendMode != SWF_BLEND_NORMAL) newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
+						if (drawable->spriteBlendMode != SWF_BLEND_NONE) newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
 						genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
 						if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
 						if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
@@ -1330,11 +1330,9 @@ void execCommands(VDrawCommandsList *cmdList) {
 			} else if (cmd->blendMode == SWF_BLEND_DIFFERENCE) {
 				paint.setBlendMode(SkBlendMode::kDifference);
 			} else if (cmd->blendMode == SWF_BLEND_ADD) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
+				paint.setBlendMode(SkBlendMode::kPlus);
 			} else if (cmd->blendMode == SWF_BLEND_SUBTRACT) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
+				paint.setBlendMode(SkBlendMode::kDifference);
 			} else if (cmd->blendMode == SWF_BLEND_INVERT) {
 				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode invert\n");
 				usingInvalidBlendModeWarnings++;

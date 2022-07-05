@@ -352,15 +352,15 @@ void updateGame() {
 	endShader();
 #endif
 
-#if 0 // ngui test
+#if 1 // ngui test
 	clearRenderer(0xFF000000);
 
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};
 	static Xform2 beeXform = {v2(), v2(1, 1), 0};
 	static Xform2 bootXform = {v2(), v2(1, 1), 0};
 
-	static NguiStyleStack style1;
-	static NguiStyleStack style2;
+	static NguiStyleStack style1 = {};
+	static NguiStyleStack style2 = {};
 	static int chosenStyle = 0;
 
 	if (platform->frameCount > 0 && game->debugMode) {
@@ -449,14 +449,7 @@ void updateGame() {
 	if (chosenStyle == 1) styleStack = &style1;
 	if (chosenStyle == 2) styleStack = &style2;
 	if (styleStack) {
-		for (int i = 0; i < styleStack->varsNum; i++) {
-			NguiStyleVar *var = &styleStack->vars[i];
-			NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
-
-			char data[NGUI_STYLE_VAR_DATA_SIZE];
-			nguiGetStyleOfType(styleStack, var->type, styleTypeInfo->dataType, data);
-			nguiPushStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, data);
-		}
+		nguiPushStyleStack(styleStack);
 	}
 
 	nguiStartWindow("Test Window");
@@ -597,17 +590,15 @@ void updateGame() {
 	}
 	nguiEndWindow();
 
+
 	if (styleStack) {
-		for (int i = styleStack->varsNum-1; i >= 0; i--) {
-			NguiStyleVar *var = &styleStack->vars[i];
-			nguiPopStyleVar(var->type);
-		}
+	nguiPopStyleStack(styleStack);
 	}
 
 	nguiDraw(elapsed);
 #endif
 
-#if 1 // Assemble Dalle 2 mini images
+#if 0 // Assemble Dalle 2 mini images
 	static Font *hugeFont = createFont("assets/common/arial.ttf", 120);
 	if (platform->frameCount == 2) {
 		int filesNum;

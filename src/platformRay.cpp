@@ -501,7 +501,8 @@ struct Renderer {
 	Matrix3 currentCameraMatrix; // Is the same as baseMatrix2d for raylib!
 
 	Texture *whiteTexture;
-	RenderTexture *circleTexture;
+	RenderTexture *circleTexture1024;
+	RenderTexture *circleTexture32;
 	Texture *linearGrad256;
 
 	Raylib::Light lights[MAX_LIGHTS];
@@ -669,9 +670,16 @@ void initRenderer(int width, int height) {
 	u64 whiteData = 0xFFFFFFFF;
 	renderer->whiteTexture = createTexture(1, 1, &whiteData);
 
-	renderer->circleTexture = createRenderTexture(1024, 1024, NULL);
-	pushTargetTexture(renderer->circleTexture);
-	Raylib::DrawCircle(renderer->circleTexture->width/2, renderer->circleTexture->height/2, renderer->circleTexture->width/2, toRaylibColor(0xFFFFFFFF));
+	renderer->circleTexture1024 = createRenderTexture(1024, 1024, NULL);
+	setTextureSmooth(renderer->circleTexture1024, true);
+	pushTargetTexture(renderer->circleTexture1024);
+	Raylib::DrawCircle(renderer->circleTexture1024->width/2, renderer->circleTexture1024->height/2, renderer->circleTexture1024->width/2, toRaylibColor(0xFFFFFFFF));
+	popTargetTexture();
+
+	renderer->circleTexture32 = createRenderTexture(32, 32, NULL);
+	setTextureSmooth(renderer->circleTexture32, true);
+	pushTargetTexture(renderer->circleTexture32);
+	Raylib::DrawCircle(renderer->circleTexture32->width/2, renderer->circleTexture32->height/2, renderer->circleTexture32->width/2, toRaylibColor(0xFFFFFFFF));
 	popTargetTexture();
 
 	renderer->cubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
@@ -1072,7 +1080,11 @@ void drawCircle(Vec2 position, float radius, int color) {
 	float alpha = alphaByte/255.0;
 	int flags = 0;
 	Vec4i tints = v4i(color, color, color, color);
-	drawRaylibTexture(renderer->circleTexture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
+
+	RenderTexture *texture = renderer->circleTexture1024;
+	if (radius < 45) texture = renderer->circleTexture32;
+
+	drawRaylibTexture(texture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
 }
 
 void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {

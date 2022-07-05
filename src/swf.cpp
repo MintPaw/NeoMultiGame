@@ -756,6 +756,7 @@ enum SwfBlendMode {
 	SWF_BLEND_ERASE=12,
 	SWF_BLEND_OVERLAY=13,
 	SWF_BLEND_HARDLIGHT=14,
+	SWF_BLEND_NONE=64,
 };
 struct PlaceObject {
 	int version;
@@ -1498,11 +1499,7 @@ Swf *loadSwf(char *path) {
 					placeObject->depth = readU16(&stream);
 					if (placeObject->pfHasCharacter) placeObject->characterId = readU16(&stream);
 					if (placeObject->pfHasMatrix) placeObject->matrix = readMatrix(&stream);
-					if (placeObject->pfHasColorTransform) {
-						placeObject->colorTransform = readColorTransformWithAlpha(&stream);
-					} else {
-						placeObject->colorTransform = makeColorTransform();
-					}
+					if (placeObject->pfHasColorTransform) placeObject->colorTransform = readColorTransformWithAlpha(&stream);
 					if (placeObject->pfHasRatio) placeObject->ratio = readU16(&stream);
 					if (placeObject->pfHasName) placeObject->name = readString(&stream);
 					if (placeObject->pfHasClipDepth) {
@@ -1541,11 +1538,7 @@ Swf *loadSwf(char *path) {
 					if (placeObject->pfHasClassName) placeObject->name = readString(&stream);
 					if (placeObject->pfHasCharacter) placeObject->characterId = readU16(&stream);
 					if (placeObject->pfHasMatrix) placeObject->matrix = readMatrix(&stream);
-					if (placeObject->pfHasColorTransform) {
-						placeObject->colorTransform = readColorTransformWithAlpha(&stream);
-					} else {
-						placeObject->colorTransform = makeColorTransform();
-					}
+					if (placeObject->pfHasColorTransform) placeObject->colorTransform = readColorTransformWithAlpha(&stream);
 					if (placeObject->pfHasRatio) placeObject->ratio = readU16(&stream);
 					if (placeObject->pfHasName) placeObject->name = readString(&stream);
 					if (placeObject->pfHasClipDepth) {
@@ -1645,9 +1638,11 @@ Swf *loadSwf(char *path) {
 							}
 						}
 					}
-					if (placeObject->pfHasBlendMode) placeObject->blendMode = (SwfBlendMode)read(&stream);
-					if (placeObject->blendMode == 0) placeObject->blendMode = SWF_BLEND_NORMAL;
-					if (placeObject->blendMode == SWF_BLEND_SUBTRACT) logf("Unsupported blend mode subtract!\n");
+					if (placeObject->pfHasBlendMode) {
+						placeObject->blendMode = (SwfBlendMode)read(&stream);
+					} else {
+						placeObject->blendMode = SWF_BLEND_NONE;
+					}
 
 					if (placeObject->pfHasCacheAsBitmap) placeObject->bitmapCache = read(&stream);
 					if (placeObject->pfHasVisible) placeObject->visible = read(&stream);
@@ -2095,11 +2090,12 @@ Swf *loadSwf(char *path) {
 							free(placeObject->name);
 						}
 
-						ColorTransform freshTransform = makeColorTransform();
-						if (memcmp(&placeObject->colorTransform, &freshTransform, sizeof(ColorTransform)) != 0) {
+						ColorTransform zeroTransform = {};
+						if (memcmp(&placeObject->colorTransform, &zeroTransform, sizeof(ColorTransform)) != 0) {
 							drawable->colorTransform = (ColorTransform *)malloc(sizeof(ColorTransform));
 							*drawable->colorTransform = placeObject->colorTransform;
 						}
+
 						drawable->spriteBlendMode = placeObject->blendMode;
 						drawable->filters = placeObject->filters;
 						drawable->filtersNum = placeObject->filtersNum;

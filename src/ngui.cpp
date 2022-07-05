@@ -156,6 +156,7 @@ void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot) {
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, position);
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, pivot);
 }
+void nguiPushStyleStack(NguiStyleStack *styleStack);
 
 //@speed These could be a lot faster if the elements didn't have randomly ordered styleStacks like the global styleStacks.
 //       Elements could have a different kind of style stack that's a fixed size index by the NguiStyleType
@@ -202,6 +203,7 @@ void nguiPopAnyStyleVar(int amount=1);
 void nguiPopStyleVar(NguiStyleType type);
 void nguiPopStyleIconXform();
 void nguiPopWindowPositionAndPivot();
+void nguiPopStyleStack(NguiStyleStack *styleStack);
 
 void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type);
 
@@ -218,6 +220,9 @@ bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
 int getSizeForDataType(NguiDataType dataType);
 void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack);
+void writeNguiStyleStack(DataStream *stream, NguiStyleStack *styleStack);
+NguiStyleStack readNguiStyleStack(DataStream *stream);
+
 /// FUNCTIONS ^
 
 void nguiInit() {
@@ -451,6 +456,17 @@ void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDat
 	memcpy(var->data, ptr, size);
 }
 
+void nguiPushStyleStack(NguiStyleStack *styleStack) {
+	for (int i = 0; i < styleStack->varsNum; i++) {
+		NguiStyleVar *var = &styleStack->vars[i];
+		NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
+
+		char data[NGUI_STYLE_VAR_DATA_SIZE];
+		nguiGetStyleOfType(styleStack, var->type, styleTypeInfo->dataType, data);
+		nguiPushStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, data);
+	}
+}
+
 void nguiGetStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
 	NguiStyleTypeInfo styleTypeInfo = ngui->styleTypeInfos[type];
 	if (styleTypeInfo.dataType != dataType) {
@@ -499,6 +515,13 @@ void nguiPopStyleIconXform() {
 void nguiPopWindowPositionAndPivot() {
 	nguiPopStyleVar(NGUI_STYLE_WINDOW_PIVOT);
 	nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
+}
+
+void nguiPopStyleStack(NguiStyleStack *styleStack) {
+	for (int i = styleStack->varsNum-1; i >= 0; i--) {
+		NguiStyleVar *var = &styleStack->vars[i];
+		nguiPopStyleVar(var->type);
+	}
 }
 
 void nguiPopAnyStyleVar(int amount) {
@@ -683,6 +706,12 @@ void nguiDraw(float elapsed) {
 					labelTextColor = tintColor(labelTextColor, disabledTint);
 				}
 
+				if (child->bgColor == 0) child->bgColor = bgColor;
+				child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
+
+				if (child->fgColor == 0) child->fgColor = fgColor;
+				child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
+
 				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
 					drawRect(rect, child->bgColor);
 
@@ -731,12 +760,6 @@ void nguiDraw(float elapsed) {
 						if (perc > 0.75) bgColor = lerpColor(bgColor, activeTint, flashBrightness);
 					}
 
-					if (child->bgColor == 0) child->bgColor = bgColor;
-					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
-
-					if (child->fgColor == 0) child->fgColor = fgColor;
-					child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
-
 					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
 
 					Rect graphicsRect = childRect;
@@ -780,9 +803,6 @@ void nguiDraw(float elapsed) {
 				} else if (child->type == NGUI_ELEMENT_SLIDER) {
 					Rect graphicsRect = childRect;
 
-					if (child->bgColor == 0) child->bgColor = bgColor;
-					child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
-
 					drawElementBg(child, graphicsRect);
 
 					{
@@ -795,12 +815,15 @@ void nguiDraw(float elapsed) {
 					drawRect(barRect, child->fgColor);
 
 					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
-					Rect buttonRect = makeRect(0, 0, barRect.height*1.25, barRect.height*1.25);
+					Rect buttonRect = makeRect(0, 0, barRect.height*1.5, barRect.height*1.5);
 					buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
 					buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
-					drawRect(buttonRect, labelTextColor);
+					// drawRect(buttonRect, labelTextColor);
 
-					if (contains(buttonRect, ngui->mouse)) {
+					Circle buttonCircle = makeCircle(getCenter(buttonRect), buttonRect.width/2);
+					drawCircle(buttonCircle, labelTextColor);
+
+					if (contains(buttonCircle, ngui->mouse) || contains(barRect, ngui->mouse)) {
 						if (platform->mouseJustDown) ngui->draggingId = child->id;
 					}
 
@@ -934,16 +957,41 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		NguiStyleVar *var = &styleStack->vars[i];
 		NguiStyleTypeInfo *styleTypeInfo = &ngui->styleTypeInfos[var->type];
 
+		if (ImGui::ArrowButton("moveUp", ImGuiDir_Up)) {
+			if (i > 0) {
+				arraySwap(styleStack->vars, styleStack->varsNum, sizeof(NguiStyleVar), i, i-1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+		ImGui::SameLine();
+
+		if (ImGui::ArrowButton("moveDown", ImGuiDir_Down)) {
+			if (i < styleStack->varsNum-1) {
+				arraySwap(styleStack->vars, styleStack->varsNum, sizeof(NguiStyleVar), i, i+1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+		ImGui::SameLine();
+
+		bool shouldSpliceVar = false;
+		guiPushStyleColor(ImGuiCol_Button, 0xFF900000);
+		if (ImGui::Button("X")) shouldSpliceVar = true;
+		guiPopStyleColor();
+
 		char **styleTypesList = (char **)frameMalloc(sizeof(char *) * NGUI_STYLE_TYPES_MAX);
 		int styleTypesListNum = 0;
 		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
 			styleTypesList[styleTypesListNum++] = ngui->styleTypeInfos[i].enumName;
 		}
+		ImGui::SameLine();
 		if (ImGui::Combo("###varType", (int *)&var->type, styleTypesList, NGUI_STYLE_TYPES_MAX, 20)) {
 			styleTypeInfo = &ngui->styleTypeInfos[var->type];
-			nguiGetStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, var->data);
+			nguiGetStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, var->data); 
 		}
 		ImGui::SameLine();
+
 		if (styleTypeInfo->dataType == NGUI_DATA_TYPE_INT) {
 			ImGui::InputInt(frameSprintf("###%s", styleTypeInfo->name), (int *)var->data);
 		} else if (styleTypeInfo->dataType == NGUI_DATA_TYPE_COLOR_INT) {
@@ -957,6 +1005,13 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		}
 
 		ImGui::PopID();
+
+		if (shouldSpliceVar) {
+			arraySpliceIndex(styleStack->vars, styleStack->varsNum, sizeof(NguiStyleVar), i);
+			i--;
+			styleStack->varsNum--;
+			continue;
+		}
 	}
 
 	if (ImGui::Button("Add style var")) {
@@ -964,3 +1019,27 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		nguiPushStyleOfType(styleStack, NGUI_STYLE_WINDOW_BG_COLOR, NGUI_DATA_TYPE_COLOR_INT, &value);
 	}
 }
+
+void writeNguiStyleStack(DataStream *stream, NguiStyleStack styleStack) {
+	writeU32(stream, styleStack.varsNum);
+	for (int i = 0; i < styleStack.varsNum; i++) {
+		NguiStyleVar *var = &styleStack.vars[i];
+		writeU32(stream, var->type);
+		writeBytes(stream, var->data, sizeof(Vec4));
+	}
+}
+
+NguiStyleStack readNguiStyleStack(DataStream *stream) {
+	NguiStyleStack styleStack = {};
+	styleStack.varsMax = styleStack.varsNum = readU32(stream);
+	styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * styleStack.varsMax);
+	for (int i = 0; i < styleStack.varsNum; i++) {
+		NguiStyleVar *var = &styleStack.vars[i];
+		var->type = (NguiStyleType)readU32(stream);
+		readBytes(stream, var->data, sizeof(Vec4));
+	}
+
+	return styleStack;
+}
+
+
