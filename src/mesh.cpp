@@ -68,7 +68,7 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh);
 
 Material createMaterial();
 void uploadMesh(Mesh *mesh, bool hasWeights=false);
-void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int tint=0xFFFFFFFF);
+void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, Material material=createMaterial());
 /// FUNCTIONS ^
 
 void initMesh() {
@@ -302,7 +302,7 @@ void unloadMesh(Mesh *mesh) {
 	mesh->vaoId = 0;
 }
 
-void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
+void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material) {
 	if (!renderer->in3dPass) {
 		logf("Doing 3d draw call outside pass\n");
 		return;
@@ -327,25 +327,23 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	if (skeleton) hasWeights = true;
 	uploadMesh(mesh, hasWeights);
 
-	Raylib::rlEnableShader(renderer->lightingAnimatedShader.id);
-	glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
-
-	Material material = createMaterial();
-	material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = argbToRgbaFloat(tint);
-
 	Raylib::rlDisableBackfaceCulling(); //@hack Triangle winding is backwards for me, and Raylib doesn't have a way of changing it
 
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
 	{
 		Raylib::rlEnableShader(material.shader.id);
 
+		if (material.shader.id == renderer->lightingAnimatedShader.id) {
+			glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
+		}
+
 		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE] != -1) {
-			float *values = &material.values[Raylib::MATERIAL_MAP_DIFFUSE].color.x;
+			float *values = &argbToRgba(material.values[Raylib::MATERIAL_MAP_DIFFUSE].color).x;
 			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE], values, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 
 		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] != -1) {
-			float *values = &material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color.x;
+			float *values = &argbToRgba(material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color).x;
 			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR], values, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 

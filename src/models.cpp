@@ -14,7 +14,6 @@ struct Model {
 	int childrenMax;
 	Mesh *mesh;
 	AABB bounds;
-	Matrix4 invMatrix;
 };
 
 struct ModelSystem {
@@ -39,12 +38,13 @@ void writeModel(DataStream *stream, Model *model);
 
 Vec3 getSize(Model *model);
 void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int tint=0xFFFFFFFF, Model *parent=NULL);
+void replaceAllMaterials(Model *model, Material material);
 
 // bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
-void showModelsGui();
+// void showModelsGui();
 
 // void reloadAllMeshesForModels(); // Actually declared in draw3d.cpp
-void reloadMeshes(Model *model, char *modelDir=NULL);
+// void reloadMeshes(Model *model, char *modelDir=NULL);
 
 void initModel() {
 	modelSys = (ModelSystem *)zalloc(sizeof(ModelSystem));
@@ -88,9 +88,9 @@ Model *getModel(char *path) {
 void readModel(DataStream *stream, Model *model, char *modelDir) {
 	model->version = readU8(stream);
 	model->name = readString(stream);
-
 	model->localMatrix = readMatrix4(stream);
-	model->invMatrix = model->localMatrix.invert();
+
+	model->material = createMaterial();
 	model->meshPath = readString(stream);
 	if (model->meshPath) {
 		char *realMeshPath = frameSprintf("%s/%s.mesh", modelDir, model->meshPath);
@@ -162,12 +162,21 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model
 
 	if (model->mesh) {
 		Matrix4 meshMatrix = matrix;
-		drawMesh(model->mesh, meshMatrix, skeleton, tint);
+		drawMesh(model->mesh, meshMatrix, skeleton, model->material);
+		model->material = createMaterial(); // This should set back to a saved default later
 	}
 
 	for (int i = 0; i < model->childrenNum; i++) {
 		Model *child = &model->children[i];
 		drawModel(child, matrix, skeleton, tint, model);
+	}
+}
+
+void replaceAllMaterials(Model *model, Material material) {
+	model->material = material;
+	for (int i = 0; i < model->childrenNum; i++) {
+		Model *child = &model->children[i];
+		replaceAllMaterials(child, material);
 	}
 }
 
@@ -239,28 +248,28 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model
 // 	}
 // }
 
-void reloadAllMeshesForModels() {
-	for (int i = 0; i < modelSys->modelsNum; i++) { // Maybe just set meshes to NULL and reload them during drawModel?
-		Model *model = &modelSys->models[i];
-		reloadMeshes(model);
-	}
-}
+// void reloadAllMeshesForModels() {
+// 	for (int i = 0; i < modelSys->modelsNum; i++) { // Maybe just set meshes to NULL and reload them during drawModel?
+// 		Model *model = &modelSys->models[i];
+// 		reloadMeshes(model);
+// 	}
+// }
 
-void reloadMeshes(Model *model, char *modelDir) {
-	if (!modelDir) {
-		modelDir = frameStringClone(model->path);
-		char *lastSlash = strrchr(modelDir, '/');
-		if (lastSlash) *lastSlash = 0;
-	}
-	if (model->mesh) {
-		char *realMeshPath = frameSprintf("%s/%s.mesh", modelDir, model->meshPath);
-		model->mesh = getMesh(realMeshPath);
-	}
+// void reloadMeshes(Model *model, char *modelDir) {
+// 	if (!modelDir) {
+// 		modelDir = frameStringClone(model->path);
+// 		char *lastSlash = strrchr(modelDir, '/');
+// 		if (lastSlash) *lastSlash = 0;
+// 	}
+// 	if (model->mesh) {
+// 		char *realMeshPath = frameSprintf("%s/%s.mesh", modelDir, model->meshPath);
+// 		model->mesh = getMesh(realMeshPath);
+// 	}
 
-	for (int i = 0; i < model->childrenNum; i++) {
-		reloadMeshes(&model->children[i], modelDir);
-	}
-}
+// 	for (int i = 0; i < model->childrenNum; i++) {
+// 		reloadMeshes(&model->children[i], modelDir);
+// 	}
+// }
 
 // void showModelsGui() {
 // 	if (!modelSys->debugFramebuffer) {

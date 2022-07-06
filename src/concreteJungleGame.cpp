@@ -1277,6 +1277,11 @@ void updateGame() {
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
+
+						Material material = createMaterial();
+						material.shader = renderer->lightingAnimatedShader;
+						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(element->color);
+						replaceAllMaterials(element->model, material);
 						drawModel(element->model, element->modelMatrix, element->skeleton, element->color);
 					}
 				}

@@ -122,6 +122,7 @@ void hexToArgb(int argbHex, int *a, int *r, int *g, int *b);
 void hexToArgbFloat(int argbHex, float *a, float *r, float *g, float *b);
 Vec4 hexToArgbFloat(int argbHex);
 int argbToRgba(int argb);
+Vec4 argbToRgba(Vec4 argb);
 Vec4 argbToRgbaFloat(int argb);
 int getAofArgb(int src);
 int setAofArgb(int src, int newA);
@@ -1977,6 +1978,10 @@ int argbToRgba(int argb) {
 	int a, r, g, b;
 	hexToArgb(argb, &a, &r, &g, &b);
 	return argbToHex(r, g, b, a);
+}
+
+Vec4 argbToRgba(Vec4 argb) {
+	return v4(argb.y, argb.z, argb.w, argb.x);
 }
 
 Vec4 argbToRgbaFloat(int argb) {
