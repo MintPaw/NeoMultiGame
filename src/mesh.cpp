@@ -9,6 +9,19 @@ struct MeshVertex {
 };
 #pragma pack(pop)
 
+struct MaterialValue {
+	Texture *texture;
+	Vec4 color;
+	float value;
+};
+
+struct Material {
+	Raylib::Shader shader;
+#define MAX_MATERIAL_MAPS 12
+	MaterialValue values[MAX_MATERIAL_MAPS];
+	float params[4];
+};
+
 struct Mesh {
 	char version;
 #define MESH_NAME_MAX_LEN PATH_MAX_LEN
@@ -31,6 +44,11 @@ struct Mesh {
 	char *normalPath;
 	char *specularPath;
 
+	int vaoId;
+
+#define MAX_MESH_VERTEX_BUFFERS 7
+	int vboIds[MAX_MESH_VERTEX_BUFFERS];
+
 	/// Unserialized
 	AABB bounds;
 	Texture *diffuseTexture;
@@ -40,8 +58,6 @@ struct MeshSystem {
 #define MESHES_MAX 512
 	Mesh meshes[MESHES_MAX];
 	int meshesNum;
-
-	Raylib::Material raylibMaterial;
 };
 
 MeshSystem *meshSys = NULL;
@@ -49,182 +65,14 @@ MeshSystem *meshSys = NULL;
 void initMesh();
 Mesh *getMesh(char *path);
 void readMesh(DataStream *stream, char *meshDir, Mesh *mesh);
+
+Material createMaterial();
+void uploadMesh(Mesh *mesh, bool hasWeights=false);
 void drawMesh(Mesh *mesh, Matrix4 matrix=mat4(), Skeleton *skeleton=NULL, int tint=0xFFFFFFFF);
-namespace Raylib {
-	void MyDrawMesh(Mesh mesh, Material material, Matrix transform) {
-    const int MAX_MATERIAL_MAPS = 12;
-#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
-		rlEnableShader(material.shader.id);
-
-		if (material.shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1) {
-			float values[4] = {
-				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.r/255.0f,
-				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.g/255.0f,
-				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.b/255.0f,
-				(float)material.maps[MATERIAL_MAP_DIFFUSE].color.a/255.0f
-			};
-
-			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_DIFFUSE], values, SHADER_UNIFORM_VEC4, 1);
-		}
-
-		if (material.shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1) {
-			float values[4] = {
-				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.r/255.0f,
-				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.g/255.0f,
-				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.b/255.0f,
-				(float)material.maps[SHADER_LOC_COLOR_SPECULAR].color.a/255.0f
-			};
-
-			rlSetUniform(material.shader.locs[SHADER_LOC_COLOR_SPECULAR], values, SHADER_UNIFORM_VEC4, 1);
-		}
-
-		Matrix matModel = MatrixIdentity();
-		Matrix matView = rlGetMatrixModelview();
-		Matrix matModelView = MatrixIdentity();
-		Matrix matProjection = rlGetMatrixProjection();
-
-		if (material.shader.locs[SHADER_LOC_MATRIX_VIEW] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_VIEW], matView);
-		if (material.shader.locs[SHADER_LOC_MATRIX_PROJECTION] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_PROJECTION], matProjection);
-		if (material.shader.locs[SHADER_LOC_MATRIX_MODEL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MODEL], transform);
-
-		matModel = MatrixMultiply(transform, rlGetMatrixTransform());
-
-		matModelView = MatrixMultiply(matModel, matView);
-
-		if (material.shader.locs[SHADER_LOC_MATRIX_NORMAL] != -1) rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
-
-		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
-			if (material.maps[i].texture.id > 0) {
-				rlActiveTextureSlot(i);
-
-				if ((i == MATERIAL_MAP_IRRADIANCE) ||
-					(i == MATERIAL_MAP_PREFILTER) ||
-					(i == MATERIAL_MAP_CUBEMAP)) rlEnableTextureCubemap(material.maps[i].texture.id);
-				else rlEnableTexture(material.maps[i].texture.id);
-
-				rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
-			}
-		}
-
-		if (!rlEnableVertexArray(mesh.vaoId)) {
-			logf("Couldn't bind vao (bad gpu support?)\n");
-			return;
-		}
-
-		Matrix matModelViewProjection = MatrixMultiply(matModelView, matProjection);
-
-		rlSetUniformMatrix(material.shader.locs[SHADER_LOC_MATRIX_MVP], matModelViewProjection);
-
-		if (mesh.indices != NULL) rlDrawVertexArrayElements(0, mesh.triangleCount*3, 0);
-		else rlDrawVertexArray(0, mesh.vertexCount);
-
-		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
-			rlActiveTextureSlot(i);
-
-			if ((i == MATERIAL_MAP_IRRADIANCE) ||
-				(i == MATERIAL_MAP_PREFILTER) ||
-				(i == MATERIAL_MAP_CUBEMAP)) rlDisableTextureCubemap();
-			else rlDisableTexture();
-		}
-
-		rlDisableVertexArray();
-		rlDisableVertexBuffer();
-		rlDisableVertexBufferElement();
-
-		rlDisableShader();
-
-		rlSetMatrixModelview(matView);
-		rlSetMatrixProjection(matProjection);
-#else
-		logf("Can't use meshes in gles!\n");
-#endif
-	}
-
-	void MyUploadMesh(Mesh *mesh, bool dynamic) {
-		if (mesh->vaoId > 0) {
-			TRACELOG(LOG_WARNING, "VAO: [ID %i] Trying to re-load an already loaded mesh", mesh->vaoId);
-			return;
-		}
-
-		const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
-		mesh->vboId = (unsigned int *)RL_CALLOC(MAX_MESH_VERTEX_BUFFERS, sizeof(unsigned int));
-
-		mesh->vaoId = 0;        // Vertex Array Object
-		mesh->vboId[0] = 0;     // Vertex buffer: positions
-		mesh->vboId[1] = 0;     // Vertex buffer: texcoords
-		mesh->vboId[2] = 0;     // Vertex buffer: normals
-		mesh->vboId[3] = 0;     // Vertex buffer: colors
-		mesh->vboId[4] = 0;     // Vertex buffer: tangents
-		mesh->vboId[5] = 0;     // Vertex buffer: texcoords2
-		mesh->vboId[6] = 0;     // Vertex buffer: indices
-
-		mesh->vaoId = rlLoadVertexArray();
-		rlEnableVertexArray(mesh->vaoId);
-
-		void *vertices = mesh->animVertices != NULL ? mesh->animVertices : mesh->vertices;
-		mesh->vboId[0] = rlLoadVertexBuffer(vertices, mesh->vertexCount*3*sizeof(float), dynamic);
-		rlSetVertexAttribute(0, 3, RL_FLOAT, 0, 0, 0);
-		rlEnableVertexAttribute(0);
-
-		mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
-		rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
-		rlEnableVertexAttribute(1);
-
-		if (mesh->normals != NULL) {
-			void *normals = mesh->animNormals != NULL ? mesh->animNormals : mesh->normals;
-			mesh->vboId[2] = rlLoadVertexBuffer(normals, mesh->vertexCount*3*sizeof(float), dynamic);
-			rlSetVertexAttribute(2, 3, RL_FLOAT, 0, 0, 0);
-			rlEnableVertexAttribute(2);
-		} else {
-			float value[3] = { 1.0f, 1.0f, 1.0f };
-			rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
-			rlDisableVertexAttribute(2);
-		}
-
-		if (mesh->colors != NULL) {
-			mesh->vboId[3] = rlLoadVertexBuffer(mesh->colors, mesh->vertexCount*4*sizeof(unsigned char), dynamic);
-			rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, 0, 0, 0);
-			rlEnableVertexAttribute(3);
-		} else {
-			float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			rlSetVertexAttributeDefault(3, value, SHADER_ATTRIB_VEC4, 4);
-			rlDisableVertexAttribute(3);
-		}
-
-		if (mesh->tangents != NULL) {
-			mesh->vboId[4] = rlLoadVertexBuffer(mesh->tangents, mesh->vertexCount*4*sizeof(float), dynamic);
-			rlSetVertexAttribute(4, 4, RL_FLOAT, 0, 0, 0);
-			rlEnableVertexAttribute(4);
-		} else {
-			float value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-			rlSetVertexAttributeDefault(4, value, SHADER_ATTRIB_VEC4, 4);
-			rlDisableVertexAttribute(4);
-		}
-
-		if (mesh->texcoords2 != NULL) {
-			mesh->vboId[5] = rlLoadVertexBuffer(mesh->texcoords2, mesh->vertexCount*2*sizeof(float), dynamic);
-			rlSetVertexAttribute(5, 2, RL_FLOAT, 0, 0, 0);
-			rlEnableVertexAttribute(5);
-		} else {
-			float value[2] = { 0.0f, 0.0f };
-			rlSetVertexAttributeDefault(5, value, SHADER_ATTRIB_VEC2, 2);
-			rlDisableVertexAttribute(5);
-		}
-
-		if (mesh->indices != NULL) mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned short), dynamic);
-
-		if (!mesh->vaoId) logf("Failed to upload mesh (no vao support?)");
-
-		rlDisableVertexArray();
-	}
-}
-
 /// FUNCTIONS ^
 
 void initMesh() {
 	meshSys = (MeshSystem *)zalloc(sizeof(MeshSystem));
-
-	meshSys->raylibMaterial = Raylib::LoadMaterialDefault();
 }
 
 Mesh *getMesh(char *path) {
@@ -334,6 +182,127 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 	} ///
 }
 
+Material createMaterial() {
+	Material material = {};
+	material.shader = renderer->lightingAnimatedShader;
+
+	material.values[Raylib::MATERIAL_MAP_DIFFUSE].texture = renderer->whiteTexture;
+
+	material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = argbToRgbaFloat(0xFFFFFFFF);
+	material.values[Raylib::MATERIAL_MAP_SPECULAR].color = argbToRgbaFloat(0xFFFFFFFF);
+
+	return material;
+}
+
+void uploadMesh(Mesh *mesh, bool hasWeights) {
+	// This could be faster if it was global and resizable
+	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
+	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
+	Vec3 *normals = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
+	u8 *boneIndices = (u8 *)frameMalloc(sizeof(u8) * 4 * mesh->vertsNum);
+	Vec4 *boneWeights = (Vec4 *)frameMalloc(sizeof(Vec4) * mesh->vertsNum);
+	Vec2 *uvs2 = NULL;
+	u16 *indices = mesh->inds;
+
+	for (int i = 0; i < mesh->vertsNum; i++) {
+		MeshVertex meshVert = mesh->verts[i];
+		if (hasWeights) {
+			boneIndices[i * 4 + 0] = meshVert.boneIndices[0];
+			boneIndices[i * 4 + 1] = meshVert.boneIndices[1];
+			boneIndices[i * 4 + 2] = meshVert.boneIndices[2];
+			boneIndices[i * 4 + 3] = meshVert.boneIndices[3];
+			boneWeights[i].x = meshVert.boneWeights[0];
+			boneWeights[i].y = meshVert.boneWeights[1];
+			boneWeights[i].z = meshVert.boneWeights[2];
+			boneWeights[i].w = meshVert.boneWeights[3];
+			positions[i] = meshVert.position;
+			normals[i] = meshVert.normal;
+		} else {
+			boneWeights[i].x = 1;
+			positions[i] = meshVert.position;
+			normals[i] = meshVert.normal;
+		}
+		uvs[i] = meshVert.uv;
+		normals[i] = meshVert.normal;
+	}
+
+	u8 *colors = boneIndices;
+	Vec4 *tangents = boneWeights;
+	int triangleCount = mesh->indsNum/3;
+	int vertexCount = mesh->vertsNum;
+	bool dynamic = false;
+
+	if (mesh->vaoId) {
+		logf("Trying to reupload mesh\n");
+		return;
+	}
+
+	memset(mesh->vboIds, 0, sizeof(int) * MAX_MESH_VERTEX_BUFFERS);
+
+	mesh->vaoId = Raylib::rlLoadVertexArray();
+	Raylib::rlEnableVertexArray(mesh->vaoId);
+
+	mesh->vboIds[0] = Raylib::rlLoadVertexBuffer(positions, vertexCount*3*sizeof(float), dynamic);
+	Raylib::rlSetVertexAttribute(0, 3, RL_FLOAT, 0, 0, 0);
+	Raylib::rlEnableVertexAttribute(0);
+
+	mesh->vboIds[1] = Raylib::rlLoadVertexBuffer(uvs, vertexCount*2*sizeof(float), dynamic);
+	Raylib::rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
+	Raylib::rlEnableVertexAttribute(1);
+
+	if (normals) {
+		mesh->vboIds[2] = Raylib::rlLoadVertexBuffer(normals, vertexCount*3*sizeof(float), dynamic);
+		Raylib::rlSetVertexAttribute(2, 3, RL_FLOAT, 0, 0, 0);
+		Raylib::rlEnableVertexAttribute(2);
+	} else {
+		float value[3] = { 1.0f, 1.0f, 1.0f };
+		Raylib::rlSetVertexAttributeDefault(2, value, Raylib::SHADER_ATTRIB_VEC3, 3);
+		Raylib::rlDisableVertexAttribute(2);
+	}
+
+	if (colors != NULL) {
+		mesh->vboIds[3] = Raylib::rlLoadVertexBuffer(colors, vertexCount*4*sizeof(unsigned char), dynamic);
+		Raylib::rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, 0, 0, 0);
+		Raylib::rlEnableVertexAttribute(3);
+	} else {
+		float value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		Raylib::rlSetVertexAttributeDefault(3, value, Raylib::SHADER_ATTRIB_VEC4, 4);
+		Raylib::rlDisableVertexAttribute(3);
+	}
+
+	if (tangents != NULL) {
+		mesh->vboIds[4] = Raylib::rlLoadVertexBuffer(tangents, vertexCount*4*sizeof(float), dynamic);
+		Raylib::rlSetVertexAttribute(4, 4, RL_FLOAT, 0, 0, 0);
+		Raylib::rlEnableVertexAttribute(4);
+	} else {
+		float value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Raylib::rlSetVertexAttributeDefault(4, value, Raylib::SHADER_ATTRIB_VEC4, 4);
+		Raylib::rlDisableVertexAttribute(4);
+	}
+
+	if (uvs2 != NULL) {
+		mesh->vboIds[5] = Raylib::rlLoadVertexBuffer(uvs2, vertexCount*2*sizeof(float), dynamic);
+		Raylib::rlSetVertexAttribute(5, 2, RL_FLOAT, 0, 0, 0);
+		Raylib::rlEnableVertexAttribute(5);
+	} else {
+		float value[2] = { 0.0f, 0.0f };
+		Raylib::rlSetVertexAttributeDefault(5, value, Raylib::SHADER_ATTRIB_VEC2, 2);
+		Raylib::rlDisableVertexAttribute(5);
+	}
+
+	if (indices != NULL) mesh->vboIds[6] = Raylib::rlLoadVertexBufferElement(indices, triangleCount*3*sizeof(u16), dynamic);
+
+	if (!mesh->vaoId) logf("Failed to upload mesh (no vao support?)");
+
+	Raylib::rlDisableVertexArray();
+}
+
+void unloadMesh(Mesh *mesh) {
+	Raylib::rlUnloadVertexArray(mesh->vaoId);
+	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(mesh->vboIds[i]);
+	mesh->vaoId = 0;
+}
+
 void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 	if (!renderer->in3dPass) {
 		logf("Doing 3d draw call outside pass\n");
@@ -355,66 +324,104 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 		boneTransforms[0] = mat4();
 	}
 
-	// This could be much faster if it was global and resizable
-	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
-	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
-	Vec3 *normals = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
-	u8 *boneIndices = (u8 *)frameMalloc(sizeof(u8) * 4 * mesh->vertsNum);
-	Vec4 *boneWeights = (Vec4 *)frameMalloc(sizeof(Vec4) * mesh->vertsNum);
-
-	for (int i = 0; i < mesh->vertsNum; i++) {
-		MeshVertex meshVert = mesh->verts[i];
-		if (skeleton) {
-			boneIndices[i * 4 + 0] = meshVert.boneIndices[0];
-			boneIndices[i * 4 + 1] = meshVert.boneIndices[1];
-			boneIndices[i * 4 + 2] = meshVert.boneIndices[2];
-			boneIndices[i * 4 + 3] = meshVert.boneIndices[3];
-			boneWeights[i].x = meshVert.boneWeights[0];
-			boneWeights[i].y = meshVert.boneWeights[1];
-			boneWeights[i].z = meshVert.boneWeights[2];
-			boneWeights[i].w = meshVert.boneWeights[3];
-			positions[i] = meshVert.position;
-			normals[i] = meshVert.normal;
-		} else {
-			boneWeights[i].x = 1;
-			positions[i] = meshVert.position;
-			normals[i] = meshVert.normal;
-		}
-		uvs[i] = meshVert.uv;
-		normals[i] = meshVert.normal;
-	}
-
-	Raylib::Mesh raylibMesh = {};
-	raylibMesh.vertices = &positions[0].x;
-	raylibMesh.texcoords = &uvs[0].x;
-	raylibMesh.normals = &normals[0].x;
-	raylibMesh.indices = mesh->inds;
-	raylibMesh.colors = boneIndices;
-	raylibMesh.tangents = &boneWeights[0].x;
-	raylibMesh.triangleCount = mesh->indsNum/3;
-	raylibMesh.vertexCount = mesh->vertsNum;
+	bool hasWeights = false;
+	if (skeleton) hasWeights = true;
+	uploadMesh(mesh, hasWeights);
 
 	Raylib::rlEnableShader(renderer->lightingAnimatedShader.id);
 	glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
-	// glUniformMatrix4fv(shader->u_projection, 1, false, props.projectionMatrix.data);
-	// Raylib::SetShaderValueV(renderer->lightingAnimatedShader, renderer->lightingAnimatedShaderBoneTransformsLoc, boneTransforms, int uniformType, int count)
 
-	// Raylib::UploadMesh(&raylibMesh, false);
-	Raylib::MyUploadMesh(&raylibMesh, false);
-
-	// meshSys->raylibMaterial.shader = renderer->lightingShader;
-	meshSys->raylibMaterial.shader = renderer->lightingAnimatedShader;
-	// meshSys->raylibMaterial.maps[MATERIAL_MAP_DIFFUSE] =
-	meshSys->raylibMaterial.maps[Raylib::MATERIAL_MAP_DIFFUSE].color = toRaylibColor(tint);
+	Material material = createMaterial();
+	material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = argbToRgbaFloat(tint);
 
 	Raylib::rlDisableBackfaceCulling(); //@hack Triangle winding is backwards for me, and Raylib doesn't have a way of changing it
 
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
-	// DrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
-	Raylib::MyDrawMesh(raylibMesh, meshSys->raylibMaterial, raylibMatrix);
+	{
+		Raylib::rlEnableShader(material.shader.id);
 
-	// Unload mesh
-	Raylib::rlUnloadVertexArray(raylibMesh.vaoId);
-	const int MAX_MESH_VERTEX_BUFFERS = 7; // Copied from rmodels.c
-	for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) Raylib::rlUnloadVertexBuffer(raylibMesh.vboId[i]);
+		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE] != -1) {
+			float values[4] = {
+				(float)material.values[Raylib::MATERIAL_MAP_DIFFUSE].color.x,
+				(float)material.values[Raylib::MATERIAL_MAP_DIFFUSE].color.y,
+				(float)material.values[Raylib::MATERIAL_MAP_DIFFUSE].color.z,
+				(float)material.values[Raylib::MATERIAL_MAP_DIFFUSE].color.w
+			};
+
+			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE], values, Raylib::SHADER_UNIFORM_VEC4, 1);
+		}
+
+		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] != -1) {
+			float values[4] = {
+				(float)material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color.x,
+				(float)material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color.y,
+				(float)material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color.z,
+				(float)material.values[Raylib::SHADER_LOC_COLOR_SPECULAR].color.w
+			};
+
+			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR], values, Raylib::SHADER_UNIFORM_VEC4, 1);
+		}
+
+		Raylib::Matrix matModel = Raylib::MatrixIdentity();
+		Raylib::Matrix matView = Raylib::rlGetMatrixModelview();
+		Raylib::Matrix matModelView = Raylib::MatrixIdentity();
+		Raylib::Matrix matProjection = Raylib::rlGetMatrixProjection();
+
+		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_VIEW] != -1) Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_VIEW], matView);
+		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION] != -1) Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION], matProjection);
+		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL] != -1) {
+			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL], raylibMatrix);
+		}
+
+		matModel = MatrixMultiply(raylibMatrix, Raylib::rlGetMatrixTransform());
+
+		matModelView = MatrixMultiply(matModel, matView);
+
+		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL] != -1) Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
+
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
+			if (material.values[i].texture) {
+				Raylib::rlActiveTextureSlot(i);
+
+				if ((i == Raylib::MATERIAL_MAP_IRRADIANCE) ||
+					(i == Raylib::MATERIAL_MAP_PREFILTER) ||
+					(i == Raylib::MATERIAL_MAP_CUBEMAP)) Raylib::rlEnableTextureCubemap(material.values[i].texture->raylibTexture.id);
+				else Raylib::rlEnableTexture(material.values[i].texture->raylibTexture.id);
+
+				Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_MAP_DIFFUSE + i], &i, Raylib::SHADER_UNIFORM_INT, 1);
+			}
+		}
+
+		if (!Raylib::rlEnableVertexArray(mesh->vaoId)) {
+			logf("Couldn't bind vao (bad gpu support?)\n");
+			return;
+		}
+
+		Raylib::Matrix matModelViewProjection = Raylib::MatrixMultiply(matModelView, matProjection);
+
+		Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MVP], matModelViewProjection);
+
+		if (mesh->inds != NULL) Raylib::rlDrawVertexArrayElements(0, mesh->indsNum*3, 0);
+		else Raylib::rlDrawVertexArray(0, mesh->vertsNum);
+
+		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
+			Raylib::rlActiveTextureSlot(i);
+
+			if ((i == Raylib::MATERIAL_MAP_IRRADIANCE) ||
+				(i == Raylib::MATERIAL_MAP_PREFILTER) ||
+				(i == Raylib::MATERIAL_MAP_CUBEMAP)) Raylib::rlDisableTextureCubemap();
+			else Raylib::rlDisableTexture();
+		}
+
+		Raylib::rlDisableVertexArray();
+		Raylib::rlDisableVertexBuffer();
+		Raylib::rlDisableVertexBufferElement();
+
+		Raylib::rlDisableShader();
+
+		Raylib::rlSetMatrixModelview(matView);
+		Raylib::rlSetMatrixProjection(matProjection);
+	}
+
+	unloadMesh(mesh);
 }

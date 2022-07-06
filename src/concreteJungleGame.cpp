@@ -3797,7 +3797,7 @@ void stepGame(float elapsed) {
 				* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
 
 			DrawBillboardCall billboard = {};
-			billboard.renderTexture = renderer->circleTexture;
+			billboard.renderTexture = renderer->circleTexture1024;
 			billboard.position = particle->position;
 			billboard.size = v2(32, 32);
 			billboard.tint = particle->tint;
