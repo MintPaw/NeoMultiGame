@@ -2,8 +2,8 @@ struct Model {
 	char version;
 	char *name;
 
-	Matrix4 modelMatrix;
 	Matrix4 localMatrix;
+	Material material;
 	char *meshPath;
 
 	Model *children;
@@ -112,7 +112,6 @@ void computeBounds(Model *model, Matrix4 matrix) {
 	model->bounds.max = v3(-99999, -99999, -99999);
 
 	matrix = model->localMatrix * matrix;
-	model->modelMatrix = matrix;
 
 	for (int i = 0; i < model->childrenNum; i++) {
 		Model *child = &model->children[i];
@@ -161,11 +160,7 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model
 		return;
 	}
 
-	// if (!parent) matrix = matrix * modelProps.matrix;
-	// matrix = matrix * model->localMatrix;
-
 	if (model->mesh) {
-		// Matrix4 meshMatrix = model->modelMatrix * matrix;
 		Matrix4 meshMatrix = matrix;
 		drawMesh(model->mesh, meshMatrix, skeleton, tint);
 	}

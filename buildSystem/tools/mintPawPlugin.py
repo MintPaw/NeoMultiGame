@@ -174,13 +174,13 @@ def saveSubMesh(obj, meshName, path, materialIndex):
     outputFile.write(ba)
     outputFile.close()
 
-def writeModel(ba, obj, modelPath):
+def writeModel(ba, obj, modelPath, depth=0):
     ba.append(1) # Version
 
     modelName = obj.name
     writeString(ba, modelName)
 
-    if obj.name.startswith("M_"):
+    if depth == 0:
         writeMatrix(ba, mathutils.Matrix());
     else:
         writeMatrix(ba, obj.matrix_local.transposed());
@@ -243,7 +243,7 @@ def writeModel(ba, obj, modelPath):
         bpy.ops.object.delete()
 
     for child in obj.children:
-        writeModel(ba, child, modelPath)
+        writeModel(ba, child, modelPath, depth+1)
 
 def writeBone(ba, arm, bone, transformList):
     writeString(ba, bone.name)

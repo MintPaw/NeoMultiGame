@@ -149,7 +149,6 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 		} else {
 			for (int i = 0; i < 4; i++) vert->boneWeights[i] /= sum;
 		}
-
 	}
 
 	mesh->indsNum = readU32(stream);
@@ -361,11 +360,9 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, int tint) {
 		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION] != -1) {
 			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION], matProjection);
 		}
-
 		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL] != -1) {
 			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL], raylibMatrix);
 		}
-
 		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL] != -1) {
 			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
 		}
