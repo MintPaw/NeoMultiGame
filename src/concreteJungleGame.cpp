@@ -292,6 +292,7 @@ struct Globals {
 	float actorModelScale;
 	float movementPercDistanceWalkingRatio;
 	float movementPercDistanceRunningRatio;
+	float specularPower;
 };
 
 enum StatType {
@@ -1281,6 +1282,7 @@ void updateGame() {
 						Material material = createMaterial();
 						material.shader = renderer->lightingAnimatedShader;
 						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(element->color);
+						material.values[Raylib::MATERIAL_MAP_SPECULAR].color = v4(0, globals->specularPower, 0, 0);
 						replaceAllMaterials(element->model, material);
 						drawModel(element->model, element->modelMatrix, element->skeleton, element->color);
 					}
@@ -2042,6 +2044,9 @@ void stepGame(float elapsed) {
 			ImGui::DragFloat("Actor model scale", &globals->actorModelScale, 0.01);
 			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01, 0, 0, "%.4f");
 			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01, 0, 0, "%.4f");
+			ImGui::Separator();
+
+			ImGui::DragFloat("Specualar power", &globals->specularPower, 0.01, 0, 0, "%.4f");
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -5624,7 +5629,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 14;
+	int globalsVersion = 15;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -5676,6 +5681,8 @@ void saveGlobals() {
 	writeFloat(stream, globals->movementPercDistanceWalkingRatio);
 	writeFloat(stream, globals->movementPercDistanceRunningRatio);
 
+	writeFloat(stream, globals->specularPower);
+
 	writeDataStream("assets/info/globals.bin", stream);
 	destroyDataStream(stream);
 	logf("Globals saved\n");
@@ -5715,35 +5722,36 @@ void loadGlobals() {
 		info->buffToGive = (BuffType)readU32(stream);
 		info->buffToGiveTime = readFloat(stream);
 
-		if (globalsVersion >= 13) {
-			info->thrusterTriggersNum = readU32(stream);
-			for (int i = 0; i < info->thrusterTriggersNum; i++) {
-				ThrusterTrigger *trigger = &info->thrusterTriggers[i];
-				memset(trigger, 0, sizeof(ThrusterTrigger));
-				trigger->frame = readU32(stream);
-				trigger->requiresHit = readU8(stream);
+		info->thrusterTriggersNum = readU32(stream);
+		for (int i = 0; i < info->thrusterTriggersNum; i++) {
+			ThrusterTrigger *trigger = &info->thrusterTriggers[i];
+			memset(trigger, 0, sizeof(ThrusterTrigger));
+			trigger->frame = readU32(stream);
+			trigger->requiresHit = readU8(stream);
 
-				Thruster *thruster = &trigger->thruster;
-				thruster->accel = readVec3(stream);
-				thruster->maxTime = readFloat(stream);
-			}
+			Thruster *thruster = &trigger->thruster;
+			thruster->accel = readVec3(stream);
+			thruster->maxTime = readFloat(stream);
 		}
 
-		if (globalsVersion >= 14) {
-			info->hitThruster.accel = readVec3(stream);
-			info->hitThruster.maxTime = readFloat(stream);
-			info->blockThruster.accel = readVec3(stream);
-			info->blockThruster.maxTime = readFloat(stream);
-		}
+		info->hitThruster.accel = readVec3(stream);
+		info->hitThruster.maxTime = readFloat(stream);
+		info->blockThruster.accel = readVec3(stream);
+		info->blockThruster.maxTime = readFloat(stream);
 	}
 
 	globals->actorSpriteOffset = readVec3(stream);
 	globals->actorSpriteScale = readFloat(stream);
-	if (globalsVersion >= 10) globals->actorSpriteScaleMultiplier = readFloat(stream);
-	if (globalsVersion >= 12) globals->actorModelOffset = readVec3(stream);
-	if (globalsVersion >= 12) globals->actorModelScale = readFloat(stream);
-	if (globalsVersion >= 11) globals->movementPercDistanceWalkingRatio = readFloat(stream);
-	if (globalsVersion >= 11) globals->movementPercDistanceRunningRatio = readFloat(stream);
+	globals->actorSpriteScaleMultiplier = readFloat(stream);
+	globals->actorModelOffset = readVec3(stream);
+	globals->actorModelScale = readFloat(stream);
+	globals->movementPercDistanceWalkingRatio = readFloat(stream);
+	globals->movementPercDistanceRunningRatio = readFloat(stream);
+	if (globalsVersion >= 15) {
+		globals->specularPower = readFloat(stream);
+	} else {
+		globals->specularPower = 1;
+	}
 
 	destroyDataStream(stream);
 }

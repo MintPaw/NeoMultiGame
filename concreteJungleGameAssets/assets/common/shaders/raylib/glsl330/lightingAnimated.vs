@@ -23,7 +23,6 @@ out vec3 fragNormal;
 
 void main()
 {
-#if 1
     // Send vertex attributes to fragment shader
 		mat4 boneTrans = boneTransforms[int(vertexColor.x)] * vertexTangent.x;
 		boneTrans += boneTransforms[int(vertexColor.y)] * vertexTangent.y;
@@ -32,10 +31,7 @@ void main()
 		vec3 modelPos = (vec4(vertexPosition, 1.0) * boneTrans).xyz;
 
     fragPosition = vec3(matModel*vec4(modelPos, 1.0));
-#else
-		vec3 modelPos = vertexPosition;
-#endif
-#
+
     fragPosition = vec3(matModel*vec4(vertexPosition, 1.0));
 
     fragTexCoord = vertexTexCoord;

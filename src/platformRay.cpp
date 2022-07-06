@@ -621,30 +621,35 @@ void initRenderer(int width, int height) {
 		char *vs;
 		char *fs;
 
-		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/alphaDiscard.fs", glslFolder));
-		renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
-		free(fs);
+		{
+			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/alphaDiscard.fs", glslFolder));
+			renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
+			free(fs);
+		}
 
-		vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/base_lighting.vs", glslFolder));
-		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lighting.fs", glslFolder));
-		renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
-		free(vs);
-		free(fs);
-
-		renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
-		renderer->lightingShaderAlphaLoc = Raylib::GetShaderLocation(renderer->lightingShader, "alpha");
-
-		int ambientLoc = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
 		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-		Raylib::SetShaderValue(renderer->lightingShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+		{
+			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/base_lighting.vs", glslFolder));
+			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lighting.fs", glslFolder));
+			renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
+			free(vs);
+			free(fs);
 
-		// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-		// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-		// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-		// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-		renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
+			renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
+			renderer->lightingShaderAlphaLoc = Raylib::GetShaderLocation(renderer->lightingShader, "alpha");
+
+			renderer->lightingShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
+			int loc = renderer->lightingShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
+			Raylib::SetShaderValue(renderer->lightingShader, loc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+
+			// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+			// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+			// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+			// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
+			// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
+			// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
+			renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
+		}
 
 		{
 			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.vs", glslFolder));
@@ -653,18 +658,23 @@ void initRenderer(int width, int height) {
 			free(vs);
 			free(fs);
 
-			int ambientLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
 			renderer->lightingAnimatedShaderBoneTransformsLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "boneTransforms");
 
-			Raylib::SetShaderValue(renderer->lightingAnimatedShader, ambientLoc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
+			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "colSpecular");
+			int loc = renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
+			Raylib::SetShaderValue(renderer->lightingAnimatedShader, loc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+
 			renderer->lightsAnimated[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
 		}
 
-		fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
-		renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
-		free(fs);
+		{
+			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
+			renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
+			free(fs);
 
-		renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
+			renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
+		}
 	} ///
 
 	u64 whiteData = 0xFFFFFFFF;
