@@ -31,6 +31,7 @@ bool stringEndsWith(char *hayStack, char *needle);
 int toLowerCase(int letter);
 int toUpperCase(int letter);
 bool isNumber(char ch) { return (ch <= '9' && ch >= '0'); }
+float getNumbersFromEndOfString(char *str);
 void stripNumbersFromEndOfString(char *str);
 int getIntAtEndOfString(char *str);
 
@@ -476,6 +477,24 @@ int toLowerCase(int letter) {
 int toUpperCase(int letter) {
 	if (letter >= 'a' && letter <= 'z') return letter - ('a'-'A');
 	return letter;
+}
+
+float getNumbersFromEndOfString(char *str) {
+	int len = strlen(str);
+
+	int charsToCut = 0;
+	for (int i = len-1; i >= 0; i--) {
+		if (isNumber(str[i]) || str[i] == '.') {
+			charsToCut++;
+		} else {
+			break;
+		}
+	}
+
+	if (charsToCut == 0) return 0;
+
+	char *numString = &str[len - charsToCut];
+	return atof(numString);
 }
 
 void stripNumbersFromEndOfString(char *str) {
