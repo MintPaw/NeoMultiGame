@@ -37,10 +37,9 @@ namespace Raylib {
 #include "raylib.h"
 #include "rlgl.h"
 #include "raymath.h"
-
-#define RLIGHTS_IMPLEMENTATION
-#include "rlights.h"
 };
+// #define RLIGHTS_IMPLEMENTATION
+// #include "rlights.h"
 
 #undef RED
 #undef ORANGE

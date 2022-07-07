@@ -1,10 +1,4 @@
 #if _WIN32
-#define RAYLIB_GLSL_VERSION            330
-#else
-#define RAYLIB_GLSL_VERSION            100
-#endif
-
-#if _WIN32
 #include "gl.h"
 #else
 #include <GLES3/gl3.h>
@@ -480,6 +474,30 @@ struct Shader {
 	// int locs[RL_MAX_SHADER_LOCATIONS];
 };
 
+#define MAX_LIGHTS 4
+
+struct Light {
+	int type;
+	Raylib::Vector3 position;
+	Raylib::Vector3 target;
+	Raylib::Color color;
+	bool enabled;
+
+	int enabledLoc;
+	int typeLoc;
+	int posLoc;
+	int targetLoc;
+	int colorLoc;
+};
+
+enum LightType {
+	LIGHT_DIRECTIONAL,
+	LIGHT_POINT
+};
+
+static int lightsCount = 0;
+
+
 #define _F_TD_FLIP_Y           (1 << 1)
 #define _F_TD_SKIP_PREMULTIPLY (1 << 2)
 // #define _F_TD_SRGB8            (1 << 3)
@@ -490,13 +508,10 @@ struct Renderer {
 	bool disabled;
 	int maxTextureUnits; // Does nothing
 
-	Raylib::Shader lightingShader;
-	int lightingShaderAlphaLoc;
-
 	Raylib::Shader lightingAnimatedShader;
 	int lightingAnimatedShaderBoneTransformsLoc;
 
-	Raylib::Shader alphaDiscardShader;
+	Shader *alphaDiscardShader;
 
 	Raylib::Shader danmakuShader;
 	int danmakuShaderHueShiftValueLoc;
@@ -524,11 +539,7 @@ struct Renderer {
 	RenderTexture *circleTexture32;
 	Texture *linearGrad256;
 
-	Raylib::Light lights[MAX_LIGHTS];
-	Raylib::Light lightsAnimated[MAX_LIGHTS];
-	Raylib::Model cubeModel;
-	Raylib::Model coneModel;
-	Raylib::Model sphereModel;
+	Light lights[MAX_LIGHTS];
 
 	void *tempTextureBuffer;
 	int tempTextureBufferSize;
@@ -610,6 +621,8 @@ void popAlpha();
 void setRendererBlendMode(BlendMode blendMode);
 void setDepthMask(bool enabled);
 
+Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Raylib::Shader shader);
+void updateLightValues(Raylib::Shader shader, Light light);
 void updateLightingShader();
 
 void resetRenderContext();
@@ -620,9 +633,6 @@ void startShader(Raylib::Shader shader);
 void startShader(Shader *shader);
 void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
-void drawAABB(AABB aabb, int color);
-void drawCone(Cone cone, int color);
-void drawSphere(Sphere sphere, int color);
 
 #include "rendererUtils.cpp"
 bool usesAlphaDiscard = false;
@@ -643,39 +653,15 @@ void initRenderer(int width, int height) {
     char *glslFolder = "glsl330";
 #endif
 
+		renderer->alphaDiscardShader = createShader(
+			NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
+			NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
+		);
+
 		char *vs;
 		char *fs;
 
-		{
-			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/alphaDiscard.fs", glslFolder));
-			renderer->alphaDiscardShader = Raylib::LoadShaderFromMemory(NULL, fs);
-			free(fs);
-		}
-
 		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-		{
-			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/base_lighting.vs", glslFolder));
-			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lighting.fs", glslFolder));
-			renderer->lightingShader = Raylib::LoadShaderFromMemory(vs, fs);
-			free(vs);
-			free(fs);
-
-			renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingShader, "viewPos");
-			renderer->lightingShaderAlphaLoc = Raylib::GetShaderLocation(renderer->lightingShader, "alpha");
-
-			renderer->lightingShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = Raylib::GetShaderLocation(renderer->lightingShader, "ambient");
-			int loc = renderer->lightingShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
-			Raylib::SetShaderValue(renderer->lightingShader, loc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
-
-			// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 200, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-			// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, -200, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-			// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 0, 0, 200 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-			// renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 1000, 0, 0 }, {0, 0, 0}, Raylib::RED, renderer->lightingShader);
-			// renderer->lights[1] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, -1000, 0 }, {0, 0, 0}, Raylib::GREEN, renderer->lightingShader);
-			// renderer->lights[2] = Raylib::CreateLight(Raylib::LIGHT_POINT, { 0, 0, 1000 }, {0, 0, 0}, Raylib::BLUE, renderer->lightingShader);
-			renderer->lights[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingShader);
-		}
-
 		{
 			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.vs", glslFolder));
 			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.fs", glslFolder));
@@ -685,12 +671,13 @@ void initRenderer(int width, int height) {
 
 			renderer->lightingAnimatedShaderBoneTransformsLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "boneTransforms");
 
+			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "viewPos");
 			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
 			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "colSpecular");
 			int loc = renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
 			Raylib::SetShaderValue(renderer->lightingAnimatedShader, loc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
 
-			renderer->lightsAnimated[0] = Raylib::CreateLight(Raylib::LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
+			renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
 		}
 
 		{
@@ -716,15 +703,6 @@ void initRenderer(int width, int height) {
 	pushTargetTexture(renderer->circleTexture32);
 	Raylib::DrawCircle(renderer->circleTexture32->width/2, renderer->circleTexture32->height/2, renderer->circleTexture32->width/2, toRaylibColor(0xFFFFFFFF));
 	popTargetTexture();
-
-	renderer->cubeModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCube(1, 1, 1));
-	renderer->cubeModel.materials[0].shader = renderer->lightingShader;
-
-	renderer->coneModel = Raylib::LoadModelFromMesh(Raylib::GenMeshCone(1, 1, 16));
-	renderer->coneModel.materials[0].shader = renderer->lightingShader;
-
-	renderer->sphereModel = Raylib::LoadModelFromMesh(Raylib::GenMeshSphere(1, 8, 8));
-	renderer->sphereModel.materials[0].shader = renderer->lightingShader;
 
 	initRendererUtils();
 }
@@ -1482,20 +1460,46 @@ void setDepthMask(bool enabled) {
 	else Raylib::rlDisableDepthMask();
 }
 
-void updateLightingShader(Camera camera) {
-	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[0]);
-	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[1]);
-	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[2]);
-	Raylib::UpdateLightValues(renderer->lightingShader, renderer->lights[3]);
-	Raylib::SetShaderValue(renderer->lightingShader, renderer->lightingShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Raylib::Shader shader) {
+	Light light = {};
 
-	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[0]);
-	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[1]);
-	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[2]);
-	Raylib::UpdateLightValues(renderer->lightingAnimatedShader, renderer->lightsAnimated[3]);
+	light.enabled = true;
+	light.type = type;
+	light.position = position;
+	light.target = target;
+	light.color = color;
+
+	light.enabledLoc = GetShaderLocation(shader, frameSprintf("lights[%d].enabled", number));
+	light.typeLoc = GetShaderLocation(shader, frameSprintf("lights[%d].type", number));
+	light.posLoc = GetShaderLocation(shader, frameSprintf("lights[%d].position", number));
+	light.targetLoc = GetShaderLocation(shader, frameSprintf("lights[%d].target", number));
+	light.colorLoc = GetShaderLocation(shader, frameSprintf("lights[%d].color", number));
+
+	updateLightValues(shader, light);
+
+	return light;
+}
+
+void updateLightValues(Raylib::Shader shader, Light light) {
+	SetShaderValue(shader, light.enabledLoc, &light.enabled, Raylib::SHADER_UNIFORM_INT);
+	SetShaderValue(shader, light.typeLoc, &light.type, Raylib::SHADER_UNIFORM_INT);
+
+	SetShaderValue(shader, light.posLoc, &light.position, Raylib::SHADER_UNIFORM_VEC3);
+
+	SetShaderValue(shader, light.targetLoc, &light.target, Raylib::SHADER_UNIFORM_VEC3);
+
+	float color[4] = { (float)light.color.r/(float)255, (float)light.color.g/(float)255, (float)light.color.b/(float)255, (float)light.color.a/(float)255 };
+	SetShaderValue(shader, light.colorLoc, color, Raylib::SHADER_UNIFORM_VEC4);
+}
+
+void updateLightingShader(Camera camera) {
+	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[0]);
+	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[1]);
+	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[2]);
+	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[3]);
 
 	// This happens automatically because of drawMesh
-	// Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+	Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
 }
 
 void resetRenderContext() {
@@ -1568,49 +1572,6 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 
 	*outPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
 	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
-}
-
-void drawAABB(AABB aabb, int color) {
-	if (!renderer->in3dPass) {
-		logf("Doing 3d draw call outside pass\n");
-		return;
-	}
-
-	Vec3 size = getSize(aabb);
-	Vec3 pos = aabb.min + size/2;
-	Raylib::DrawModelEx(renderer->cubeModel, toRaylib(pos), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
-}
-
-void drawCone(Cone cone, int color) {
-	if (!renderer->in3dPass) {
-		logf("Doing 3d draw call outside pass\n");
-		return;
-	}
-
-	Vec3 origDir = v3(0, -1, 0);
-	Vec3 newDir = cone.direction;
-	float rotationAngle = acos(dot(origDir, newDir)/(length(origDir)*length(newDir)));
-	Vec3 rotationAxis = cross(origDir, newDir);
-
-	Vec3 position = cone.position;
-	position += newDir * cone.length;
-
-	Vec3 size = v3(cone.radius, cone.length, cone.radius);
-
-	Raylib::rlMatrixMode(RL_MODELVIEW);
-	Raylib::DrawModelEx(renderer->coneModel, toRaylib(position), toRaylib(rotationAxis), toDeg(rotationAngle), toRaylib(size), toRaylibColor(color));
-}
-
-void drawSphere(Vec3 position, float radius, int color) { drawSphere(makeSphere(position, radius), color); };
-void drawSphere(Sphere sphere, int color) {
-	if (!renderer->in3dPass) {
-		logf("Doing 3d draw call outside pass\n");
-		return;
-	}
-
-	Vec3 position = sphere.position;
-	Vec3 size = v3(1, 1, 1) * sphere.radius;
-	Raylib::DrawModelEx(renderer->sphereModel, toRaylib(position), toRaylib(v3(0, 0, 1)), 0, toRaylib(size), toRaylibColor(color));
 }
 
 ///- Gui

@@ -402,6 +402,20 @@ class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
 
         return {"FINISHED"}
 
+class MESH_OP_export_content_for_models(bpy.types.Operator):
+    bl_idname = "mesh.export_content_for_models"
+    bl_label = "export_content_for_models"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scn = bpy.data.scenes[0]
+        world = bpy.data.worlds["World"]
+
+        saveModel(bpy.data.objects["Cube"], "cube", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models");
+        saveModel(bpy.data.objects["Sphere"], "sphere", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models");
+
+        return {"FINISHED"}
+
 class ExportPanel:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -421,10 +435,12 @@ def register():
     bpy.utils.register_class(ExportSubPanel)
     bpy.utils.register_class(ExportMeshesOp)
     bpy.utils.register_class(MESH_OP_export_content_for_concrete_jungle)
+    bpy.utils.register_class(MESH_OP_export_content_for_models)
 
 def unregister():
     bpy.utils.unregister_class(ExportSubPanel)
     bpy.utils.unregister_class(ExportMeshesOp)
     bpy.utils.unregister_class(MESH_OP_export_content_for_concrete_jungle)
+    bpy.utils.unregister_class(MESH_OP_export_content_for_models)
 
 register()

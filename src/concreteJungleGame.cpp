@@ -648,7 +648,6 @@ struct DrawBillboardCall {
 enum WorldElementType {
 	WORLD_ELEMENT_CUBE,
 	WORLD_ELEMENT_TRIANGLE,
-	WORLD_ELEMENT_CONE,
 	WORLD_ELEMENT_SPHERE,
 	WORLD_ELEMENT_MODEL,
 };
@@ -656,7 +655,6 @@ struct WorldElement {
 	WorldElementType type;
 	// union {
 	Tri tri;
-	Cone cone;
 	Sphere sphere;
 	AABB aabb;
 	Model *model;
@@ -870,7 +868,6 @@ AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
-void pushCone(Cone cone, int color, float alpha=1);
 void pushSphere(Sphere sphere, int color, float alpha=1);
 void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int color=0xFFFFFFFF);
 void pushBillboard(DrawBillboardCall billboard);
@@ -1251,30 +1248,19 @@ void updateGame() {
 				renderer->lights[0].position.z = sunPosition.z;
 				updateLightingShader(game->camera3d);
 
-				{
-					Vec4 alpha = v4(1, 0, 0, 0);
-					Raylib::SetShaderValue(
-						renderer->lightingShader,
-						renderer->lightingShaderAlphaLoc,
-						&alpha.x,
-						Raylib::SHADER_UNIFORM_VEC4
-					);
-				}
-
 				getMouseRay(game->camera3d, game->mouse, &game->mouseRayPos, &game->mouseRayDir);
-
-				startShader(renderer->lightingShader);
 
 				for (int i = 0; i < game->worldElementsNum; i++) {
 					WorldElement *element = &game->worldElements[i];
+
+					// Matrix4 mat = mat4();
+					// glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, 1, true, mat.data);
 
 					if (element->type == WORLD_ELEMENT_CUBE) {
 						drawAABB(element->aabb, element->color);
 					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
 						Vec2 uvs[3] = {};
 						drawTriangle(NULL, element->tri.verts, uvs);
-					} else if (element->type == WORLD_ELEMENT_CONE) {
-						drawCone(element->cone, element->color);
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
@@ -1287,8 +1273,6 @@ void updateGame() {
 						drawModel(element->model, element->modelMatrix, element->skeleton, element->color);
 					}
 				}
-
-				endShader();
 
 				startShader(renderer->alphaDiscardShader);
 				for (int i = 0; i < game->billboardsNum; i++) {
@@ -2046,7 +2030,7 @@ void stepGame(float elapsed) {
 			ImGui::DragFloat("Movement perc distance running ratio", &globals->movementPercDistanceRunningRatio, 0.01, 0, 0, "%.4f");
 			ImGui::Separator();
 
-			ImGui::DragFloat("Specualar power", &globals->specularPower, 0.01, 0, 0, "%.4f");
+			ImGui::DragFloat("Specular power", &globals->specularPower, 0.01, 0, 0, "%.4f");
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -5384,14 +5368,6 @@ void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color) {
 	element->tri.verts[1] = vert1;
 	element->tri.verts[2] = vert2;
 	element->color = color;
-}
-
-void pushCone(Cone cone, int color, float alpha) {
-	WorldElement *element = createWorldElement();
-	element->type = WORLD_ELEMENT_CONE;
-	element->cone = cone;
-	element->color = color;
-	element->alpha = alpha;
 }
 
 void pushSphere(Sphere sphere, int color, float alpha) {

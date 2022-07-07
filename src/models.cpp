@@ -38,6 +38,9 @@ void writeModel(DataStream *stream, Model *model);
 
 Vec3 getSize(Model *model);
 void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int tint=0xFFFFFFFF, Model *parent=NULL);
+void drawAABB(AABB aabb, int color);
+void drawSphere(Sphere sphere, int color);
+void drawSphere(Vec3 position, float radius, int color) { drawSphere(makeSphere(position, radius), color); };
 void replaceAllMaterials(Model *model, Material material);
 
 // bool intersectsLine(Model *model, Vec3 start, Vec3 end, float *outDist, Vec2 *outUv, MeshTri **outMeshTri);
@@ -170,6 +173,44 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model
 		Model *child = &model->children[i];
 		drawModel(child, matrix, skeleton, tint, model);
 	}
+}
+
+void drawAABB(AABB aabb, int color) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
+	Matrix4 matrix = mat4();
+	matrix.TRANSLATE(getCenter(aabb));
+	matrix.SCALE(getSize(aabb)/2);
+
+	Model *model = getModel("assets/common/models/cube.model");
+
+	Material material = createMaterial();
+	material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(color);
+	replaceAllMaterials(model, material);
+
+	drawModel(model, matrix, NULL, color);
+}
+
+void drawSphere(Sphere sphere, int color) {
+	if (!renderer->in3dPass) {
+		logf("Doing 3d draw call outside pass\n");
+		return;
+	}
+
+	Matrix4 matrix = mat4();
+	matrix.TRANSLATE(sphere.position);
+	matrix.SCALE(sphere.radius);
+
+	Model *model = getModel("assets/common/models/sphere.model");
+
+	Material material = createMaterial();
+	material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(color);
+	replaceAllMaterials(model, material);
+
+	drawModel(model, matrix, NULL, color);
 }
 
 void replaceAllMaterials(Model *model, Material material) {
