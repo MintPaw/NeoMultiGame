@@ -461,6 +461,25 @@ struct Camera {
 	bool isOrtho;
 };
 
+enum ShaderUniformType {
+	SHADER_UNIFORM_FLOAT,
+	SHADER_UNIFORM_VEC2,
+	SHADER_UNIFORM_VEC3,
+	SHADER_UNIFORM_VEC4,
+	SHADER_UNIFORM_MATRIX4,
+	SHADER_UNIFORM_INT,
+	SHADER_UNIFORM_IVEC2,
+	SHADER_UNIFORM_IVEC3,
+	SHADER_UNIFORM_IVEC4,
+	SHADER_UNIFORM_SAMPLER2D
+};
+
+struct Shader {
+	Raylib::Shader raylibShader;
+	// int shaderId;
+	// int locs[RL_MAX_SHADER_LOCATIONS];
+};
+
 #define _F_TD_FLIP_Y           (1 << 1)
 #define _F_TD_SKIP_PREMULTIPLY (1 << 2)
 // #define _F_TD_SRGB8            (1 << 3)
@@ -531,6 +550,11 @@ Raylib::Matrix toRaylib(Matrix4 matrix) {
 
 void initRenderer(int width, int height);
 void clearRenderer(int color=0);
+
+Shader *createShader(char *vs, char *fs, char *vs100=NULL, char *fs100=NULL);
+int getUniformLocation(Shader *shader, char *uniformName);
+int getVertextAttribLocation(Shader *shader, char *attribName);
+bool setShaderUniformValue(Shader *shader, int loc, void *ptr, int count, ShaderUniformType type);
 
 Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
@@ -706,6 +730,57 @@ void initRenderer(int width, int height) {
 
 void clearRenderer(int color) {
 	Raylib::ClearBackground(toRaylibColor(color));
+}
+
+Shader *createShader(char *vs, char *fs, char *vs100, char *fs100) {
+#if !defined(GRAPHICS_API_OPENGL_33)
+	if ((vs && !vs100) || (fs && !fs100)) logf("Using glsl3.3 shader on incompatible platform\n");
+	vs = vs100;
+	fs = fs100;
+#endif
+
+	Shader *shader = (Shader *)zalloc(sizeof(Shader));
+	shader->raylibShader = Raylib::LoadShaderFromMemory(vs, fs);
+	return shader;
+}
+
+int getUniformLocation(Shader *shader, char *uniformName) {
+	int loc = glGetUniformLocation(shader->raylibShader.id, uniformName);
+	return loc;
+}
+
+int getVertextAttribLocation(Shader *shader, char *attribName) {
+	int loc = glGetAttribLocation(shader->raylibShader.id, attribName);
+	return loc;
+}
+
+bool setShaderUniformValue(Shader *shader, int loc, void *ptr, int count, ShaderUniformType type) {
+	Raylib::rlEnableShader(shader->raylibShader.id);
+
+	if (type == SHADER_UNIFORM_FLOAT) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_FLOAT, count);
+	} else if (type == SHADER_UNIFORM_VEC2) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC2, count);
+	} else if (type == SHADER_UNIFORM_VEC3) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC3, count);
+	} else if (type == SHADER_UNIFORM_VEC4) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC4, count);
+	} else if (type == SHADER_UNIFORM_MATRIX4) {
+		glUniformMatrix4fv(loc, count, true, (float *)ptr);
+	} else if (type == SHADER_UNIFORM_INT) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_INT, count);
+	} else if (type == SHADER_UNIFORM_IVEC2) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC2, count);
+	} else if (type == SHADER_UNIFORM_IVEC3) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC3, count);
+	} else if (type == SHADER_UNIFORM_IVEC4) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC4, count);
+	} else if (type == SHADER_UNIFORM_SAMPLER2D) {
+		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_SAMPLER2D, count);
+	} else {
+		logf("Invalid shader uniform type\n");
+	}
+	return false;
 }
 
 Texture *createTexture(const char *path, int flags) {
