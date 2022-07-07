@@ -508,7 +508,7 @@ struct Renderer {
 	bool disabled;
 	int maxTextureUnits; // Does nothing
 
-	Raylib::Shader lightingAnimatedShader;
+	Shader *lightingAnimatedShader;
 	int lightingAnimatedShaderBoneTransformsLoc;
 
 	Shader *alphaDiscardShader;
@@ -562,10 +562,10 @@ Raylib::Matrix toRaylib(Matrix4 matrix) {
 void initRenderer(int width, int height);
 void clearRenderer(int color=0);
 
-Shader *createShader(char *vsPath, char *fsPath, char *vs100Path=NULL, char *fs100Path=NULL);
+Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path=NULL, char *fs100Path=NULL);
 int getUniformLocation(Shader *shader, char *uniformName);
 int getVertextAttribLocation(Shader *shader, char *attribName);
-bool setShaderUniformValue(Shader *shader, int loc, void *ptr, int count, ShaderUniformType type);
+bool setShaderUniform(Shader *shader, int loc, void *ptr, ShaderUniformType type, int count);
 
 Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
@@ -621,8 +621,8 @@ void popAlpha();
 void setRendererBlendMode(BlendMode blendMode);
 void setDepthMask(bool enabled);
 
-Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Raylib::Shader shader);
-void updateLightValues(Raylib::Shader shader, Light light);
+Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader);
+void updateLightValues(Shader *shader, Light light);
 void updateLightingShader();
 
 void resetRenderContext();
@@ -653,35 +653,31 @@ void initRenderer(int width, int height) {
     char *glslFolder = "glsl330";
 #endif
 
-		renderer->alphaDiscardShader = createShader(
+		renderer->alphaDiscardShader = loadShader(
 			NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
 			NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
 		);
 
-		char *vs;
-		char *fs;
-
-		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 		{
-			vs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.vs", glslFolder));
-			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/lightingAnimated.fs", glslFolder));
-			renderer->lightingAnimatedShader = Raylib::LoadShaderFromMemory(vs, fs);
-			free(vs);
-			free(fs);
+			renderer->lightingAnimatedShader = loadShader(
+				"assets/common/shaders/raylib/glsl330/lightingAnimated.vs",
+				"assets/common/shaders/raylib/glsl330/lightingAnimated.fs"
+			);
 
-			renderer->lightingAnimatedShaderBoneTransformsLoc = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "boneTransforms");
+			renderer->lightingAnimatedShaderBoneTransformsLoc = getUniformLocation(renderer->lightingAnimatedShader, "boneTransforms");
 
-			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "viewPos");
-			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "ambient");
-			renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = Raylib::GetShaderLocation(renderer->lightingAnimatedShader, "colSpecular");
-			int loc = renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
-			Raylib::SetShaderValue(renderer->lightingAnimatedShader, loc, ambientLightValue, Raylib::SHADER_UNIFORM_VEC4);
+			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = getUniformLocation(renderer->lightingAnimatedShader, "viewPos");
+			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = getUniformLocation(renderer->lightingAnimatedShader, "ambient");
+			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = getUniformLocation(renderer->lightingAnimatedShader, "colSpecular");
+			float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
+			int loc = renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
+			setShaderUniform(renderer->lightingAnimatedShader, loc, ambientLightValue, SHADER_UNIFORM_VEC4, 1);
 
 			renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
 		}
 
 		{
-			fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
+			char *fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
 			renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
 			free(fs);
 
@@ -711,7 +707,7 @@ void clearRenderer(int color) {
 	Raylib::ClearBackground(toRaylibColor(color));
 }
 
-Shader *createShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path) {
+Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path) {
 #if !defined(GRAPHICS_API_OPENGL_33)
 	if ((vsPath && !vs100Path) || (fsPath && !fs100Path)) logf("Using glsl3.3 shader on incompatible platform\n");
 	vsPath = vs100Path;
@@ -747,7 +743,7 @@ int getVertextAttribLocation(Shader *shader, char *attribName) {
 	return loc;
 }
 
-bool setShaderUniformValue(Shader *shader, int loc, void *ptr, int count, ShaderUniformType type) {
+bool setShaderUniform(Shader *shader, int loc, void *ptr, ShaderUniformType type, int count) {
 	Raylib::rlEnableShader(shader->raylibShader.id);
 
 	if (type == SHADER_UNIFORM_FLOAT) {
@@ -1460,7 +1456,7 @@ void setDepthMask(bool enabled) {
 	else Raylib::rlDisableDepthMask();
 }
 
-Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Raylib::Shader shader) {
+Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader) {
 	Light light = {};
 
 	light.enabled = true;
@@ -1469,27 +1465,27 @@ Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector
 	light.target = target;
 	light.color = color;
 
-	light.enabledLoc = GetShaderLocation(shader, frameSprintf("lights[%d].enabled", number));
-	light.typeLoc = GetShaderLocation(shader, frameSprintf("lights[%d].type", number));
-	light.posLoc = GetShaderLocation(shader, frameSprintf("lights[%d].position", number));
-	light.targetLoc = GetShaderLocation(shader, frameSprintf("lights[%d].target", number));
-	light.colorLoc = GetShaderLocation(shader, frameSprintf("lights[%d].color", number));
+	light.enabledLoc = getUniformLocation(shader, frameSprintf("lights[%d].enabled", number));
+	light.typeLoc = getUniformLocation(shader, frameSprintf("lights[%d].type", number));
+	light.posLoc = getUniformLocation(shader, frameSprintf("lights[%d].position", number));
+	light.targetLoc = getUniformLocation(shader, frameSprintf("lights[%d].target", number));
+	light.colorLoc = getUniformLocation(shader, frameSprintf("lights[%d].color", number));
 
 	updateLightValues(shader, light);
 
 	return light;
 }
 
-void updateLightValues(Raylib::Shader shader, Light light) {
-	SetShaderValue(shader, light.enabledLoc, &light.enabled, Raylib::SHADER_UNIFORM_INT);
-	SetShaderValue(shader, light.typeLoc, &light.type, Raylib::SHADER_UNIFORM_INT);
+void updateLightValues(Shader *shader, Light light) {
+	setShaderUniform(shader, light.enabledLoc, &light.enabled, SHADER_UNIFORM_INT, 1);
+	setShaderUniform(shader, light.typeLoc, &light.type, SHADER_UNIFORM_INT, 1);
 
-	SetShaderValue(shader, light.posLoc, &light.position, Raylib::SHADER_UNIFORM_VEC3);
+	setShaderUniform(shader, light.posLoc, &light.position, SHADER_UNIFORM_VEC3, 1);
 
-	SetShaderValue(shader, light.targetLoc, &light.target, Raylib::SHADER_UNIFORM_VEC3);
+	setShaderUniform(shader, light.targetLoc, &light.target, SHADER_UNIFORM_VEC3, 1);
 
 	float color[4] = { (float)light.color.r/(float)255, (float)light.color.g/(float)255, (float)light.color.b/(float)255, (float)light.color.a/(float)255 };
-	SetShaderValue(shader, light.colorLoc, color, Raylib::SHADER_UNIFORM_VEC4);
+	setShaderUniform(shader, light.colorLoc, color, SHADER_UNIFORM_VEC4, 1);
 }
 
 void updateLightingShader(Camera camera) {
@@ -1499,7 +1495,14 @@ void updateLightingShader(Camera camera) {
 	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[3]);
 
 	// This happens automatically because of drawMesh
-	Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+	// Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader->locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+	setShaderUniform(
+		renderer->lightingAnimatedShader,
+		renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW],
+		&camera.position.x,
+		SHADER_UNIFORM_VEC3,
+		1
+	);
 }
 
 void resetRenderContext() {

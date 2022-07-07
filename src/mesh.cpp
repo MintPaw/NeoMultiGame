@@ -183,7 +183,7 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 
 Material createMaterial() {
 	Material material = {};
-	material.shader = renderer->lightingAnimatedShader;
+	material.shader = renderer->lightingAnimatedShader->raylibShader;
 
 	material.values[Raylib::MATERIAL_MAP_DIFFUSE].texture = renderer->whiteTexture;
 
@@ -333,7 +333,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 	{
 		Raylib::rlEnableShader(material.shader.id);
 
-		if (material.shader.id == renderer->lightingAnimatedShader.id) {
+		if (material.shader.id == renderer->lightingAnimatedShader->raylibShader.id) {
 			glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
 		}
 
