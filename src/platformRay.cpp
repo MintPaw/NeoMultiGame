@@ -551,7 +551,7 @@ Raylib::Matrix toRaylib(Matrix4 matrix) {
 void initRenderer(int width, int height);
 void clearRenderer(int color=0);
 
-Shader *createShader(char *vs, char *fs, char *vs100=NULL, char *fs100=NULL);
+Shader *createShader(char *vsPath, char *fsPath, char *vs100Path=NULL, char *fs100Path=NULL);
 int getUniformLocation(Shader *shader, char *uniformName);
 int getVertextAttribLocation(Shader *shader, char *attribName);
 bool setShaderUniformValue(Shader *shader, int loc, void *ptr, int count, ShaderUniformType type);
@@ -617,6 +617,7 @@ void resetRenderContext();
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
 void end3d();
 void startShader(Raylib::Shader shader);
+void startShader(Shader *shader);
 void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 void drawAABB(AABB aabb, int color);
@@ -732,15 +733,29 @@ void clearRenderer(int color) {
 	Raylib::ClearBackground(toRaylibColor(color));
 }
 
-Shader *createShader(char *vs, char *fs, char *vs100, char *fs100) {
+Shader *createShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path) {
 #if !defined(GRAPHICS_API_OPENGL_33)
-	if ((vs && !vs100) || (fs && !fs100)) logf("Using glsl3.3 shader on incompatible platform\n");
-	vs = vs100;
-	fs = fs100;
+	if ((vsPath && !vs100Path) || (fsPath && !fs100Path)) logf("Using glsl3.3 shader on incompatible platform\n");
+	vsPath = vs100Path;
+	fsPath = fs100Path;
 #endif
+
+#if defined(GRAPHICS_API_OPENGL_33)
+	if (vsPath == NULL) vsPath = "assets/common/shaders/raylib/glsl330/base.vs";
+	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl330/base.fs";
+#else
+	if (vsPath == NULL) vsPath = "assets/common/shaders/raylib/glsl100/base.vs";
+	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl100/base.fs";
+#endif
+
+	char *vs = (char *)readFile(vsPath);
+	char *fs = (char *)readFile(fsPath);
 
 	Shader *shader = (Shader *)zalloc(sizeof(Shader));
 	shader->raylibShader = Raylib::LoadShaderFromMemory(vs, fs);
+
+	free(vs);
+	free(fs);
 	return shader;
 }
 
@@ -1522,6 +1537,9 @@ void end3d() {
 
 void startShader(Raylib::Shader shader) {
 	Raylib::BeginShaderMode(shader);
+}
+void startShader(Shader *shader) {
+	Raylib::BeginShaderMode(shader->raylibShader);
 }
 void endShader() {
 	Raylib::EndShaderMode();
