@@ -1,7 +1,5 @@
-// Add a way to see the prewarming
 // Do npc awareness
 // Attacks that break block need to go through
-// Air attacks need to float
 // Running kick needs to launch further
 // Make money fade away eventaully
 // Make thrown weapons do damage
@@ -155,6 +153,9 @@ Vec3 UNIT_SIZE = v3(150, 150, 300);
 
 #define FRAME_SUBSTEPS 2
 
+#define STASIS_TIME_SCALE_AMOUNT 0.1
+#define STASIS_STAMINA_PERC 0.95
+
 u32 teamColors[TEAMS_MAX] = {
 	0xFFC5FF87,
 	0xFFFF878B,
@@ -217,6 +218,7 @@ enum ActionType {
 	ACTION_DRINK_POTION_FINISH=28,
 	ACTION_DRINK_POTION_FAIL=29,
 	ACTION_ARMOR_GAIN=30,
+	ACTION_STASIS_GAIN=31,
 
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
@@ -525,6 +527,7 @@ struct Actor {
 	Vec2 aiCurrentXy;
 	Vec2 aiCurrentXyOffset;
 	float aiStateLength;
+
 	float allianceCost;
 
 	bool isLastExitedDoor;
@@ -540,6 +543,9 @@ struct Actor {
 	int potionsLeft;
 	bool doingSpotDodge;
 	bool hasHyperArmor;
+	bool hasStasisAttack;
+
+	float stasisTimeLeft;
 
 	Item heldItem;
 
@@ -2163,22 +2169,21 @@ void stepGame(float elapsed) {
 
 	Vec2 inputVec = v2();
 	Vec2 movementVec = v2();
-	bool jumpPressed, punchPressed, kickPressed, special1Pressed, special2Pressed, drinkPotionPressed, dashButtonPressed, armorGainButtonPressed;
+	bool jumpPressed, punchPressed, kickPressed, drinkPotionPressed, dashButtonPressed, armorGainButtonPressed, stasisGainButtonPressed;
 	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
 		jumpPressed = false;
 		punchPressed = false;
 		kickPressed = false;
-		special1Pressed = false;
-		special2Pressed = false;
+		drinkPotionPressed = false;
+		dashButtonPressed = false;
+		armorGainButtonPressed = false;
+		stasisGainButtonPressed = false;
 		changeStyle1Pressed = false;
 		changeStyle2Pressed = false;
 		changeStyle3Pressed = false;
 		changeStyle4Pressed = false;
-		drinkPotionPressed = false;
-		dashButtonPressed = false;
-		armorGainButtonPressed = false;
 		pickupPressed = false;
 
 		bool canInput = true;
@@ -2203,12 +2208,11 @@ void stepGame(float elapsed) {
 			if (keyJustPressed(' ') || joyButtonJustPressed(0, JOY_X)) jumpPressed = true;
 			if (keyJustPressed('J') || joyButtonJustPressed(0, JOY_SQUARE)) punchPressed = true;
 			if (keyJustPressed('K') || joyButtonJustPressed(0, JOY_TRIANGLE)) kickPressed = true;
-			if (keyJustPressed('U')) special1Pressed = true;
-			if (keyJustPressed('I')) special2Pressed = true;
 			if (keyJustPressed('L') || joyButtonJustPressed(0, JOY_CIRCLE)) pickupPressed = true;
 			if (game->alliancesControlled[0] && player->isOnGround && (keyJustPressed('Q') || joyButtonJustPressed(0, JOY_L1))) drinkPotionPressed = true;
 			if (game->alliancesControlled[1] && player->isOnGround && (keyJustPressed('N') || joyButtonJustPressed(0, JOY_R1))) dashButtonPressed = true;
 			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) armorGainButtonPressed = true;
+			if (game->alliancesControlled[3] && player->isOnGround && (keyJustPressed('U') || joyButtonJustPressed(0, JOY_R2))) stasisGainButtonPressed = true;
 			if (keyJustPressed('1')) changeStyle1Pressed = true;
 			if (keyJustPressed('2')) changeStyle2Pressed = true;
 			if (keyJustPressed('3')) changeStyle3Pressed = true;
@@ -2248,8 +2252,10 @@ void stepGame(float elapsed) {
 				bool canDoAction = true;
 
 				if (action->time == 0) {
-					actor->stamina -= action->info->staminaUsage;
-					if (actor->stamina <= 0 && action->info->staminaUsage) {
+					float staminaCost = action->info->staminaUsage;
+					if (action->type == ACTION_STASIS_GAIN) staminaCost = actor->maxStamina * STASIS_STAMINA_PERC;
+					actor->stamina -= staminaCost;
+					if (actor->stamina <= 0 && staminaCost) {
 						canDoAction = false;
 						actionDone = true;
 					}
@@ -2373,6 +2379,11 @@ void stepGame(float elapsed) {
 										continue;
 									}
 
+									if (actor->hasStasisAttack) {
+										actor->hasStasisAttack = false;
+										otherActor->stasisTimeLeft = 10;
+									}
+
 									float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
 
 									int particleColor;
@@ -2394,6 +2405,7 @@ void stepGame(float elapsed) {
 											blockThruster = action->info->hitThruster;
 											blockThruster.accel *= 0.25;
 										}
+										blockThruster.accel.z = 0;
 										applyThruster(otherActor, blockThruster, actor->facingLeft);
 
 										otherActor->actionsNum = 0;
@@ -2475,7 +2487,6 @@ void stepGame(float elapsed) {
 
 				float maxTime;
 				float actionTimeScale = getStatPoints(actor, STAT_ATTACK_SPEED)*0.1;
-
 				if (usesCustomLength) {
 					maxTime = action->customLength;
 				} else {
@@ -2582,6 +2593,8 @@ void stepGame(float elapsed) {
 							}
 							addAction(actor, ACTION_DASH_FORWARD);
 						}
+					} else if (action->type == ACTION_STASIS_GAIN) {
+						actor->hasStasisAttack = true;
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2593,6 +2606,8 @@ void stepGame(float elapsed) {
 				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
 				if (usesCustomLength) actionTimeScale = 1;
 				if (action->type == ACTION_RAISING) actionTimeScale = 1;
+
+				if (actor->stasisTimeLeft > 0) actionTimeScale *= STASIS_TIME_SCALE_AMOUNT;
 
 				action->prevTime = action->time;
 				action->time += elapsed * actionTimeScale;
@@ -2627,6 +2642,9 @@ void stepGame(float elapsed) {
 			if (actor->isRunningLeft || actor->isRunningRight) speed *= 2;
 			for (int i = 0; i < getBuffCount(actor, BUFF_BUDDHA_PALM_SLOW); i++) speed *= 0.5;
 			for (int i = 0; i < getBuffCount(actor, BUFF_STICKY_NAPALM_STACK); i++) speed *= 0.8;
+			if (actor->stasisTimeLeft > 0) speed *= STASIS_TIME_SCALE_AMOUNT;
+
+
 			actor->isBlocking = true;
 			if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
 			if (!actor->isOnGround) actor->isBlocking = false;
@@ -2746,16 +2764,6 @@ void stepGame(float elapsed) {
 					}
 				}
 
-				if (special1Pressed) {
-					ActionType actionType = getActionType(actor, 0);
-					if (actionType != ACTION_NONE) addAction(actor, actionType);
-				}
-
-				if (special2Pressed) {
-					ActionType actionType = getActionType(actor, 1);
-					if (actionType != ACTION_NONE) addAction(actor, actionType);
-				}
-
 				if (changeStyle1Pressed) {
 					infof("Style 1\n");
 					actor->styleIndex = 0;
@@ -2794,6 +2802,14 @@ void stepGame(float elapsed) {
 				if (armorGainButtonPressed) {
 					actor->hasHyperArmor = true;
 					addAction(actor, ACTION_ARMOR_GAIN);
+				}
+
+				if (stasisGainButtonPressed) {
+					if (actor->stamina / actor->maxStamina > STASIS_STAMINA_PERC) {
+						addAction(actor, ACTION_STASIS_GAIN);
+					} else {
+						infof("Not enough stamina\n");
+					}
 				}
 
 				actor->timeSinceLastLeftPress += elapsed;
@@ -3254,11 +3270,11 @@ void stepGame(float elapsed) {
 						SkeletonBlend *mainBlend = getSkeletonBlend(actor->skeleton, "main");
 						SkeletonBlend *nextBlend = getSkeletonBlend(actor->skeleton, "next");
 						SkeletonBlend *fadeOutBlend = getSkeletonBlend(actor->skeleton, "fadeOut");
-						float timeScale = elapsed / (1/60.0);
+						float skeletonBlendTimeScale = elapsed / (1/60.0);
 
 						SkeletonBlend *currentBlend = NULL;
 
-						float weightChange = 0.1 * timeScale;
+						float weightChange = 0.1 * skeletonBlendTimeScale;
 
 						nextBlend->weight = 0;
 
@@ -3285,7 +3301,9 @@ void stepGame(float elapsed) {
 
 					updateSkeleton(actor->skeleton, elapsed);
 					if (game->debugDrawUnitModels) {
-						pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, teamColors[actor->team]);
+						int color = teamColors[actor->team];
+						if (actor->stasisTimeLeft > 0) color = lerpColor(color, 0xFF0000FF, 0.5);
+						pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, color);
 
 						int targetBoneIndex = getBoneIndex(actor->skeleton, "weapon.r");
 						Bone *bone = &actor->skeleton->base->bones[targetBoneIndex];
@@ -3530,10 +3548,9 @@ void stepGame(float elapsed) {
 				actor->isBlocking = false;
 			}
 
-			float timeScale = elapsed / (1/60.0);
-
 			float grav = 0.75;
 			for (int i = 0; i < getBuffCount(actor, BUFF_HEAVEN_STEP_GRAVITY); i++) grav *= 0.5;
+
 			actor->accel.z -= grav;
 
 			for (int i = 0; i < actor->thrustersNum; i++) {
@@ -3542,7 +3559,9 @@ void stepGame(float elapsed) {
 
 				actor->accel += thruster->accel;
 
-				thruster->time += elapsed;
+				float thrusterTimeScale = 1;
+				if (actor->stasisTimeLeft > 0) thrusterTimeScale *= STASIS_TIME_SCALE_AMOUNT;
+				thruster->time += elapsed * thrusterTimeScale;
 				if (thruster->time >= thruster->maxTime) {
 					arraySpliceIndex(actor->thrusters, actor->thrustersNum, sizeof(Thruster), i);
 					actor->thrustersNum--;
@@ -3558,10 +3577,13 @@ void stepGame(float elapsed) {
 				damping = v3(0, 0, 0.02);
 			}
 
-			actor->velo += (actor->accel - damping*actor->velo) * timeScale;
+			float physicsTimeScale = elapsed / (1/60.0);
+			if (actor->stasisTimeLeft > 0) physicsTimeScale *= STASIS_TIME_SCALE_AMOUNT;
+
+			actor->velo += (actor->accel - damping*actor->velo) * physicsTimeScale;
 			actor->accel = v3();
 
-			Vec3 positionOffset = actor->velo * timeScale;
+			Vec3 positionOffset = actor->velo * physicsTimeScale;
 
 			{ // AABB collision
 				bool bouncedOffSideWall = false;
@@ -3727,6 +3749,9 @@ void stepGame(float elapsed) {
 		actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
 
 		actor->aiStateTime += elapsed;
+		actor->stasisTimeLeft -= elapsed;
+		if (actor->stasisTimeLeft < 0) actor->stasisTimeLeft = 0;
+
 		if (actor->position.z < -10000) actor->position = v3(0, 0, 500);
 	} ///
 
@@ -4577,6 +4602,7 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[0]) textLines[textLinesNum++] = frameSprintf("L1 - Quaff potion (%d/3)", player->potionsLeft);
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "R1 - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "L3 - Armor up";
+				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "R2 - Stasis";
 			} else {
 				textLines[textLinesNum++] = "J - Punch";
 				textLines[textLinesNum++] = "K - Kick";
@@ -4585,6 +4611,7 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[0]) textLines[textLinesNum++] = frameSprintf("Q - Quaff potion (%d/3)", player->potionsLeft);
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "N - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "B - Armor up";
+				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "U - Stasis";
 			}
 
 #if 0
