@@ -111,6 +111,8 @@ struct Ngui {
 	int elementsNum;
 	int elementsMax;
 
+	NguiElement *lastElement;
+
 	int nextNguiElementId;
 	int currentOrderIndex;
 
@@ -219,8 +221,11 @@ void nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
 bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
+bool nguiHoveringElement();
+
 int getSizeForDataType(NguiDataType dataType);
 void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack);
+
 void writeNguiStyleStack(DataStream *stream, NguiStyleStack *styleStack);
 NguiStyleStack readNguiStyleStack(DataStream *stream);
 
@@ -624,9 +629,12 @@ void nguiDraw(float elapsed) {
 						child->position = cursor;
 					}
 				}
-				if (child->alive == 1) child->position = lerp(child->position, cursor, 0.05);
-				Vec2 buttonSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
-				Rect childRect = makeRect(child->position, buttonSize) * ngui->uiScale;
+
+				Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
+				Vec2 position = cursor;
+
+				if (child->alive == 1) child->position = lerp(child->position, position, 0.05);
+				Rect childRect = makeRect(child->position, elementSize) * ngui->uiScale;
 				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
 
 				child->childRect = childRect;
@@ -640,10 +648,10 @@ void nguiDraw(float elapsed) {
 				if (!skipCursorBump) {
 					prevCursor = cursor;
 					if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
-						cursor.x += buttonSize.x + elementPadding.x;
+						cursor.x += elementSize.x + elementPadding.x;
 					} else {
 						cursor.x = 0;
-						cursor.y += buttonSize.y + elementPadding.y;
+						cursor.y += elementSize.y + elementPadding.y;
 						elementsInRow = 0;
 					}
 
@@ -909,6 +917,7 @@ NguiElement *getNguiElement(char *name) {
 		copyStyleVar(&element->styleStack, &ngui->globalStyleStack, (NguiStyleType)i);
 	}
 
+	ngui->lastElement = element;
 	return element;
 }
 
@@ -946,6 +955,12 @@ bool nguiSlider(char *name, float *value, float min, float max) {
 	element->valueMin = min;
 	element->valueMax = max;
 	return element->justActive;
+}
+
+bool nguiHoveringElement() {
+	if (!ngui->lastElement) return false;
+	if (ngui->lastElement->hoveringTime != 0) return true;
+	return false;
 }
 
 int getSizeForDataType(NguiDataType dataType) {

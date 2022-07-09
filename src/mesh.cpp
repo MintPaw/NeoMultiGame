@@ -338,13 +338,13 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		}
 
 		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE] != -1) {
-			float *values = &argbToRgba(material.values[Raylib::MATERIAL_MAP_DIFFUSE].color).x;
-			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE], values, Raylib::SHADER_UNIFORM_VEC4, 1);
+			Vec4 color = argbToRgba(material.values[Raylib::MATERIAL_MAP_DIFFUSE].color);
+			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 
 		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] != -1) {
-			float *values = &argbToRgba(material.values[Raylib::MATERIAL_MAP_SPECULAR].color).x;
-			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR], values, Raylib::SHADER_UNIFORM_VEC4, 1);
+			Vec4 color = argbToRgba(material.values[Raylib::MATERIAL_MAP_SPECULAR].color);
+			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 
 		Raylib::Matrix matModel = MatrixMultiply(raylibMatrix, Raylib::rlGetMatrixTransform());
