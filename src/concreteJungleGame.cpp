@@ -2379,11 +2379,6 @@ void stepGame(float elapsed) {
 										continue;
 									}
 
-									if (actor->hasStasisAttack) {
-										actor->hasStasisAttack = false;
-										otherActor->stasisTimeLeft = 10;
-									}
-
 									float damage = getStatPoints(actor, STAT_DAMAGE) * action->info->damage;
 
 									int particleColor;
@@ -2452,6 +2447,11 @@ void stepGame(float elapsed) {
 										newAction->customLength = action->info->hitstunFrames/60.0;
 
 										if (action->info->buffToGive != BUFF_NONE) addBuff(otherActor, action->info->buffToGive, action->info->buffToGiveTime);
+
+										if (actor->hasStasisAttack) {
+											actor->hasStasisAttack = false;
+											otherActor->stasisTimeLeft = 3;
+										}
 									}
 
 									for (int i = 0; i < particlesAmount; i++) {
@@ -2602,8 +2602,10 @@ void stepGame(float elapsed) {
 				}
 
 				if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
+				if (actor->hasStasisAttack) actionTimeScale *= 2;
 
 				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
+
 				if (usesCustomLength) actionTimeScale = 1;
 				if (action->type == ACTION_RAISING) actionTimeScale = 1;
 
