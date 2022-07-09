@@ -4487,6 +4487,21 @@ struct Xform2 {
 	float rotation;
 };
 
+Xform2 createXform2();
+Xform2 createXform2() {
+	Xform2 xform = {};
+	xform.scale = v2(1, 1);
+	return xform;
+}
+
+Xform2 lerp(Xform2 a, Xform2 b, float perc);
+Xform2 lerp(Xform2 a, Xform2 b, float perc) {
+	a.translation = lerp(a.translation, b.translation, perc);
+	a.scale = lerp(a.scale, b.scale, perc);
+	a.rotation = lerp(a.rotation, b.rotation, perc);
+	return a;
+}
+
 struct Cone {
 	Vec3 position;
 	Vec3 direction;

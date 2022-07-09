@@ -1,35 +1,36 @@
 enum NguiStyleType {
-	NGUI_STYLE_WINDOW_POSITION,
-	NGUI_STYLE_WINDOW_PIVOT,
-	NGUI_STYLE_WINDOW_SIZE,
-	NGUI_STYLE_WINDOW_PADDING,
-	NGUI_STYLE_WINDOW_LERP_SPEED,
-	NGUI_STYLE_ELEMENT_DISABLED,
-	NGUI_STYLE_ELEMENT_DISABLED_TINT,
-	NGUI_STYLE_ELEMENT_PADDING,
-	NGUI_STYLE_ELEMENTS_IN_ROW,
-	NGUI_STYLE_ELEMENT_SIZE,
-	NGUI_STYLE_BUTTON_LABEL_GRAVITY,
-	NGUI_STYLE_BUTTON_HOVER_OFFSET,
-	NGUI_STYLE_WINDOW_BG_COLOR,
-	NGUI_STYLE_BG_COLOR,
-	NGUI_STYLE_FG_COLOR,
-	NGUI_STYLE_HOVER_TINT,
-	NGUI_STYLE_ACTIVE_TINT,
-	NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS,
-	NGUI_STYLE_TEXT_COLOR,
-	NGUI_STYLE_INDENT,
-	NGUI_STYLE_ICON_PTR,
-	NGUI_STYLE_ICON_ROTATION,
-	NGUI_STYLE_ICON_SCALE,
-	NGUI_STYLE_ICON_TRANSLATION,
-	NGUI_STYLE_ICON_ALPHA,
-	NGUI_STYLE_ICON_GRAVITY,
-	NGUI_STYLE_HIGHLIGHT_TINT,
-	NGUI_STYLE_HIGHLIGHT_CRUSH,
-	NGUI_STYLE_HOVER_SOUND_PATH_PTR,
-	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR,
-	NGUI_STYLE_TYPES_MAX,
+	NGUI_STYLE_WINDOW_POSITION=0,
+	NGUI_STYLE_WINDOW_PIVOT=1,
+	NGUI_STYLE_WINDOW_SIZE=2,
+	NGUI_STYLE_WINDOW_PADDING=3,
+	NGUI_STYLE_WINDOW_LERP_SPEED=4,
+	NGUI_STYLE_ELEMENT_DISABLED=5,
+	NGUI_STYLE_ELEMENT_DISABLED_TINT=6,
+	NGUI_STYLE_ELEMENT_PADDING=7,
+	NGUI_STYLE_ELEMENTS_IN_ROW=8,
+	NGUI_STYLE_ELEMENT_SIZE=9,
+	NGUI_STYLE_BUTTON_LABEL_GRAVITY=10,
+	NGUI_STYLE_BUTTON_HOVER_OFFSET=11,
+	NGUI_STYLE_WINDOW_BG_COLOR=12,
+	NGUI_STYLE_BG_COLOR=13,
+	NGUI_STYLE_FG_COLOR=14,
+	NGUI_STYLE_HOVER_TINT=15,
+	NGUI_STYLE_ACTIVE_TINT=16,
+	NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS=17,
+	NGUI_STYLE_TEXT_COLOR=18,
+	NGUI_STYLE_INDENT=19,
+	NGUI_STYLE_ICON_PTR=20,
+	NGUI_STYLE_ICON_ROTATION=21,
+	NGUI_STYLE_ICON_SCALE=22,
+	NGUI_STYLE_ICON_TRANSLATION=23,
+	NGUI_STYLE_ICON_ALPHA=24,
+	NGUI_STYLE_ICON_GRAVITY=25,
+	NGUI_STYLE_HIGHLIGHT_TINT=26,
+	NGUI_STYLE_HIGHLIGHT_CRUSH=27,
+	NGUI_STYLE_HOVER_SOUND_PATH_PTR=28,
+	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR=29,
+	NGUI_STYLE_BUTTON_HOVER_SCALE=30,
+	NGUI_STYLE_TYPES_MAX=31,
 };
 
 enum NguiLayout {
@@ -87,7 +88,7 @@ struct NguiElement {
 
 	Vec2 position;
 	Vec2 size; // Only used for windows right now
-	Vec2 graphicsOffset;
+	Xform2 graphicsXform;
 	int bgColor;
 	int fgColor;
 
@@ -389,6 +390,11 @@ void nguiInit() {
 	info->name = "Active sound path";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_HOVER_SCALE];
+	info->enumName = "NGUI_STYLE_BUTTON_HOVER_SCALE";
+	info->name = "Button hover scale";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
@@ -419,6 +425,7 @@ void nguiInit() {
 	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
 	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
 	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -729,7 +736,7 @@ void nguiDraw(float elapsed) {
 				};
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
-					Vec2 graphicsOffset = v2();
+					Xform2 graphicsXform = createXform2();
 
 					if (contains(childRect, ngui->mouse) && !disabled) {
 						if (child->hoveringTime == 0) {
@@ -745,7 +752,8 @@ void nguiDraw(float elapsed) {
 							child->justActive = true;
 						}
 
-						graphicsOffset = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET) * ngui->uiScale;
+						graphicsXform.translation = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET) * ngui->uiScale;
+						graphicsXform.scale = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE);
 						child->hoveringTime += elapsed;
 					} else {
 						child->hoveringTime = 0;
@@ -760,11 +768,12 @@ void nguiDraw(float elapsed) {
 						if (perc > 0.75) bgColor = lerpColor(bgColor, activeTint, flashBrightness);
 					}
 
-					child->graphicsOffset = lerp(child->graphicsOffset, graphicsOffset, 0.05);
+					child->graphicsXform = lerp(child->graphicsXform, graphicsXform, 0.05);
 
 					Rect graphicsRect = childRect;
-					graphicsRect.x += child->graphicsOffset.x;
-					graphicsRect.y += child->graphicsOffset.y;
+					graphicsRect.x += child->graphicsXform.translation.x;
+					graphicsRect.y += child->graphicsXform.translation.y;
+					graphicsRect = inflatePerc(graphicsRect, child->graphicsXform.scale - 1);
 
 					drawElementBg(child, graphicsRect);
 

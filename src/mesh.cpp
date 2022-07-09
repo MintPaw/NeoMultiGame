@@ -388,7 +388,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MVP], matModelViewProjection);
 
 		if (mesh->inds) {
-			Raylib::rlDrawVertexArrayElements(0, mesh->indsNum*3, 0);
+			Raylib::rlDrawVertexArrayElements(0, mesh->indsNum, 0);
 		} else {
 			Raylib::rlDrawVertexArray(0, mesh->vertsNum);
 		}
