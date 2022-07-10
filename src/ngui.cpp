@@ -111,6 +111,7 @@ struct Ngui {
 	int elementsNum;
 	int elementsMax;
 
+	Rect lastWindowRect;
 	NguiElement *lastElement;
 
 	int nextNguiElementId;
@@ -212,7 +213,8 @@ void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type)
 
 void nguiDraw(float elapsed);
 
-NguiElement *getNguiElement(char *name);
+NguiElement *getAndReviveNguiElement(char *name);
+NguiElement *getNguiElementById(int id);
 int getNguiId(int parentId, char *name);
 
 void nguiSetNextWindowSize(Vec2 size);
@@ -553,7 +555,7 @@ void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type)
 
 
 void nguiDraw(float elapsed) {
-	for (int i = 0; i < ngui->elementsNum; i++) {
+	for (int i = 0; i < ngui->elementsNum; i++) { /// Splice dead elements
 		NguiElement *element = &ngui->elements[i];
 		if (element->alive <= 0) {
 			if (element->styleStack.vars) free(element->styleStack.vars);
@@ -562,7 +564,7 @@ void nguiDraw(float elapsed) {
 			ngui->elementsNum--;
 			continue;
 		}
-	}
+	} ///
 
 	ngui->currentStyleStack = &ngui->globalStyleStack;
 
@@ -854,6 +856,7 @@ void nguiDraw(float elapsed) {
 			}
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
+			ngui->lastWindowRect = windowRect;
 
 			arraySpliceIndex(elementsLeft, elementsLeftNum, sizeof(NguiElement *), windowIndex);
 			i--;
@@ -879,7 +882,7 @@ void nguiDraw(float elapsed) {
 	ngui->time += elapsed;
 }
 
-NguiElement *getNguiElement(char *name) {
+NguiElement *getAndReviveNguiElement(char *name) {
 	NguiElement *element = NULL;
 
 	for (int i = 0; i < ngui->elementsNum; i++) {
@@ -921,6 +924,15 @@ NguiElement *getNguiElement(char *name) {
 	return element;
 }
 
+NguiElement *getNguiElementById(int id) {
+	for (int i = 0; i < ngui->elementsNum; i++) {
+		NguiElement *element = &ngui->elements[i];
+		if (element->id == id) return element;
+	}
+
+	return NULL;
+}
+
 int getElementIndex(NguiElement *element) {
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *possibleElement = &ngui->elements[i];
@@ -931,25 +943,30 @@ int getElementIndex(NguiElement *element) {
 }
 
 void nguiStartWindow(char *name, int flags) {
-	NguiElement *element = getNguiElement(name);
+	NguiElement *element = getAndReviveNguiElement(name);
 	element->type = NGUI_ELEMENT_WINDOW;
 	ngui->currentParentId = element->id;
 	ngui->currentOrderIndex = 0;
 }
 
 void nguiEndWindow() {
+	NguiElement *window = getNguiElementById(ngui->currentParentId);
+	if (window) {
+		ngui->lastWindowRect = makeRect(window->position, window->size);
+	}
+
 	ngui->currentParentId = 0;
 }
 
 bool nguiButton(char *name, char *subText) {
-	NguiElement *element = getNguiElement(name);
+	NguiElement *element = getAndReviveNguiElement(name);
 	element->type = NGUI_ELEMENT_BUTTON;
 	element->subText = subText;
 	return element->justActive;
 }
 
 bool nguiSlider(char *name, float *value, float min, float max) {
-	NguiElement *element = getNguiElement(name);
+	NguiElement *element = getAndReviveNguiElement(name);
 	element->type = NGUI_ELEMENT_SLIDER;
 	element->valuePtr = value;
 	element->valueMin = min;
