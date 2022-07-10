@@ -1,6 +1,5 @@
 #define DO_SKIA_MSAA 0
 
-#define DO_LAYER_BLUR 1
 #define DO_DRAW_AFTER_CONTEXT_SWITCH 0
 #define USE_MSAA_RENDERBUFFER 1
 
@@ -138,10 +137,12 @@ struct VDrawCommandsList {
 	int cmdsMax;
 };
 
-struct SkiaSys {
+struct SkiaSystem {
 	SkBitmap bitmap;
 	SkCanvas *mainCanvas;
 	SkCanvas *canvas;
+
+	bool useSaveLayerBlur;
 
 	const GrGLInterface *grInterface;
 	GrDirectContext *grDirectContext;
@@ -176,7 +177,7 @@ struct SkiaSys {
 
 	VDrawCommandsList immVDrawCommandsList;
 };
-SkiaSys *skiaSys = NULL;
+SkiaSystem *skiaSys = NULL;
 
 void resetSkia(Vec2 size, Vec2 scale=v2(1, 1), bool useGpu=true, int msaaSamples=16);
 void drawSprite(SwfSprite *sprite, SpriteTransform *transforms=NULL, int transformsNum=0, DrawSpriteRecurseData recurse={});
@@ -213,7 +214,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 	if (!skiaSys) {
 		platform->usingSkia = true;
 
-		skiaSys = (SkiaSys *)zalloc(sizeof(SkiaSys));
+		skiaSys = (SkiaSystem *)zalloc(sizeof(SkiaSystem));
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
 
@@ -463,7 +464,6 @@ DrawShapeProps newDrawShapeProps() {
 }
 
 void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdList) {
-#if 1 /// Draw sub shapes with cached paths
 	for (int i = 0; i < shape->subShapesNum; i++) {
 		SwfSubShape *subShape = &shape->subShapes[i];
 		if (subShape->drawEdgesNum == 0) continue;
@@ -550,271 +550,6 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 
 		createCommand(cmdList, VDRAW_END_SHAPE);
 	}
-#endif
-
-#if 0 /// Draw sub shapes imm
-	{
-		VDrawCommand *cmd = createCommand(cmdList, VDRAW_MOVE_TO);
-		cmd->position = v2();
-	}
-
-	Vec2 cursor = v2();
-
-	for (int i = 0; i < shape->subShapesNum; i++) {
-		SwfSubShape *subShape = &shape->subShapes[i];
-
-		{ /// Set line/fill style
-			if (subShape->fillStyleIndex && subShape->lineStyleIndex) logf("nononono\n");
-
-			VDrawCommand *paintCmd = NULL;
-			if (subShape->fillStyleIndex != 0) {
-				FillStyle *newFillStyle = &shape->fillStyles[subShape->fillStyleIndex - 1];
-				// if (newFillStyle->gradient.spreadMode != 0) logf("Bad spread mode\n");
-				// if (newFillStyle->gradient.interpolationMode != 0) logf("Bad introplation mode\n");
-
-				if (newFillStyle->fillStyleType == FILL_STYLE_SOLID) {
-					int color = newFillStyle->color;
-					color = applyColorTransform(color, props.colorTransform);
-
-					paintCmd = createCommand(cmdList, VDRAW_SET_SOLID_FILL);
-					paintCmd->colors[0] = color;
-				} else if (
-					newFillStyle->fillStyleType == FILL_STYLE_LINEAR_GRADIENT ||
-					newFillStyle->fillStyleType == FILL_STYLE_RADIAL_GRADIENT ||
-					newFillStyle->fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT
-				) {
-					if (newFillStyle->fillStyleType == FILL_STYLE_LINEAR_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_LINEAR_GRADIENT_FILL);
-					} else if (newFillStyle->fillStyleType == FILL_STYLE_RADIAL_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_RADIAL_GRADIENT_FILL);
-					} else if (newFillStyle->fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_FOCAL_GRADIENT_FILL);
-						paintCmd->position.x = newFillStyle->gradient.focalPoint;
-					}
-					paintCmd->matrix = newFillStyle->gradientMatrix;
-					for (int i = 0; i < newFillStyle->gradient.coordsNum; i++) {
-						GradeCord *coord = &newFillStyle->gradient.coords[i];
-						paintCmd->colors[i] = applyColorTransform(coord->color, props.colorTransform);
-						paintCmd->gradientRatios[i] = (float)coord->ratio / 255.0;
-						paintCmd->gradientRatiosNum++;
-					}
-				} else if (newFillStyle->fillStyleType == FILL_STYLE_CLIPPED_BITMAP || newFillStyle->fillStyleType == FILL_STYLE_REPEATING_BITMAP) {
-					paintCmd = createCommand(cmdList, VDRAW_BITMAP_FILL);
-
-					if (newFillStyle->fillStyleType == FILL_STYLE_CLIPPED_BITMAP) {
-						paintCmd->tileMode = SkTileMode::kClamp;
-					} else {
-						paintCmd->tileMode = SkTileMode::kRepeat;
-					}
-
-					paintCmd->swfBitmap = newFillStyle->bitmap;
-					paintCmd->matrix = newFillStyle->bitmapMatrix;
-					paintCmd->matrix.SCALE(1/20.0, 1/20.0);
-				} else {
-					Panic("Bad fill");
-				}
-			}
-
-			if (subShape->lineStyleIndex != 0) {
-				LineStyle *newLineStyle = &shape->lineStyles[subShape->lineStyleIndex - 1];
-				int color = newLineStyle->color;
-				color = applyColorTransform(color, props.colorTransform);
-
-				paintCmd = createCommand(cmdList, VDRAW_SET_LINE_STYLE);
-				paintCmd->colors[0] = color;
-				paintCmd->width = newLineStyle->width;
-
-				paintCmd->startCapStyle = newLineStyle->startCapStyle;
-				paintCmd->joinStyle = newLineStyle->joinStyle;
-				paintCmd->miterLimitFactor = newLineStyle->miterLimitFactor;
-			}
-
-			if (paintCmd) {
-				for (int i = 0; i < 16; i++) {
-					int a, r, g, b;
-					hexToArgb(paintCmd->colors[i], &a, &r, &g, &b);
-					a = ((a/255.0) * props.alpha) * 255.0;
-					paintCmd->colors[i] = argbToHex(a, r, g, b);
-				}
-			}
-		}
-
-		int pathOperations = 0;
-		for (int i = 0; i < subShape->drawEdgesNum; i++) {
-			DrawEdgeRecord *edge = &subShape->drawEdges[i];
-
-			if (!cursor.equal(edge->start)) {
-				cursor = edge->start;
-				VDrawCommand *cmd = createCommand(cmdList, VDRAW_MOVE_TO);
-				cmd->position = edge->start;
-				pathOperations++;
-			}
-			if (edge->type == DRAW_EDGE_STRAIGHT_EDGE) {
-				cursor = edge->control;
-				VDrawCommand *cmd = createCommand(cmdList, VDRAW_LINE_TO);
-				cmd->position = edge->control;
-				pathOperations++;
-			} else if (edge->type == DRAW_EDGE_CURVED_EDGE) {
-				cursor = edge->anchor;
-				VDrawCommand *cmd = createCommand(cmdList, VDRAW_QUAD_TO);
-				cmd->control = edge->control;
-				cmd->position = edge->anchor;
-				pathOperations++;
-			}
-		}
-
-		if (pathOperations > 0) {
-			if (props.useClip) {
-				createCommand(cmdList, VDRAW_CLIP_PATH);
-			} else {
-				createCommand(cmdList, VDRAW_DRAW_PATH);
-			}
-		}
-
-		createCommand(cmdList, VDRAW_RESET_PATH);
-		createCommand(cmdList, VDRAW_END_SHAPE);
-		cursor = v2();
-	}
-#endif
-
-#if 0 /// Draw shape imm
-	{
-		VDrawCommand *cmd = createCommand(cmdList, VDRAW_MOVE_TO);
-		cmd->position = v2();
-	}
-
-	Vec2 cursor = v2();
-	int pathOperations = 0;
-
-	int lineStyleIndex = 0;
-	int fillStyleIndex = 0;
-
-	for (int i = 0; i < shape->drawEdgesNum; i++) {
-		DrawEdgeRecord *edge = &shape->drawEdges[i];
-
-		if (edge->fillStyleIndex != fillStyleIndex || edge->lineStyleIndex != lineStyleIndex) {
-			if (pathOperations > 0) {
-				if (props.useClip) {
-					createCommand(cmdList, VDRAW_CLIP_PATH);
-				} else {
-					createCommand(cmdList, VDRAW_DRAW_PATH);
-				}
-				pathOperations = 0;
-				createCommand(cmdList, VDRAW_RESET_PATH);
-				createCommand(cmdList, VDRAW_END_SHAPE);
-				cursor = v2();
-			}
-
-			lineStyleIndex = edge->lineStyleIndex;
-			fillStyleIndex = edge->fillStyleIndex;
-
-			if (fillStyleIndex && lineStyleIndex) logf("nononono\n");
-
-			VDrawCommand *paintCmd = NULL;
-			if (fillStyleIndex != 0) {
-				FillStyle *newFillStyle = &shape->fillStyles[fillStyleIndex - 1];
-				// if (newFillStyle->gradient.spreadMode != 0) logf("Bad spread mode\n");
-				// if (newFillStyle->gradient.interpolationMode != 0) logf("Bad introplation mode\n");
-
-				if (newFillStyle->fillStyleType == FILL_STYLE_SOLID) {
-					int color = newFillStyle->color;
-					color = applyColorTransform(color, props.colorTransform);
-
-					paintCmd = createCommand(cmdList, VDRAW_SET_SOLID_FILL);
-					paintCmd->colors[0] = color;
-				} else if (
-					newFillStyle->fillStyleType == FILL_STYLE_LINEAR_GRADIENT ||
-					newFillStyle->fillStyleType == FILL_STYLE_RADIAL_GRADIENT ||
-					newFillStyle->fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT
-				) {
-					if (newFillStyle->fillStyleType == FILL_STYLE_LINEAR_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_LINEAR_GRADIENT_FILL);
-					} else if (newFillStyle->fillStyleType == FILL_STYLE_RADIAL_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_RADIAL_GRADIENT_FILL);
-					} else if (newFillStyle->fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT) {
-						paintCmd = createCommand(cmdList, VDRAW_SET_FOCAL_GRADIENT_FILL);
-						paintCmd->position.x = newFillStyle->gradient.focalPoint;
-					}
-					paintCmd->matrix = newFillStyle->gradientMatrix;
-					for (int i = 0; i < newFillStyle->gradient.coordsNum; i++) {
-						GradeCord *coord = &newFillStyle->gradient.coords[i];
-						paintCmd->colors[i] = applyColorTransform(coord->color, props.colorTransform);
-						paintCmd->gradientRatios[i] = (float)coord->ratio / 255.0;
-						paintCmd->gradientRatiosNum++;
-					}
-				} else if (newFillStyle->fillStyleType == FILL_STYLE_CLIPPED_BITMAP || newFillStyle->fillStyleType == FILL_STYLE_REPEATING_BITMAP) {
-					paintCmd = createCommand(cmdList, VDRAW_BITMAP_FILL);
-
-					if (newFillStyle->fillStyleType == FILL_STYLE_CLIPPED_BITMAP) {
-						paintCmd->tileMode = SkTileMode::kClamp;
-					} else {
-						paintCmd->tileMode = SkTileMode::kRepeat;
-					}
-
-					paintCmd->swfBitmap = newFillStyle->bitmap;
-					paintCmd->matrix = newFillStyle->bitmapMatrix;
-					paintCmd->matrix.SCALE(1/20.0, 1/20.0);
-				} else {
-					Panic("Bad fill");
-				}
-			}
-
-			if (lineStyleIndex != 0) {
-				LineStyle *newLineStyle = &shape->lineStyles[lineStyleIndex - 1];
-				int color = newLineStyle->color;
-				color = applyColorTransform(color, props.colorTransform);
-
-				paintCmd = createCommand(cmdList, VDRAW_SET_LINE_STYLE);
-				paintCmd->colors[0] = color;
-				paintCmd->width = newLineStyle->width;
-
-				paintCmd->startCapStyle = newLineStyle->startCapStyle;
-				paintCmd->joinStyle = newLineStyle->joinStyle;
-				paintCmd->miterLimitFactor = newLineStyle->miterLimitFactor;
-			}
-
-			if (paintCmd) {
-				for (int i = 0; i < 16; i++) {
-					int a, r, g, b;
-					hexToArgb(paintCmd->colors[i], &a, &r, &g, &b);
-					a = ((a/255.0) * props.alpha) * 255.0;
-					paintCmd->colors[i] = argbToHex(a, r, g, b);
-				}
-			}
-		}
-
-		if (!cursor.equal(edge->start)) {
-			cursor = edge->start;
-			VDrawCommand *cmd = createCommand(cmdList, VDRAW_MOVE_TO);
-			cmd->position = edge->start;
-			pathOperations++;
-		}
-		if (edge->type == DRAW_EDGE_STRAIGHT_EDGE) {
-			cursor = edge->control;
-			VDrawCommand *cmd = createCommand(cmdList, VDRAW_LINE_TO);
-			cmd->position = edge->control;
-			pathOperations++;
-		} else if (edge->type == DRAW_EDGE_CURVED_EDGE) {
-			cursor = edge->anchor;
-			VDrawCommand *cmd = createCommand(cmdList, VDRAW_QUAD_TO);
-			cmd->control = edge->control;
-			cmd->position = edge->anchor;
-			pathOperations++;
-		}
-	}
-
-	if (pathOperations > 0) {
-		if (props.useClip) {
-			createCommand(cmdList, VDRAW_CLIP_PATH);
-		} else {
-			createCommand(cmdList, VDRAW_DRAW_PATH);
-		}
-		createCommand(cmdList, VDRAW_RESET_PATH);
-		createCommand(cmdList, VDRAW_END_SHAPE);
-		cursor = v2();
-		pathOperations = 0;
-	}
-#endif
 }
 
 void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse, VDrawCommandsList *cmdList, bool isNested) {
@@ -1001,7 +736,11 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						props.colorTransform = recurse.colorTransform;
 
 						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE); //@todo This could be a bit faster if you didn't set blend mode every shape
-						cmd->blendMode = recurse.blendMode;
+						if (nextUseClip) {
+							cmd->blendMode = SWF_BLEND_NORMAL;
+						} else {
+							cmd->blendMode = recurse.blendMode;
+						}
 
 						genDrawShape(drawable->shape, props, cmdList);
 					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
@@ -1131,32 +870,25 @@ void execCommands(VDrawCommandsList *cmdList) {
 		} else if (cmd->type == VDRAW_RESTORE) {
 			skiaSys->canvas->restore();
 		} else if (cmd->type == VDRAW_START_SHAPE) {
-#if DO_LAYER_BLUR
-#else
-			if (!isZero(skiaSys->currentBlur)) {
-				sk_sp<SkImageFilter> filter = SkImageFilters::Blur(skiaSys->currentBlur.x, skiaSys->currentBlur.y, SkTileMode::kDecal, NULL);
-				paint.setImageFilter(filter);
-			}
-#endif
 		} else if (cmd->type == VDRAW_END_SHAPE) {
 			paint.setShader(NULL);
-			paint.setImageFilter(NULL);
 		} else if (cmd->type == VDRAW_END_SPRITE) {
 		} else if (cmd->type == VDRAW_START_BLUR) {
-#if DO_LAYER_BLUR
-			SkPaint blurPaint = SkPaint();
-			sk_sp<SkImageFilter> filter = SkImageFilters::Blur(cmd->position.x, cmd->position.y, SkTileMode::kDecal, NULL);
-			blurPaint.setImageFilter(filter);
-			skiaSys->canvas->saveLayer(NULL, &blurPaint);
-#else
-			skiaSys->currentBlur = cmd->position;
-#endif
+			if (skiaSys->useSaveLayerBlur) {
+				SkPaint blurPaint = SkPaint();
+				sk_sp<SkImageFilter> filter = SkImageFilters::Blur(cmd->position.x, cmd->position.y, SkTileMode::kDecal, NULL);
+				blurPaint.setImageFilter(filter);
+				skiaSys->canvas->saveLayer(NULL, &blurPaint);
+			} else {
+				sk_sp<SkImageFilter> filter = SkImageFilters::Blur(cmd->position.x, cmd->position.y, SkTileMode::kDecal, NULL);
+				paint.setImageFilter(filter);
+			}
 		} else if (cmd->type == VDRAW_END_BLUR) {
-#if DO_LAYER_BLUR
-			skiaSys->canvas->restore();
-#else
-			skiaSys->currentBlur = v2();
-#endif
+			if (skiaSys->useSaveLayerBlur) {
+				skiaSys->canvas->restore();
+			} else {
+				paint.setImageFilter(NULL);
+			}
 		} else if (cmd->type == VDRAW_START_COLOR_MATRIX) {
 			float *colorMatrix = (float *)frameMalloc(sizeof(float) * 20);
 			memcpy(colorMatrix, cmd->colors, sizeof(float) * 20);
