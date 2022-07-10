@@ -790,16 +790,18 @@ void nguiDraw(float elapsed) {
 					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
 					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
-						Rect iconRect = getInnerRectOfSize(graphicsRect, v2(graphicsRect.height, graphicsRect.height), iconGravity);
+						Rect iconRect = getInnerRectOfAspect(graphicsRect, getSize(iconTexture), iconGravity);
 						setScissor(iconRect);
+
 						Matrix3 matrix = mat3();
 						matrix.TRANSLATE(iconRect.x, iconRect.y);
-						matrix.SCALE(iconRect.width, iconRect.height);
-						matrix.TRANSLATE(0.5, 0.5);
-						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
+						matrix.TRANSLATE(getSize(iconRect)/2);
 						matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
+						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
 						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
-						matrix.TRANSLATE(-0.5, -0.5);
+						matrix.TRANSLATE(-getSize(iconRect)/2);
+						matrix.SCALE(iconRect.width, iconRect.height);
+
 						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 						drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
 						clearScissor();
