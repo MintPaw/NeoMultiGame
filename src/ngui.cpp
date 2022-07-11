@@ -415,6 +415,12 @@ void nguiInit() {
 	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
 	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
+
+	Sound *sound;
+	sound = getSound("assets/common/audio/tickEffect.ogg");
+	sound->tweakVolume = 0.1;
+	sound = getSound("assets/common/audio/clickEffect.ogg");
+	sound->tweakVolume = 0.1;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {

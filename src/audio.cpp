@@ -33,6 +33,9 @@ struct Sound {
 	stb_vorbis *vorbis;
 
 	ALuint al3dBuffer;
+
+	int concurrentInstances;
+	int maxConcurrentInstances;
 };
 
 struct Channel {
@@ -85,6 +88,8 @@ struct Audio {
 	Sound *soundStore[SOUNDS_MAX];
 	int soundStoreNum;
 
+	int defaultMaxConcurrentInstances;
+
 	ALCdevice *device;
 	ALCcontext *context;
 
@@ -102,6 +107,7 @@ void initSound(Sound *sound);
 void updateAudio();
 Channel *playSound(Sound *sound, bool looping=false);
 void stopChannel(int channelId);
+void stopChannel(Channel *channel);
 Channel *getChannel(int id);
 void seekChannelPerc(Channel *channel, float perc);
 
@@ -186,10 +192,8 @@ void initAudio() {
 	CheckAudioError();
 
 	Sound *sound;
-	sound = getSound("assets/common/audio/tickEffect.ogg");
-	sound->tweakVolume = 0.1;
-	sound = getSound("assets/common/audio/clickEffect.ogg");
-	sound->tweakVolume = 0.1;
+	sound = getSound("assets/common/audio/silence.ogg");
+	sound->maxConcurrentInstances = 0;
 }
 
 void initSound(Sound *sound) {
@@ -231,6 +235,10 @@ Channel *playSound(Sound *sound, bool looping) {
 		return NULL;
 	}
 
+	if (sound->maxConcurrentInstances != 0 && sound->concurrentInstances > sound->maxConcurrentInstances-1) {
+		return playSound(getSound("assets/common/audio/silence.ogg"), looping);
+	}
+
 	memset(channel, 0, sizeof(Channel));
 
 	channel->id = ++audio->nextChannelId;
@@ -242,13 +250,20 @@ Channel *playSound(Sound *sound, bool looping) {
 	channel->lastVolume = 0;
 	channel->sound = sound;
 
+	sound->concurrentInstances++;
 	audio->channelsCount++;
 	return channel;
 }
 
 void stopChannel(int channelId) {
 	Channel *channel = getChannel(channelId);
-	if (channel) channel->exists = false;
+	if (channel) stopChannel(channel);
+}
+
+void stopChannel(Channel *channel) {
+	if (channel->sound) channel->sound->concurrentInstances--;
+	audio->channelsCount--;
+	channel->exists = false;
 }
 
 void updateAudio() {
@@ -394,8 +409,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 				if (channel->looping) {
 					channel->samplePosition = 0;
 				} else {
-					channel->exists = false;
-					audio->channelsCount--;
+					stopChannel(channel);
 					break;
 				}
 			}
@@ -450,6 +464,7 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 		sound->exists = true;
 		sound->path = stringClone(path);
 		sound->tweakVolume = 1;
+		sound->maxConcurrentInstances = audio->defaultMaxConcurrentInstances;
 
 		sound->oggData = (unsigned char *)readFile(sound->path, &sound->oggDataLen);
 
