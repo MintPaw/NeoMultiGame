@@ -24,7 +24,7 @@ void *zalloc(u32 size);
 char *stringClone(const char *str);
 bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
 bool strContains(const char *haystack, const char *needle, bool caseInsentitive=false);
-char *lastStrstr(char *haystack, const char *needle);
+char *strrstr(char *haystack, const char *needle);
 int countChar(const char *src, char value);
 bool stringStartsWith(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
@@ -425,7 +425,7 @@ bool strContains(const char *haystack, const char *needle, bool caseInsentitive)
 #endif
 }
 
-char *lastStrstr(char *haystack, const char *needle) {
+char *strrstr(char *haystack, const char *needle) {
 	if (*needle == '\0')
 		return (char *) haystack;
 

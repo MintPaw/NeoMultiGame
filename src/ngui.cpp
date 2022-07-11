@@ -133,33 +133,15 @@ Ngui *ngui = NULL;
 void nguiInit();
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
-void nguiPushStyleInt(NguiStyleType type, int value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &value);
-}
-void nguiPushStyleColorInt(NguiStyleType type, int value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &value);
-}
-void nguiPushStyleFloat(NguiStyleType type, float value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &value);
-}
-void nguiPushStyleVec2(NguiStyleType type, Vec2 value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &value);
-}
-void nguiPushStyleStringPtr(NguiStyleType type, char *value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value);
-}
-void nguiPushStylePtr(NguiStyleType type, void *value) {
-	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &value);
-}
-void nguiPushStyleIconXform(Xform2 xform) {
-	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, xform.rotation);
-	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
-	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, xform.translation);
-}
-void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot) {
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, position);
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, pivot);
-}
+void nguiPushStyleInt(NguiStyleType type, int value);
+void nguiPushStyleColorInt(NguiStyleType type, int value);
+void nguiPushStyleColorTintInt(NguiStyleType type, int value);
+void nguiPushStyleFloat(NguiStyleType type, float value);
+void nguiPushStyleVec2(NguiStyleType type, Vec2 value);
+void nguiPushStyleStringPtr(NguiStyleType type, char *value);
+void nguiPushStylePtr(NguiStyleType type, void *value);
+void nguiPushStyleIconXform(Xform2 xform);
+void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot);
 void nguiPushStyleStack(NguiStyleStack *styleStack);
 
 //@speed These could be a lot faster if the elements didn't have randomly ordered styleStacks like the global styleStacks.
@@ -470,6 +452,41 @@ void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDat
 	memcpy(var->data, ptr, size);
 }
 
+void nguiPushStyleInt(NguiStyleType type, int value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_INT, &value);
+}
+void nguiPushStyleColorInt(NguiStyleType type, int value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &value);
+}
+void nguiPushStyleColorTintInt(NguiStyleType type, int value) {
+	int current;
+	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &current);
+
+	current = tintColor(current, value);
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_COLOR_INT, &current);
+}
+void nguiPushStyleFloat(NguiStyleType type, float value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_FLOAT, &value);
+}
+void nguiPushStyleVec2(NguiStyleType type, Vec2 value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_VEC2, &value);
+}
+void nguiPushStyleStringPtr(NguiStyleType type, char *value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_STRING_PTR, &value);
+}
+void nguiPushStylePtr(NguiStyleType type, void *value) {
+	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &value);
+}
+void nguiPushStyleIconXform(Xform2 xform) {
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, xform.rotation);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
+	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, xform.translation);
+}
+void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot) {
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, position);
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, pivot);
+}
+
 void nguiPushStyleStack(NguiStyleStack *styleStack) {
 	for (int i = 0; i < styleStack->varsNum; i++) {
 		NguiStyleVar *var = &styleStack->vars[i];
@@ -730,7 +747,13 @@ void nguiDraw(float elapsed) {
 				child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
 
 				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
-					drawRect(rect, child->bgColor);
+					{
+						RenderProps props = newRenderProps();
+						props.tint = child->bgColor;
+						props.matrix.TRANSLATE(getPosition(rect));
+						props.matrix.SCALE(getSize(rect));
+						drawTexture(renderer->whiteTexture, props);
+					}
 
 					RenderProps props = newRenderProps();
 					props.matrix.TRANSLATE(rect.x, rect.y);
