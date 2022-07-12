@@ -32,14 +32,15 @@ drinkPotionFinish
 drinkPotionFail
 Fail drink potion
 Stun snap
-Stun press
-Create sword
-Create knife
-Weapon stash
-Weapon unstash
-Shotgun fire
-Shotgun reload
-Apply blade oil
+createWeapon
+stashOnBack
+stashOnHip
+fireShotgun
+openShotgun
+loadShotgunShell
+closeShotgun
+useWeaponOil
+
 
 Ending items:
 	- [L1] Estus

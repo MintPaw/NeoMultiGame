@@ -17,9 +17,9 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=chessGame
 # GAME_NAME=tdSlasherGame
 # GAME_NAME=zooBoundGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=gladiators2Game
-# GAME_NAME=concreteJungleGame
+GAME_NAME=concreteJungleGame
 # GAME_NAME=animationToolsGame
 # GAME_NAME=rayGame
 # GAME_NAME=rollerGame
@@ -182,6 +182,8 @@ else ifeq ($(GAME_NAME), interrogationGame)
 	rsync -at "/c/Dropbox/MultiGame/multiGame/commonAssets/assets/common" "/c/Dropbox/CatFallowWing/interrogationGame/assets" &
 else ifeq ($(GAME_NAME), zooBoundGame)
 	rsync -at "/c/Dropbox/MultiGame/multiGame/commonAssets/assets/common" "/c/Dropbox/ZooBound/zooBoundGameAssets/assets" &
+else ifeq ($(GAME_NAME), concreteJungleGame)
+	rsync -at "/c/Dropbox/MultiGame/multiGame/commonAssets/assets/common" "/c/Dropbox/concreteJungle/concreteJungleGameAssets/assets" &
 endif
 	cmd /c "\
 		set GAME_NAME=$(GAME_NAME)&& \

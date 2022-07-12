@@ -18,7 +18,21 @@ struct MaterialValue {
 struct Material {
 	Raylib::Shader shader;
 #define MAX_MATERIAL_MAPS 12
+    // MATERIAL_MAP_DIFFUSE    = 0,
+    // MATERIAL_MAP_SPECULAR,
+    // MATERIAL_MAP_NORMAL,
+    // MATERIAL_MAP_ROUGHNESS,
+    // MATERIAL_MAP_OCCLUSION,
+    // MATERIAL_MAP_EMISSION,
+    // MATERIAL_MAP_HEIGHT,
+    // MATERIAL_MAP_CUBEMAP,           // (NOTE: Uses GL_TEXTURE_CUBE_MAP)
+    // MATERIAL_MAP_IRRADIANCE,        // (NOTE: Uses GL_TEXTURE_CUBE_MAP)
+    // MATERIAL_MAP_PREFILTER,         // (NOTE: Uses GL_TEXTURE_CUBE_MAP)
+    // MATERIAL_MAP_BRDF
 	MaterialValue values[MAX_MATERIAL_MAPS];
+	Texture *diffuseTexture;
+	Texture *specularTexture;
+	Texture *normalTexture;
 	float params[4];
 };
 
@@ -51,7 +65,6 @@ struct Mesh {
 
 	/// Unserialized
 	AABB bounds;
-	Texture *diffuseTexture;
 };
 
 struct MeshSystem {
@@ -160,15 +173,9 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 	mesh->material = readU32(stream);
 	mesh->backFaceCulled = readU8(stream);
 
-	mesh->diffusePath = readString(stream);
-	mesh->normalPath = readString(stream);
-	mesh->specularPath = readString(stream);
-
-	if (mesh->diffusePath) {
-		char *path = frameSprintf("%s/%s", meshDir, mesh->diffusePath);
-		mesh->diffuseTexture = getTexture(path);
-		if (!mesh->diffuseTexture) logf("Failed to load diffuse texture: %s\n", path);
-	}
+	readString(stream); // Old diffusePath
+	readString(stream); // Old normalPath
+	readString(stream); // Old specularPath
 
 	{ /// Calculate bounds
 		mesh->bounds.min = v3(99999, 99999, 99999);

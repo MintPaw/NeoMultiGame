@@ -146,33 +146,32 @@ def saveSubMesh(obj, meshName, path, materialIndex):
     ba.extend(struct.pack("<1I", 0)) # Material type
     ba.append(0) # Back face culled
 
+    ba.append(0) # Old diffuse texture
+    ba.append(0) # Old normal texture
+    ba.append(0) # Old specular texture
+
+    outputFile = open(path+".mesh", "wb")
+    outputFile.write(ba)
+    outputFile.close()
+
+def writeMaterial(ba, obj, materialIndex):
     diffusePath = None
 
-    if len(mesh.materials) > 0:
-        material = mesh.materials[materialIndex]
-        bsdf = None
-        for link in material.node_tree.links:
-            if link.to_node.name == "Material Output":
-                bsdf = link.from_node
-        if bsdf != None:
-            for link in material.node_tree.links:
-                if link.to_node == bsdf:
-                    if link.to_socket.name == "Base Color":
-                        if link.from_node.image != None:
-                            diffusePath = link.from_node.image.filepath[2:]
+    if obj != None and len(obj.data.materials) > 0:
+        materialNodeTree = obj.data.materials[materialIndex].node_tree
+        if "MintMaterial" in materialNodeTree:
+            mintMaterialNodes = materialNodeTree.nodes["MintMaterial"]
+            image = mintMaterialNodes.node_tree.nodes["texture"].image
+            if image != None:
+                diffusePath = image.name
 
-    # outputNode = material.node_tree.nodes["Material Output"]
     if diffusePath != None:
         writeString(ba, diffusePath)
     else:
         ba.append(0)
 
-    ba.append(0) # Normal texture
     ba.append(0) # Specular texture
-
-    outputFile = open(path+".mesh", "wb")
-    outputFile.write(ba)
-    outputFile.close()
+    ba.append(0) # Normal texture
 
 def writeModel(ba, obj, modelPath, depth=0):
     ba.append(1) # Version
@@ -217,6 +216,8 @@ def writeModel(ba, obj, modelPath, depth=0):
                 materialInds.append(poly.material_index)
 
     ba.append(0) # meshPath for root model
+    writeMaterial(ba, None, 0) # Null material for root model
+
     ba.extend(struct.pack("<1i", len(obj.children) + len(materialInds)))
 
     for ind in materialInds:
@@ -229,9 +230,8 @@ def writeModel(ba, obj, modelPath, depth=0):
         else:
             meshName = obj.data.name
         meshName = modelName + "." + meshName
-        # meshName = meshName
-        # print("meshName: "+meshName)
         writeString(ba, meshName) # Actually meshPath, which is in the same dir
+        writeMaterial(ba, newObj, ind)
         ba.extend(struct.pack("<1i", 0)) # childrenNum
         saveSubMesh(newObj, meshName, modelPath + "/" + meshName, ind)
 

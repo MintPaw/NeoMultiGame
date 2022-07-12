@@ -3,8 +3,8 @@ struct Model {
 	char *name;
 
 	Matrix4 localMatrix;
-	Material material;
 	char *meshPath;
+	Material material;
 
 	Model *children;
 	int childrenNum;
@@ -93,13 +93,23 @@ void readModel(DataStream *stream, Model *model, char *modelDir) {
 	model->name = readString(stream);
 	model->localMatrix = readMatrix4(stream);
 
-	model->material = createMaterial();
 	model->meshPath = readString(stream);
 	if (model->meshPath) {
 		char *realMeshPath = frameSprintf("%s/%s.mesh", modelDir, model->meshPath);
 		model->mesh = getMesh(realMeshPath);
-		if (!model->mesh) logf("Failed to load mesh %s\n", realMeshPath);
+		if (!model->mesh) logf("Failed to load mesh %s (%s | %s)\n", realMeshPath, modelDir, model->meshPath);
 	}
+
+	model->material = createMaterial();
+	char *path;
+	path = readFrameString(stream);
+	if (fileExists(path)) model->material.diffuseTexture = getTexture(path);
+
+	path = readFrameString(stream);
+	if (fileExists(path)) model->material.specularTexture = getTexture(path);
+
+	path = readFrameString(stream);
+	if (fileExists(path)) model->material.normalTexture = getTexture(path);
 
 	model->childrenNum = readU32(stream);
 	model->childrenMax = model->childrenNum;
@@ -132,6 +142,7 @@ void computeBounds(Model *model, Matrix4 matrix) {
 }
 
 void writeModel(DataStream *stream, Model *model) {
+	logf("writeModel is old\n");
 	writeU8(stream, model->version);
 	writeString(stream, model->name);
 
