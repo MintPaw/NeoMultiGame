@@ -16,7 +16,7 @@ struct MaterialValue {
 };
 
 struct Material {
-	Raylib::Shader shader;
+	Shader *shader;
 #define MAX_MATERIAL_MAPS 12
     // MATERIAL_MAP_DIFFUSE    = 0,
     // MATERIAL_MAP_SPECULAR,
@@ -187,7 +187,7 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 
 Material createMaterial() {
 	Material material = {};
-	material.shader = renderer->lightingAnimatedShader->raylibShader;
+	material.shader = renderer->lightingAnimatedShader;
 
 	material.values[Raylib::MATERIAL_MAP_DIFFUSE].texture = renderer->whiteTexture;
 
@@ -335,20 +335,21 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
 	{
-		Raylib::rlEnableShader(material.shader.id);
+		Raylib::rlEnableShader(material.shader->raylibShader.id);
 
-		if (material.shader.id == renderer->lightingAnimatedShader->raylibShader.id) {
+		if (material.shader == renderer->lightingAnimatedShader) {
 			glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
 		}
 
-		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE] != -1) {
+		int *shaderLocs = material.shader->raylibShader.locs;
+		if (shaderLocs[Raylib::SHADER_LOC_COLOR_DIFFUSE] != -1) {
 			Vec4 color = argbToRgba(material.values[Raylib::MATERIAL_MAP_DIFFUSE].color);
-			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_DIFFUSE], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
+			Raylib::rlSetUniform(shaderLocs[Raylib::SHADER_LOC_COLOR_DIFFUSE], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 
-		if (material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] != -1) {
+		if (shaderLocs[Raylib::SHADER_LOC_COLOR_SPECULAR] != -1) {
 			Vec4 color = argbToRgba(material.values[Raylib::MATERIAL_MAP_SPECULAR].color);
-			Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
+			Raylib::rlSetUniform(shaderLocs[Raylib::SHADER_LOC_COLOR_SPECULAR], &color.x, Raylib::SHADER_UNIFORM_VEC4, 1);
 		}
 
 		Raylib::Matrix matModel = MatrixMultiply(raylibMatrix, Raylib::rlGetMatrixTransform());
@@ -356,18 +357,10 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		Raylib::Matrix matModelView = MatrixMultiply(matModel, matView);
 		Raylib::Matrix matProjection = Raylib::rlGetMatrixProjection();
 
-		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_VIEW] != -1) {
-			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_VIEW], matView);
-		}
-		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION] != -1) {
-			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_PROJECTION], matProjection);
-		}
-		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL] != -1) {
-			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MODEL], raylibMatrix);
-		}
-		if (material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL] != -1) {
-			Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
-		}
+		if (shaderLocs[Raylib::SHADER_LOC_MATRIX_VIEW] != -1) Raylib::rlSetUniformMatrix(shaderLocs[Raylib::SHADER_LOC_MATRIX_VIEW], matView);
+		if (shaderLocs[Raylib::SHADER_LOC_MATRIX_PROJECTION] != -1) Raylib::rlSetUniformMatrix(shaderLocs[Raylib::SHADER_LOC_MATRIX_PROJECTION], matProjection);
+		if (shaderLocs[Raylib::SHADER_LOC_MATRIX_MODEL] != -1) Raylib::rlSetUniformMatrix(shaderLocs[Raylib::SHADER_LOC_MATRIX_MODEL], raylibMatrix);
+		if (shaderLocs[Raylib::SHADER_LOC_MATRIX_NORMAL] != -1) Raylib::rlSetUniformMatrix(shaderLocs[Raylib::SHADER_LOC_MATRIX_NORMAL], MatrixTranspose(MatrixInvert(matModel)));
 
 		for (int i = 0; i < MAX_MATERIAL_MAPS; i++) {
 			if (material.values[i].texture) {
@@ -379,7 +372,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 					Raylib::rlEnableTexture(material.values[i].texture->raylibTexture.id);
 				}
 
-				Raylib::rlSetUniform(material.shader.locs[Raylib::SHADER_LOC_MAP_DIFFUSE + i], &i, Raylib::SHADER_UNIFORM_INT, 1);
+				Raylib::rlSetUniform(shaderLocs[Raylib::SHADER_LOC_MAP_DIFFUSE + i], &i, Raylib::SHADER_UNIFORM_INT, 1);
 			}
 		}
 
@@ -389,7 +382,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		}
 
 		Raylib::Matrix matModelViewProjection = Raylib::MatrixMultiply(matModelView, matProjection);
-		Raylib::rlSetUniformMatrix(material.shader.locs[Raylib::SHADER_LOC_MATRIX_MVP], matModelViewProjection);
+		Raylib::rlSetUniformMatrix(shaderLocs[Raylib::SHADER_LOC_MATRIX_MVP], matModelViewProjection);
 
 		if (mesh->inds) {
 			Raylib::rlDrawVertexArrayElements(0, mesh->indsNum, 0);

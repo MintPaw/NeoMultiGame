@@ -1273,7 +1273,7 @@ void updateGame() {
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
 
 						Material material = createMaterial();
-						material.shader = renderer->lightingAnimatedShader->raylibShader;
+						material.shader = renderer->lightingAnimatedShader;
 						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(element->color);
 						material.values[Raylib::MATERIAL_MAP_SPECULAR].color = v4(0, globals->specularPower, 0, 0);
 						replaceAllMaterials(element->model, material);
