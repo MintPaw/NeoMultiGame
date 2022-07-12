@@ -4,7 +4,7 @@ struct Model {
 
 	Matrix4 localMatrix;
 	char *meshPath;
-	Material material;
+	Material defaultMaterial;
 
 	Model *children;
 	int childrenNum;
@@ -14,6 +14,7 @@ struct Model {
 	int childrenMax;
 	Mesh *mesh;
 	AABB bounds;
+	Material material;
 };
 
 struct ModelSystem {
@@ -100,16 +101,30 @@ void readModel(DataStream *stream, Model *model, char *modelDir) {
 		if (!model->mesh) logf("Failed to load mesh %s (%s | %s)\n", realMeshPath, modelDir, model->meshPath);
 	}
 
-	model->material = createMaterial();
+	model->defaultMaterial = createMaterial();
 	char *path;
 	path = readFrameString(stream);
-	if (fileExists(path)) model->material.diffuseTexture = getTexture(path);
+	if (path) {
+		char *realPath = frameSprintf("%s/%s.png", modelDir, path);
+		model->defaultMaterial.values[Raylib::MATERIAL_MAP_DIFFUSE].texture = getTexture(realPath);
+		if (!model->defaultMaterial.values[Raylib::MATERIAL_MAP_DIFFUSE].texture) logf("Failed to load diffuse texture %s\n", realPath);
+	}
 
 	path = readFrameString(stream);
-	if (fileExists(path)) model->material.specularTexture = getTexture(path);
+	if (path) {
+		char *realPath = frameSprintf("%s/%s.png", modelDir, path);
+		model->defaultMaterial.values[Raylib::MATERIAL_MAP_SPECULAR].texture = getTexture(realPath);
+		if (!model->defaultMaterial.values[Raylib::MATERIAL_MAP_SPECULAR].texture) logf("Failed to load specular texture %s\n", realPath);
+	}
 
 	path = readFrameString(stream);
-	if (fileExists(path)) model->material.normalTexture = getTexture(path);
+	if (path) {
+		char *realPath = frameSprintf("%s/%s.png", modelDir, path);
+		model->defaultMaterial.values[Raylib::MATERIAL_MAP_NORMAL].texture = getTexture(realPath);
+		if (!model->defaultMaterial.values[Raylib::MATERIAL_MAP_NORMAL].texture) logf("Failed to load normal texture %s\n", realPath);
+	}
+
+	model->material = model->defaultMaterial;
 
 	model->childrenNum = readU32(stream);
 	model->childrenMax = model->childrenNum;
@@ -177,7 +192,7 @@ void drawModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int tint, Model
 	if (model->mesh) {
 		Matrix4 meshMatrix = matrix;
 		drawMesh(model->mesh, meshMatrix, skeleton, model->material);
-		model->material = createMaterial(); // This should set back to a saved default later
+		model->material = model->defaultMaterial;
 	}
 
 	for (int i = 0; i < model->childrenNum; i++) {

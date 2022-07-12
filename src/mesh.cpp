@@ -30,9 +30,6 @@ struct Material {
     // MATERIAL_MAP_PREFILTER,         // (NOTE: Uses GL_TEXTURE_CUBE_MAP)
     // MATERIAL_MAP_BRDF
 	MaterialValue values[MAX_MATERIAL_MAPS];
-	Texture *diffuseTexture;
-	Texture *specularTexture;
-	Texture *normalTexture;
 	float params[4];
 };
 

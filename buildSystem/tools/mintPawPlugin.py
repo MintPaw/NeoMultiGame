@@ -159,7 +159,7 @@ def writeMaterial(ba, obj, materialIndex):
 
     if obj != None and len(obj.data.materials) > 0:
         materialNodeTree = obj.data.materials[materialIndex].node_tree
-        if "MintMaterial" in materialNodeTree:
+        if "MintMaterial" in materialNodeTree.nodes:
             mintMaterialNodes = materialNodeTree.nodes["MintMaterial"]
             image = mintMaterialNodes.node_tree.nodes["texture"].image
             if image != None:
