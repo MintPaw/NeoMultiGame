@@ -46,4 +46,3 @@ void releaseTexture(Texture *texture);
 void releaseTexture(Texture *texture) {
 	logf("No way of removing textures from hashMap right now\n");
 }
-

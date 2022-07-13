@@ -366,7 +366,7 @@ void destroyQueue(Queue *queue) {
 /// Pool start
 //
 
-struct Pool {
+struct Pool { // This is actually an arena
 	void *data;
 	int dataMax;
 	int dataIndex;

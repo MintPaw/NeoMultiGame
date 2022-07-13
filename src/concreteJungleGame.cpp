@@ -221,6 +221,8 @@ enum ActionType {
 	ACTION_ARMOR_GAIN=30,
 	ACTION_STASIS_GAIN=31,
 
+	ACTION_PUNCH_2=40,
+
 	ACTION_FORCED_IDLE=64,
 	ACTION_FORCED_MOVE=65,
 	ACTION_FORCED_LEAVE=66,
@@ -803,7 +805,7 @@ struct Game {
 	bool debugDrawActorAction;
 	bool debugDrawActorStats;
 	bool debugDrawActorStatsSimple;
-	bool debugDrawActorFacingDirection;
+	bool debugDrawUnitCombo;
 	bool debugDrawActorTargets;
 	bool debugDrawUnitBoxes;
 	bool debugDrawUnitBillboards;
@@ -1175,8 +1177,8 @@ void updateGame() {
 
 		game->debugTimeScale = 1;
 		game->debugDrawUnitModels = true;
-		game->debugDrawHitboxes = true;
 		game->debugDrawActorStatsSimple = true;
+		game->debugDrawUnitCombo = true;
 
 		game->cameraAngleDegrees.x = 75;
 		game->cameraAngleDegrees.y = 3;
@@ -1673,7 +1675,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor action", &game->debugDrawActorAction);
 			ImGui::Checkbox("Draw actor stats", &game->debugDrawActorStats);
 			ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
-			ImGui::Checkbox("Draw actor facing directions", &game->debugDrawActorFacingDirection);
+			ImGui::Checkbox("Draw unit combo", &game->debugDrawUnitCombo);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw unit boxes", &game->debugDrawUnitBoxes);
 			ImGui::Checkbox("Draw unit billboards", &game->debugDrawUnitBillboards);
@@ -2541,7 +2543,9 @@ void stepGame(float elapsed) {
 					} 
 					actor->pastActions[actor->pastActionsNum++] = actor->actions[0];
 
-					if (action->type == ACTION_KNOCKDOWN) {
+					if (action->type == ACTION_UPPERCUT) {
+						actor->pastActionsNum = 0;
+					} else if (action->type == ACTION_KNOCKDOWN) {
 						addAction(actor, ACTION_RAISING);
 					} else if (action->type == ACTION_FORCED_LEAVE) {
 						actor->markedForDeletion = true;
@@ -2618,7 +2622,6 @@ void stepGame(float elapsed) {
 				actor->timeWithoutAction = 0;
 			} else { 
 				actor->timeWithoutAction += elapsed;
-				if (actor->timeWithoutAction > 0.5) actor->pastActionsNum = 0;
 			}
 		} ///
 
@@ -2647,10 +2650,11 @@ void stepGame(float elapsed) {
 			for (int i = 0; i < getBuffCount(actor, BUFF_STICKY_NAPALM_STACK); i++) speed *= 0.8;
 			if (actor->stasisTimeLeft > 0) speed *= STASIS_TIME_SCALE_AMOUNT;
 
-
 			actor->isBlocking = true;
 			if (actor->stamina <= BLOCKING_STAMINA_THRESHOLD) actor->isBlocking = false;
 			if (!actor->isOnGround) actor->isBlocking = false;
+
+			if (actor->timeMoving > 0 || actor->timeWithoutAction > 0.2) actor->pastActionsNum = 0;
 
 			if (actor->isRunningLeft || actor->isRunningRight) {
 				if (fmod(game->time, 0.2) < fmod(game->prevTime, 0.2)) {
@@ -2705,25 +2709,15 @@ void stepGame(float elapsed) {
 				if (punchPressed) {
 					if (actor->isOnGround) {
 						if (actor->heldItem.type == ITEM_NONE) {
-							bool didAttack = false;
 							if (actor->isRunningLeft || actor->isRunningRight) {
 								addAction(actor, ACTION_RUNNING_PUNCH);
-								didAttack = true;
+							} else if (actor->pastActionsNum == 1 && actor->pastActions[0].type == ACTION_PUNCH) {
+								addAction(actor, ACTION_PUNCH_2);
+							} else if (actor->pastActionsNum == 2 && actor->pastActions[0].type == ACTION_PUNCH && actor->pastActions[1].type == ACTION_PUNCH_2) {
+								addAction(actor, ACTION_UPPERCUT);
+							} else {
+								addAction(actor, ACTION_PUNCH);
 							}
-
-							if (!didAttack && actor->pastActionsNum >= 2) {
-								bool arePunches = true;
-								for (int i = actor->pastActionsNum-2; i < actor->pastActionsNum; i++) {
-									Action *action = &actor->pastActions[i];
-									if (action->type != ACTION_PUNCH) arePunches = false;
-								}
-
-								if (arePunches) {
-									addAction(actor, ACTION_UPPERCUT);
-									didAttack = true;
-								}
-							}
-							if (!didAttack) addAction(actor, ACTION_PUNCH);
 						} else if (actor->heldItem.type == ITEM_SWORD) {
 							addAction(actor, ACTION_ATTACK1_SWORD);
 						} else if (actor->heldItem.type == ITEM_KNIFE) {
@@ -3871,8 +3865,11 @@ void stepGame(float elapsed) {
 						);
 					}
 
-					if (game->debugDrawActorFacingDirection) {
-						textLines[textLinesNum++] = frameSprintf("%s", actor->facingLeft ? "Facing left" : "Facing right");
+					if (game->debugDrawUnitCombo && actor->type == ACTOR_UNIT) {
+						for (int i = 0; i < actor->pastActionsNum; i++) {
+							Action *action = &player->pastActions[i];
+							textLines[textLinesNum++] = frameSprintf("%d: %s", i, action->info->name);
+						}
 					}
 
 					Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
