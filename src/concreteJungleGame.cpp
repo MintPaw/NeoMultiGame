@@ -2918,15 +2918,17 @@ void stepGame(float elapsed) {
 									}
 								} ///
 							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
+								float standAwayMin = 200;
+								float standAwayMax = 300;
+								float yVariance = 300;
+
 								if (actor->aiStateTime == 0) {
-									Vec2 dir = normalize(v2(rndFloat(0, 1), rndFloat(0, 1)));
-									float dist = rndFloat(200, 300);
-									Vec2 targetPositionOffset = (dir*2 - 1) * dist;
+									float xDir = actor->position.x < target->position.x ? -1 : 1;
+									Vec2 targetPositionOffset;
+									targetPositionOffset.x = xDir * rndFloat(standAwayMin, standAwayMax);
+									targetPositionOffset.y = rndFloat(-yVariance/2, yVariance/2);
 
-									if (actor->position.x < target->position.x) targetPositionOffset.x -= 200;
-									else targetPositionOffset.x += 200;
-
-									actor->aiStateLength = clampMap(dist, 0, 300, 0.1, 4);
+									actor->aiStateLength = rndFloat(2, 4);
 
 									actor->aiTargetPosition2 = targetPosition2 + targetPositionOffset;
 
@@ -2942,13 +2944,13 @@ void stepGame(float elapsed) {
 									actor->aiTargetPosition2 = position;
 								}
 
-								float maxDistTillChase = 600;
+								float maxDistTillChase = (standAwayMax + yVariance/2) * 1.25;
 								if (distance(actor->aiTargetPosition2, targetPosition2) > maxDistTillChase) {
 									if (actor->aiStateTime > 0.2) actor->prevAiState = AI_IDLE; // Reset AI state if player moves too far away for too long
 								}
 
 								float dist = distance(actor->aiTargetPosition2, position2);
-								if (dist < 1000) actor->aiTimeAggroedAndCloseToPlayer += elapsed;
+								if (dist < maxDistTillChase*1.15) actor->aiTimeAggroedAndCloseToPlayer += elapsed;
 								if (distance(actor->aiTargetPosition2, position2) > 10) {
 									float speedMulti = clampMap(dist, 50, 100, 0.2, 1);
 
