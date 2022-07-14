@@ -10,7 +10,6 @@
 // Smooth out movement, blocking, and animation transtions
 // Make shops take less in-game time to travel to
 // Better map and fortification graphics
-// Make Dark Souls-like potion thing
 // Glowing eyes?
 
 // We need healing
@@ -67,53 +66,6 @@ Street/room types:
 	- Gravity (high gravity)
 	- Shopping
 	- Blood moon (high speed, vampirism?)
-
-Weapons:
-	- Sword
-	- Baseball/pipe
-	- Knife
-	- Crate?
-
-Upgrades:
-	- Chain lightning (5 max links, 4% chance, 5% damage, 40 distance)
-		- Link chance + 2%
-		- Link radius 5%
-		- Link damage multiplier +10%
-
-	- Magnet (Attract orbs from 30 distance away)
-		- Attract from +10% away
-
-	- Armor (10% chance of hyper armor)
-		- +2% chance of hyper armor
-
-	- Slow mo (Can I even do that? -_-)
-	- Warp strike
-	!- Automatic push blocking
-	- Level up (+1 to every stat)
-	- Bleed
-	!- Dash
-	- Mist coil: Fire a fireball at the cost of hp
-	- Aphotic Shield: Create a shield the absorbs a certain amount of damage (armor?)
-	- (passive) Curse of Avernus: Hitting an enemy 4 times within a specific amount of time will cause them to be slowed
-	- Borrowed Time: For a short time, taking damage heals you (automatically activates at low hp?)
-	- Acid Spray: Throw down some acid that slowly damages anyone who's standing in it.
-	- Chemical Rage: Puts you into rage for a short time, gives hp regen, cooldown reduction, and movespeed (and attack speed?)
-	- Cold Feet: Drop a orb that slow surrounding units
-	!- (passive) Mana break: Attacks that land take a small percentage of enemy stamina
-	- Magnetic field: Drop a field that give allies bonus attack speed
-	- Spark wraith: Like a one-time widow mine
-	- (passive) Counter spike: Gives a chance for a magical counter to being attacked
-	!- Culling blade: An attack that instantly kills units below a certain amount of hp percent
-	- (passive) Enfeeble: Attacking applies a debuff that lowers attack damage
-	- Brain sap: An attack that heals you
-	- (passive) Sticky napalm: A stacking slow that's applied with every attack
-	- Flamebreak: You "hit the ground" and push everyone away
-	- Firefly: For a short time, when you walk around, you drop fire or something else that does damage
-	- Ally summons?
-	- Primal roar: Stuns everyone in a "cone" in front of you
-	!- (passive) Bloodrage: You gain attack speed as you lose hp
-	- Blood rite: Put down a seal/bomb that goes off after ~3 seconds
-	- Handgun: Limited ammo
 
 *idle = 1
 *move = 4
