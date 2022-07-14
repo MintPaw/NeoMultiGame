@@ -9,6 +9,8 @@ import mathutils
 import bpy
 import bmesh
 
+poseMarkersOutString = ""
+
 def writeString(ba, string):
     stringLength = len(string);
     ba.extend(struct.pack("<"+str(stringLength+1)+"s", string.encode("utf-8")))
@@ -283,6 +285,14 @@ def writeSkeleton(ba, obj, skeleName):
     for action in actions:
         obj.animation_data.action = action
 
+        global poseMarkersOutString
+        for i in range(0, len(action.pose_markers)):
+            marker = action.pose_markers[i]
+            poseMarkersOutString += action.name + " "
+            poseMarkersOutString += str(marker.frame/(int(action.frame_range.y) - int(action.frame_range.x))) + " "
+            poseMarkersOutString += marker.name
+            poseMarkersOutString += "\n"
+
         for i in range(int(action.frame_range.x), int(action.frame_range.y)):
             # print("Action "+action.name+" frame "+str(i))
             bpy.context.scene.frame_set(i);
@@ -303,6 +313,7 @@ def writeSkeleton(ba, obj, skeleName):
                 vecs.append(matrix.to_scale());
                 framesMap[poseBone.bone.name].append(vecs);
             frameCount += 1
+
 
     writeString(ba, skeleName) 
     ba.extend(struct.pack("<1I", frameCount))
@@ -325,7 +336,6 @@ def writeBaToFile(ba, path):
     outputFile = open(path, "wb")
     outputFile.write(ba)
     outputFile.close()
-
 
 
 class ExportMeshesOp(bpy.types.Operator):
@@ -377,7 +387,18 @@ def saveSkeleton(obj, name, path):
     ba = bytearray()
     writeSkeleton(ba, obj, name);
     writeBaToFile(ba, path + "/" + name + ".skele")
+    savePoseMarkers(path + "/" + name + ".markers")
     setAllArmsPoseMode("POSE")
+
+def savePoseMarkers(path):
+    scn = bpy.data.scenes[0]
+
+    global poseMarkersOutString;
+    f = open(path, "w")
+    f.write(poseMarkersOutString)
+    f.close()
+    poseMarkersOutString = "";
+
 
 class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
     bl_idname = "mesh.export_content_for_concrete_jungle"

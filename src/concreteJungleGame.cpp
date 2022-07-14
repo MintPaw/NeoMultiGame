@@ -964,7 +964,8 @@ void updateGame() {
 		loadGlobals();
 
 		{ /// Animation data
-			char *str = (char *)readFile("assets/frames/Unit/params.vars");
+			// char *str = (char *)readFile("assets/frames/Unit/params.vars");
+			char *str = (char *)readFile("assets/skeletons/unit.markers");
 			game->animationMarkerData = (AnimationMarkerData *)zalloc(sizeof(AnimationMarkerData) * countChar(str, '\n'));
 
 			char *lineStart = str;
@@ -3025,7 +3026,7 @@ void stepGame(float elapsed) {
 									int choice = rndPick(choiceBuckets, AI_CHOICES_MAX);
 									if (choice == AI_CHOICE_1) {
 										addAction(actor, ACTION_PUNCH);
-										addAction(actor, ACTION_PUNCH);
+										addAction(actor, ACTION_PUNCH_2);
 										addAction(actor, ACTION_UPPERCUT);
 									} else if (choice == AI_CHOICE_2) {
 										addAction(actor, ACTION_PUNCH);

@@ -16,9 +16,6 @@ def setupFileFunc():
     scn = bpy.data.scenes[0]
     world = bpy.data.worlds["World"]
 
-    if world.get("subSteps") is None:
-        world["subSteps"] = 1
-
     scn.render.engine = "BLENDER_EEVEE"
     scn.render.image_settings.compression = 100
 
@@ -34,8 +31,6 @@ def dumpPoseMarkers(armature):
     world = bpy.data.worlds["World"]
     unitName = armature.name[4:]
     outPath = "C:/bin/frames/spriteDump/"+unitName+"/params.vars"
-
-    subSteps = world["subSteps"]
 
     global poseMarkersOutString;
     f = open(outPath, "w")
@@ -92,29 +87,24 @@ def exportAction(armature, action, outPath, altName=None):
 
     print("Exporting action "+animName+"("+realAction.name+") to "+outPath)
     dopeSheetArea.action = realAction
-    subSteps = world["subSteps"]
     global totalFrameCount
 
     for i in range(int(realAction.frame_range.x), int(realAction.frame_range.y)):
-        frameIndex = i
-        for i in range(0, subSteps):
-            scn.frame_set(frameIndex, subframe=i/subSteps)
-
-            animFileName = animName
-            animFileName += "_"
-            animFileName += str(frameIndex*subSteps + i).zfill(3)
-            exportImage(outPath, animFileName)
-            totalFrameCount += 1
+        scn.frame_set(i)
+        animFileName = animName
+        animFileName += "_"
+        animFileName += str(frameIndex).zfill(3)
+        exportImage(outPath, animFileName)
+        totalFrameCount += 1
 
     frameCount = int(realAction.frame_range.y) - int(realAction.frame_range.x)
-    print("Has "+str(frameCount)+" frames (without subSteps)")
-    frameCount *= subSteps
+    print("Has "+str(frameCount)+" frames)")
 
     global poseMarkersOutString
     for i in range(0, len(realAction.pose_markers)):
         marker = realAction.pose_markers[i]
         poseMarkersOutString += animName + " "
-        poseMarkersOutString += str((marker.frame*subSteps)/frameCount) + " "
+        poseMarkersOutString += str((marker.frame)/frameCount) + " "
         poseMarkersOutString += marker.name
         poseMarkersOutString += "\n"
 
