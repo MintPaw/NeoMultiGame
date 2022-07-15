@@ -246,6 +246,8 @@ void platformUpdate() {
 
 	guiDraw();
 	Raylib::rlDrawRenderBatchActive();
+	void endRenderingFrame(); //@headerHack
+	endRenderingFrame();
 
 	if (keyPressed(KEY_CTRL) && keyPressed('Q')) platform->running = false;
 
@@ -526,6 +528,7 @@ struct Renderer {
 #define CAMERA_2D_STACK_MAX 128
 	Matrix3 camera2dStack[CAMERA_2D_STACK_MAX];
 	int camera2dStackNum;
+	float current2dDrawDepth;
 
 #define ALPHA_STACK_MAX 128
 	float alphaStack[ALPHA_STACK_MAX];
@@ -586,23 +589,19 @@ u8 *getTextureData(Texture *texture, int flags=0);
 void destroyTexture(Texture *texture);
 void destroyTexture(RenderTexture *renderTexture);
 
+void drawTexture(RenderTexture *renderTexture, RenderProps props);
 void drawTexture(Texture *texture, RenderProps props);
 void drawSimpleTexture(Texture *texture);
 void drawSimpleTexture(RenderTexture *renderTexture);
 void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
-void drawFxaaTexture(RenderTexture *renderTexture, Matrix3 matrix);
-void drawFxaaTexture(Texture *texture, Matrix3 matrix);
-void drawPixelArtFilterTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1));
-void drawPixelArtFilterTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1));
 void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
 void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
-void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
-void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
-void drawTriangle(Texture *texture, Vec3 *verts, Vec2 *uvs, int tint=0xFFFFFFFF, float alpha=1);
 void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
+void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors);
+void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors);
 
 void pushTargetTexture(RenderTexture *renderTexture);
 void popTargetTexture();
@@ -632,6 +631,7 @@ void end3d();
 void startShader(Raylib::Shader shader);
 void startShader(Shader *shader);
 void endShader();
+void endRenderingFrame();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 
 #include "rendererUtils.cpp"
@@ -1031,7 +1031,6 @@ void destroyTexture(RenderTexture *renderTexture) {
 	free(renderTexture);
 }
 
-void drawTexture(RenderTexture *renderTexture, RenderProps props);
 void drawTexture(RenderTexture *renderTexture, RenderProps props) {
 	if (props.alpha == 0) return;
 	if (props.disabled) return;
@@ -1100,32 +1099,6 @@ void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, flo
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int flags = 0;
 	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
-}
-
-void drawFxaaTexture(RenderTexture *renderTexture, Matrix3 matrix) {
-	Vec2 uv0 = v2(0, 0);
-	Vec2 uv1 = v2(1, 1);
-	Matrix3 uvMatrix = mat3();
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	float alpha = 1;
-	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
-}
-void drawFxaaTexture(Texture *texture, Matrix3 matrix) {
-	Vec2 uv0 = v2(0, 0);
-	Vec2 uv1 = v2(1, 1);
-	Matrix3 uvMatrix = mat3();
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	float alpha = 1;
-	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
-}
-
-void drawPixelArtFilterTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1) {
-	drawSimpleTexture(renderTexture, matrix, uv0, uv1);
-}
-void drawPixelArtFilterTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1) {
-	drawSimpleTexture(texture, matrix, uv0, uv1);
 }
 
 void drawRect(Rect rect, int color, int flags) {
@@ -1217,84 +1190,10 @@ void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, in
 	bottomRight += position;
 	bottomLeft += position;
 
-	Raylib::rlCheckRenderBatchLimit(4);
-
-	Raylib::rlSetTexture(texture->raylibTexture.id);
-
-	Raylib::rlBegin(RL_QUADS);
-	Raylib::Color raylibTint = toRaylibColor(tint);
-	Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-
-	Raylib::rlTexCoord2f(uv0.x, uv0.y);
-	Raylib::rlVertex3f(topLeft.x, topLeft.y, topLeft.z);
-
-	Raylib::rlTexCoord2f(uv0.x, uv1.y);
-	Raylib::rlVertex3f(bottomLeft.x, bottomLeft.y, bottomLeft.z);
-
-	Raylib::rlTexCoord2f(uv1.x, uv1.y);
-	Raylib::rlVertex3f(bottomRight.x, bottomRight.y, bottomRight.z);
-
-	Raylib::rlTexCoord2f(uv1.x, uv0.y);
-	Raylib::rlVertex3f(topRight.x, topRight.y, topRight.z);
-
-	Raylib::rlEnd();
-
-	Raylib::rlSetTexture(0);
-}
-
-void draw2dQuad(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags) {
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
-}
-void draw2dQuad(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags) {
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
-}
-
-void drawTriangle(Texture *texture, Vec3 *verts, Vec2 *uvs, int tint, float alpha) {
-	alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
-	if (renderer->disabled) return;
-	if (alpha == 0) return;
-
-	if (!texture) texture = renderer->whiteTexture;
-
-	// Matrix3 flipMatrix = {
-	// 	1,  0,  0,
-	// 	0, -1,  0,
-	// 	0,  1,  1
-	// };
-	// uvMatrix = flipMatrix * uvMatrix;
-	// for (int i = 0; i < ArrayLength(uvs); i++) {
-	// 	uvs[i] = uvMatrix * uvs[i];
-	// }
-
-	int raylibPointCount = 3;
-
-	{
-		Raylib::Texture raylibTexture = texture->raylibTexture;
-		Raylib::rlCheckRenderBatchLimit((raylibPointCount - 1)*4);
-
-		Raylib::rlSetTexture(raylibTexture.id);
-
-		Raylib::rlBegin(RL_TRIANGLES);
-
-		int a, r, g, b;
-		hexToArgb(tint, &a, &r, &g, &b);
-		a *= alpha;
-		r *= a/255.0;
-		g *= a/255.0;
-		b *= a/255.0;
-		tint = argbToHex(a, r, g, b);
-		Raylib::Color raylibTint = toRaylibColor(tint);
-		Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-
-		for (int i = 0; i < raylibPointCount; i++) {
-			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
-			Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
-		}
-
-		Raylib::rlEnd();
-
-		Raylib::rlSetTexture(0);
-	}
+	Vec3 verts[4] = { topLeft, bottomLeft, bottomRight, topRight };
+	Vec2 uvs[4] = { v2(uv0.x, uv0.y), v2(uv0.x, uv1.y), v2(uv1.x, uv1.y), v2(uv1.x, uv0.y) };
+	int colors[4] = { tint, tint, tint, tint };
+	drawTexturedQuad(texture->raylibTexture.id, verts, uvs, colors);
 }
 
 void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha,int flags) {
@@ -1332,36 +1231,50 @@ void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, 
 		uvs[i] = uvMatrix * uvs[i];
 	}
 
-	int raylibPointCount = 4;
-
-	{
-		Raylib::rlCheckRenderBatchLimit((raylibPointCount - 1)*4);
-
-		Raylib::rlSetTexture(raylibTexture.id);
-
-		Raylib::rlBegin(RL_QUADS);
-
-		for (int i = 0; i < raylibPointCount; i++) {
-			int tint = ((int *)&tints.x)[i];
-			int a, r, g, b;
-			hexToArgb(tint, &a, &r, &g, &b);
-			a *= alpha;
-			r *= a/255.0;
-			g *= a/255.0;
-			b *= a/255.0;
-			tint = argbToHex(a, r, g, b);
-			Raylib::Color raylibTint = toRaylibColor(tint);
-			Raylib::rlColor4ub(raylibTint.r, raylibTint.g, raylibTint.b, raylibTint.a);
-
-			Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
-			Raylib::rlVertex2f(verts[i].x, verts[i].y);
-		}
-
-		Raylib::rlEnd();
-
-		Raylib::rlSetTexture(0);
+	int colors[4];
+	for (int i = 0; i < 4; i++) {
+		int tint = ((int *)&tints.x)[i];
+		int a, r, g, b;
+		hexToArgb(tint, &a, &r, &g, &b);
+		a *= alpha;
+		r *= a/255.0;
+		g *= a/255.0;
+		b *= a/255.0;
+		colors[i] = argbToHex(a, r, g, b);
 	}
+
+	drawTexturedQuad(raylibTexture.id, verts, uvs, colors);
 }
+
+void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors) {
+	Vec3 verts3[4];
+	verts3[0] = v3(verts[0], renderer->current2dDrawDepth);
+	verts3[1] = v3(verts[1], renderer->current2dDrawDepth);
+	verts3[2] = v3(verts[2], renderer->current2dDrawDepth);
+	verts3[3] = v3(verts[3], renderer->current2dDrawDepth);
+	drawTexturedQuad(textureId, verts3, uvs, colors);
+	renderer->current2dDrawDepth += 1.0/20000.0; // Should really be a fraction of the far-near clip plane
+}
+
+void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
+	Raylib::rlCheckRenderBatchLimit(4);
+
+	Raylib::rlSetTexture(textureId);
+
+	Raylib::rlBegin(RL_QUADS);
+
+	for (int i = 0; i < 4; i++) {
+		Raylib::Color raylibColor = toRaylibColor(colors[i]);
+		Raylib::rlColor4ub(raylibColor.r, raylibColor.g, raylibColor.b, raylibColor.a);
+		Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
+		Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
+	}
+
+	Raylib::rlEnd();
+
+	Raylib::rlSetTexture(0);
+}
+
 
 void pushTargetTexture(RenderTexture *renderTexture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");
@@ -1508,7 +1421,7 @@ void updateLightingShader(Camera camera) {
 void resetRenderContext() {
 	Raylib::rlDrawRenderBatchActive();
 	setRendererBlendMode(BLEND_NORMAL);
-#ifndef __EMSCRIPTEN__
+#ifndef __EMSCRIPTEN__ // 100% needed...
 	glBindSampler(0, 0);
 #endif
 }
@@ -1550,6 +1463,9 @@ void startShader(Shader *shader) {
 }
 void endShader() {
 	Raylib::EndShaderMode();
+}
+void endRenderingFrame() {
+	renderer->current2dDrawDepth = -1;
 }
 
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {

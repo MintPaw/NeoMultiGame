@@ -105,7 +105,7 @@ Vec3 UNIT_SIZE = v3(150, 150, 300);
 
 #define GROUND_SPACING 0.1
 
-#define FRAME_SUBSTEPS 2
+#define FRAME_SUBSTEPS 1
 
 #define STASIS_TIME_SCALE_AMOUNT 0.1
 #define STASIS_STAMINA_PERC 0.95
@@ -1230,7 +1230,8 @@ void updateGame() {
 						drawAABB(element->aabb, element->color);
 					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
 						Vec2 uvs[3] = {};
-						drawTriangle(NULL, element->tri.verts, uvs);
+						logf("drawTriangle is gone now\n");
+						// drawTriangle(NULL, element->tri.verts, uvs);
 					} else if (element->type == WORLD_ELEMENT_SPHERE) {
 						drawSphere(element->sphere, element->color);
 					} else if (element->type == WORLD_ELEMENT_MODEL) {
