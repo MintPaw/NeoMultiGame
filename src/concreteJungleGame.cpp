@@ -382,7 +382,14 @@ struct ActorTypeInfo {
 enum AiState {
 	AI_IDLE,
 	AI_STAND_NEAR_TARGET,
-	AI_APPROACH_FOR_ATTACH,
+	AI_STAND_AT_ATTENTION,
+	AI_APPROACH_FOR_ATTACK,
+};
+char *aiStateStrings[] = {
+	"AI_IDLE",
+	"AI_STAND_NEAR_TARGET",
+	"AI_STAND_AT_ATTENTION",
+	"AI_APPROACH_FOR_ATTACK",
 };
 
 enum AiType {
@@ -757,13 +764,14 @@ struct Game {
 	bool debugDrawActorStats;
 	bool debugDrawActorStatsSimple;
 	bool debugDrawUnitCombo;
+	bool debugDrawUnitAiState;
 	bool debugDrawActorTargets;
 	bool debugDrawUnitBoxes;
 	bool debugDrawUnitBillboards;
 	bool debugDrawUnitModels;
 	bool debugDrawVision;
 	bool debugNeverTakeDamage;
-	bool debugAINeverApproaches;
+	bool debugAiNeverApproaches;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
 	bool debugShowPrewarm;
@@ -1131,7 +1139,6 @@ void updateGame() {
 		game->debugTimeScale = 1;
 		game->debugDrawUnitModels = true;
 		game->debugDrawActorStatsSimple = true;
-		game->debugDrawUnitCombo = true;
 
 		game->cameraAngleDegrees.x = 75;
 		game->cameraAngleDegrees.y = 3;
@@ -1629,6 +1636,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw actor stats", &game->debugDrawActorStats);
 			ImGui::Checkbox("Draw actor stats simple", &game->debugDrawActorStatsSimple);
 			ImGui::Checkbox("Draw unit combo", &game->debugDrawUnitCombo);
+			ImGui::Checkbox("Draw unit ai state", &game->debugDrawUnitAiState);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw unit boxes", &game->debugDrawUnitBoxes);
 			ImGui::Checkbox("Draw unit billboards", &game->debugDrawUnitBillboards);
@@ -1714,7 +1722,7 @@ void stepGame(float elapsed) {
 			}
 
 			ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
-			ImGui::Checkbox("AI never approaches", &game->debugAINeverApproaches);
+			ImGui::Checkbox("AI never approaches", &game->debugAiNeverApproaches);
 
 			ImGui::Text("alliancesControlled: ");
 			ImGui::SameLine();
@@ -2835,10 +2843,7 @@ void stepGame(float elapsed) {
 						if (actor->actionsNum == 0) {
 							Actor *target = getActor(map, actor->aiTarget);
 
-							if (!target) {
-								if (actor->aiState == AI_STAND_NEAR_TARGET) actor->aiState = AI_IDLE;
-								if (actor->aiState == AI_APPROACH_FOR_ATTACH) actor->aiState = AI_IDLE;
-							}
+							if (!target) actor->aiState = AI_IDLE;
 
 							if (actor->prevAiState != actor->aiState) {
 								actor->prevAiState = actor->aiState;
@@ -2848,6 +2853,12 @@ void stepGame(float elapsed) {
 							Vec2 position2 = v2(actor->position);
 							Vec2 targetPosition2 = v2();
 							if (target) targetPosition2 = v2(target->position);
+
+							float standAwayMin = 200;
+							float standAwayMax = 300;
+							float yVariance = 300;
+							float stepBackMulti = 1;
+							float maxDistTillChase = (standAwayMax + yVariance/2) * 1.25;
 
 							if (actor->aiState == AI_IDLE) {
 								if (target) actor->aiState = AI_STAND_NEAR_TARGET;
@@ -2918,9 +2929,11 @@ void stepGame(float elapsed) {
 									}
 								} ///
 							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
-								float standAwayMin = 200;
-								float standAwayMax = 300;
-								float yVariance = 300;
+
+								if (actor->team == 1) {
+									standAwayMin = 400;
+									standAwayMax = 500;
+								}
 
 								if (actor->aiStateTime == 0) {
 									float xDir = actor->position.x < target->position.x ? -1 : 1;
@@ -2944,7 +2957,6 @@ void stepGame(float elapsed) {
 									actor->aiTargetPosition2 = position;
 								}
 
-								float maxDistTillChase = (standAwayMax + yVariance/2) * 1.25;
 								if (distance(actor->aiTargetPosition2, targetPosition2) > maxDistTillChase) {
 									if (actor->aiStateTime > 0.2) actor->prevAiState = AI_IDLE; // Reset AI state if player moves too far away for too long
 								}
@@ -2956,17 +2968,37 @@ void stepGame(float elapsed) {
 
 									Vec2 dir = normalize(actor->aiTargetPosition2 - position2);
 									actor->movementAccel += v3(dir * speed.x*speedMulti);
+								} else {
+									actor->aiState = AI_STAND_AT_ATTENTION;
+								}
+							} else if (actor->aiState == AI_STAND_AT_ATTENTION) {
+								if (actor->aiStateTime == 0) {
+									actor->aiStateLength = rndFloat(2, 4);
 								}
 
-								if (actor->aiTimeAggroedAndCloseToPlayer > actor->aiStateLength && !game->debugAINeverApproaches) {
-									actor->aiTimeAggroedAndCloseToPlayer = 0;
+								float dist = distance(position2, targetPosition2);
+								float tooFarDist = dist - standAwayMax;
+
+								if (tooFarDist > 300) actor->aiState = AI_STAND_NEAR_TARGET;
+
+#if 0 // Backstepping causes no blocking...
+								float tooCloseDist = dist - standAwayMax;
+								if (tooCloseDist < -standAwayMin*0.2) {
+									float speedMulti = clampMap(tooCloseDist, -standAwayMin*0.2, -standAwayMin*0.8, 0.2, 0.9);
+
+									Vec2 dir = normalize(targetPosition2 - position2);
+									actor->movementAccel += v3(dir * -speed.x*speedMulti);
+								}
+#endif
+
+								if (actor->aiStateTime > actor->aiStateLength && !game->debugAiNeverApproaches) {
 									if (rndPerc(aggression)) {
-										actor->aiState = AI_APPROACH_FOR_ATTACH;
+										actor->aiState = AI_APPROACH_FOR_ATTACK;
 									} else {
 										actor->prevAiState = AI_IDLE; // Reset ai state
 									}
 								}
-							} else if (actor->aiState == AI_APPROACH_FOR_ATTACH) {
+							} else if (actor->aiState == AI_APPROACH_FOR_ATTACK) {
 								Vec2 dest2 = targetPosition2;
 
 								Vec2 dir = (dest2 - position2).normalize();
@@ -3830,6 +3862,10 @@ void stepGame(float elapsed) {
 							Action *action = &player->pastActions[i];
 							textLines[textLinesNum++] = frameSprintf("%d: %s", i, action->info->name);
 						}
+					}
+
+					if (game->debugDrawUnitAiState && actor->type == ACTOR_UNIT && !actor->playerControlled) {
+							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", aiStateStrings[actor->aiState], actor->aiStateTime);
 					}
 
 					Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
