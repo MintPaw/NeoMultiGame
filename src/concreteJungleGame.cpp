@@ -1,4 +1,5 @@
 // Do npc awareness
+// Shouldn't block if unaware
 // Attacks that break block need to go through
 // Running kick needs to launch further
 // Make money fade away eventaully
@@ -394,7 +395,6 @@ char *aiStateStrings[] = {
 
 enum AiType {
 	AI_NORMAL,
-	AI_DUMMY,
 };
 
 struct Style {
@@ -486,7 +486,6 @@ struct Actor {
 	float aiStateTime;
 	int aiTarget;
 	Vec2 aiTargetPosition2;
-	float aiTimeAggroedAndCloseToPlayer;
 	float aiStateLength;
 
 	float allianceCost;
@@ -807,6 +806,8 @@ Actor *getActorByName(Map *map, char *actorName);
 void removeActorById(Map *map, int id);
 void removeActorByIndex(Map *map, int index);
 Actor *findDoorWithDestMapName(Map *map, char *destMapName);
+
+Actor *createUnit(Map *map, int team);
 
 Action *addAction(Actor *actor, ActionType type);
 Buff *addBuff(Actor *actor, BuffType type, float maxTime);
@@ -1664,22 +1665,31 @@ void stepGame(float elapsed) {
 
 			ImGui::SameLine();
 			if (ImGui::Button("Spawn Dummy")) {
-				Actor *actor = createActor(map, ACTOR_UNIT);
+				Actor *actor = createUnit(map, 2);
 				actor->stats[STAT_MAX_STAMINA] = 1;
 				actor->stats[STAT_STAMINA_REGEN] = 1;
 				actor->stats[STAT_HP] = 50;
 				actor->stats[STAT_MOVEMENT_SPEED] = 1;
 				actor->stats[STAT_ATTACK_SPEED] = 1;
-				actor->team = 1;
+				actor->hasHyperArmor = false;
 				actor->position = v3(0, 0, 10);
 			}
 
-			ImGui::SameLine();
-			if (ImGui::Button("Spawn enemy")) {
-				Actor *actor = createActor(map, ACTOR_UNIT);
-				actor->team = 1;
-				actor->position = v3(0, 0, 10);
+			ImGui::Text("Spawn unit from team:");
+			for (int i = 0; i < TEAMS_MAX; i++) {
+				if (ImGui::Button(frameSprintf("%d###teamSpawn%d", i, i))) {
+					Actor *actor = createUnit(map, i);
+					actor->stats[STAT_DAMAGE] = 10;
+					actor->stats[STAT_HP] = 10;
+					actor->stats[STAT_MAX_STAMINA] = 10;
+					actor->stats[STAT_STAMINA_REGEN] = 10;
+					actor->stats[STAT_MOVEMENT_SPEED] = 10;
+					actor->stats[STAT_ATTACK_SPEED] = 10;
+					actor->position = v3(0, 0, 10);
+				}
+				ImGui::SameLine();
 			}
+			ImGui::NewLine();
 
 			if (ImGui::Button("Kill enemies")) {
 				for (int i = 0; i < map->actorsNum; i++) {
@@ -2860,6 +2870,11 @@ void stepGame(float elapsed) {
 							float stepBackMulti = 1;
 							float maxDistTillChase = (standAwayMax + yVariance/2) * 1.25;
 
+							if (actor->team == 1) {
+								standAwayMin = 400;
+								standAwayMax = 500;
+							}
+
 							if (actor->aiState == AI_IDLE) {
 								if (target) actor->aiState = AI_STAND_NEAR_TARGET;
 
@@ -2930,11 +2945,6 @@ void stepGame(float elapsed) {
 								} ///
 							} else if (actor->aiState == AI_STAND_NEAR_TARGET) {
 
-								if (actor->team == 1) {
-									standAwayMin = 400;
-									standAwayMax = 500;
-								}
-
 								if (actor->aiStateTime == 0) {
 									float xDir = actor->position.x < target->position.x ? -1 : 1;
 									Vec2 targetPositionOffset;
@@ -2957,12 +2967,7 @@ void stepGame(float elapsed) {
 									actor->aiTargetPosition2 = position;
 								}
 
-								if (distance(actor->aiTargetPosition2, targetPosition2) > maxDistTillChase) {
-									if (actor->aiStateTime > 0.2) actor->prevAiState = AI_IDLE; // Reset AI state if player moves too far away for too long
-								}
-
 								float dist = distance(actor->aiTargetPosition2, position2);
-								if (dist < maxDistTillChase*1.15) actor->aiTimeAggroedAndCloseToPlayer += elapsed;
 								if (distance(actor->aiTargetPosition2, position2) > 10) {
 									float speedMulti = clampMap(dist, 50, 100, 0.2, 1);
 
@@ -2973,7 +2978,45 @@ void stepGame(float elapsed) {
 								}
 							} else if (actor->aiState == AI_STAND_AT_ATTENTION) {
 								if (actor->aiStateTime == 0) {
-									actor->aiStateLength = rndFloat(2, 4);
+									actor->aiStateLength = rndFloat(0.1, 6);
+
+									bool shouldOpenWithDash = false;
+									if (
+										actor->team == 1 &&
+										rndPerc(0.01) &&
+										actor->stamina >= actor->maxStamina*0.3 &&
+										fabs((targetPosition2.y - position2.y)) < 100 &&
+										fabs((targetPosition2.x - position2.x)) > (standAwayMin+standAwayMax)/2
+									) shouldOpenWithDash = true;
+									if (shouldOpenWithDash) {
+										addAction(actor, ACTION_DASH_START);
+										addAction(actor, ACTION_DASH_FORWARD);
+										actor->aiState = AI_APPROACH_FOR_ATTACK;
+									}
+
+									bool shouldOpenWithArmorGain = false;
+									if (
+										actor->team == 2 &&
+										rndPerc(0.01) &&
+										!actor->hasHyperArmor &&
+										actor->stamina >= globals->actionTypeInfos[ACTION_ARMOR_GAIN].staminaUsage &&
+										actor->stamina >= actor->maxStamina*0.3
+									) shouldOpenWithArmorGain = true;
+									if (shouldOpenWithArmorGain) {
+										actor->hasHyperArmor = true;
+										addAction(actor, ACTION_ARMOR_GAIN);
+									}
+
+									bool shouldOpenWithStasisGain = false;
+									if (
+										actor->team == 3 &&
+										rndPerc(0.01) &&
+										!actor->hasStasisAttack &&
+										actor->stamina >= actor->maxStamina * STASIS_STAMINA_PERC
+									) shouldOpenWithStasisGain = true;
+									if (shouldOpenWithStasisGain) {
+										addAction(actor, ACTION_STASIS_GAIN);
+									}
 								}
 
 								float dist = distance(position2, targetPosition2);
@@ -2999,9 +3042,7 @@ void stepGame(float elapsed) {
 									}
 								}
 							} else if (actor->aiState == AI_APPROACH_FOR_ATTACK) {
-								Vec2 dest2 = targetPosition2;
-
-								Vec2 dir = (dest2 - position2).normalize();
+								Vec2 dir = (targetPosition2 - position2).normalize();
 								actor->movementAccel += v3(dir * speed);
 
 								if (distance(actor, target) < 100 && fabs(actor->position.y - target->position.y) < 100) {
@@ -3029,7 +3070,6 @@ void stepGame(float elapsed) {
 								}
 							}
 						}
-					} else if (actor->aiType == AI_DUMMY) {
 					}
 				} ///
 			}
@@ -4199,16 +4239,9 @@ void stepGame(float elapsed) {
 
 		{ /// Spawn enemies // Spawn npcs
 			auto createNpcUnit = [](Map *map)->Actor *{
-				Actor *actor = createActor(map, ACTOR_UNIT);
-				actor->stats[STAT_DAMAGE] = 5;
-				actor->stats[STAT_HP] = 5;
-				actor->stats[STAT_MAX_STAMINA] = 5;
-				actor->stats[STAT_STAMINA_REGEN] = 5;
-				actor->stats[STAT_MOVEMENT_SPEED] = 5;
-				actor->stats[STAT_ATTACK_SPEED] = 5;
-				actor->level = 0;
+				int team = rndPick(map->alliances, TEAMS_MAX);
+				Actor *actor = createUnit(map, team);
 
-				actor->team = rndPick(map->alliances, TEAMS_MAX);
 				actor->allianceCost = 0.05;
 
 				float surroundingAlliance = countSurroundingAlliance(getCoordsByCityMap(map), actor->team);
@@ -5016,6 +5049,22 @@ Actor *findDoorWithDestMapName(Map *map, char *destMapName) {
 	}
 
 	return NULL;
+}
+
+Actor *createUnit(Map *map, int team) {
+	Actor *actor = createActor(map, ACTOR_UNIT);
+	actor->stats[STAT_DAMAGE] = 5;
+	actor->stats[STAT_HP] = 5;
+	actor->stats[STAT_MAX_STAMINA] = 5;
+	actor->stats[STAT_STAMINA_REGEN] = 5;
+	actor->stats[STAT_MOVEMENT_SPEED] = 5;
+	actor->stats[STAT_ATTACK_SPEED] = 5;
+	actor->level = 0;
+
+	actor->team = team;
+	if (actor->team == 2) actor->hasHyperArmor = rndPerc(0.9);
+	if (actor->team == 3) actor->hasStasisAttack = rndPerc(0.9);
+	return actor;
 }
 
 Action *addAction(Actor *actor, ActionType type) {
