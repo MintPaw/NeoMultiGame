@@ -246,9 +246,6 @@ struct ActionTypeInfo {
 
 struct Globals {
 	ActionTypeInfo actionTypeInfos[ACTION_TYPES_MAX];
-	Vec3 actorSpriteOffset;
-	float actorSpriteScale;
-	float actorSpriteScaleMultiplier;
 	Vec3 actorModelOffset;
 	float actorModelScale;
 	float movementPercDistanceWalkingRatio;
@@ -771,7 +768,6 @@ struct Game {
 	bool debugDrawUnitAiState;
 	bool debugDrawActorTargets;
 	bool debugDrawUnitBoxes;
-	bool debugDrawUnitBillboards;
 	bool debugDrawUnitModels;
 	bool debugDrawVision;
 	bool debugNeverTakeDamage;
@@ -847,7 +843,6 @@ void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushSphere(Sphere sphere, int color, float alpha=1);
 void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int color=0xFFFFFFFF);
 void pushBillboard(DrawBillboardCall billboard);
-void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped);
 WorldElement *createWorldElement();
 void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color);
 Log3Buffer *log3f(Vec3 position, const char *msg, ...);
@@ -893,7 +888,6 @@ void runGame() {
 	initRenderer(res.x, res.y);
 	initTextureSystem();
 	initFonts();
-	initAnimations();
 	nguiInit();
 
 	platformUpdateLoop(updateGame);
@@ -907,32 +901,9 @@ void updateGame() {
 		game->particleFont = createFont("assets/common/arial.ttf", 25);
 		game->simpleStatsFont = createFont("assets/common/arial.ttf", 18);
 
-		animSys->loopsByDefault = true;
-		animSys->frameRate = 60;
-
-		bool reprocessSheets = false;
-		for (int i = 0; i < assetPathsNum; i++) {
-			char *path = assetPaths[i];
-			if (strstr(path, "/needsReprocess.dummy")) {
-				reprocessSheets = true;
-				deleteFile(path);
-			}
-		}
-		if (reprocessSheets) removeDirectory("assets/sheets");
-
-		if (fileExists("assets/sheets/sheetData.bin")) {
-			loadSpriteSheet("assets/sheets/sheetData.bin");
-		} else {
-			packSpriteSheet("assets/frames");
-
-			if (!directoryExists("assets/sheets")) createDirectory("assets/sheets");
-			saveSpriteSheets("assets/sheets");
-		}
-
 		loadGlobals();
 
 		{ /// Animation data
-			// char *str = (char *)readFile("assets/frames/Unit/params.vars");
 			char *str = (char *)readFile("assets/skeletons/unit.markers");
 			game->animationMarkerData = (AnimationMarkerData *)zalloc(sizeof(AnimationMarkerData) * countChar(str, '\n'));
 
@@ -1650,7 +1621,6 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw unit ai state", &game->debugDrawUnitAiState);
 			ImGui::Checkbox("Draw actor targets", &game->debugDrawActorTargets);
 			ImGui::Checkbox("Draw unit boxes", &game->debugDrawUnitBoxes);
-			ImGui::Checkbox("Draw unit billboards", &game->debugDrawUnitBillboards);
 			ImGui::Checkbox("Draw unit models", &game->debugDrawUnitModels);
 			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
 			ImGui::Checkbox("Show prewarm", &game->debugShowPrewarm);
@@ -2013,9 +1983,6 @@ void stepGame(float elapsed) {
 				ImGui::TreePop();
 			}
 
-			ImGui::DragFloat3("Actor sprite offset", &globals->actorSpriteOffset.x);
-			ImGui::DragFloat("Actor sprite scale", &globals->actorSpriteScale, 0.01);
-			ImGui::DragFloat("Actor sprite scale multiplier", &globals->actorSpriteScaleMultiplier, 0.01);
 			ImGui::DragFloat3("Actor model offset", &globals->actorModelOffset.x);
 			ImGui::DragFloat("Actor model scale", &globals->actorModelScale, 0.01);
 			ImGui::DragFloat("Movement perc distance walking ratio", &globals->movementPercDistanceWalkingRatio, 0.01, 0, 0, "%.4f");
@@ -3278,35 +3245,6 @@ void stepGame(float elapsed) {
 						}
 					}
 				}
-
-				{ /// 2d
-					Frame *frame = NULL;
-					Animation *anim = getAnimationOrEmpty(frameSprintf("Unit/%s", animName));
-					if (anim) {
-						anim->loops = animLoops;
-						frame = getAnimFrameAtSecond(anim, animTime);
-						if (animPercOverride != -1) {
-							int frameInt = (int)roundf(animPercOverride * (anim->framesNum-1));
-							frame = anim->frames[frameInt];
-						}
-					}
-
-					float scale = 1;
-					bool flipped = false;
-					if (actor->facingLeft) flipped = true;
-
-					DrawBillboardCall billboard = {};
-					billboard.camera = game->camera3d;
-					billboard.tint = teamColors[actor->team];
-					billboard.alpha = 1;
-					if (game->debugDrawUnitBillboards) {
-						if (frame) {
-							pushBillboardFrame(billboard, frame, aabb, scale, flipped);
-						} else {
-							pushAABB(aabb, teamColors[actor->team]);
-						}
-					}
-				} ///
 
 				{ /// 3d
 					actor->modelMatrix = mat4();
@@ -5396,64 +5334,6 @@ void pushBillboard(DrawBillboardCall billboard) {
 	game->billboards[game->billboardsNum++] = billboard;
 }
 
-void pushBillboardFrame(DrawBillboardCall billboard, Frame *frame, AABB aabb, float scale, bool flipped) {
-	Globals *globals = &game->globals;
-
-	Vec3 position = getCenter(aabb) + globals->actorSpriteOffset;
-	Rect source = {};
-	source.width = frame->width;
-	source.height = frame->height;
-	source.x = frame->srcX;
-	source.y = frame->texture->height - source.height - frame->srcY;
-
-	scale *= globals->actorSpriteScale * globals->actorSpriteScaleMultiplier;
-	Vec2 size = v2(frame->width, frame->height);
-	size *= scale;
-
-	/*
-		 0   3
-		 -----
-		 |   |
-		 -----
-		 1   2
-		 */
-	Rect inner;
-	inner.x = frame->destOffX*scale;
-	inner.y = frame->destOffY*scale;
-	inner.width = frame->width*scale;
-	inner.height = frame->height*scale;
-
-	Vec3 billboardOffset;
-	billboardOffset.x = aabb.min.x + inner.x;
-	billboardOffset.y = getCenter(aabb).y-0.01;
-	billboardOffset.z = aabb.max.z - inner.height;
-
-	Vec3 verts[] = {
-		globals->actorSpriteOffset + billboardOffset + v3(0, 0, -inner.y+inner.height),
-		globals->actorSpriteOffset + billboardOffset + v3(0, 0, 0 -inner.y),
-		globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y+inner.height),
-		globals->actorSpriteOffset + billboardOffset + v3(inner.width, 0, -inner.y),
-	};
-	// pushTriangle(verts[0], verts[1], verts[2], 0xFF0000FF);
-	// pushTriangle(verts[2], verts[1], verts[3], 0xFF0000FF);
-
-	position.x = (verts[0].x + verts[3].x)/2;
-	position.y = verts[0].y - 1;
-	position.z = (verts[0].z + verts[1].z)/2;
-	size = getSize(inner);
-	if (flipped) {
-		float edgeDist = aabb.max.x - position.x;
-		position.x = aabb.min.x + edgeDist;
-		size.x *= -1;
-	}
-
-	billboard.renderTexture = frame->texture;
-	billboard.size = size;
-	billboard.source = source;
-	billboard.position = position;
-	pushBillboard(billboard);
-}
-
 WorldElement *createWorldElement() {
 	if (game->worldElementsNum > WORLD_ELEMENTS_MAX-1) {
 		game->worldElementsNum = WORLD_ELEMENTS_MAX-1;
@@ -5767,9 +5647,9 @@ void saveGlobals() {
 		writeFloat(stream, info->blockThruster.maxTime);
 	}
 
-	writeVec3(stream, globals->actorSpriteOffset);
-	writeFloat(stream, globals->actorSpriteScale);
-	writeFloat(stream, globals->actorSpriteScaleMultiplier);
+	writeVec3(stream, v3());
+	writeFloat(stream, 0);
+	writeFloat(stream, 0);
 	writeVec3(stream, globals->actorModelOffset);
 	writeFloat(stream, globals->actorModelScale);
 	writeFloat(stream, globals->movementPercDistanceWalkingRatio);
@@ -5834,9 +5714,9 @@ void loadGlobals() {
 		info->blockThruster.maxTime = readFloat(stream);
 	}
 
-	globals->actorSpriteOffset = readVec3(stream);
-	globals->actorSpriteScale = readFloat(stream);
-	globals->actorSpriteScaleMultiplier = readFloat(stream);
+	readVec3(stream);
+	readFloat(stream);
+	readFloat(stream);
 	globals->actorModelOffset = readVec3(stream);
 	globals->actorModelScale = readFloat(stream);
 	globals->movementPercDistanceWalkingRatio = readFloat(stream);

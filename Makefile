@@ -973,10 +973,3 @@ genButt2GoZips:
 		rm -f movie.html; \
 		rm -f ../ngHtml.zip; \
 		$(SEVEN_ZIP) a -tzip ../ngHtml.zip .
-
-copyConcreteJungleUnitFrames:
-	rm -rf /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/frames
-	cp -r /c/bin/frames/* /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/frames
-
-delConcreteJungleUnitFrames:
-	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/frames -type f -name "*.png" -delete
