@@ -189,8 +189,10 @@ enum ActionType {
 	ACTION_AIR_ATTACK1_KNIFE=74,
 	ACTION_TOSS=75,
 	ACTION_CREATE_ITEM=76,
-	ACTION_STASH_ON_HIP=77,
-	ACTION_STASH_ON_BACK=78,
+	ACTION_STASH_ON_BACK=77,
+	ACTION_STASH_ON_HIP=78,
+	ACTION_SWAP_HELD_ITEM_FOR_BACK=100,
+	ACTION_SWAP_HELD_ITEM_FOR_HIP=101,
 	ACTION_TYPES_MAX=128,
 };
 
@@ -509,6 +511,8 @@ struct Actor {
 	float stasisTimeLeft;
 
 	Item heldItem;
+	Item backItem;
+	Item hipItem;
 
 #define STYLES_MAX 4
 	Style styles[STYLES_MAX];
@@ -2122,7 +2126,8 @@ void stepGame(float elapsed) {
 
 	Vec2 inputVec = v2();
 	Vec2 movementVec = v2();
-	bool jumpPressed, punchPressed, kickPressed, drinkPotionPressed, dashButtonPressed, armorGainButtonPressed, stasisGainButtonPressed;
+	bool jumpPressed, punchPressed, kickPressed;
+	bool drinkPotionPressed, dashButtonPressed, armorGainButtonPressed, stasisGainButtonPressed, stashWeaponButtonPressed;
 	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
@@ -2133,6 +2138,7 @@ void stepGame(float elapsed) {
 		dashButtonPressed = false;
 		armorGainButtonPressed = false;
 		stasisGainButtonPressed = false;
+		stashWeaponButtonPressed = false;
 		changeStyle1Pressed = false;
 		changeStyle2Pressed = false;
 		changeStyle3Pressed = false;
@@ -2145,10 +2151,10 @@ void stepGame(float elapsed) {
 		if (game->inEditor) canInput = false;
 		if (player->stamina <= 0) canInput = false;
 
-		if (keyPressed('W') || keyPressed(KEY_UP) || joyButtonPressed(0, JOY_PAD_UP)) inputVec.y++;
-		if (keyPressed('S') || keyPressed(KEY_DOWN) || joyButtonPressed(0, JOY_PAD_DOWN)) inputVec.y--;
-		if (keyPressed('A') || keyPressed(KEY_LEFT) || joyButtonPressed(0, JOY_PAD_LEFT)) inputVec.x--;
-		if (keyPressed('D') || keyPressed(KEY_RIGHT) || joyButtonPressed(0, JOY_PAD_RIGHT)) inputVec.x++;
+		if (keyPressed('W') || keyPressed(KEY_UP)) inputVec.y++;
+		if (keyPressed('S') || keyPressed(KEY_DOWN)) inputVec.y--;
+		if (keyPressed('A') || keyPressed(KEY_LEFT)) inputVec.x--;
+		if (keyPressed('D') || keyPressed(KEY_RIGHT)) inputVec.x++;
 		Vec2 leftStick = joyLeftStick(0);
 		inputVec.y += clampMap(leftStick.y, -0.2, -1, 0, 1); // This doesn't actually result in smooth movement
 		inputVec.y -= clampMap(leftStick.y, 0.2, 1, 0, 1);
@@ -2166,6 +2172,7 @@ void stepGame(float elapsed) {
 			if (game->alliancesControlled[1] && player->isOnGround && (keyJustPressed('N') || joyButtonJustPressed(0, JOY_R1))) dashButtonPressed = true;
 			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) armorGainButtonPressed = true;
 			if (game->alliancesControlled[3] && player->isOnGround && (keyJustPressed('U') || joyButtonJustPressed(0, JOY_R2))) stasisGainButtonPressed = true;
+			if (game->alliancesControlled[5] && player->isOnGround && (keyJustPressed('H') || joyButtonJustPressed(0, JOY_PAD_DOWN))) stashWeaponButtonPressed = true;
 			if (keyJustPressed('1')) changeStyle1Pressed = true;
 			if (keyJustPressed('2')) changeStyle2Pressed = true;
 			if (keyJustPressed('3')) changeStyle3Pressed = true;
@@ -2199,6 +2206,7 @@ void stepGame(float elapsed) {
 		{ /// Update action
 			if (actor->actionsNum > 0) {
 				Action *action = &actor->actions[0];
+
 				if (action->type != ACTION_BLOCKSTUN) actor->isBlocking = false;
 
 				bool actionDone = false;
@@ -2583,6 +2591,8 @@ void stepGame(float elapsed) {
 								particle->tint = 0x80606090;
 							}
 						}
+					} else if (action->type == ACTION_SWAP_HELD_ITEM_FOR_BACK || action->type == ACTION_SWAP_HELD_ITEM_FOR_HIP) {
+						logf("@hack Instant action at the start of the queue?\n");
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2606,6 +2616,33 @@ void stepGame(float elapsed) {
 			} else { 
 				actor->timeWithoutAction += elapsed;
 			}
+
+			for (;;) {
+				bool instantlyProcessedAction = false;
+
+				if (actor->actionsNum > 0) {
+					Action *action = &actor->actions[0];
+					if (action->type == ACTION_SWAP_HELD_ITEM_FOR_BACK) {
+						instantlyProcessedAction = true;
+						Item temp = actor->backItem;
+						actor->backItem = actor->heldItem;
+						actor->heldItem = temp;
+					} else if (action->type == ACTION_SWAP_HELD_ITEM_FOR_HIP) {
+						instantlyProcessedAction = true;
+						Item temp = actor->hipItem;
+						actor->hipItem = actor->heldItem;
+						actor->heldItem = temp;
+					}
+				}
+
+				if (instantlyProcessedAction) {
+					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
+					actor->actionsNum--;
+				} else {
+					break;
+				}
+			}
+
 		} ///
 
 		{ /// Update buffs
@@ -2789,6 +2826,45 @@ void stepGame(float elapsed) {
 						addAction(actor, ACTION_STASIS_GAIN);
 					} else {
 						infof("Not enough stamina\n");
+					}
+				}
+
+				if (stashWeaponButtonPressed) {
+					auto doesItemTypeGoOnBack = [](ItemType type) {
+						if (type == ITEM_SWORD) return true;
+						if (type == ITEM_KNIFE) return false;
+						return false;
+					};
+
+					ItemType typeToSwapFor = actor->backItem.type;
+					if (typeToSwapFor == ITEM_NONE) typeToSwapFor = actor->hipItem.type;
+
+					if (actor->heldItem.type != ITEM_NONE) {
+						if (doesItemTypeGoOnBack(actor->heldItem.type)) {
+							addAction(actor, ACTION_STASH_ON_BACK);
+							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
+						} else { 
+							addAction(actor, ACTION_STASH_ON_HIP);
+							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
+						}
+
+						if (typeToSwapFor != ITEM_NONE && doesItemTypeGoOnBack(actor->heldItem.type) != doesItemTypeGoOnBack(typeToSwapFor)) {
+							if (doesItemTypeGoOnBack(typeToSwapFor)) {
+								addAction(actor, ACTION_STASH_ON_BACK);
+								addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
+							} else { 
+								addAction(actor, ACTION_STASH_ON_HIP);
+								addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
+							}
+						}
+					} else if (typeToSwapFor != ITEM_NONE) {
+						if (doesItemTypeGoOnBack(typeToSwapFor)) {
+							addAction(actor, ACTION_STASH_ON_BACK);
+							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
+						} else { 
+							addAction(actor, ACTION_STASH_ON_HIP);
+							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
+						}
 					}
 				}
 
@@ -3263,7 +3339,7 @@ void stepGame(float elapsed) {
 
 					if (!mainAnim) {
 						mainAnim = getAnimation(actor->skeleton, "idle");
-						logf("Anim '%s'/'%s' not found\n", altAnimName, animName);
+						logf("Anim '%s'/'%s' not found (%d)\n", altAnimName, animName, platform->frameCount);
 						pushAABB(aabb, teamColors[actor->team]);
 					}
 
@@ -3308,9 +3384,26 @@ void stepGame(float elapsed) {
 						pushModel(getModel("assets/models/unit.model"), actor->modelMatrix, actor->skeleton, color);
 
 						Matrix4 heldItemMatrix = getBoneMatrix(actor, "weapon.r");
+						Matrix4 backItemMatrix = getBoneMatrix(actor, "weaponBack");
+						Matrix4 hipItemMatrix = getBoneMatrix(actor, "weaponBelt");
 
-						if (actor->heldItem.type == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), heldItemMatrix);
-						else if (actor->heldItem.type == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), heldItemMatrix);
+						if (actor->heldItem.type == ITEM_SWORD) {
+							pushModel(getModel("assets/models/sword.model"), heldItemMatrix);
+						} else if (actor->heldItem.type == ITEM_KNIFE) {
+							pushModel(getModel("assets/models/knife.model"), heldItemMatrix);
+						}
+
+						if (actor->backItem.type == ITEM_SWORD) {
+							pushModel(getModel("assets/models/sword.model"), backItemMatrix);
+						} else if (actor->backItem.type == ITEM_KNIFE) {
+							pushModel(getModel("assets/models/knife.model"), backItemMatrix);
+						}
+
+						if (actor->hipItem.type == ITEM_SWORD) {
+							pushModel(getModel("assets/models/sword.model"), hipItemMatrix);
+						} else if (actor->hipItem.type == ITEM_KNIFE) {
+							pushModel(getModel("assets/models/knife.model"), hipItemMatrix);
+						}
 					}
 				} ///
 
@@ -4603,6 +4696,8 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "R1 - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "L3 - Armor up";
 				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "R2 - Stasis";
+				if (game->alliancesControlled[4]) textLines[textLinesNum++] = "Circle(hold) - Create weapon";
+				if (game->alliancesControlled[5]) textLines[textLinesNum++] = "D-pad down - Stash weapon";
 			} else {
 				textLines[textLinesNum++] = "J - Punch";
 				textLines[textLinesNum++] = "K - Kick";
@@ -4612,6 +4707,9 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "N - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "B - Armor up";
 				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "U - Stasis";
+				if (game->alliancesControlled[4]) textLines[textLinesNum++] = "L(hold) - Create weapon";
+				if (game->alliancesControlled[5]) textLines[textLinesNum++] = "H - Stash weapon";
+	// - [Down] Weapon stash?
 			}
 
 #if 0
