@@ -93,7 +93,7 @@ def exportAction(armature, action, outPath, altName=None):
         scn.frame_set(i)
         animFileName = animName
         animFileName += "_"
-        animFileName += str(frameIndex).zfill(3)
+        animFileName += str(i).zfill(3)
         exportImage(outPath, animFileName)
         totalFrameCount += 1
 
@@ -166,8 +166,8 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         armature = scn.objects["ARM_"+unitName]
 
         actions = bpy.data.actions
-        bpy.data.scenes[0].objects["sword"].hide_render = True
-        bpy.data.scenes[0].objects["knife"].hide_render = True
+        bpy.data.scenes[0].objects["Sword"].hide_render = True
+        bpy.data.scenes[0].objects["Knife"].hide_render = True
 
         exportAction(armature, actions["idle"], outPath, "idle");
         exportAction(armature, actions["walk"], outPath, "walk");
@@ -204,7 +204,7 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["upTest"], outPath, "upTest");
         exportAction(armature, actions["duckTest"], outPath, "duckTest");
 
-        bpy.data.scenes[0].objects["sword"].hide_render = False
+        bpy.data.scenes[0].objects["Sword"].hide_render = False
 
         exportAction(armature, actions["endPickup_sword"], outPath, "endPickup_sword");
         exportAction(armature, actions["idle_sword"], outPath, "idle_sword");
@@ -228,8 +228,8 @@ class MESH_OP_generate_concrete_jungle(bpy.types.Operator):
         exportAction(armature, actions["drinkPotionFinish"], outPath, "drinkPotionFinish_sword");
         exportAction(armature, actions["drinkPotionFail"], outPath, "drinkPotionFail_sword");
 
-        bpy.data.scenes[0].objects["sword"].hide_render = True
-        bpy.data.scenes[0].objects["knife"].hide_render = False
+        bpy.data.scenes[0].objects["Sword"].hide_render = True
+        bpy.data.scenes[0].objects["Knife"].hide_render = False
 
         exportAction(armature, actions["endPickup"], outPath, "endPickup_knife")
         exportAction(armature, actions["idle_knife"], outPath, "idle_knife");

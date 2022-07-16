@@ -83,14 +83,19 @@ void readAnimation(DataStream *stream, SkeletonAnimation *anim);
 void readBone(DataStream *stream, Bone *bone, int frameCount);
 void readBone2(DataStream *stream, Bone *bone, int frameCount);
 void readBaseSkeleton(DataStream *stream, BaseSkeleton *base);
+
 Skeleton *deriveSkeleton(char *skeletonPath);
 Skeleton *deriveSkeleton(BaseSkeleton *base);
+
 SkeletonBlend *createSkeletonBlend(Skeleton *skeleton, const char *name, SkeletonBlendType type);
 SkeletonBlend *getSkeletonBlend(Skeleton *skeleton, const char *name);
+
 int getSkeletonAnimationIndexByName(Skeleton *skeleton, const char *name);
 SkeletonAnimation *getAnimation(Skeleton *skeleton, const char *name);
+
 int getBoneIndex(BaseSkeleton *base, const char *boneName);
 int getBoneIndex(Skeleton *skeleton, const char *boneName);
+
 void updateSkeleton(Skeleton *skeleton, float elapsed);
 void destroySkeleton(Skeleton *skeleton);
 

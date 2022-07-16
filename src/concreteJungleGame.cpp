@@ -420,6 +420,7 @@ struct Actor {
 	Vec3 position;
 	Vec3 size;
 	Skeleton *skeleton;
+	Matrix4 modelMatrix;
 
 #define MAP_NAME_MAX_LEN 64
 	char destMapName[MAP_NAME_MAX_LEN];
@@ -588,6 +589,7 @@ enum ParticleType {
 struct Particle {
 	ParticleType type;
 	Vec3 position;
+	Vec2 size;
 	Vec3 velo;
 	int tint;
 	float time;
@@ -770,6 +772,7 @@ struct Game {
 	bool debugDrawUnitModels;
 	bool debugDrawVision;
 	bool debugNeverTakeDamage;
+	bool debugNeverLoseStamina;
 	bool debugAiNeverApproaches;
 	bool debugForceRestock;
 	Map *editorSelectedCityMap;
@@ -854,6 +857,7 @@ int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
 Particle *createParticle(ParticleType type);
 void applyThruster(Actor *actor, Thruster newThruster, bool flipX=false);
+Matrix4 getBoneMatrix(Actor *actor, char *boneName);
 
 void saveMap(Map *map, int mapFileIndex);
 void loadMap(Map *map, int mapFileIndex);
@@ -1252,9 +1256,11 @@ void updateGame() {
 
 					int tint = billboard->tint;
 					Vec4 tintVec = hexToArgbFloat(billboard->tint);
-					tintVec *= billboard->alpha;
+					tintVec.x *= billboard->alpha;
+					// tintVec *= billboard->alpha;
 					tint = argbToHex(tintVec);
-					// tint = 0x80808080; //@todo Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
+					// tint = 0x80808080; //@incomplete Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
+					// tint = 0x80FFFFFF; // And this is pure white (no alpha blending?)
 
 					if (billboard->texture) {
 						drawBillboard(
@@ -1733,6 +1739,7 @@ void stepGame(float elapsed) {
 			}
 
 			ImGui::Checkbox("Never take damage", &game->debugNeverTakeDamage);
+			ImGui::Checkbox("Never lose stamina", &game->debugNeverLoseStamina);
 			ImGui::Checkbox("AI never approaches", &game->debugAiNeverApproaches);
 
 			ImGui::Text("alliancesControlled: ");
@@ -2573,6 +2580,39 @@ void stepGame(float elapsed) {
 						}
 					} else if (action->type == ACTION_STASIS_GAIN) {
 						actor->hasStasisAttack = true;
+
+						char *bonesToSpawnOn[] = {
+							"chest", 
+							"body", 
+							"head", 
+							"hand.l", 
+							"arm1.l", 
+							"arm2.l", 
+							"leg1.l", 
+							"leg2.l", 
+							"toes.l", 
+							"hand.r", 
+							"arm1.r", 
+							"arm2.r", 
+							"leg1.r", 
+							"leg2.r", 
+							"toes.r", 
+						};
+
+						for (int i = 0; i < ArrayLength(bonesToSpawnOn); i++) {
+							Matrix4 boneMatrix = getBoneMatrix(actor, bonesToSpawnOn[i]);
+							pushSphere(makeSphere(boneMatrix * v3(), 20), 0xFFFF0000);
+							for (int i = 0; i < 2; i++) {
+								Particle *particle = createParticle(PARTICLE_DUST);
+								particle->position = boneMatrix * v3();
+								particle->position.y -= 5;
+								particle->size = v2(128, 128);
+								particle->velo.x = rndFloat(-2, 2);
+								particle->velo.z = rndFloat(-1, 1);
+								particle->maxTime = rndFloat(5, 10);
+								particle->tint = 0x80606090;
+							}
+						}
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -3266,20 +3306,11 @@ void stepGame(float elapsed) {
 				} ///
 
 				{ /// 3d
-					Matrix4 modelMatrix = mat4();
-					modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
-					modelMatrix.TRANSLATE(globals->actorModelOffset);
-
-#if 1
-					modelMatrix.ROTATE_EULER(0, 0, actor->facingAngle);
-#else
-					if (actor->facingLeft) {
-						modelMatrix.ROTATE_EULER(0, 0, -M_PI/2);
-					} else {
-						modelMatrix.ROTATE_EULER(0, 0, M_PI/2);
-					}
-#endif
-					modelMatrix.SCALE(globals->actorModelScale);
+					actor->modelMatrix = mat4();
+					actor->modelMatrix.TRANSLATE(getCenter(aabb) - v3(0, 0, getSize(aabb).z/2));
+					actor->modelMatrix.TRANSLATE(globals->actorModelOffset);
+					actor->modelMatrix.ROTATE_EULER(0, 0, actor->facingAngle);
+					actor->modelMatrix.SCALE(globals->actorModelScale);
 
 					char *altAnimName = NULL;
 					if (actor->heldItem.type == ITEM_SWORD) altAnimName = frameSprintf("%s_sword", animName);
@@ -3333,13 +3364,9 @@ void stepGame(float elapsed) {
 					if (game->debugDrawUnitModels) {
 						int color = teamColors[actor->team];
 						if (actor->stasisTimeLeft > 0) color = lerpColor(color, 0xFF0000FF, 0.5);
-						pushModel(getModel("assets/models/unit.model"), modelMatrix, actor->skeleton, color);
+						pushModel(getModel("assets/models/unit.model"), actor->modelMatrix, actor->skeleton, color);
 
-						int targetBoneIndex = getBoneIndex(actor->skeleton, "weapon.r");
-						Bone *bone = &actor->skeleton->base->bones[targetBoneIndex];
-						Matrix4 heldItemMatrix = modelMatrix * actor->skeleton->meshTransforms[targetBoneIndex] * bone->modelSpaceMatrix;
-						// Vec3 pos = heldItemMatrix * v3();
-						// pushSphere(makeSphere(pos, 20), 0xFFFF0000);
+						Matrix4 heldItemMatrix = getBoneMatrix(actor, "weapon.r");
 
 						if (actor->heldItem.type == ITEM_SWORD) pushModel(getModel("assets/models/sword.model"), heldItemMatrix);
 						else if (actor->heldItem.type == ITEM_KNIFE) pushModel(getModel("assets/models/knife.model"), heldItemMatrix);
@@ -3393,6 +3420,8 @@ void stepGame(float elapsed) {
 					}
 				}
 			} ///
+
+			if (game->debugNeverLoseStamina && actor->playerControlled) actor->stamina = actor->maxStamina;
 		} else if (actor->type == ACTOR_GROUND) {
 			pushAABB(getAABB(actor), 0xFFE8C572);
 		} else if (actor->type == ACTOR_WALL) {
@@ -3848,7 +3877,7 @@ void stepGame(float elapsed) {
 			DrawBillboardCall billboard = {};
 			billboard.renderTexture = renderer->circleTexture1024;
 			billboard.position = particle->position;
-			billboard.size = v2(32, 32);
+			billboard.size = particle->size;
 			billboard.tint = particle->tint;
 			billboard.alpha = alpha;
 			pushBillboard(billboard);
@@ -5557,14 +5586,15 @@ Effect *createEffect(EffectType type, Vec3 position) {
 
 Particle *createParticle(ParticleType type) {
 	if (game->particlesNum > game->particlesMax-1) {
-		game->particlesNum = game->particlesMax-1;
-		logf("Too many particles! (should self expand)\n");
+		game->particles = (Particle *)resizeArray(game->particles, sizeof(Particle), game->particlesNum, game->particlesMax*2);
+		game->particlesMax *= 2;
 	}
 
 	Particle *particle = &game->particles[game->particlesNum++];
 	memset(particle, 0, sizeof(Particle));
 	particle->type = type;
 	particle->tint = 0xFFFFFFFF;
+	particle->size = v2(32, 32);
 	return particle;
 }
 
@@ -5577,6 +5607,18 @@ void applyThruster(Actor *actor, Thruster newThruster, bool flipX) {
 	*thruster = newThruster;
 	if (flipX) thruster->accel.x *= -1;
 	thruster->time = 0; // This shouldn't actually be needed
+}
+
+Matrix4 getBoneMatrix(Actor *actor, char *boneName) {
+	int boneIndex = getBoneIndex(actor->skeleton, boneName);
+	if (boneIndex == -1) {
+		logf("Can't find bone %s\n", boneName);
+		return mat4();
+	}
+
+	Bone *bone = &actor->skeleton->base->bones[boneIndex];
+	Matrix4 matrix = actor->modelMatrix * actor->skeleton->meshTransforms[boneIndex] * bone->modelSpaceMatrix;
+	return matrix;
 }
 
 void saveMap(Map *map, int mapFileIndex) {
