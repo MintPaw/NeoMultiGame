@@ -191,8 +191,6 @@ enum ActionType {
 	ACTION_CREATE_ITEM=76,
 	ACTION_STASH_ON_BACK=77,
 	ACTION_STASH_ON_HIP=78,
-	ACTION_SWAP_HELD_ITEM_FOR_BACK=100,
-	ACTION_SWAP_HELD_ITEM_FOR_HIP=101,
 	ACTION_TYPES_MAX=128,
 };
 
@@ -2591,8 +2589,14 @@ void stepGame(float elapsed) {
 								particle->tint = 0x80606090;
 							}
 						}
-					} else if (action->type == ACTION_SWAP_HELD_ITEM_FOR_BACK || action->type == ACTION_SWAP_HELD_ITEM_FOR_HIP) {
-						logf("@hack Instant action at the start of the queue?\n");
+					} else if (action->type == ACTION_STASH_ON_BACK) {
+						Item temp = actor->backItem;
+						actor->backItem = actor->heldItem;
+						actor->heldItem = temp;
+					} else if (action->type == ACTION_STASH_ON_HIP) {
+						Item temp = actor->hipItem;
+						actor->hipItem = actor->heldItem;
+						actor->heldItem = temp;
 					}
 
 					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
@@ -2616,33 +2620,6 @@ void stepGame(float elapsed) {
 			} else { 
 				actor->timeWithoutAction += elapsed;
 			}
-
-			for (;;) {
-				bool instantlyProcessedAction = false;
-
-				if (actor->actionsNum > 0) {
-					Action *action = &actor->actions[0];
-					if (action->type == ACTION_SWAP_HELD_ITEM_FOR_BACK) {
-						instantlyProcessedAction = true;
-						Item temp = actor->backItem;
-						actor->backItem = actor->heldItem;
-						actor->heldItem = temp;
-					} else if (action->type == ACTION_SWAP_HELD_ITEM_FOR_HIP) {
-						instantlyProcessedAction = true;
-						Item temp = actor->hipItem;
-						actor->hipItem = actor->heldItem;
-						actor->heldItem = temp;
-					}
-				}
-
-				if (instantlyProcessedAction) {
-					arraySpliceIndex(actor->actions, actor->actionsNum, sizeof(Action), 0);
-					actor->actionsNum--;
-				} else {
-					break;
-				}
-			}
-
 		} ///
 
 		{ /// Update buffs
@@ -2842,28 +2819,22 @@ void stepGame(float elapsed) {
 					if (actor->heldItem.type != ITEM_NONE) {
 						if (doesItemTypeGoOnBack(actor->heldItem.type)) {
 							addAction(actor, ACTION_STASH_ON_BACK);
-							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
 						} else { 
 							addAction(actor, ACTION_STASH_ON_HIP);
-							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
 						}
 
 						if (typeToSwapFor != ITEM_NONE && doesItemTypeGoOnBack(actor->heldItem.type) != doesItemTypeGoOnBack(typeToSwapFor)) {
 							if (doesItemTypeGoOnBack(typeToSwapFor)) {
 								addAction(actor, ACTION_STASH_ON_BACK);
-								addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
 							} else { 
 								addAction(actor, ACTION_STASH_ON_HIP);
-								addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
 							}
 						}
 					} else if (typeToSwapFor != ITEM_NONE) {
 						if (doesItemTypeGoOnBack(typeToSwapFor)) {
 							addAction(actor, ACTION_STASH_ON_BACK);
-							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_BACK);
 						} else { 
 							addAction(actor, ACTION_STASH_ON_HIP);
-							addAction(actor, ACTION_SWAP_HELD_ITEM_FOR_HIP);
 						}
 					}
 				}
@@ -3339,7 +3310,7 @@ void stepGame(float elapsed) {
 
 					if (!mainAnim) {
 						mainAnim = getAnimation(actor->skeleton, "idle");
-						logf("Anim '%s'/'%s' not found (%d)\n", altAnimName, animName, platform->frameCount);
+						logf("Anim '%s'/'%s' not found\n", altAnimName, animName);
 						pushAABB(aabb, teamColors[actor->team]);
 					}
 
@@ -4709,7 +4680,6 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "U - Stasis";
 				if (game->alliancesControlled[4]) textLines[textLinesNum++] = "L(hold) - Create weapon";
 				if (game->alliancesControlled[5]) textLines[textLinesNum++] = "H - Stash weapon";
-	// - [Down] Weapon stash?
 			}
 
 #if 0
