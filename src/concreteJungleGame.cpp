@@ -397,12 +397,6 @@ enum AiType {
 	AI_NORMAL,
 };
 
-struct Style {
-	int activeItem0;
-	int activeItem1;
-	int passiveItem;
-};
-
 enum StoreType {
 	STORE_NONE,
 	STORE_ATTACK,
@@ -511,10 +505,6 @@ struct Actor {
 	Item heldItem;
 	Item backItem;
 	Item hipItem;
-
-#define STYLES_MAX 4
-	Style styles[STYLES_MAX];
-	int styleIndex;
 
 	float awareness;
 
@@ -822,7 +812,6 @@ Item *giveItem(Actor *actor, ItemType type, int amount);
 void removeItem(Actor *actor, ItemType type, int amount);
 Item *getItem(Actor *actor, int id);
 int getStashedItemCount(Actor *actor, ItemType type);
-int getEquippedItemCount(Actor *actor, ItemType type);
 float getStatPoints(Actor *actor, StatType stat);
 
 int getSurroundingAtMaxAlliance(Vec2i startingIndex, int team);
@@ -989,93 +978,93 @@ void updateGame() {
 			strcpy(info->name, "money");
 
 			info = &game->itemTypeInfos[ITEM_HEALTH_PACK];
-			strcpy(info->name, "health pack");
+			strcpy(info->name, "health pack (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 10;
 
 			info = &game->itemTypeInfos[ITEM_DAMAGE_BOOST];
-			strcpy(info->name, "damage boost");
+			strcpy(info->name, "damage boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_HP_BOOST];
-			strcpy(info->name, "hp boost");
+			strcpy(info->name, "hp boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_STAMINA_REGEN_BOOST];
-			strcpy(info->name, "stamina regen boost");
+			strcpy(info->name, "stamina regen boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_MAX_STAMINA_BOOST];
-			strcpy(info->name, "max stamina boost");
+			strcpy(info->name, "max stamina boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_MOVEMENT_SPEED_BOOST];
-			strcpy(info->name, "movement speed boost");
+			strcpy(info->name, "movement speed boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_ATTACK_SPEED_BOOST];
-			strcpy(info->name, "attack speed boost");
+			strcpy(info->name, "attack speed boost (doesn't work)");
 			info->slotType = ITEM_SLOT_GLOBAL;
 			info->basePrice = 25;
 
 			info = &game->itemTypeInfos[ITEM_MAGNET];
-			strcpy(info->name, "magnet");
+			strcpy(info->name, "magnet (doesn't work)");
 			info->slotType = ITEM_SLOT_PASSIVE;
 			info->basePrice = 30;
 
 			info = &game->itemTypeInfos[ITEM_HYPER_ARMOR];
-			strcpy(info->name, "hyper armor");
+			strcpy(info->name, "hyper armor (doesn't work)");
 			info->slotType = ITEM_SLOT_PASSIVE;
 			info->basePrice = 40;
 
 			info = &game->itemTypeInfos[ITEM_HEAVEN_STEP];
-			strcpy(info->name, "heaven step");
+			strcpy(info->name, "heaven step (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 50;
 			info->actionType = ACTION_HEAVEN_STEP;
 
 			info = &game->itemTypeInfos[ITEM_SHADOW_STEP];
-			strcpy(info->name, "shadow step");
+			strcpy(info->name, "shadow step (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 60;
 			info->actionType = ACTION_SHADOW_STEP;
 
 			info = &game->itemTypeInfos[ITEM_BUDDHA_PALM];
-			strcpy(info->name, "buddha palm");
+			strcpy(info->name, "buddha palm (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 70;
 			info->actionType = ACTION_BUDDHA_PALM;
 
 			info = &game->itemTypeInfos[ITEM_BLOOD_RAGE];
-			strcpy(info->name, "blood rage");
+			strcpy(info->name, "blood rage (doesn't work)");
 			info->slotType = ITEM_SLOT_PASSIVE;
 			info->basePrice = 80;
 
 			info = &game->itemTypeInfos[ITEM_DASH];
-			strcpy(info->name, "dash");
+			strcpy(info->name, "dash (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 90;
 			// info->actionType = ACTION_DASH;
 
 			info = &game->itemTypeInfos[ITEM_BRAIN_SAP];
-			strcpy(info->name, "brain sap");
+			strcpy(info->name, "brain sap (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 100;
 			info->actionType = ACTION_BRAIN_SAP;
 
 			info = &game->itemTypeInfos[ITEM_CULLING_BLADE];
-			strcpy(info->name, "culling blade");
+			strcpy(info->name, "culling blade (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 110;
 			info->actionType = ACTION_CULLING_BLADE;
 
 			info = &game->itemTypeInfos[ITEM_STICKY_NAPALM];
-			strcpy(info->name, "sticky napalm");
+			strcpy(info->name, "sticky napalm (doesn't work)");
 			info->slotType = ITEM_SLOT_ACTIVE;
 			info->basePrice = 120;
 			info->actionType = ACTION_STICKY_NAPALM;
@@ -1328,22 +1317,6 @@ void stepGame(float elapsed) {
 	if (elapsed > (1/60.0) + 0.001 && platform->frameCount % (60*5) == 0) logf("You shouldn't use high time steps...\n");
 	Globals *globals = &game->globals;
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
-
-	auto getActionType = [](Actor *actor, int actionIndex)->ActionType {
-		Globals *globals = &game->globals;
-		Style *style = &actor->styles[actor->styleIndex];
-
-		Item *item = NULL;
-		if (actionIndex == 0) item = getItem(actor, style->activeItem0);
-		if (actionIndex == 1) item = getItem(actor, style->activeItem1);
-		if (!item) return ACTION_NONE;
-		Assert(item->info);
-
-		ActionTypeInfo *atInfo = &globals->actionTypeInfos[item->info->actionType];
-		if (actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_ON_GROUND)) return ACTION_NONE;
-		if (!actor->isOnGround && !(atInfo->flags & _F_AT_ALLOWED_IN_AIR)) return ACTION_NONE;
-		return item->info->actionType;
-	};
 
 	{ /// Init city (and maps)
 		if (!game->cityInited) {
@@ -2126,7 +2099,6 @@ void stepGame(float elapsed) {
 	Vec2 movementVec = v2();
 	bool jumpPressed, punchPressed, kickPressed;
 	bool drinkPotionPressed, dashButtonPressed, armorGainButtonPressed, stasisGainButtonPressed, stashWeaponButtonPressed;
-	bool changeStyle1Pressed, changeStyle2Pressed, changeStyle3Pressed, changeStyle4Pressed;
 	bool pickupPressed;
 	{ /// Update inputs
 		jumpPressed = false;
@@ -2137,10 +2109,6 @@ void stepGame(float elapsed) {
 		armorGainButtonPressed = false;
 		stasisGainButtonPressed = false;
 		stashWeaponButtonPressed = false;
-		changeStyle1Pressed = false;
-		changeStyle2Pressed = false;
-		changeStyle3Pressed = false;
-		changeStyle4Pressed = false;
 		pickupPressed = false;
 
 		bool canInput = true;
@@ -2171,10 +2139,6 @@ void stepGame(float elapsed) {
 			if (game->alliancesControlled[2] && player->isOnGround && (keyJustPressed('B') || joyButtonJustPressed(0, JOY_L3))) armorGainButtonPressed = true;
 			if (game->alliancesControlled[3] && player->isOnGround && (keyJustPressed('U') || joyButtonJustPressed(0, JOY_R2))) stasisGainButtonPressed = true;
 			if (game->alliancesControlled[5] && player->isOnGround && (keyJustPressed('H') || joyButtonJustPressed(0, JOY_PAD_DOWN))) stashWeaponButtonPressed = true;
-			if (keyJustPressed('1')) changeStyle1Pressed = true;
-			if (keyJustPressed('2')) changeStyle2Pressed = true;
-			if (keyJustPressed('3')) changeStyle3Pressed = true;
-			if (keyJustPressed('4')) changeStyle4Pressed = true;
 		}
 	} ///
 
@@ -2603,7 +2567,6 @@ void stepGame(float elapsed) {
 					actor->actionsNum--;
 				}
 
-				if (getEquippedItemCount(actor, ITEM_BLOOD_RAGE)) actionTimeScale *= clampMap(actor->hp/actor->maxHp, 0.5, 0.2, 1, 2);
 				if (actor->hasStasisAttack) actionTimeScale *= 2;
 
 				if (action->time < activeMin && action->time + elapsed*actionTimeScale > activeMax) actionTimeScale = 1;
@@ -2756,26 +2719,6 @@ void stepGame(float elapsed) {
 							addAction(actor, ACTION_AIR_THROW);
 						}
 					}
-				}
-
-				if (changeStyle1Pressed) {
-					infof("Style 1\n");
-					actor->styleIndex = 0;
-				}
-
-				if (changeStyle2Pressed) {
-					infof("Style 2\n");
-					actor->styleIndex = 1;
-				}
-
-				if (changeStyle3Pressed) {
-					infof("Style 3\n");
-					actor->styleIndex = 2;
-				}
-
-				if (changeStyle4Pressed) {
-					infof("Style 4\n");
-					actor->styleIndex = 3;
 				}
 
 				if (pickupPressed) {
@@ -3522,13 +3465,6 @@ void stepGame(float elapsed) {
 			pushAABB(getAABB(actor), lerpColor(0xFF523501, 0xFF121212, actor->locked));
 		} else if (actor->type == ACTOR_ITEM) {
 			if (actor->isOnGround) {
-				if (getEquippedItemCount(player, ITEM_MAGNET) > 0) {
-					if (distance(player, actor) < 100) {
-						Vec3 dir = normalize(getCenter(getAABB(player)) - getCenter(getAABB(actor)));
-						actor->accel += dir * 5;
-					}
-				}
-
 				ItemTypeInfo *itemTypeInfo = &game->itemTypeInfos[actor->itemType];
 				if (itemTypeInfo->slotType != ITEM_SLOT_WEAPON && overlaps(actor, player)) {
 					if (actor->itemType == ITEM_MONEY) {
@@ -3741,12 +3677,6 @@ void stepGame(float elapsed) {
 			while (actor->movementPerc > 1) actor->movementPerc--;
 
 			if (actor->timeMoving == 0) actor->movementPerc = 0;
-		}
-
-		if (actor->hp < 20 && getEquippedItemCount(actor, ITEM_HEALTH_PACK) > 0) {
-			infof("Health pack used\n");
-			actor->hp += 100;
-			removeItem(actor, ITEM_HEALTH_PACK, 1);
 		}
 
 		if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
@@ -4540,31 +4470,11 @@ void stepGame(float elapsed) {
 					for (int i = 0; i < player->itemsNum; i++) {
 						Item *item = &player->items[i];
 
-						bool inUse = false;
-						for (int i = 0; i < STYLES_MAX; i++) {
-							Style *style = &player->styles[i];
-							for (int i = 0; i < 3; i++) {
-								int *slotPtr = NULL;
-								if (i == 0) slotPtr = &style->passiveItem;
-								if (i == 1) slotPtr = &style->activeItem0;
-								if (i == 2) slotPtr = &style->activeItem1;
-
-								if (item->id == *slotPtr) {
-									inUse = true;
-									break;
-								}
-							}
-						}
-
-						if (game->draggingItemId == item->id || inUse) pushAlpha(0.5);
-
 						Rect iconRect = makeRect(cursor, cellSize);
 						drawItemIcon(item, inflatePerc(iconRect, -0.1));
 
-						if (game->draggingItemId == item->id || inUse) popAlpha();
-
-						if (platform->mouseJustDown && contains(iconRect, game->mouse) && !game->draggingItemId && !inUse) {
-							game->draggingItemId = item->id;
+						if (platform->mouseJustDown && contains(iconRect, game->mouse)) {
+							logf("You clicked an item!\n");
 						}
 
 						cursor.x += iconRect.width;
@@ -4573,81 +4483,6 @@ void stepGame(float elapsed) {
 							cursor.y += cellSize.y;
 						}
 					}
-				}
-
-				bool itemDropped = game->draggingItemId && !platform->mouseDown;
-				Rect draggingRect = makeCenteredSquare(game->mouse, game->size.y * 0.05);
-
-				{
-					Rect stylesContainer = bg;
-					stylesContainer.width *= 0.5;
-					stylesContainer.x += stylesContainer.width;
-					stylesContainer = inflatePerc(stylesContainer, -0.1);
-					drawRect(stylesContainer, 0xFF444444);
-
-					int stylesMax = 4;
-					for (int i = 0; i < stylesMax; i++) {
-						Style *style = &player->styles[i];
-
-						Rect styleContainer = stylesContainer;
-						styleContainer.height /= stylesMax;
-						styleContainer.y += styleContainer.height * i;
-						styleContainer = inflatePerc(styleContainer, -0.1);
-						drawRect(styleContainer, 0xFF333333);
-
-						int slotsMax = 3;
-						for (int i = 0; i < slotsMax; i++) {
-							bool isActiveSlot = false;
-							int *slotPtr = NULL;
-							if (i == 0) {
-								slotPtr = &style->passiveItem;
-							} else if (i == 1) {
-								slotPtr = &style->activeItem0;
-								isActiveSlot = true;
-							} else if (i == 2) {
-								slotPtr = &style->activeItem1;
-								isActiveSlot = true;
-							} else {
-								logf("Invalid slot\n");
-							}
-
-							Rect slotRect = styleContainer;
-							slotRect.width /= slotsMax;
-							slotRect.x += slotRect.width * i;
-							slotRect = inflatePerc(slotRect, -0.2);
-							Item *item = getItem(player, *slotPtr);
-							if (item) {
-								drawItemIcon(item, slotRect);
-								Circle xCircle = makeCircle(v2(slotRect.x + slotRect.width, slotRect.y), game->size.y*0.02);
-								drawCircle(xCircle, 0xFFFF0000);
-								if (platform->mouseJustUp && contains(xCircle, game->mouse)) *slotPtr = 0;
-							} else {
-								int color = 0xFF111111;
-								if (!isActiveSlot) color = lerpColor(color, 0xFF0000FF, 0.1);
-								drawRect(slotRect, color);
-							}
-
-							bool canDropItemHere = false;
-							Item *draggingItem = getItem(player, game->draggingItemId);
-							if (draggingItem && isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_ACTIVE) canDropItemHere = true;
-							if (draggingItem && !isActiveSlot && draggingItem->info->slotType == ITEM_SLOT_PASSIVE) canDropItemHere = true;
-
-							if (itemDropped && overlaps(slotRect, draggingRect)) {
-								if (canDropItemHere) {
-									*slotPtr = game->draggingItemId;
-									game->draggingItemId = 0; // Drop instantly to avoid putting in multiple slots on the same frame
-								} else {
-									logf("Can't put item in this slot...\n");
-								}
-							}
-						}
-					}
-				}
-
-				if (game->draggingItemId) {
-					Item *item = getItem(player, game->draggingItemId);
-					drawItemIcon(item, draggingRect);
-					if (!platform->mouseDown) game->draggingItemId = 0;
 				}
 			}
 		} ///
@@ -4681,17 +4516,6 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[4]) textLines[textLinesNum++] = "L(hold) - Create weapon";
 				if (game->alliancesControlled[5]) textLines[textLinesNum++] = "H - Stash weapon";
 			}
-
-#if 0
-			Style *style = &player->styles[player->styleIndex];
-			Item *item0 = getItem(player, style->activeItem0);
-			Item *item1 = getItem(player, style->activeItem1);
-			ActionTypeInfo *info0 = &globals->actionTypeInfos[item0 ? item0->info->actionType : ACTION_NONE];
-			ActionTypeInfo *info1 = &globals->actionTypeInfos[item1 ? item1->info->actionType : ACTION_NONE];
-
-			textLines[textLinesNum++] = frameSprintf("U - %s", info0->name);
-			textLines[textLinesNum++] = frameSprintf("I - %s", info1->name);
-#endif
 
 			Vec2 cursor = v2(3, game->size.y);
 			for (int i = textLinesNum-1; i >= 0; i--) {
@@ -5204,48 +5028,8 @@ Item *getItem(Actor *actor, int id) {
 	return NULL;
 }
 
-int getStashedItemCount(Actor *actor, ItemType type) {
-	int count = 0;
-	for (int i = 0; i < actor->itemsNum; i++) {
-		Item *item = &actor->items[i];
-		if (item->type == type) count += item->amount;
-	}
-	return count;
-}
-
-int getEquippedItemCount(Actor *actor, ItemType type) {
-	int count = 0;
-	Style *style = &actor->styles[actor->styleIndex];
-
-	Item *item = NULL;
-
-	item = getItem(actor, style->activeItem0);
-	if (item && item->type == type) count += item->amount;
-
-	item = getItem(actor, style->activeItem1);
-	if (item && item->type == type) count += item->amount;
-
-	item = getItem(actor, style->passiveItem);
-	if (item && item->type == type) count += item->amount;
-
-	return count;
-}
-
 float getStatPoints(Actor *actor, StatType stat) {
 	float value = actor->stats[stat];
-	if (stat == STAT_DAMAGE) {
-		value += getStashedItemCount(actor, ITEM_DAMAGE_BOOST);
-	} else if (stat == STAT_HP) {
-		value += getStashedItemCount(actor, ITEM_HP_BOOST);
-	} else if (stat == STAT_STAMINA_REGEN) {
-		value += getStashedItemCount(actor, ITEM_STAMINA_REGEN_BOOST);
-	} else if (stat == STAT_MAX_STAMINA) {
-		value += getStashedItemCount(actor, ITEM_MAX_STAMINA_BOOST);
-	} else if (stat == STAT_MOVEMENT_SPEED) {
-		value += getStashedItemCount(actor, ITEM_MOVEMENT_SPEED_BOOST);
-	} else if (stat == STAT_ATTACK_SPEED) {
-		value += getStashedItemCount(actor, ITEM_ATTACK_SPEED_BOOST);
-	}
 	return value;
 }
 
