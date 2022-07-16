@@ -319,8 +319,9 @@ void updateSkeleton(Skeleton *skeleton, float elapsed) {
 
 				float floatFramesIn = blend->time * anim->frameRate;
 				int framesIn = blend->time * anim->frameRate;
-				int nextFramesIn = framesIn+1;
 				float framePerc = floatFramesIn - framesIn;
+
+				int nextFramesIn = framesIn+1;
 
 				if (blend->loops) {
 					framesIn = fmod(framesIn, anim->frameCount);
