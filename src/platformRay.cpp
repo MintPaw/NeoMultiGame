@@ -538,8 +538,8 @@ struct Renderer {
 	Matrix3 currentCameraMatrix; // Is the same as baseMatrix2d for raylib!
 
 	Texture *whiteTexture;
-	RenderTexture *circleTexture1024;
-	RenderTexture *circleTexture32;
+	Texture *circleTexture1024;
+	Texture *circleTexture32;
 	Texture *linearGrad256;
 
 	Light lights[MAX_LIGHTS];
@@ -618,12 +618,14 @@ void pushAlpha(float alpha);
 void popAlpha();
 
 void setRendererBlendMode(BlendMode blendMode);
+void setDepthTest(bool enabled);
 void setDepthMask(bool enabled);
 
 Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader);
 void updateLightValues(Shader *shader, Light light);
 void updateLightingShader();
 
+void processBatchDraws();
 void resetRenderContext();
 
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
@@ -687,18 +689,8 @@ void initRenderer(int width, int height) {
 
 	u64 whiteData = 0xFFFFFFFF;
 	renderer->whiteTexture = createTexture(1, 1, &whiteData);
-
-	renderer->circleTexture1024 = createRenderTexture(1024, 1024, NULL);
-	setTextureSmooth(renderer->circleTexture1024, true);
-	pushTargetTexture(renderer->circleTexture1024);
-	Raylib::DrawCircle(renderer->circleTexture1024->width/2, renderer->circleTexture1024->height/2, renderer->circleTexture1024->width/2, toRaylibColor(0xFFFFFFFF));
-	popTargetTexture();
-
-	renderer->circleTexture32 = createRenderTexture(32, 32, NULL);
-	setTextureSmooth(renderer->circleTexture32, true);
-	pushTargetTexture(renderer->circleTexture32);
-	Raylib::DrawCircle(renderer->circleTexture32->width/2, renderer->circleTexture32->height/2, renderer->circleTexture32->width/2, toRaylibColor(0xFFFFFFFF));
-	popTargetTexture();
+	renderer->circleTexture1024 = createTexture("assets/common/images/circle1024.png");
+	renderer->circleTexture32 = createTexture("assets/common/images/circle32.png");
 
 	initRendererUtils();
 }
@@ -1128,10 +1120,10 @@ void drawCircle(Vec2 position, float radius, int color) {
 	int flags = 0;
 	Vec4i tints = v4i(color, color, color, color);
 
-	RenderTexture *texture = renderer->circleTexture1024;
+	Texture *texture = renderer->circleTexture1024;
 	if (radius < 45) texture = renderer->circleTexture32;
 
-	drawRaylibTexture(texture->raylibRenderTexture.texture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
+	drawRaylibTexture(texture->raylibTexture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
 }
 
 void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
@@ -1264,7 +1256,15 @@ void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
 	Raylib::rlBegin(RL_QUADS);
 
 	for (int i = 0; i < 4; i++) {
-		Raylib::Color raylibColor = toRaylibColor(colors[i]);
+		int color = colors[i];
+		int a, r, g, b;
+		hexToArgb(color, &a, &r, &g, &b);
+		r *= a/255.0;
+		g *= a/255.0;
+		b *= a/255.0;
+		color = argbToHex(a, r, g, b);
+		Raylib::Color raylibColor = toRaylibColor(color);
+
 		Raylib::rlColor4ub(raylibColor.r, raylibColor.g, raylibColor.b, raylibColor.a);
 		Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
 		Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
@@ -1364,7 +1364,14 @@ void setRendererBlendMode(BlendMode blendMode) {
 	}
 }
 
+void setDepthTest(bool enabled) {
+	processBatchDraws();
+	if (enabled) Raylib::rlEnableDepthTest();
+	else Raylib::rlDisableDepthTest();
+}
+
 void setDepthMask(bool enabled) {
+	processBatchDraws();
 	if (enabled) Raylib::rlEnableDepthMask();
 	else Raylib::rlDisableDepthMask();
 }
@@ -1418,8 +1425,12 @@ void updateLightingShader(Camera camera) {
 	);
 }
 
-void resetRenderContext() {
+void processBatchDraws() {
 	Raylib::rlDrawRenderBatchActive();
+}
+
+void resetRenderContext() {
+	processBatchDraws();
 	setRendererBlendMode(BLEND_NORMAL);
 #ifndef __EMSCRIPTEN__ // 100% needed...
 	glBindSampler(0, 0);
@@ -1429,7 +1440,7 @@ void resetRenderContext() {
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	renderer->in3dPass = true;
 
-	Raylib::rlDrawRenderBatchActive(); // Why do I need this?
+	processBatchDraws();
 
 	Raylib::rlMatrixMode(RL_PROJECTION);
 	Raylib::rlPushMatrix();
@@ -1447,7 +1458,7 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::Matrix raylibLookAt = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 	Raylib::rlMultMatrixf(MatrixToFloat(raylibLookAt));
 
-	Raylib::rlEnableDepthTest(); 
+	setDepthTest(true);
 }
 
 void end3d() {

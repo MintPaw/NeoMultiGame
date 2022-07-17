@@ -405,6 +405,12 @@ enum StoreType {
 	STORE_TYPES_MAX,
 };
 
+enum SpinState {
+	SPIN_NONE=0,
+	SPIN_STRAIGHT,
+	SPIN_SPINNING,
+};
+
 struct Actor {
 	ActorType type;
 	int id;
@@ -511,6 +517,8 @@ struct Actor {
 #define THRUSTERS_MAX 8
 	Thruster thrusters[THRUSTERS_MAX];
 	int thrustersNum;
+
+	SpinState spin;
 };
 
 struct Map {
@@ -1192,9 +1200,6 @@ void updateGame() {
 				for (int i = 0; i < game->worldElementsNum; i++) {
 					WorldElement *element = &game->worldElements[i];
 
-					// Matrix4 mat = mat4();
-					// glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, 1, true, mat.data);
-
 					if (element->type == WORLD_ELEMENT_CUBE) {
 						drawAABB(element->aabb, element->color);
 					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
@@ -1214,7 +1219,7 @@ void updateGame() {
 					}
 				}
 
-				startShader(renderer->alphaDiscardShader);
+				setDepthMask(false);
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
 					if (isZero(billboard->camera.up)) billboard->camera = game->camera3d;
@@ -1222,10 +1227,6 @@ void updateGame() {
 					int tint = billboard->tint;
 					Vec4 tintVec = hexToArgbFloat(billboard->tint);
 					tintVec.x *= billboard->alpha;
-					// tintVec *= billboard->alpha;
-					tint = argbToHex(tintVec);
-					// tint = 0x80808080; //@incomplete Figure out why this means 50% alpha (circleTexture or billboards aren't premultiplied?)
-					// tint = 0x80FFFFFF; // And this is pure white (no alpha blending?)
 
 					if (billboard->texture) {
 						drawBillboard(
@@ -1247,8 +1248,8 @@ void updateGame() {
 						);
 					}
 				}
+				setDepthMask(true);
 
-				endShader();
 				end3d();
 			}
 			game->worldElementsNum = 0;
@@ -3810,7 +3811,7 @@ void stepGame(float elapsed) {
 				* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
 
 			DrawBillboardCall billboard = {};
-			billboard.renderTexture = renderer->circleTexture1024;
+			billboard.texture = renderer->circleTexture1024;
 			billboard.position = particle->position;
 			billboard.size = particle->size;
 			billboard.tint = particle->tint;
