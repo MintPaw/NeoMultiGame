@@ -128,6 +128,7 @@ int getAofArgb(int src);
 int setAofArgb(int src, int newA);
 int setBofArgb(int src, int newB);
 int tintColor(int color, int tint);
+int alphaColor(int color, float alpha);
 int getComplement(int color);
 float FORCE_INLINE srgbToLinear(float value);
 float FORCE_INLINE linearToSrgb(float value);
@@ -2022,6 +2023,12 @@ int tintColor(int color, int tint) {
 	int ret = lerpColor(color, tint, (cA/255.0));
 	setAofArgb(ret, origAlpha);
 	return ret;
+}
+
+int alphaColor(int color, float alpha) {
+	int a = getAofArgb(color);
+	color = setAofArgb(color, a * alpha);
+	return color;
 }
 
 int getComplement(int color) {

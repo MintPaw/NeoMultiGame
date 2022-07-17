@@ -643,6 +643,8 @@ enum ScreenElementType {
 	SCREEN_ELEMENT_RECT,
 	SCREEN_ELEMENT_RECT_OUTLINE,
 	SCREEN_ELEMENT_LINE,
+	SCREEN_ELEMENT_TEXT,
+	SCREEN_ELEMENT_TEXT_IN_RECT,
 };
 struct ScreenElement {
 	ScreenElementType type;
@@ -651,6 +653,9 @@ struct ScreenElement {
 
 	Line2 line;
 	int thickness;
+
+	char *text;
+	DrawTextProps drawTextProps;
 };
 
 struct StoreData {
@@ -676,7 +681,6 @@ struct Game {
 	float time;
 	Vec2 size;
 	Vec2 mouse;
-	Vec2 worldMouse;
 
 	int hitPauseFrames;
 	bool lastStepOfFrame;
@@ -842,6 +846,8 @@ AABB getAABB(Actor *actor);
 AABB bringWithinBounds(AABB groundAABB, AABB aabb);
 AABB bringWithinBounds(Map *map, AABB aabb);
 void bringWithinBounds(Map *map, Actor *actor);
+Vec2 getScreenPoint(Vec3 position);
+
 void pushAABB(AABB aabb, int color, float alpha=1);
 void pushAABBOutline(AABB aabb, int lineThickness, int color);
 void pushSphere(Sphere sphere, int color, float alpha=1);
@@ -849,11 +855,12 @@ void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton=NULL, int color=
 void pushBillboard(DrawBillboardCall billboard);
 WorldElement *createWorldElement();
 void pushTriangle(Vec3 vert0, Vec3 vert1, Vec3 vert2, int color);
-Log3Buffer *log3f(Vec3 position, const char *msg, ...);
 ScreenElement *createScreenElement();
 void pushScreenRect(Rect rect, int color);
 void pushScreenRectOutline(Rect rect, int thickness, int color);
 void pushScreenLine(Vec2 start, Vec2 end, int thickness, int color);
+void pushScreenText(char *text, DrawTextProps drawTextProps);
+void pushScreenTextInRect(char *text, DrawTextProps drawTextProps, Rect rect);
 
 int playWorldSound(char *path, Vec3 worldPosition);
 Effect *createEffect(EffectType type, Vec3 position);
@@ -1274,7 +1281,8 @@ void updateGame() {
 				continue;
 			}
 
-			Vec2 screenPos = game->cameraMatrix * v2(game->isoMatrix3 * worldChannel->position);
+			Vec2 screenPos = getScreenPoint(worldChannel->position);
+
 			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
 			float distPerc = distance(v2(), screenPerc);
 			float vol = clampMap(distPerc, 0, 2, 1, 0);
@@ -1291,6 +1299,25 @@ void updateGame() {
 
 		drawSimpleTexture(texture, matrix);
 	}
+
+	{ /// Update screen elements
+		for (int i = 0; i < game->screenElementsNum; i++) {
+			ScreenElement *element = &game->screenElements[i];
+
+			if (element->type == SCREEN_ELEMENT_RECT) {
+				drawRect(element->rect, element->color);
+			} else if (element->type == SCREEN_ELEMENT_RECT_OUTLINE) {
+				drawRectOutline(element->rect, element->thickness, element->color);
+			} else if (element->type == SCREEN_ELEMENT_LINE) {
+				drawLine(element->line, element->thickness, element->color);
+			} else if (element->type == SCREEN_ELEMENT_TEXT) {
+				drawText(element->text, element->drawTextProps);
+			} else if (element->type == SCREEN_ELEMENT_TEXT_IN_RECT) {
+				drawTextInRect(element->text, element->drawTextProps, element->rect);
+			}
+		}
+		game->screenElementsNum = 0;
+	} ///
 
 	float fadeOutPerc = game->nextMap_t;
 	if (!game->debugSkipPrewarm && !game->debugShowPrewarm) {
@@ -1362,7 +1389,6 @@ void stepGame(float elapsed) {
 		game->cameraMatrix.TRANSLATE(game->size/2);
 		game->cameraMatrix.TRANSLATE(-v2(game->isoMatrix3 * game->visualCameraTarget));
 		pushCamera2d(game->cameraMatrix);
-		game->worldMouse = game->cameraMatrix.invert() * game->mouse;
 
 		Matrix3 matrix = mat3();
 		matrix.ROTATE(game->cameraAngleDegrees.y);
@@ -2079,13 +2105,9 @@ void stepGame(float elapsed) {
 		bool selectedSomething = false;
 		for (int i = 0; i < map->actorsNum; i++) {
 			Actor *actor = &map->actors[i];
-			AABB aabb = getAABB(actor);
-			Rect bounds = getBounds(aabb);
-			Vec2 position2 = v2(game->isoMatrix3 * actor->position);
-			Vec2 positionCenter2 = v2(game->isoMatrix3 * getCenter(aabb));
-			Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
+			Rect bounds = getBounds(getAABB(actor));
 
-			if (platform->mouseJustUp && contains(bounds, game->worldMouse)) {
+			if (platform->mouseJustUp && contains(bounds, game->mouse)) {
 				game->selectedActorId = actor->id;
 				selectedSomething = true;
 			}
@@ -2424,7 +2446,7 @@ void stepGame(float elapsed) {
 				}
 
 				if (action->type == ACTION_FORCED_MOVE) {
-					if (game->debugDrawPathing) log3f(actor->position, "start")->logTime -= 9999;
+					if (game->debugDrawPathing) pushSphere(makeSphere(actor->position, 64), 0xFFFF0000);
 					maxTime = 9999;
 
 					Vec3 dir = normalize(action->targetPosition - actor->position);
@@ -2435,12 +2457,12 @@ void stepGame(float elapsed) {
 					actor->movementAccel.y += dir.y * speed.y;
 
 					Vec3 targetPosition = action->targetPosition;
-					if (game->debugDrawPathing) log3f(action->targetPosition, "end")->logTime -= 9999;
+					if (game->debugDrawPathing) pushSphere(makeSphere(action->targetPosition, 64), 0xFFFF0000);
 
 					AABB destAABB = getAABBAtPosition(actor, targetPosition);
 					destAABB = bringWithinBounds(map, destAABB);
 					targetPosition = getCenter(destAABB) + getSize(destAABB)*v3(0, 0, -0.5);
-					if (game->debugDrawPathing) log3f(action->targetPosition, "trueEnd")->logTime -= 9999;
+					if (game->debugDrawPathing) pushSphere(makeSphere(action->targetPosition, 64), 0xFFFF0000);
 
 					if (distance(actor->position, targetPosition) < 20) actionDone = true;
 				}
@@ -3299,12 +3321,11 @@ void stepGame(float elapsed) {
 				} ///
 
 				if (game->debugDrawUnitBoxes) pushAABB(aabb, teamColors[actor->team]);
-
 			} ///
 
 			{ /// Draw overlay
 				AABB aabb = getAABB(actor);
-				Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
+				Vec2 positionTop2 = getScreenPoint(actor->position + v3(0, 0, actor->size.z));
 
 				bool hasHpBar = true;
 				bool hasStaminaBar = true;
@@ -3337,13 +3358,100 @@ void stepGame(float elapsed) {
 				if (game->debugDrawActorTargets) {
 					Actor *target = getActor(map, actor->aiTarget);
 					if (target) {
-						Vec2 positionCenter2 = v2(game->isoMatrix3 * getCenter(aabb));
+						Vec2 positionCenter2 = getScreenPoint(getCenter(aabb));
 
 						AABB targetAABB = getAABB(target);
-						Vec2 targetPositionCenter2 = v2(game->isoMatrix3 * getCenter(targetAABB));
+						Vec2 targetPositionCenter2 = getScreenPoint(getCenter(targetAABB));
 						pushScreenLine(positionCenter2, targetPositionCenter2, 4, 0xFFFF0000);
 					}
 				}
+
+				{ /// Text lines
+					const int TEXT_LINES_MAX = 8;
+					char *textLines[TEXT_LINES_MAX];
+					int textLinesNum = 0;
+
+					if (game->debugDrawActorStatus) {
+						if (actor->timeInAir > 0) textLines[textLinesNum++] = frameSprintf("In air (%.1f)", actor->timeInAir);
+						if (actor->timeMoving > 0) textLines[textLinesNum++] = frameSprintf("Moving (%.1f)", actor->timeMoving);
+						if (actor->timeNotMoving > 0) textLines[textLinesNum++] = frameSprintf("Not moving (%.1f)", actor->timeNotMoving);
+					}
+
+					if (game->debugDrawActorAction) {
+						if (actor->actionsNum > 0) {
+							Action *action = &actor->actions[0];
+							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", action->info->name, action->time);
+						}
+					}
+
+					if (game->debugDrawActorStats) {
+						textLines[textLinesNum++] = frameSprintf(
+							"atk:%.0f hp:%.0f sGen:%.0f\nmaxS:%.0f move:%.0f aSpeed:%.0f",
+							getStatPoints(actor, STAT_DAMAGE),
+							getStatPoints(actor, STAT_HP),
+							getStatPoints(actor, STAT_STAMINA_REGEN),
+							getStatPoints(actor, STAT_MAX_STAMINA),
+							getStatPoints(actor, STAT_MOVEMENT_SPEED),
+							getStatPoints(actor, STAT_ATTACK_SPEED)
+						);
+					}
+
+					if (game->debugDrawUnitCombo && actor->type == ACTOR_UNIT) {
+						for (int i = 0; i < actor->pastActionsNum; i++) {
+							Action *action = &player->pastActions[i];
+							textLines[textLinesNum++] = frameSprintf("%d: %s", i, action->info->name);
+						}
+					}
+
+					if (game->debugDrawUnitAiState && actor->type == ACTOR_UNIT && !actor->playerControlled) {
+							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", aiStateStrings[actor->aiState], actor->aiStateTime);
+					}
+
+					Vec2 positionTop2 = getScreenPoint(actor->position + v3(0, 0, actor->size.z));
+					Vec2 cursor = positionTop2;
+					for (int i = 0; i < textLinesNum; i++) {
+						Vec2 size = getTextSize(game->defaultFont, textLines[i]);
+						Vec2 position;
+						position.x = cursor.x - size.x/2;
+						position.y = cursor.y - size.y;
+
+						Rect rect = inflate(makeRect(position, size), 5);
+						pushScreenRect(rect, 0x80000000);
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFC0C0C0, position);
+						pushScreenText(textLines[i], props);
+
+						cursor.y -= size.y;
+					}
+
+					if (game->debugDrawActorStatsSimple) {
+						char *statTextStrs[STATS_MAX];
+						Vec2 statTextSizes[STATS_MAX];
+						Vec2 size = v2();
+						for (int i = 0; i < STATS_MAX; i++) {
+							statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
+							statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
+							size.x += statTextSizes[i].x;
+							size.y = MaxNum(size.y, statTextSizes[i].y);
+						}
+						Vec2 position = positionTop2;
+						position.x -= size.x/2;
+						position.y -= size.y;
+
+						for (int i = 0; i < STATS_MAX; i++) {
+							DrawTextProps props = newDrawTextProps(game->simpleStatsFont, statTypeColors[i], position);
+							pushScreenText(statTextStrs[i], props);
+							position.x += statTextSizes[i].x;
+						}
+
+						{
+							Vec2 center = positionTop2;
+							center.y -= 30;
+							Rect levelRect = makeCenteredSquare(center, 32);
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+							pushScreenTextInRect(frameSprintf("%d", actor->level), props, levelRect);
+						}
+					}
+				} ///
 			} ///
 
 			if (game->debugNeverLoseStamina && actor->playerControlled) actor->stamina = actor->maxStamina;
@@ -3660,7 +3768,7 @@ void stepGame(float elapsed) {
 		if (game->inEditor) {
 			AABB aabb = getAABB(actor);
 			Rect bounds = getBounds(aabb);
-			if (contains(bounds, game->worldMouse) || game->debugAlwaysShowWireframes) {
+			if (contains(bounds, game->mouse) || game->debugAlwaysShowWireframes) {
 				pushAABBOutline(aabb, 2, 0xFFFFFFFF);
 				pushScreenRectOutline(bounds, 1, 0xFF00FFFF);
 			}
@@ -3672,9 +3780,9 @@ void stepGame(float elapsed) {
 					Line3 lineX = makeLine3(actor->position, actor->position + v3(64, 0, 0));
 					Line3 lineY = makeLine3(actor->position, actor->position + v3(0, 64, 0));
 					Line3 lineZ = makeLine3(actor->position, actor->position + v3(0, 0, 64));
-					pushScreenLine(v2(game->isoMatrix3 * lineX.start), v2(game->isoMatrix3 * lineX.end), 4, 0xFFFF0000);
-					pushScreenLine(v2(game->isoMatrix3 * lineY.start), v2(game->isoMatrix3 * lineY.end), 4, 0xFF00FF00);
-					pushScreenLine(v2(game->isoMatrix3 * lineZ.start), v2(game->isoMatrix3 * lineZ.end), 4, 0xFF0000FF);
+					pushScreenLine(getScreenPoint(lineX.start), getScreenPoint(lineX.end), 4, 0xFFFF0000);
+					pushScreenLine(getScreenPoint(lineY.start), getScreenPoint(lineY.end), 4, 0xFF00FF00);
+					pushScreenLine(getScreenPoint(lineZ.start), getScreenPoint(lineZ.end), 4, 0xFF0000FF);
 				}
 			}
 		}
@@ -3742,7 +3850,7 @@ void stepGame(float elapsed) {
 		}
 
 		if (promptItem) {
-			Vec2 position2 = v2(game->isoMatrix3 * promptItem->position);
+			Vec2 position2 = getScreenPoint(promptItem->position);
 			Rect rect = makeCenteredSquare(position2, 64);
 			pushScreenRect(rect, 0x80FF0000);
 
@@ -3816,152 +3924,6 @@ void stepGame(float elapsed) {
 
 	pushTargetTexture(game->overlayTexture);
 	clearRenderer();
-	{ /// Draw actors (overlay)
-		for (int i = 0; i < map->actorsNum; i++) {
-			Actor *actor = &map->actors[i];
-			{ // Status lines
-				if (actor->type == ACTOR_UNIT) {
-					const int TEXT_LINES_MAX = 8;
-					char *textLines[TEXT_LINES_MAX];
-					int textLinesNum = 0;
-
-					if (game->debugDrawActorStatus) {
-						if (actor->timeInAir > 0) textLines[textLinesNum++] = frameSprintf("In air (%.1f)", actor->timeInAir);
-						if (actor->timeMoving > 0) textLines[textLinesNum++] = frameSprintf("Moving (%.1f)", actor->timeMoving);
-						if (actor->timeNotMoving > 0) textLines[textLinesNum++] = frameSprintf("Not moving (%.1f)", actor->timeNotMoving);
-					}
-
-					if (game->debugDrawActorAction) {
-						if (actor->actionsNum > 0) {
-							Action *action = &actor->actions[0];
-							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", action->info->name, action->time);
-						}
-					}
-
-					if (game->debugDrawActorStats) {
-						textLines[textLinesNum++] = frameSprintf(
-							"atk:%.0f hp:%.0f sGen:%.0f\nmaxS:%.0f move:%.0f aSpeed:%.0f",
-							getStatPoints(actor, STAT_DAMAGE),
-							getStatPoints(actor, STAT_HP),
-							getStatPoints(actor, STAT_STAMINA_REGEN),
-							getStatPoints(actor, STAT_MAX_STAMINA),
-							getStatPoints(actor, STAT_MOVEMENT_SPEED),
-							getStatPoints(actor, STAT_ATTACK_SPEED)
-						);
-					}
-
-					if (game->debugDrawUnitCombo && actor->type == ACTOR_UNIT) {
-						for (int i = 0; i < actor->pastActionsNum; i++) {
-							Action *action = &player->pastActions[i];
-							textLines[textLinesNum++] = frameSprintf("%d: %s", i, action->info->name);
-						}
-					}
-
-					if (game->debugDrawUnitAiState && actor->type == ACTOR_UNIT && !actor->playerControlled) {
-							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", aiStateStrings[actor->aiState], actor->aiStateTime);
-					}
-
-					Vec2 positionTop2 = v2(game->isoMatrix3 * (actor->position + v3(0, 0, actor->size.z)));
-					Vec2 cursor = positionTop2;
-					for (int i = 0; i < textLinesNum; i++) {
-						Vec2 size = getTextSize(game->defaultFont, textLines[i]);
-						Vec2 position;
-						position.x = cursor.x - size.x/2;
-						position.y = cursor.y - size.y;
-
-						Rect rect = inflate(makeRect(position, size), 5);
-						drawRect(rect, 0x80000000);
-						drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
-
-						cursor.y -= size.y;
-					}
-
-					if (game->debugDrawActorStatsSimple) {
-						char *statTextStrs[STATS_MAX];
-						Vec2 statTextSizes[STATS_MAX];
-						Vec2 size = v2();
-						for (int i = 0; i < STATS_MAX; i++) {
-							statTextStrs[i] = frameSprintf("%.0f", getStatPoints(actor, (StatType)i));
-							statTextSizes[i] = getTextSize(game->simpleStatsFont, statTextStrs[i]);
-							size.x += statTextSizes[i].x;
-							size.y = MaxNum(size.y, statTextSizes[i].y);
-						}
-						Vec2 position = positionTop2;
-						position.x -= size.x/2;
-						position.y -= size.y;
-
-						for (int i = 0; i < STATS_MAX; i++) {
-							drawText(game->simpleStatsFont, statTextStrs[i], position, statTypeColors[i]);
-							position.x += statTextSizes[i].x;
-						}
-
-						{
-							Vec2 center = positionTop2;
-							center.y -= 30;
-							Rect levelRect = makeCenteredSquare(center, 32);
-							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-							drawTextInRect(frameSprintf("%d", actor->level), props, levelRect);
-						}
-					}
-
-				}
-			}
-
-			{ /// Status icons
-				if (actor->type == ACTOR_UNIT) {
-					struct Icon {
-						Texture *texture;
-						bool flipped;
-					};
-
-					const int ICONS_MAX = 128;
-					Icon *icons = (Icon *)zalloc(sizeof(Icon) * ICONS_MAX);
-					int iconsNum = 0;
-
-					for (int i = 0; i < actor->buffsNum; i++) {
-						Buff *buff = &actor->buffs[i];
-
-						if (buff->type == BUFF_HEAVEN_STEP_GRAVITY) {
-							Icon *icon = &icons[iconsNum++];
-							icon->texture = getTexture("assets/images/statusIcons/heavenStep.png");
-						} else if (buff->type == BUFF_BUDDHA_PALM_SLOW) {
-							Icon *icon = &icons[iconsNum++];
-							icon->texture = getTexture("assets/images/statusIcons/buddhaPalm.png");
-						} else {
-							Icon *icon = &icons[iconsNum++];
-							icon->texture = renderer->whiteTexture;
-						}
-
-					}
-
-					Vec2 position2 = v2(game->isoMatrix3 * actor->position);
-					Vec2 cursor = position2 - v2(0, 50);
-					for (int i = 0; i < iconsNum; i++) {
-						Icon *icon = &icons[i];
-						Texture *texture = icon->texture;
-
-						Rect rect = makeCenteredSquare(cursor, 64);
-						Matrix3 mat = mat3();
-						mat.TRANSLATE(rect.x, rect.y);
-						mat.SCALE(rect.width, rect.height);
-						Vec2 uv0 = v2(0, 0);
-						Vec2 uv1 = v2(1, 1);
-
-						if (icon->flipped) {
-							uv0 = v2(1, 0);
-							uv1 = v2(0, 1);
-						}
-
-						drawRect(rect, 0x40000000);
-						drawSimpleTexture(icon->texture, mat, uv0, uv1);
-
-						cursor.y -= rect.height + 8;
-					}
-				}
-			} ///
-
-		}
-	} ///
 
 	{ /// Update effects
 		for (int i = 0; i < game->effectsNum; i++) {
@@ -3969,7 +3931,7 @@ void stepGame(float elapsed) {
 
 			bool complete = false;
 			float maxTime = 1;
-			Vec2 position2 = v2(game->isoMatrix3 * effect->position);
+			Vec2 position2 = getScreenPoint(effect->position);
 
 			char *effectText = NULL;
 			int effectTextColor = 0;
@@ -4023,10 +3985,8 @@ void stepGame(float elapsed) {
 
 				Rect rect = makeRect(pos, size);
 
-				pushAlpha(alpha);
-				drawRect(inflate(rect, 2), 0x30000000);
-				drawText(game->particleFont, effectText, pos, effectTextColor);
-				popAlpha();
+				pushScreenRect(inflate(rect, 2), alphaColor(0x30000000, alpha));
+				pushScreenText(effectText, newDrawTextProps(game->particleFont, alphaColor(effectTextColor, alpha), pos));
 			}
 
 			effect->time += elapsed;
@@ -4042,43 +4002,6 @@ void stepGame(float elapsed) {
 			if (complete) {
 				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
 				game->effectsNum--;
-				i--;
-				continue;
-			}
-		}
-	} ///
-
-	{ /// Update screen elements
-		for (int i = 0; i < game->screenElementsNum; i++) {
-			ScreenElement *element = &game->screenElements[i];
-
-			if (element->type == SCREEN_ELEMENT_RECT) {
-				drawRect(element->rect, element->color);
-			} else if (element->type == SCREEN_ELEMENT_RECT_OUTLINE) {
-				drawRectOutline(element->rect, element->thickness, element->color);
-			} else if (element->type == SCREEN_ELEMENT_LINE) {
-				drawLine(element->line, element->thickness, element->color);
-			}
-		}
-		game->screenElementsNum = 0;
-	} ///
-
-	{ /// Update log3buffers
-		for (int i = 0; i < game->log3BuffersNum; i++) {
-			Log3Buffer *log3Buffer = &game->log3Buffers[i];
-
-			float maxTime = 3;
-			float time = game->time - log3Buffer->logTime;
-
-			float alpha = clampMap(time, 0, maxTime*0.05, 0, 1) * clampMap(time, maxTime*0.95, maxTime, 1, 0);
-
-			AABB aabb = makeCenteredAABB(log3Buffer->position, v3(16, 16, 16));
-			pushAABB(aabb, 0xFFFF0000);
-
-			if (time > maxTime) {
-				free(log3Buffer->buffer);
-				arraySpliceIndex(game->log3Buffers, game->log3BuffersNum, sizeof(Log3Buffer), i);
-				game->log3BuffersNum--;
 				i--;
 				continue;
 			}
@@ -5105,8 +5028,8 @@ Rect getBounds(AABB aabb) {
 	Vec3 points[8];
 	toPoints(aabb, points);
 	for (int i = 0; i < 8; i++) {
-		Vec3 point = game->isoMatrix3 * points[i];
-		bounds = insert(bounds, v2(point));
+		Vec2 point = getScreenPoint(points[i]);
+		bounds = insert(bounds, point);
 	}
 
 	return bounds;
@@ -5177,6 +5100,11 @@ void bringWithinBounds(Map *map, Actor *actor) {
 	actor->position = newPos;
 }
 
+Vec2 getScreenPoint(Vec3 position) {
+	Vec2 position2 = worldSpaceTo2dNDC01(game->camera3d, position) * v2(platform->windowSize);
+	return position2;
+}
+
 void pushAABB(AABB aabb, int color, float alpha) {
 	WorldElement *element = createWorldElement();
 	element->type = WORLD_ELEMENT_CUBE;
@@ -5190,9 +5118,9 @@ void pushAABBOutline(AABB aabb, int lineThickness, int color) {
 	AABBToLines(aabb, points);
 
 	for (int i = 0; i < 12; i++) {
-		Vec3 start = game->isoMatrix3 * points[i*2 + 0];
-		Vec3 end = game->isoMatrix3 * points[i*2 + 1];
-		pushScreenLine(v2(start), v2(end), lineThickness, color);
+		Vec2 start = getScreenPoint(points[i*2 + 0]);
+		Vec2 end = getScreenPoint(points[i*2 + 1]);
+		pushScreenLine(start, end, lineThickness, color);
 	}
 }
 
@@ -5243,32 +5171,6 @@ void pushModel(Model *model, Matrix4 matrix, Skeleton *skeleton, int color) {
 	element->modelMatrix = matrix;
 }
 
-Log3Buffer *log3f(Vec3 position, const char *msg, ...) {
-	va_list args;
-
-	va_start(args, msg);
-	int size = stbsp_vsnprintf(NULL, 0, msg, args);
-	va_end(args);
-
-	char *str = frameMalloc(size+1);
-
-	va_start(args, msg);
-	stbsp_vsnprintf(str, size+1, msg, args);
-	va_end(args);
-
-	if (game->log3BuffersNum > LOG3_BUFFERS_MAX-1) {
-		game->log3BuffersNum = LOG3_BUFFERS_MAX-1;
-		logf("Too many log3's!\n");
-	}
-
-	Log3Buffer *log3Buffer = &game->log3Buffers[game->log3BuffersNum++];
-	memset(log3Buffer, 0, sizeof(Log3Buffer));
-	log3Buffer->position = position;
-	log3Buffer->buffer = stringClone(str);
-	log3Buffer->logTime = game->time;
-	return log3Buffer;
-}
-
 ScreenElement *createScreenElement() {
 	if (game->screenElementsNum > SCREEN_ELEMENTS_MAX-1) {
 		game->screenElementsNum = SCREEN_ELEMENTS_MAX-1;
@@ -5301,6 +5203,21 @@ void pushScreenLine(Vec2 start, Vec2 end, int thickness, int color) {
 	element->line = makeLine2(start, end);
 	element->color = color;
 	element->thickness = thickness;
+}
+
+void pushScreenText(char *text, DrawTextProps drawTextProps) {
+	ScreenElement *element = createScreenElement();
+	element->type = SCREEN_ELEMENT_TEXT;
+	element->text = text;
+	element->drawTextProps = drawTextProps;
+}
+
+void pushScreenTextInRect(char *text, DrawTextProps drawTextProps, Rect rect) {
+	ScreenElement *element = createScreenElement();
+	element->type = SCREEN_ELEMENT_TEXT_IN_RECT;
+	element->text = text;
+	element->rect = rect;
+	element->drawTextProps = drawTextProps;
 }
 
 int playWorldSound(char *path, Vec3 worldPosition) {

@@ -56,7 +56,7 @@ Vec2 drawText(Font *font, const char *text, Vec2 position, int color=0xFF000000,
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
 
 DrawTextProps newDrawTextProps();
-DrawTextProps newDrawTextProps(Font *font, int color);
+DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
 Vec2 drawText(const char *text, DrawTextProps props);
 
 void initFonts();
@@ -317,10 +317,11 @@ DrawTextProps newDrawTextProps() {
 	return props;
 }
 
-DrawTextProps newDrawTextProps(Font *font, int color) {
+DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position) {
 	DrawTextProps props = newDrawTextProps();
 	props.font = font;
 	props.color = color;
+	props.position = position;
 	return props;
 }
 

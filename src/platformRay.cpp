@@ -33,6 +33,7 @@ struct Platform {
 
 	int windowWidth;
 	int windowHeight;
+	Vec2i windowSize;
 	float windowScaling;
 
 	float realElapsed;
@@ -137,6 +138,7 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform = (Platform *)zalloc(sizeof(Platform));
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
+	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
 #ifdef _WIN32
 	platform->processHandle = GetCurrentProcess();
@@ -211,6 +213,7 @@ void platformUpdate() {
 
 	platform->windowWidth = Raylib::GetScreenWidth();
 	platform->windowHeight = Raylib::GetScreenHeight();
+	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
 	{ /// Events
 		platform->mouseJustDown = Raylib::IsMouseButtonPressed(Raylib::MOUSE_BUTTON_LEFT);
@@ -635,6 +638,7 @@ void startShader(Shader *shader);
 void endShader();
 void endRenderingFrame();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
+Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition);
 
 #include "rendererUtils.cpp"
 bool usesAlphaDiscard = false;
@@ -1502,6 +1506,19 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 
 	*outPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
 	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
+}
+
+Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
+	Raylib::Matrix matProj = Raylib::rlGetMatrixProjection();
+	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+	Raylib::Matrix viewProj = Raylib::MatrixMultiply(matView, matProj);
+	Raylib::Matrix invViewProj = Raylib::MatrixInvert(viewProj);
+	Raylib::Vector3 raylibPosition = {worldPosition.x, worldPosition.y, worldPosition.z};
+	raylibPosition = Raylib::Vector3Transform(raylibPosition, viewProj);
+	Vec2 ndc = v2(raylibPosition.x, raylibPosition.y);
+	ndc /= 2;
+	ndc.x++;
+	return ndc;
 }
 
 ///- Gui
