@@ -519,9 +519,6 @@ struct Actor {
 	int thrustersNum;
 
 	SpinState spin;
-
-	float pulsesLeftInStasisGainEffect;
-	float timeLeftInStasisGainEffect;
 };
 
 struct Map {
@@ -574,6 +571,7 @@ enum EffectType {
 	EFFECT_PLAYER_DAMAGE,
 	EFFECT_BLOCK_DAMAGE,
 	EFFECT_MONEY,
+	EFFECT_STASIS_GAIN,
 };
 struct Effect {
 	EffectType type;
@@ -583,6 +581,9 @@ struct Effect {
 
 #define EFFECT_TEXT_MAX_LEN 16
 	char text[EFFECT_TEXT_MAX_LEN];
+
+	int actorId;
+	int pulses;
 };
 
 enum ParticleType {
@@ -2526,7 +2527,9 @@ void stepGame(float elapsed) {
 						}
 					} else if (action->type == ACTION_STASIS_GAIN) {
 						actor->hasStasisAttack = true;
-						actor->pulsesLeftInStasisGainEffect = 5;
+						Effect *effect = createEffect(EFFECT_STASIS_GAIN, v3());
+						effect->actorId = actor->id;
+						effect->pulses = 10;
 					} else if (action->type == ACTION_STASH_ON_BACK) {
 						Item temp = actor->backItem;
 						actor->backItem = actor->heldItem;
@@ -3653,37 +3656,6 @@ void stepGame(float elapsed) {
 			if (actor->timeMoving == 0) actor->movementPerc = 0;
 		}
 
-		{ /// Effects
-			char *mainBones[] = {
-				"chest", "body", "head", 
-				"hand.l", "arm1.l", "arm2.l", 
-				"toes.l", "leg1.l", "leg2.l", 
-				"hand.r", "arm1.r", "arm2.r", 
-				"toes.r", "leg1.r", "leg2.r", 
-			};
-
-			if (actor->pulsesLeftInStasisGainEffect > 0) {
-
-				actor->timeLeftInStasisGainEffect -= elapsed;
-				if (actor->timeLeftInStasisGainEffect < 0) {
-					actor->timeLeftInStasisGainEffect = 0.1;
-					actor->pulsesLeftInStasisGainEffect--;
-					for (int i = 0; i < ArrayLength(mainBones); i++) {
-						Matrix4 boneMatrix = getBoneMatrix(actor, mainBones[i]);
-						Particle *particle = createParticle(PARTICLE_STASIS_GAIN);
-						particle->position = boneMatrix * v3();
-						particle->position.y -= 5;
-						particle->size = v2(32, 32);
-						particle->velo.x = rndFloat(-2, 2);
-						particle->velo.z = rndFloat(-1, 1);
-						particle->maxTime = rndFloat(0.1, 0.5);
-						particle->tint = 0x80606090;
-					}
-				}
-
-			}
-		} ///
-
 		if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
 		if (game->inEditor) {
 			AABB aabb = getAABB(actor);
@@ -4013,6 +3985,30 @@ void stepGame(float elapsed) {
 			} else if (effect->type == EFFECT_MONEY) {
 				effectText = frameSprintf("+$%.2f", effect->value);
 				effectTextColor = 0xFF00FF00;
+			} else if (effect->type == EFFECT_STASIS_GAIN) {
+				maxTime = 0.1;
+				char *mainBones[] = {
+					"chest", "body", "head", 
+					"hand.l", "arm1.l", "arm2.l", 
+					"toes.l", "leg1.l", "leg2.l", 
+					"hand.r", "arm1.r", "arm2.r", 
+					"toes.r", "leg1.r", "leg2.r", 
+				};
+
+				Actor *actor = getActor(map, effect->actorId);
+				if (effect->time == 0 && actor && actor->skeleton) {
+					for (int i = 0; i < ArrayLength(mainBones); i++) {
+						Matrix4 boneMatrix = getBoneMatrix(actor, mainBones[i]);
+						Particle *particle = createParticle(PARTICLE_STASIS_GAIN);
+						particle->position = boneMatrix * v3();
+						particle->position.y -= 5;
+						particle->size = v2(32, 32);
+						particle->velo.x = rndFloat(-2, 2);
+						particle->velo.z = rndFloat(-1, 1);
+						particle->maxTime = rndFloat(0.1, 0.5);
+						particle->tint = 0x80606090;
+					}
+				}
 			}
 
 			if (effectText) {
@@ -4034,7 +4030,14 @@ void stepGame(float elapsed) {
 			}
 
 			effect->time += elapsed;
-			if (effect->time > maxTime) complete = true;
+			if (effect->time > maxTime) {
+				if (effect->pulses > 0) {
+					effect->pulses--;
+					effect->time = 0;
+				} else {
+					complete = true;
+				}
+			}
 
 			if (complete) {
 				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
