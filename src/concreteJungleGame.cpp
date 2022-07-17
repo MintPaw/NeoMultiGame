@@ -519,6 +519,9 @@ struct Actor {
 	int thrustersNum;
 
 	SpinState spin;
+
+	float pulsesLeftInStasisGainEffect;
+	float timeLeftInStasisGainEffect;
 };
 
 struct Map {
@@ -584,7 +587,7 @@ struct Effect {
 
 enum ParticleType {
 	PARTICLE_DUST,
-	PARTICLE_BLOOD,
+	PARTICLE_STASIS_GAIN,
 };
 struct Particle {
 	ParticleType type;
@@ -2523,39 +2526,7 @@ void stepGame(float elapsed) {
 						}
 					} else if (action->type == ACTION_STASIS_GAIN) {
 						actor->hasStasisAttack = true;
-
-						char *bonesToSpawnOn[] = {
-							"chest", 
-							"body", 
-							"head", 
-							"hand.l", 
-							"arm1.l", 
-							"arm2.l", 
-							"leg1.l", 
-							"leg2.l", 
-							"toes.l", 
-							"hand.r", 
-							"arm1.r", 
-							"arm2.r", 
-							"leg1.r", 
-							"leg2.r", 
-							"toes.r", 
-						};
-
-						for (int i = 0; i < ArrayLength(bonesToSpawnOn); i++) {
-							Matrix4 boneMatrix = getBoneMatrix(actor, bonesToSpawnOn[i]);
-							for (int i = 0; i < 10; i++) {
-								Particle *particle = createParticle(PARTICLE_DUST);
-								particle->position = boneMatrix * v3();
-								particle->position.y -= 5;
-								particle->size = v2(32, 32);
-								particle->velo.x = rndFloat(-2, 2);
-								particle->velo.z = rndFloat(-1, 1);
-								particle->maxTime = rndFloat(0.1, 0.25);
-								particle->delay = i * 0.15;
-								particle->tint = 0x80606090;
-							}
-						}
+						actor->pulsesLeftInStasisGainEffect = 5;
 					} else if (action->type == ACTION_STASH_ON_BACK) {
 						Item temp = actor->backItem;
 						actor->backItem = actor->heldItem;
@@ -3682,6 +3653,37 @@ void stepGame(float elapsed) {
 			if (actor->timeMoving == 0) actor->movementPerc = 0;
 		}
 
+		{ /// Effects
+			char *mainBones[] = {
+				"chest", "body", "head", 
+				"hand.l", "arm1.l", "arm2.l", 
+				"toes.l", "leg1.l", "leg2.l", 
+				"hand.r", "arm1.r", "arm2.r", 
+				"toes.r", "leg1.r", "leg2.r", 
+			};
+
+			if (actor->pulsesLeftInStasisGainEffect > 0) {
+
+				actor->timeLeftInStasisGainEffect -= elapsed;
+				if (actor->timeLeftInStasisGainEffect < 0) {
+					actor->timeLeftInStasisGainEffect = 0.1;
+					actor->pulsesLeftInStasisGainEffect--;
+					for (int i = 0; i < ArrayLength(mainBones); i++) {
+						Matrix4 boneMatrix = getBoneMatrix(actor, mainBones[i]);
+						Particle *particle = createParticle(PARTICLE_STASIS_GAIN);
+						particle->position = boneMatrix * v3();
+						particle->position.y -= 5;
+						particle->size = v2(32, 32);
+						particle->velo.x = rndFloat(-2, 2);
+						particle->velo.z = rndFloat(-1, 1);
+						particle->maxTime = rndFloat(0.1, 0.5);
+						particle->tint = 0x80606090;
+					}
+				}
+
+			}
+		} ///
+
 		if (game->debugNeverTakeDamage && actor == player) player->hp = 100;
 		if (game->inEditor) {
 			AABB aabb = getAABB(actor);
@@ -3742,7 +3744,7 @@ void stepGame(float elapsed) {
 			}
 		}
 		actor->hp = mathClamp(actor->hp, 0, actor->maxHp);
-		if (actor->actionsNum == 0) actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03;
+		if (actor->actionsNum == 0) actor->stamina += getStatPoints(actor, STAT_STAMINA_REGEN) * 0.03 * (elapsed*60.0);
 		actor->stamina = mathClamp(actor->stamina, -100, actor->maxStamina);
 
 		actor->aiStateTime += elapsed;
@@ -3801,17 +3803,23 @@ void stepGame(float elapsed) {
 			particle->time += elapsed;
 			if (particle->time > particle->maxTime) complete = true;
 
-			// particle->velo.z -= 0.98; // grav
-
-			particle->position += particle->velo;
-			particle->velo *= 0.95;
-
 			float fadeInPerc = 0.10;
 			float fadeOutPerc = 0.10;
+			Vec3 accel = v3();
 
 			if (particle->type == PARTICLE_DUST) {
-			} else if (particle->type == PARTICLE_BLOOD) {
+			} else if (particle->type == PARTICLE_STASIS_GAIN) {
+				fadeInPerc = 0.20;
+				fadeOutPerc = 0.50;
+				accel.z += 1;
 			}
+
+			float particleTimeScale = elapsed / (1/60.0);
+
+			Vec3 damping = v3(0.05, 0.05, 0.05);
+			particle->velo += (accel - damping*particle->velo) * particleTimeScale;
+
+			particle->position += particle->velo * particleTimeScale;
 
 			float alpha =
 				clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
