@@ -458,6 +458,7 @@ struct Camera {
 	Vec3 up;
 	float fovy;
 	bool isOrtho;
+	float orthoScale;
 };
 
 enum ShaderUniformType {
@@ -1451,8 +1452,10 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::rlLoadIdentity();
 
 	if (!camera.isOrtho) logf("No perspective camera allowed\n");
-	double top = size.y/2;
-	double right = size.x/2;
+	double top = size.y/2 / camera.orthoScale;
+	double right = size.x/2 / camera.orthoScale;
+	if (camera.fovy != 0) logf("fovy does nothing currently\n");
+	if (camera.orthoScale == 0) logf("Camera has an orthoScale of 0\n");
 
 	Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
 
@@ -1509,15 +1512,21 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 }
 
 Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
-	Raylib::Matrix matProj = Raylib::rlGetMatrixProjection();
-	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
-	Raylib::Matrix viewProj = Raylib::MatrixMultiply(matView, matProj);
+	Raylib::Matrix proj = Raylib::rlGetMatrixProjection();
+	Raylib::Matrix view = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+	view = Raylib::MatrixMultiply(view, Raylib::MatrixScale(camera.orthoScale, camera.orthoScale, camera.orthoScale));
+
+	Raylib::Matrix viewProj = Raylib::MatrixMultiply(view, proj);
+
 	Raylib::Matrix invViewProj = Raylib::MatrixInvert(viewProj);
+
 	Raylib::Vector3 raylibPosition = {worldPosition.x, worldPosition.y, worldPosition.z};
 	raylibPosition = Raylib::Vector3Transform(raylibPosition, viewProj);
+
 	Vec2 ndc = v2(raylibPosition.x, raylibPosition.y);
 	ndc /= 2;
 	ndc.x++;
+
 	return ndc;
 }
 

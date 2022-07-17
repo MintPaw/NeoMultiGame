@@ -702,7 +702,6 @@ struct Game {
 
 	Vec3 cameraTarget;
 	Vec3 visualCameraTarget;
-	Matrix3 isoMatrix3;
 	Camera camera3d;
 
 	int nextActionId;
@@ -1381,21 +1380,22 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Set up matrices
+		Vec2 screenScale = v2(platform->windowSize) / v2(1920, 1080);
+		float zoom = MinNum(screenScale.x, screenScale.y);
+
 		game->visualCameraTarget = lerp(game->visualCameraTarget, game->cameraTarget, 0.5);
 		if (distance(game->visualCameraTarget, game->cameraTarget) > 100) game->visualCameraTarget = game->cameraTarget;
 
-		{ // 3d camera
-			Matrix3 matrix = mat3();
-			matrix.ROTATE(game->cameraAngleDegrees.y);
-			matrix.ROTATE_X(game->cameraAngleDegrees.x);
-			Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
+		Matrix3 matrix = mat3();
+		matrix.ROTATE(game->cameraAngleDegrees.y);
+		matrix.ROTATE_X(game->cameraAngleDegrees.x);
+		Vec3 cameraPos = (matrix * v3(0, 0, 1000)) + game->visualCameraTarget;
 
-			game->camera3d.position = cameraPos;
-			game->camera3d.target = game->visualCameraTarget;
-			game->camera3d.up = v3(0, 0, 1);
-			game->camera3d.fovy = 10;
-			game->camera3d.isOrtho = true;
-		}
+		game->camera3d.position = cameraPos;
+		game->camera3d.target = game->visualCameraTarget;
+		game->camera3d.up = v3(0, 0, 1);
+		game->camera3d.orthoScale = zoom;
+		game->camera3d.isOrtho = true;
 	} ///
 
 	bool inRoomPrewarm = false;
@@ -1426,7 +1426,8 @@ void stepGame(float elapsed) {
 				}
 
 				if (player) { // There always has to be a player???
-					Actor *newActor = createActor(destMap, ACTOR_UNIT); // Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird
+					// Should factor into moveActor()? // You really should, because them itemsPtr fixup is really weird @incomplete
+					Actor *newActor = createActor(destMap, ACTOR_UNIT);
 					int id = newActor->id;
 					Skeleton *skeleton = newActor->skeleton;
 					Item *itemsPtr = newActor->items;
@@ -2613,8 +2614,18 @@ void stepGame(float elapsed) {
 
 			if (actor->playerControlled) {
 				if (!game->inEditor) {
-					game->cameraTarget = actor->position;
-					game->cameraTarget.z += platform->windowHeight*0.15;
+					if (actor->isOnGround) {
+						game->cameraTarget = actor->position;
+						game->cameraTarget.z += platform->windowHeight*0.15;
+					} else {
+						if (fabs(actor->position.z - game->cameraTarget.z) < game->size.y*0.5) {
+							game->cameraTarget.x = actor->position.x;
+							game->cameraTarget.y = actor->position.y;
+						} else {
+							game->cameraTarget = actor->position;
+							game->cameraTarget.z += platform->windowHeight*0.15;
+						}
+					}
 				}
 
 				{ // Figure out running
@@ -3387,7 +3398,7 @@ void stepGame(float elapsed) {
 					}
 
 					if (game->debugDrawUnitAiState && actor->type == ACTOR_UNIT && !actor->playerControlled) {
-							textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", aiStateStrings[actor->aiState], actor->aiStateTime);
+						textLines[textLinesNum++] = frameSprintf("%s (%.1fs)", aiStateStrings[actor->aiState], actor->aiStateTime);
 					}
 
 					Vec2 positionTop2 = getScreenPoint(actor->position + v3(0, 0, actor->size.z));
