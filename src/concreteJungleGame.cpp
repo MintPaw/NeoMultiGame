@@ -594,6 +594,7 @@ struct Particle {
 	int tint;
 	float time;
 	float maxTime;
+	float delay;
 };
 
 struct Log3Buffer {
@@ -609,7 +610,7 @@ struct DrawBillboardCall {
 	Vec3 position;
 	Vec2 size;
 	int tint;
-	int alpha;
+	float alpha;
 	Rect source;
 };
 
@@ -1227,6 +1228,7 @@ void updateGame() {
 					int tint = billboard->tint;
 					Vec4 tintVec = hexToArgbFloat(billboard->tint);
 					tintVec.x *= billboard->alpha;
+					tint = argbToHex(tintVec);
 
 					if (billboard->texture) {
 						drawBillboard(
@@ -2542,15 +2544,15 @@ void stepGame(float elapsed) {
 
 						for (int i = 0; i < ArrayLength(bonesToSpawnOn); i++) {
 							Matrix4 boneMatrix = getBoneMatrix(actor, bonesToSpawnOn[i]);
-							pushSphere(makeSphere(boneMatrix * v3(), 20), 0xFFFF0000);
-							for (int i = 0; i < 2; i++) {
+							for (int i = 0; i < 10; i++) {
 								Particle *particle = createParticle(PARTICLE_DUST);
 								particle->position = boneMatrix * v3();
 								particle->position.y -= 5;
-								particle->size = v2(128, 128);
+								particle->size = v2(32, 32);
 								particle->velo.x = rndFloat(-2, 2);
 								particle->velo.z = rndFloat(-1, 1);
-								particle->maxTime = rndFloat(5, 10);
+								particle->maxTime = rndFloat(0.1, 0.25);
+								particle->delay = i * 0.15;
 								particle->tint = 0x80606090;
 							}
 						}
@@ -3790,6 +3792,11 @@ void stepGame(float elapsed) {
 		for (int i = 0; i < game->particlesNum; i++) {
 			Particle *particle = &game->particles[i];
 			bool complete = false;
+
+			if (particle->delay > 0) {
+				particle->delay -= elapsed; 
+				continue;
+			}
 
 			particle->time += elapsed;
 			if (particle->time > particle->maxTime) complete = true;
