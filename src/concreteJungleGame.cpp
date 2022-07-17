@@ -703,7 +703,6 @@ struct Game {
 	Vec3 cameraTarget;
 	Vec3 visualCameraTarget;
 	Matrix3 isoMatrix3;
-	Matrix3 cameraMatrix;
 	Camera camera3d;
 
 	int nextActionId;
@@ -1384,22 +1383,6 @@ void stepGame(float elapsed) {
 	{ /// Set up matrices
 		game->visualCameraTarget = lerp(game->visualCameraTarget, game->cameraTarget, 0.5);
 		if (distance(game->visualCameraTarget, game->cameraTarget) > 100) game->visualCameraTarget = game->cameraTarget;
-
-		game->cameraMatrix = mat3(); // More like cameraInvMatrix?
-		game->cameraMatrix.TRANSLATE(game->size/2);
-		game->cameraMatrix.TRANSLATE(-v2(game->isoMatrix3 * game->visualCameraTarget));
-		pushCamera2d(game->cameraMatrix);
-
-		Matrix3 matrix = mat3();
-		matrix.ROTATE(game->cameraAngleDegrees.y);
-		matrix.ROTATE_X(game->cameraAngleDegrees.x);
-
-		{ // Fix my 2d coordinate system
-			matrix.SCALE(1, -1);
-			matrix = matrix.transpose();
-		}
-
-		game->isoMatrix3 = matrix;
 
 		{ // 3d camera
 			Matrix3 matrix = mat3();
@@ -4207,7 +4190,6 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Draw hud
-		pushCamera2d(renderer->currentCameraMatrix.invert());
 
 		{ /// Draw map
 			pushTargetTexture(game->mapTexture);
@@ -4506,11 +4488,9 @@ void stepGame(float elapsed) {
 			}
 		} ///
 
-		popCamera2d();
 	} /// 
 	popTargetTexture(); // game->overlayTexture
 
-	popCamera2d();
 
 	game->prevMapTime = game->mapTime;
 	game->mapTime += elapsed;
