@@ -32,8 +32,6 @@ struct Sound {
 	stb_vorbis_alloc vorbisTempMem;
 	stb_vorbis *vorbis;
 
-	ALuint al3dBuffer;
-
 	int concurrentInstances;
 	int maxConcurrentInstances;
 };
@@ -57,13 +55,6 @@ struct Channel {
 	float lastVolume;
 };
 
-struct SoundSource {
-	int id;
-	ALuint source;
-	Sound *sound;
-	bool ui;
-};
-
 struct Audio {
 	bool disabled;
 	bool htmlAllowedAudio;
@@ -77,11 +68,6 @@ struct Audio {
 	bool doInstantVolumeChanges;
 
 	int memoryUsed;
-
-#define SOUND_SOURCES_MAX 128
-	SoundSource *soundSources[SOUND_SOURCES_MAX];
-	int soundSourcesNum;
-	int nextSoundSourceId;
 
 	char soundStoreNames[SOUNDS_MAX][PATH_MAX_LEN];
 	int soundStoreNamesNum;
@@ -112,11 +98,6 @@ Channel *getChannel(int id);
 void seekChannelPerc(Channel *channel, float perc);
 
 Sound *getSound(const char *path, bool onlyLoadRaw=false);
-SoundSource *playWorldSound(Vec3 position, char *path);
-SoundSource *playUiSound(char *path);
-void setPosition(SoundSource *soundSource, Vec3 position);
-SoundSource *getSoundSource(int id);
-
 // void updateAudio(); //@hack This is in main.cpp
 
 /// Private
@@ -271,7 +252,7 @@ void updateAudio() {
 
 #if defined(__EMSCRIPTEN__)
 	EM_ASM({
-		if (AL.currentCtx.audioCtx.state == "suspended") AL.currentCtx.audioCtx.resume();
+		if (AL.currentCtx.audioCtx.state == "suspended" && platform->frameCount % 8 == 0) AL.currentCtx.audioCtx.resume();
 	});
 #endif
 
@@ -481,116 +462,6 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 	}
 
 	return NULL;
-}
-
-SoundSource *playUiSound(char *path) {
-	SoundSource *source = playWorldSound(v3(), path);
-	if (source) source->ui = true;
-	return source;
-}
-
-SoundSource *playWorldSound(Vec3 position, char *path) {
-	if (audio->soundSourcesNum > SOUND_SOURCES_MAX-1) return NULL;
-
-	Sound *sound = getSound(path);
-	if (!sound) {
-		logf("No sound found at %s\n", path);
-		return NULL;
-	}
-
-	int samplesNeeded = sound->samplesTotal - sound->samplesStreamed;
-	if (samplesNeeded > 0) {
-		int samplesGot = stb_vorbis_get_samples_short_interleaved(sound->vorbis, sound->channels, &sound->samples[sound->samplesStreamed], samplesNeeded);
-		samplesGot *= sound->channels;
-		sound->samplesStreamed += samplesGot;
-	}
-
-	if (!sound->al3dBuffer) {
-		alGenBuffers(1, &sound->al3dBuffer);
-		ALenum format = 0;
-		if (sound->channels == 1) format = AL_FORMAT_MONO16;
-		if (sound->channels == 2) format = AL_FORMAT_STEREO16;
-		alBufferData(sound->al3dBuffer, format, sound->samples, sound->samplesTotal * sizeof(s16), sound->sampleRate);
-	}
-
-	SoundSource *source = (SoundSource *)zalloc(sizeof(SoundSource));
-	source->id = ++audio->nextSoundSourceId;
-	source->sound = sound;
-	alGenSources(1, &source->source);
-	// alSourcef(source->source, AL_PITCH, 1);
-	// alSourcef(source->source, AL_GAIN, 1.0f);
-	setPosition(source, position);
-	// alSource3f(source->source, AL_POSITION, position.x, position.y, position.z);
-	// alSource3f(source->source, AL_VELOCITY, 0, 0, 0);
-	alSourcei(source->source, AL_LOOPING, AL_FALSE);
-	alSourcei(source->source, AL_BUFFER, sound->al3dBuffer);
-	// alSourcef(source->source, AL_ROLLOFF_FACTOR, 3);
-	CheckAudioError();
-
-	alSourcePlay(source->source);
-	CheckAudioError();
-
-	audio->soundSources[audio->soundSourcesNum++] = source;
-	return source;
-}
-
-void setPosition(SoundSource *soundSource, Vec3 position) {
-	alSource3f(soundSource->source, AL_POSITION, position.x, position.y, position.z);
-}
-
-SoundSource *getSoundSource(int id) {
-	if (id == 0) return NULL;
-
-	for (int i = 0; i < audio->soundSourcesNum; i++) {
-		SoundSource *source = audio->soundSources[i];
-		if (source->id == id) return source;
-	}
-
-	return NULL;
-}
-
-void stop(SoundSource *source);
-void stop(SoundSource *source) {
-	alSourceStop(source->source);
-}
-
-void setVolume(SoundSource *source, float volume);
-void setVolume(SoundSource *source, float volume) {
-	alSourcef(source->source, AL_GAIN, volume);
-}
-
-void update3dSound(Vec3 pos, Vec3 up, Vec3 front);
-void update3dSound(Vec3 pos, Vec3 up, Vec3 front) {
-	ALfloat listenerOri[] = { front.x, front.y, front.z, up.x, up.y, up.z };
-	alListener3f(AL_POSITION, pos.x, pos.y, pos.z);
-	alListener3f(AL_VELOCITY, 0, 0, 0);
-	alListenerfv(AL_ORIENTATION, listenerOri);
-
-	for (int i = 0; i < audio->soundSourcesNum; i++) {
-		SoundSource *source = audio->soundSources[i];
-
-		if (source->ui) {
-			alSource3f(source->source, AL_POSITION, pos.x, pos.y, pos.z);
-		}
-
-		ALint state;
-		alGetSourcei(source->source, AL_SOURCE_STATE, &state);
-		if (state == AL_STOPPED) {
-			alDeleteSources(1, &source->source);
-			arraySpliceIndex(audio->soundSources, audio->soundSourcesNum, sizeof(SoundSource *), i);
-			free(source);
-			i--;
-			audio->soundSourcesNum--;
-			continue;
-		}
-	}
-
-	CheckAudioError();
-}
-
-void setSoundLength(SoundSource *source, float newLength) {
-	float multi = source->sound->length / newLength;
-	alSourcef(source->source, AL_PITCH, multi);
 }
 
 void checkAudioError(int lineNum) {
