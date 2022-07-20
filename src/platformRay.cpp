@@ -242,7 +242,8 @@ void platformUpdate() {
 	void updateAudio(); //@headerHack
 	updateAudio();
 
-	Raylib::BeginDrawing();
+	void startRenderingFrame(); //@headerHack;
+	startRenderingFrame();
 	guiStartFrame();
 
 	platform->updateCallback();
@@ -632,12 +633,13 @@ void updateLightingShader();
 void processBatchDraws();
 void resetRenderContext();
 
+void startRenderingFrame();
+void endRenderingFrame();
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
 void end3d();
 void startShader(Raylib::Shader shader);
 void startShader(Shader *shader);
 void endShader();
-void endRenderingFrame();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
 Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition);
 
@@ -1442,6 +1444,14 @@ void resetRenderContext() {
 #endif
 }
 
+void startRenderingFrame() {
+	Raylib::BeginDrawing();
+	renderer->current2dDrawDepth = -1;
+}
+
+void endRenderingFrame() {
+}
+
 void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	renderer->in3dPass = true;
 
@@ -1479,11 +1489,9 @@ void startShader(Raylib::Shader shader) {
 void startShader(Shader *shader) {
 	Raylib::BeginShaderMode(shader->raylibShader);
 }
+
 void endShader() {
 	Raylib::EndShaderMode();
-}
-void endRenderingFrame() {
-	renderer->current2dDrawDepth = -1;
 }
 
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {

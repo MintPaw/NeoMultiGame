@@ -2473,7 +2473,7 @@ void stepGame(float elapsed) {
 					if (actor->pastActionsNum > ACTIONS_MAX-1) {
 						memmove(&actor->pastActions[0], &actor->pastActions[1], sizeof(Action) * ACTIONS_MAX-1);
 						actor->pastActionsNum--;
-					} 
+					}
 					actor->pastActions[actor->pastActionsNum++] = actor->actions[0];
 
 					if (action->type == ACTION_UPPERCUT) {

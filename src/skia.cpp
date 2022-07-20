@@ -1,5 +1,3 @@
-#define DO_SKIA_MSAA 0
-
 #define DO_DRAW_AFTER_CONTEXT_SWITCH 0
 #define USE_MSAA_RENDERBUFFER 1
 
@@ -147,15 +145,7 @@ struct SkiaSystem {
 	const GrGLInterface *grInterface;
 	GrDirectContext *grDirectContext;
 	SkSurface *gpuSurface;
-#if DO_SKIA_MSAA
-	u32 multiSampleFramebufferId;
-	u32 flatFramebufferId;
-
-	u32 msaaColorRenderbufferId;
-	u32 msaaDepthRenderbufferId;
-#else
 	Texture *skiaTexture;
-#endif
 	bool useGpu;
 	int msaaSamples;
 
@@ -269,68 +259,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 			skiaSys->grDirectContext = grDirectContext.release();
 		}
 
-#if DO_SKIA_MSAA
-		if (!skiaSys->flatFramebufferId) glGenFramebuffers(1, &skiaSys->flatFramebufferId);
-		glBindFramebuffer(GL_FRAMEBUFFER, skiaSys->flatFramebufferId);
-
-#if RAYLIB_MODE
-		u32 backTextureId = skiaSys->backTexture->raylibRenderTexture.texture.id;
-#else
-		u32 backTextureId = skiaSys->backTexture->texture->id;
-#endif
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, backTextureId, 0);
-
-		if (!skiaSys->multiSampleFramebufferId) glGenFramebuffers(1, &skiaSys->multiSampleFramebufferId);
-		glBindFramebuffer(GL_FRAMEBUFFER, skiaSys->multiSampleFramebufferId);
-
-#if USE_MSAA_RENDERBUFFER
-		if (skiaSys->msaaColorRenderbufferId) glDeleteRenderbuffers(1, &skiaSys->msaaColorRenderbufferId);
-		glGenRenderbuffers(1, &skiaSys->msaaColorRenderbufferId);
-		glBindRenderbuffer(GL_RENDERBUFFER, skiaSys->msaaColorRenderbufferId);
-		glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSamples, GL_RGBA8, skiaSys->width, skiaSys->height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, skiaSys->msaaColorRenderbufferId);
-#else
-		if (skiaSys->msaaColorRenderbufferId) glDeleteTextures(1, &skiaSys->msaaColorRenderbufferId);
-		glGenTextures(1, &skiaSys->msaaColorRenderbufferId);
-		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, skiaSys->msaaColorRenderbufferId);
-		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, msaaSamples, GL_RGBA8, skiaSys->width, skiaSys->height, true);
-		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, skiaSys->msaaColorRenderbufferId, 0);
-#endif
-
-		if (skiaSys->msaaDepthRenderbufferId) glDeleteRenderbuffers(1, &skiaSys->msaaDepthRenderbufferId);
-		glGenRenderbuffers(1, &skiaSys->msaaDepthRenderbufferId);
-		glBindRenderbuffer(GL_RENDERBUFFER, skiaSys->msaaDepthRenderbufferId);
-		glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSamples, GL_DEPTH24_STENCIL8, skiaSys->width, skiaSys->height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, skiaSys->msaaDepthRenderbufferId);
-		u32 status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		if (status != GL_FRAMEBUFFER_COMPLETE) logf("Bad fb\n");
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		GrGLFramebufferInfo framebufferInfo;
-		framebufferInfo.fFBOID = skiaSys->multiSampleFramebufferId;
-		framebufferInfo.fFormat = GL_RGBA8;
-
-		GrBackendRenderTarget backendRenderTarget(
-			skiaSys->width,
-			skiaSys->height,
-			msaaSamples, // sample count
-			8, // stencil bits
-			framebufferInfo
-		);
-
-		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
-
-		skiaSys->gpuSurface = SkSurface::MakeFromBackendRenderTarget(
-			skiaSys->grDirectContext,
-			backendRenderTarget,
-			kBottomLeft_GrSurfaceOrigin,
-			kRGBA_8888_SkColorType,
-			NULL,
-			&surfaceProps
-		).release();
-#else
-
 	if (skiaSys->skiaTexture) destroyTexture(skiaSys->skiaTexture);
 	skiaSys->skiaTexture = createTexture(skiaSys->width, skiaSys->height);
 	setTextureSmooth(skiaSys->skiaTexture, true);
@@ -359,8 +287,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		colorSpace,
 		&surfaceProps
 	).release();
-
-#endif
 
 		if (!skiaSys->gpuSurface) {
 			if (msaaSamples == 16) {
@@ -1089,34 +1015,6 @@ void endSkiaFrame() {
 		glVertexAttribDivisor(2, 0);
 #endif
 
-#if DO_SKIA_MSAA
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, skiaSys->multiSampleFramebufferId);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, skiaSys->flatFramebufferId);
-#if RAYLIB_MODE 
-#else
-		glBlitFramebuffer(0, 0, skiaSys->width, skiaSys->height, 0, 0, skiaSys->width, skiaSys->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-#endif
-
-#if RAYLIB_MODE 
-		//@todo
-		if (renderer->targetTextureStackNum > 0) {
-			glBindFramebuffer(GL_FRAMEBUFFER, renderer->targetTextureStack[renderer->targetTextureStackNum-1]->raylibRenderTexture.id);
-		} else {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		}
-#else
-		if (renderer->currentFramebuffer) {
-			glBindFramebuffer(GL_FRAMEBUFFER, renderer->currentFramebuffer->id);
-		} else {
-			if (renderer->currentTargetTexture) {
-				setTargetTexture(renderer->currentTargetTexture);
-			} else {
-				glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			}
-		}
-#endif
-
-#else
 		pushTargetTexture(skiaSys->backTexture);
 		clearRenderer();
 
@@ -1125,7 +1023,6 @@ void endSkiaFrame() {
 		drawSimpleTexture(skiaSys->skiaTexture, matrix);
 		popTargetTexture();
 
-#endif
 	} else {
 #if DO_DRAW_AFTER_CONTEXT_SWITCH
 		execCommands(&skiaSys->immVDrawCommandsList);
