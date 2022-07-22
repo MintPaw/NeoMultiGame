@@ -629,13 +629,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						props.tint = recurse.tint;
 						props.colorTransform = recurse.colorTransform;
 
-						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE); //@todo This could be a bit faster if you didn't set blend mode every shape
-						if (nextUseClip) {
-							cmd->blendMode = SWF_BLEND_NORMAL;
-						} else {
-							cmd->blendMode = recurse.blendMode;
-						}
-
 						genDrawShape(drawable->shape, props, cmdList);
 					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
 						DrawSpriteRecurseData newRecurse = recurse;
@@ -660,8 +653,17 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 								shouldStopColorMatrix = true;
 							}
 						}
-						if (drawable->spriteBlendMode != SWF_BLEND_NONE) newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
+
+						if (drawable->spriteBlendMode != SWF_BLEND_NONE) {
+							newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
+							if (nextUseClip) newRecurse.blendMode = SWF_BLEND_NORMAL;
+						}
+
+						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE);
+						cmd->blendMode = recurse.blendMode;
+
 						genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
+
 						if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
 						if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
 					} else {
