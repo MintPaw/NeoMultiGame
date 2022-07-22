@@ -141,6 +141,7 @@ struct SkiaSystem {
 	SkCanvas *canvas;
 
 	bool useSaveLayerBlur;
+	bool useSaveLayerBlendMode;
 
 	const GrGLInterface *grInterface;
 	GrDirectContext *grDirectContext;
@@ -208,6 +209,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
 
+		skiaSys->useSaveLayerBlendMode = false;
 #if !defined(__EMSCRIPTEN__)
 		skiaSys->blurEnabled = true;
 #endif
@@ -561,7 +563,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			if (!text) text = sprite->initialText;
 			Rect textRect = sprite->bounds;
 
-#if 1
 			if (text[0] != 0) {
 				VDrawCommand *cmd = createCommand(cmdList, VDRAW_TEXT);
 				cmd->font = font;
@@ -580,39 +581,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					logf("Bad text align\n");
 				}
 			}
-#endif
-
-#if 0
-			Rect rect = inflatePerc(textRect, -0.15);
-			pushCamera2d(skiaSys->matrixStack[skiaSys->matrixStackNum-1]);
-			DrawTextProps props = newDrawTextProps();
-			props.font = font;
-			props.color = setAofArgb(sprite->textColor, 255*recurse.alpha);
-			drawTextInRect(text, props, rect);
-			drawRectOutline(textRect, 2, 0xFF0000FF);
-			popCamera2d();
-#endif
-
-#if 0
-			textRect = topMatrix.multiply(textRect);
-			Vec2 pos;
-			pos.x = textRect.x;
-			pos.y = textRect.y;
-			float width = textRect.width;
-			// drawRectOutline(textRect, 2, 0xFF0000FF);
-			Vec2 size = getTextSize(font, text, width);
-			if (sprite->textAlign == TEXT_ALIGN_LEFT) {
-				// Nothing...
-			} else if (sprite->textAlign == TEXT_ALIGN_RIGHT) {
-				pos.x += textRect.width - size.x;
-			} else if (sprite->textAlign == TEXT_ALIGN_CENTER) {
-				pos.x += textRect.width/2.0 - size.x/2.0;
-			} else {
-				logf("Bad text align\n");
-			}
-			drawRectOutline(textRect, 2, 0xFF0000FF);
-			drawText(font, text, pos, sprite->textColor, width); //@incomplte
-#endif
 		} else {
 			SwfDrawable *depths = sprite->frames[frame].depths;
 			int depthsNum = sprite->frames[frame].depthsNum;
@@ -827,41 +795,33 @@ void execCommands(VDrawCommandsList *cmdList) {
 		} else if (cmd->type == VDRAW_END_COLOR_MATRIX) {
 			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
+			SkBlendMode blendMode;
 			if (cmd->blendMode == SWF_BLEND_NORMAL) {
-				paint.setBlendMode(SkBlendMode::kSrcOver);
+				blendMode = SkBlendMode::kSrcOver;
 			} else if (cmd->blendMode == SWF_BLEND_MULTIPLY) {
-				paint.setBlendMode(SkBlendMode::kMultiply);
+				blendMode = SkBlendMode::kMultiply;
 			} else if (cmd->blendMode == SWF_BLEND_SCREEN) {
-				paint.setBlendMode(SkBlendMode::kScreen);
-			} else if (cmd->blendMode == SWF_BLEND_LIGHTEN) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
-			} else if (cmd->blendMode == SWF_BLEND_DARKEN) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
+				blendMode = SkBlendMode::kScreen;
 			} else if (cmd->blendMode == SWF_BLEND_DIFFERENCE) {
-				paint.setBlendMode(SkBlendMode::kDifference);
+				blendMode = SkBlendMode::kDifference;
 			} else if (cmd->blendMode == SWF_BLEND_ADD) {
-				paint.setBlendMode(SkBlendMode::kPlus);
+				blendMode = SkBlendMode::kPlus;
 			} else if (cmd->blendMode == SWF_BLEND_SUBTRACT) {
-				paint.setBlendMode(SkBlendMode::kDifference);
-			} else if (cmd->blendMode == SWF_BLEND_INVERT) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode invert\n");
-				usingInvalidBlendModeWarnings++;
-			} else if (cmd->blendMode == SWF_BLEND_ALPHA) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode alpha\n");
-				usingInvalidBlendModeWarnings++;
-			} else if (cmd->blendMode == SWF_BLEND_ERASE) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode erase\n");
-				usingInvalidBlendModeWarnings++;
-			} else if (cmd->blendMode == SWF_BLEND_OVERLAY) {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
-			} else if (cmd->blendMode == SWF_BLEND_HARDLIGHT) {
+				blendMode = SkBlendMode::kDifference;
+			} else {
 				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
 				usingInvalidBlendModeWarnings++;
 			}
 			if (usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
+
+			if (skiaSys->useSaveLayerBlendMode) {
+				SkPaint blendModePaint = SkPaint();
+				blendModePaint.setBlendMode(blendMode);
+				skiaSys->canvas->saveLayer(NULL, &blendModePaint);
+			} else {
+				paint.setBlendMode(blendMode);
+			}
+
 		} else if (cmd->type == VDRAW_SET_SOLID_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
 			paint.setColor(cmd->colors[0]);

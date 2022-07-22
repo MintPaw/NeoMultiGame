@@ -14,6 +14,7 @@ void readStringInto(DataStream *stream, char *dest, int max);
 u32 readU32(DataStream *stream);
 Matrix4 readMatrix4(DataStream *stream);
 Xform readXform(DataStream *stream);
+Xform2 readXform2(DataStream *stream);
 AABB readAABB(DataStream *stream);
 u8 readU8(DataStream *stream);
 u16 readU16(DataStream *stream);
@@ -44,6 +45,7 @@ void writeVec2(DataStream *stream, Vec2 value) { writeBytes(stream, &value, size
 void writeVec2i(DataStream *stream, Vec2i value) { writeBytes(stream, &value, sizeof(Vec2i)); }
 void writeMatrix4(DataStream *stream, Matrix4 value) { writeBytes(stream, &value, sizeof(Matrix4)); }
 void writeXform(DataStream *stream, Xform value) { writeBytes(stream, &value, sizeof(Xform)); }
+void writeXform2(DataStream *stream, Xform2 value) { writeBytes(stream, &value, sizeof(Xform2)); }
 void writeAABB(DataStream *stream, AABB value) { writeBytes(stream, &value, sizeof(AABB)); }
 
 #else
@@ -120,6 +122,12 @@ Matrix4 readMatrix4(DataStream *stream) {
 Xform readXform(DataStream *stream) {
 	Xform ret;
 	readBytes(stream, &ret, sizeof(Xform));
+	return ret;
+}
+
+Xform2 readXform2(DataStream *stream) {
+	Xform2 ret;
+	readBytes(stream, &ret, sizeof(Xform2));
 	return ret;
 }
 
