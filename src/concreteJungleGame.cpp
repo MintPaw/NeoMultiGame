@@ -2347,14 +2347,24 @@ void stepGame(float elapsed) {
 										particleColor = 0x80FF0000;
 										particlesAmount = damage;
 
-										if (damage >= 20) playWorldSound("assets/audio/hit/4.ogg", getCenter(otherActorAABB));
-										else if (damage >= 10) playWorldSound("assets/audio/hit/3.ogg", getCenter(otherActorAABB));
-										else if (damage >= 5) playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
-										else playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
-
+										int extraHitPauseFrames = 0;
 										if (actor->playerControlled || otherActor->playerControlled) {
-											game->hitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0.1, 0.5, 10, 20);
+											extraHitPauseFrames += clampMap(action->info->damage/otherActor->maxHp, 0.1, 0.5, 10, 20);
 										}
+
+										{
+											int hitSoundId = 0;
+											if (damage >= 20) hitSoundId = playWorldSound("assets/audio/hit/4.ogg", getCenter(otherActorAABB));
+											else if (damage >= 10) hitSoundId = playWorldSound("assets/audio/hit/3.ogg", getCenter(otherActorAABB));
+											else if (damage >= 5) hitSoundId = playWorldSound("assets/audio/hit/2.ogg", getCenter(otherActorAABB));
+											else hitSoundId = playWorldSound("assets/audio/hit/1.ogg", getCenter(otherActorAABB));
+
+											Channel *channel = getChannel(hitSoundId);
+											if (channel) {
+												channel->delay = 1/60.0 * extraHitPauseFrames;
+											}
+										}
+										game->hitPauseFrames += extraHitPauseFrames;
 										otherActor->hp -= damage;
 
 										if (actor->playerControlled) {

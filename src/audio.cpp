@@ -287,14 +287,8 @@ void updateAudio() {
 
 void mixSound(s16 *destBuffer, int destSamplesNum) {
 	memset(destBuffer, 0, destSamplesNum * sizeof(s16));
-
 	for (int i = 0; i < CHANNELS_MAX; i++) {
 		Channel *channel = &audio->channels[i];
-
-		if (channel->delay > 0) {
-			channel->delay -= 1/60.0;
-			continue;
-		}
 
 		if (!channel->exists) continue;
 		Sound *sound = channel->sound;
@@ -361,19 +355,19 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 			s16 rightSample = 0;
 			s16 leftSample = 0;
 
-			if (sound->channels == 2) {
-				rightSample = sound->samples[channel->samplePosition];
-				leftSample = sound->samples[channel->samplePosition+1];
-			} else if (sound->channels == 1) {
-				rightSample = sound->samples[channel->samplePosition];
-				leftSample = sound->samples[channel->samplePosition];
+			if (channel->delay > 0) {
+				channel->delay -= 1 / (float)SAMPLE_RATE;
+			} else {
+				if (sound->channels == 2) {
+					rightSample = sound->samples[channel->samplePosition];
+					leftSample = sound->samples[channel->samplePosition+1];
+				} else if (sound->channels == 1) {
+					rightSample = sound->samples[channel->samplePosition];
+					leftSample = sound->samples[channel->samplePosition];
+				}
+
+				channel->samplePosition += sound->channels;
 			}
-
-			channel->samplePosition += sound->channels;
-
-			// s16 noise = rndFloat(-0.25, 0.25) * SHRT_MAX;
-			// leftSample += noise;
-			// rightSample += noise;
 
 			float leftPan = 1;
 			float rightPan = 1;
