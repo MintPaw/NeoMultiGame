@@ -76,12 +76,7 @@ struct DrawShapeProps {
 
 enum VDrawCommandType {
 	VDRAW_SET_MATRIX,
-	VDRAW_MOVE_TO,
-	VDRAW_LINE_TO,
-	VDRAW_QUAD_TO,
-	VDRAW_DRAW_PATH,
 	VDRAW_CLIP_PATH,
-	VDRAW_RESET_PATH,
 	VDRAW_DRAW_CACHED_PATH,
 	VDRAW_CLIP_CACHED_PATH,
 	VDRAW_SAVE,
@@ -94,6 +89,7 @@ enum VDrawCommandType {
 	VDRAW_START_COLOR_MATRIX,
 	VDRAW_END_COLOR_MATRIX,
 	VDRAW_SET_BLEND_MODE,
+	VDRAW_END_BLEND_MODE,
 	VDRAW_SET_SOLID_FILL,
 	VDRAW_SET_LINEAR_GRADIENT_FILL,
 	VDRAW_SET_RADIAL_GRADIENT_FILL,
@@ -654,16 +650,16 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 							}
 						}
 
-						if (drawable->spriteBlendMode != SWF_BLEND_NONE) {
-							newRecurse.blendMode = (SwfBlendMode)drawable->spriteBlendMode;
-							if (nextUseClip) newRecurse.blendMode = SWF_BLEND_NORMAL;
+						bool shouldEndBlendMode = false;
+						if (drawable->spriteBlendMode != SWF_BLEND_NONE && !nextUseClip) {
+							VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE);
+							cmd->blendMode = (SwfBlendMode)drawable->spriteBlendMode;
+							shouldEndBlendMode = true;
 						}
-
-						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE);
-						cmd->blendMode = recurse.blendMode;
 
 						genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
 
+						if (shouldEndBlendMode) createCommand(cmdList, VDRAW_END_BLEND_MODE);
 						if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
 						if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
 					} else {
@@ -733,11 +729,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 	}
 
 	SkPaint paint = SkPaint();
-	if (skiaSys->useGpu) {
-		// if (skiaSys->msaaSamples > 0) paint.setAntiAlias(true);
-	} else {
-		if (skiaSys->useCpuAA) paint.setAntiAlias(true);
-	}
+	if (!skiaSys->useGpu && skiaSys->useCpuAA) paint.setAntiAlias(true);
 
 	SkPath path = SkPath();
 
@@ -745,18 +737,8 @@ void execCommands(VDrawCommandsList *cmdList) {
 		VDrawCommand *cmd = &cmdList->cmds[i];
 		if (cmd->type == VDRAW_SET_MATRIX) {
 			skiaSys->canvas->setMatrix(toSkMatrix(cmd->matrix));
-		} else if (cmd->type == VDRAW_MOVE_TO) {
-			path.moveTo(cmd->position.x, cmd->position.y);
-		} else if (cmd->type == VDRAW_LINE_TO) {
-			path.lineTo(cmd->position.x, cmd->position.y);
-		} else if (cmd->type == VDRAW_QUAD_TO) {
-			path.quadTo(cmd->control.x, cmd->control.y, cmd->position.x, cmd->position.y);
-		} else if (cmd->type == VDRAW_DRAW_PATH) {
-			skiaSys->canvas->drawPath(path, paint);
 		} else if (cmd->type == VDRAW_CLIP_PATH) {
 			skiaSys->canvas->clipPath(path);
-		} else if (cmd->type == VDRAW_RESET_PATH) {
-			path.reset();
 		} else if (cmd->type == VDRAW_DRAW_CACHED_PATH) {
 			skiaSys->canvas->drawPath(*cmd->path, paint);
 		} else if (cmd->type == VDRAW_CLIP_CACHED_PATH) {
@@ -797,7 +779,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 		} else if (cmd->type == VDRAW_END_COLOR_MATRIX) {
 			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
-			SkBlendMode blendMode;
+			SkBlendMode blendMode = SkBlendMode::kSrcOver;
 			if (cmd->blendMode == SWF_BLEND_NORMAL) {
 				blendMode = SkBlendMode::kSrcOver;
 			} else if (cmd->blendMode == SWF_BLEND_MULTIPLY) {
@@ -824,6 +806,12 @@ void execCommands(VDrawCommandsList *cmdList) {
 				paint.setBlendMode(blendMode);
 			}
 
+		} else if (cmd->type == VDRAW_END_BLEND_MODE) {
+			if (skiaSys->useSaveLayerBlendMode) {
+				skiaSys->canvas->restore();
+			} else {
+				paint.setBlendMode(SkBlendMode::kSrcOver);
+			}
 		} else if (cmd->type == VDRAW_SET_SOLID_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
 			paint.setColor(cmd->colors[0]);
