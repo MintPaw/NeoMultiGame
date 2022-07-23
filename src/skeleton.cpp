@@ -22,6 +22,7 @@ struct Bone {
 #define BONES_MAX 32
 struct BaseSkeleton {
 	char name[PATH_MAX_LEN];
+	char path[PATH_MAX_LEN];
 	int frameCount;
 
 	Bone *bones;
@@ -110,7 +111,7 @@ BaseSkeleton *getBaseSkeleton(char *path) {
 
 	for (int i = 0; i < skeletonSys->baseSkeletonsNum; i++) {
 		BaseSkeleton *base = &skeletonSys->baseSkeletons[i];
-		if (streq(base->name, path)) return base;
+		if (streq(base->path, path)) return base;
 	}
 
 	if (!fileExists(path)) return NULL;
@@ -122,7 +123,7 @@ BaseSkeleton *getBaseSkeleton(char *path) {
 
 	BaseSkeleton *base = &skeletonSys->baseSkeletons[skeletonSys->baseSkeletonsNum++];
 	memset(base, 0, sizeof(BaseSkeleton));
-	strcpy(base->name, path);
+	strcpy(base->path, path);
 
 	char *dir = frameMalloc(PATH_MAX_LEN);
 	strcpy(dir, path);

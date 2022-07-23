@@ -73,6 +73,7 @@ else
 endif
 
 PYTHON3=/c/Users/MintPaw/AppData/Local/Programs/Python/Python37-32/python.exe
+BLENDER="/c/Program Files/Blender Foundation/Blender 3.0/blender.exe"
 
 all:
 	$(MAKE) b
@@ -973,3 +974,8 @@ genButt2GoZips:
 		rm -f movie.html; \
 		rm -f ../ngHtml.zip; \
 		$(SEVEN_ZIP) a -tzip ../ngHtml.zip .
+
+exportConcreteJungleBlenderAssets:
+	$(BLENDER) /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/concreteJungle.blend \
+		-b -P /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/standaloneExportAssets.py
+

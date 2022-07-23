@@ -1640,7 +1640,7 @@ void stepGame(float elapsed) {
 				Actor *actor = createUnit(map, 2);
 				actor->stats[STAT_MAX_STAMINA] = 1;
 				actor->stats[STAT_STAMINA_REGEN] = 1;
-				actor->stats[STAT_HP] = 50;
+				actor->stats[STAT_HP] = 500;
 				actor->stats[STAT_MOVEMENT_SPEED] = 1;
 				actor->stats[STAT_ATTACK_SPEED] = 1;
 				actor->hasHyperArmor = false;
@@ -1867,15 +1867,6 @@ void stepGame(float elapsed) {
 				}
 			}
 			ImGui::InputText("Name", map->name, MAP_NAME_MAX_LEN);
-
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNode("Past actions")) {
-			for (int i = 0; i < player->pastActionsNum; i++) {
-				Action *action = &player->pastActions[i];
-				ImGui::Text("%d: %s", i, action->info->name);
-			}
 
 			ImGui::TreePop();
 		}
