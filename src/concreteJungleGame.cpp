@@ -5608,31 +5608,11 @@ void loadGlobals() {
 	globals->actorModelScale = readFloat(stream);
 	globals->movementPercDistanceWalkingRatio = readFloat(stream);
 	globals->movementPercDistanceRunningRatio = readFloat(stream);
-	if (globalsVersion >= 15) {
-		globals->specularPower = readFloat(stream);
-	} else {
-		globals->specularPower = 1;
-	}
-
-	if (globalsVersion >= 16) {
-		globals->pixelizePower = readFloat(stream);
-	} else {
-		globals->pixelizePower = 5;
-	}
-
-	if (globalsVersion >= 18) {
-		globals->fxaaResolutionScale = readFloat(stream);
-	} else {
-		globals->fxaaResolutionScale = 1;
-	}
-
-	if (globalsVersion >= 17) {
-		globals->posterizeGamma = readFloat(stream);
-		globals->posterizeNumColors = readFloat(stream);
-	} else {
-		globals->posterizeGamma = 0.6;
-		globals->posterizeNumColors = 8;
-	}
+	globals->specularPower = readFloat(stream);
+	globals->pixelizePower = readFloat(stream);
+	globals->fxaaResolutionScale = readFloat(stream);
+	globals->posterizeGamma = readFloat(stream);
+	globals->posterizeNumColors = readFloat(stream);
 
 	destroyDataStream(stream);
 }
