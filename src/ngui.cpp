@@ -200,7 +200,7 @@ NguiElement *getNguiElementById(int id);
 int getNguiId(int parentId, char *name);
 
 void nguiSetNextWindowSize(Vec2 size);
-void nguiStartWindow(char *name, int flags = 0);
+void nguiStartWindow(char *windowName, Vec2 size=v2(), Vec2 pivot=v2());
 void nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
 bool nguiSlider(char *name, float *value, float min=0, float max=1);
@@ -973,11 +973,15 @@ int getElementIndex(NguiElement *element) {
 	return 0;
 }
 
-void nguiStartWindow(char *name, int flags) {
+void nguiStartWindow(char *name, Vec2 size, Vec2 pivot) {
+	if (!isZero(size)) nguiPushWindowPositionAndPivot(size, pivot);
+
 	NguiElement *element = getAndReviveNguiElement(name);
 	element->type = NGUI_ELEMENT_WINDOW;
 	ngui->currentParentId = element->id;
 	ngui->currentOrderIndex = 0;
+
+	if (!isZero(size)) nguiPopWindowPositionAndPivot();
 }
 
 void nguiEndWindow() {
