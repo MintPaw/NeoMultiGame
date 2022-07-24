@@ -19,11 +19,12 @@ const float renderHeight = 450;
 
 uniform float pixelWidth = 5.0;
 uniform float pixelHeight = 5.0;
+uniform vec2 pixelRatio;
 
 void main()
 {
-    float dx = pixelWidth*(1.0/renderWidth);
-    float dy = pixelHeight*(1.0/renderHeight);
+    float dx = pixelRatio.x;
+    float dy = pixelRatio.y;
 
     vec2 coord = vec2(dx*floor(fragTexCoord.x/dx), dy*floor(fragTexCoord.y/dy));
 

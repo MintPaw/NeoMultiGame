@@ -251,6 +251,10 @@ struct Globals {
 	float movementPercDistanceWalkingRatio;
 	float movementPercDistanceRunningRatio;
 	float specularPower;
+	float pixelizePower;
+	float fxaaResolutionScale;
+	float posterizeGamma;
+	float posterizeNumColors;
 };
 
 enum StatType {
@@ -601,12 +605,6 @@ struct Particle {
 	float delay;
 };
 
-struct Log3Buffer {
-	Vec3 position;
-	char *buffer;
-	float logTime;
-};
-
 struct DrawBillboardCall {
 	Camera camera;
 	Texture *texture;
@@ -671,8 +669,22 @@ struct Game {
 	Font *defaultFont;
 	Font *particleFont;
 	Font *simpleStatsFont;
+	RenderTexture *gameTexture;
+	RenderTexture *gameTextureFinal;
 	RenderTexture *overlayTexture;
 	RenderTexture *mapTexture;
+
+	Shader *pixelizeShader;
+	int pixelizePixelRatioLoc;
+
+	Shader *fxaaShader;
+	int fxaaResolutionLoc;
+
+	Shader *posterizeShader;
+	int posterizeGammaLoc;
+	int posterizeNumColorsLoc;
+
+	bool resizeDirty;
 
 	Globals globals;
 	bool inEditor;
@@ -791,10 +803,6 @@ struct Game {
 
 	/// 3D
 	Vec2i cameraAngleDegrees;
-
-#define LOG3_BUFFERS_MAX 256
-	Log3Buffer log3Buffers[LOG3_BUFFERS_MAX];
-	int log3BuffersNum;
 };
 Game *game = NULL;
 
@@ -909,6 +917,16 @@ void updateGame() {
 		game->defaultFont = createFont("assets/common/arial.ttf", 40);
 		game->particleFont = createFont("assets/common/arial.ttf", 25);
 		game->simpleStatsFont = createFont("assets/common/arial.ttf", 18);
+
+		game->pixelizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/pixelizer.fs");
+		game->pixelizePixelRatioLoc = getUniformLocation(game->pixelizeShader, "pixelRatio");
+
+		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs");
+		game->fxaaResolutionLoc = getUniformLocation(game->fxaaShader, "resolution");
+
+		game->posterizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/posterization.fs");
+		game->posterizeGammaLoc = getUniformLocation(game->posterizeShader, "gamma");
+		game->posterizeNumColorsLoc = getUniformLocation(game->posterizeShader, "numColors");
 
 		loadGlobals();
 
@@ -1162,18 +1180,37 @@ void updateGame() {
 
 	{ /// Resizing
 		Vec2 newSize = v2(platform->windowWidth, platform->windowHeight);
-		if (!equal(game->size, newSize)) {
+		if (!equal(game->size, newSize)) game->resizeDirty = true;
+
+		if (game->resizeDirty) {
+			game->resizeDirty = false;
 			game->size = newSize;
 
 			if (game->overlayTexture) destroyTexture(game->overlayTexture);
 			game->overlayTexture = NULL;
+			if (game->gameTexture) destroyTexture(game->gameTexture);
+			game->gameTexture = NULL;
+			if (game->gameTextureFinal) destroyTexture(game->gameTextureFinal);
+			game->gameTextureFinal = NULL;
 			if (game->mapTexture) destroyTexture(game->mapTexture);
 			game->mapTexture = NULL;
+
+			Vec2 pixelRatio = globals->pixelizePower * (1/game->size);
+			setShaderUniform(game->pixelizeShader, game->pixelizePixelRatioLoc, &pixelRatio.x, SHADER_UNIFORM_VEC2, 1);
+
+			Vec2 fxaaSize = game->size * globals->fxaaResolutionScale;
+			setShaderUniform(game->fxaaShader, game->fxaaResolutionLoc, &fxaaSize.x, SHADER_UNIFORM_VEC2, 1);
+
+			setShaderUniform(game->posterizeShader, game->posterizeGammaLoc, &globals->posterizeGamma, SHADER_UNIFORM_FLOAT, 1);
+			setShaderUniform(game->posterizeShader, game->posterizeNumColorsLoc, &globals->posterizeNumColors, SHADER_UNIFORM_FLOAT, 1);
 		}
 	} ///
 
 	if (!game->mapTexture) game->mapTexture = createRenderTexture(game->size.x, game->size.y);
 	if (!game->overlayTexture) game->overlayTexture = createRenderTexture(game->size.x, game->size.y);
+	if (!game->gameTexture) game->gameTexture = createRenderTexture(game->size.x, game->size.y);
+	if (!game->gameTextureFinal) game->gameTextureFinal = createRenderTexture(game->size.x, game->size.y);
+	pushTargetTexture(game->gameTexture);
 
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	// platform->disableGui = !game->inEditor;
@@ -1268,27 +1305,67 @@ void updateGame() {
 		} ///
 	}
 
-	{ /// Update world channels
-		for (int i = 0; i < game->worldChannelsNum; i++) {
-			WorldChannel *worldChannel = &game->worldChannels[i];
-			Channel *channel = getChannel(worldChannel->channelId);
-			if (!channel) {
-				arraySpliceIndex(game->worldChannels, game->worldChannelsNum, sizeof(WorldChannel), i);
-				game->worldChannelsNum--;
-				i--;
-				continue;
-			}
+	popTargetTexture(); // game->gameTexture
 
-			Vec2 screenPos = getScreenPoint(worldChannel->position);
+	clearRenderer();
 
-			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
-			float distPerc = distance(v2(), screenPerc);
-			float vol = clampMap(distPerc, 0, 2, 1, 0);
-			float pan = screenPerc.x;
-			channel->userVolume2 = vol;
-			channel->pan = pan;
-		}
-	} ///
+	// Probably not needed
+	pushTargetTexture(game->gameTextureFinal);
+	clearRenderer();
+	drawSimpleTexture(game->gameTexture);
+	popTargetTexture();
+
+	auto copyBackGameTexture = []() {
+		pushTargetTexture(game->gameTexture);
+		clearRenderer();
+		drawSimpleTexture(game->gameTextureFinal);
+		popTargetTexture();
+	};
+
+	if (globals->posterizeNumColors != 0) {
+		copyBackGameTexture();
+
+		pushTargetTexture(game->gameTextureFinal);
+		clearRenderer();
+		startShader(game->posterizeShader);
+
+		drawSimpleTexture(game->gameTexture);
+
+		endShader();
+		popTargetTexture();
+	}
+
+	if (globals->fxaaResolutionScale != 0) {
+		copyBackGameTexture();
+
+		pushTargetTexture(game->gameTextureFinal);
+		clearRenderer();
+		startShader(game->fxaaShader);
+
+		drawSimpleTexture(game->gameTexture);
+
+		endShader();
+		popTargetTexture();
+	}
+
+	if (globals->pixelizePower != 0) {
+		copyBackGameTexture();
+
+		pushTargetTexture(game->gameTextureFinal);
+		startShader(game->pixelizeShader);
+		drawSimpleTexture(game->gameTexture);
+		endShader();
+		popTargetTexture();
+	}
+
+
+	{
+		RenderTexture *texture = game->gameTextureFinal;
+		Matrix3 matrix = mat3();
+		matrix.SCALE(game->size);
+
+		drawSimpleTexture(texture, matrix);
+	}
 
 	{
 		RenderTexture *texture = game->overlayTexture;
@@ -1340,6 +1417,28 @@ void updateGame() {
 		char *str = frameSprintf("%.1fms", platform->frameTimeAvg);
 		drawText(game->defaultFont, str, v2(300, 0), 0xFF808080);
 	}
+
+	{ /// Update world channels
+		for (int i = 0; i < game->worldChannelsNum; i++) {
+			WorldChannel *worldChannel = &game->worldChannels[i];
+			Channel *channel = getChannel(worldChannel->channelId);
+			if (!channel) {
+				arraySpliceIndex(game->worldChannels, game->worldChannelsNum, sizeof(WorldChannel), i);
+				game->worldChannelsNum--;
+				i--;
+				continue;
+			}
+
+			Vec2 screenPos = getScreenPoint(worldChannel->position);
+
+			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
+			float distPerc = distance(v2(), screenPerc);
+			float vol = clampMap(distPerc, 0, 2, 1, 0);
+			float pan = screenPerc.x;
+			channel->userVolume2 = vol;
+			channel->pan = pan;
+		}
+	} ///
 
 	guiDraw();
 	drawOnScreenLog();
@@ -1973,6 +2072,10 @@ void stepGame(float elapsed) {
 			ImGui::Separator();
 
 			ImGui::DragFloat("Specular power", &globals->specularPower, 0.01, 0, 0, "%.4f");
+			if (ImGui::DragFloat("Pixelize power", &globals->pixelizePower, 0.01, 0, 0, "%.4f")) game->resizeDirty = true;
+			if (ImGui::DragFloat("Fxaa resolution scale", &globals->fxaaResolutionScale, 0.01, 0, 0, "%.4f")) game->resizeDirty = true;
+			if (ImGui::DragFloat("Posterize numColors", &globals->posterizeNumColors, 0.1, 0, 0, "%.4f")) game->resizeDirty = true;
+			if (ImGui::DragFloat("Posterize gamma", &globals->posterizeGamma, 0.01, 0, 0, "%.4f")) game->resizeDirty = true;
 			ImGui::TreePop();
 		}
 		ImGui::End();
@@ -3917,9 +4020,6 @@ void stepGame(float elapsed) {
 		}
 	} ///
 
-	pushTargetTexture(game->overlayTexture);
-	clearRenderer();
-
 	{ /// Update effects
 		for (int i = 0; i < game->effectsNum; i++) {
 			Effect *effect = &game->effects[i];
@@ -4002,6 +4102,9 @@ void stepGame(float elapsed) {
 			}
 		}
 	} ///
+
+	pushTargetTexture(game->overlayTexture);
+	clearRenderer();
 
 	{ /// Update map
 		game->timeTillNextCityTick -= elapsed;
@@ -5383,7 +5486,7 @@ void saveGlobals() {
 
 	DataStream *stream = newDataStream();
 
-	int globalsVersion = 15;
+	int globalsVersion = 18;
 	writeU32(stream, globalsVersion);
 
 	for (int i = 0; i < ACTION_TYPES_MAX; i++) {
@@ -5436,6 +5539,10 @@ void saveGlobals() {
 	writeFloat(stream, globals->movementPercDistanceRunningRatio);
 
 	writeFloat(stream, globals->specularPower);
+	writeFloat(stream, globals->pixelizePower);
+	writeFloat(stream, globals->fxaaResolutionScale);
+	writeFloat(stream, globals->posterizeGamma);
+	writeFloat(stream, globals->posterizeNumColors);
 
 	writeDataStream("assets/info/globals.bin", stream);
 	destroyDataStream(stream);
@@ -5505,6 +5612,26 @@ void loadGlobals() {
 		globals->specularPower = readFloat(stream);
 	} else {
 		globals->specularPower = 1;
+	}
+
+	if (globalsVersion >= 16) {
+		globals->pixelizePower = readFloat(stream);
+	} else {
+		globals->pixelizePower = 5;
+	}
+
+	if (globalsVersion >= 18) {
+		globals->fxaaResolutionScale = readFloat(stream);
+	} else {
+		globals->fxaaResolutionScale = 1;
+	}
+
+	if (globalsVersion >= 17) {
+		globals->posterizeGamma = readFloat(stream);
+		globals->posterizeNumColors = readFloat(stream);
+	} else {
+		globals->posterizeGamma = 0.6;
+		globals->posterizeNumColors = 8;
 	}
 
 	destroyDataStream(stream);

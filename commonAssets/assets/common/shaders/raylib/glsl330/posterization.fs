@@ -13,8 +13,8 @@ out vec4 finalColor;
 
 // NOTE: Add here your custom variables
 
-float gamma = 0.6;
-float numColors = 8.0;
+uniform float gamma = 0.6;
+uniform float numColors = 8.0;
 
 void main()
 {
