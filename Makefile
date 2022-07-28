@@ -2,28 +2,21 @@
 ENGINE_TYPE := raylib
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
-# GAME_NAME=bulletHellGame
-# GAME_NAME=bulletHellGameServer
-# GAME_NAME=turnBasedGame
 # GAME_NAME=parametersGame
 # GAME_NAME=petGame
-# GAME_NAME=stockGame
 # GAME_NAME=towerGame
 # GAME_NAME=dynaGame
 # GAME_NAME=rtsClient2
 # GAME_NAME=testGame
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
-# GAME_NAME=chessGame
-# GAME_NAME=tdSlasherGame
 # GAME_NAME=zooBoundGame
-# GAME_NAME=horseGame
+GAME_NAME=horseGame
 # GAME_NAME=gladiators2Game
-GAME_NAME=concreteJungleGame
-# GAME_NAME=animationToolsGame
-# GAME_NAME=rayGame
+# GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=butt2GoGame
+# GAME_NAME=rssGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -289,10 +282,15 @@ ifneq (, $(findstring Linux, $(shell uname))) # --------------------------------
 b:
 	mkdir -p bin
 	clang -g \
-		-I include/linux \
-		-I include/all \
+		-I include/raylib \
+		-I include/raylib/skia \
+		-I include/linux_raylib_specific \
+		-I /usr/include/GL \
 		src/main.cpp \
 		-DPLAYING_$(GAME_NAME) \
+		-DRAYLIB_MODE=1 \
+		-DPLATFORM=PLATFORM_DESKTOP \
+		-DGRAPHICS=GRAPHICS_API_OPENGLES_20 \
 		-x c++ \
 		include/win64/stb_image.h \
 		include/win64/stb_sprintf.h \
@@ -300,7 +298,9 @@ b:
 		include/win64/imstb_truetype.h \
 		include/win64/imstb_rectpack.h \
 		-o bin/$(GAME_NAME) \
-		-lm -lGL -lGLEW -lstdc++ -lopenal -lSDL2 -lpthread -no-pie
+		-fPIC \
+		-L/usr/local/lib/raysan5 \
+		-lm -lopenal -lGLESv2
 
 r:
 	(cd bin; ./$(GAME_NAME))
@@ -979,3 +979,4 @@ exportConcreteJungleBlenderAssets:
 	$(BLENDER) /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/concreteJungle.blend \
 		-b -P /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/standaloneExportAssets.py
 
+-include ../multiGamePrivate/Makefile.in

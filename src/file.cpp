@@ -5,6 +5,10 @@ void refreshAssetPaths();
 #define ZIP_HEADER
 #include "zip.cpp"
 
+#ifdef __linux__
+#include <dirent.h>
+#endif
+
 enum FuzzyPathType {
 	FUZZY_ALL=0,
 	FUZZY_PNG,

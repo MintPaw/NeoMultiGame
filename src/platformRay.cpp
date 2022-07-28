@@ -1,7 +1,9 @@
-#if _WIN32
+#if defined(_WIN32)
 #include "gl.h"
-#else
+#elif defined(__EMSCRIPTEN__)
 #include <GLES3/gl3.h>
+#else
+#include "gl.h"
 #endif
 
 ///- Gui Header

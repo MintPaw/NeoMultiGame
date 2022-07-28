@@ -23,7 +23,7 @@ struct DrawSpriteRecurseData {
 	int swapsNum;
 };
 
-struct SpriteLayerProperties {
+struct SpriteLayerProps {
 	char *name;
 	float alpha;
 };
@@ -34,7 +34,7 @@ struct SpriteTransform {
 	char *paths[SPRITE_TRANSFORM_PATHS_MAX];
 	int pathsNum;
 
-	SpriteLayerProperties *layerProps;
+	SpriteLayerProps *layerProps;
 	int layerPropsNum;
 
 #define LAYERS_TO_HIDE_MAX 8
@@ -591,7 +591,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				float alphaMultiplier = 1;
 				if (currentLayerName && matchingTransform) {
 					for (int i = 0; i < matchingTransform->layerPropsNum; i++) {
-						SpriteLayerProperties *layerProps = &matchingTransform->layerProps[i];
+						SpriteLayerProps *layerProps = &matchingTransform->layerProps[i];
 						if (streq(currentLayerName, layerProps->name)) {
 							alphaMultiplier *= layerProps->alpha;
 						}

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <stdio.h>
 #include <time.h>
-#define USES_THREADS 0
+#define USES_THREADS 1
 
 #define STRINGIFYX(val) #val
 #define STRINGIFY(val) STRINGIFYX(val)
@@ -352,10 +352,6 @@ NanoTime mainNano;
 # include "fpsGame.cpp"
 #endif
 
-#if defined(PLAYING_drawTestGame)
-# include "drawTestGame.cpp"
-#endif
-
 #if defined(PLAYING_horseGame)
 # include "../../multiGamePrivate/src/horseGame.cpp"
 #endif
@@ -368,20 +364,12 @@ NanoTime mainNano;
 # include "bulletHellGame/bulletHellGameServer.cpp"
 #endif
 
-#if defined(PLAYING_turnBasedGame)
-# include "turnBasedGame.cpp"
-#endif
-
 #if defined(PLAYING_parametersGame)
 # include "parametersGame.cpp"
 #endif
 
 #if defined(PLAYING_petGame)
 # include "petGame.cpp"
-#endif
-
-#if defined(PLAYING_stockGame)
-# include "stockGame.cpp"
 #endif
 
 #if defined(PLAYING_towerGame)
@@ -408,16 +396,8 @@ NanoTime mainNano;
 # include "../../multiGamePrivate/src/interrogationGame.cpp"
 #endif
 
-#if defined(PLAYING_chessGame)
-# include "chessGame.cpp"
-#endif
-
 #if defined(PLAYING_zooBoundGame)
 # include "zooBoundGame.cpp"
-#endif
-
-#if defined(PLAYING_tdSlasherGame)
-# include "tdSlasherGame.cpp"
 #endif
 
 #if defined(PLAYING_gladiators2Game)
@@ -428,20 +408,16 @@ NanoTime mainNano;
 # include "concreteJungleGame.cpp"
 #endif
 
-#if defined(PLAYING_animationToolsGame)
-# include "../../multiGamePrivate/src/animationToolsGame.cpp"
-#endif
-
-#if defined(PLAYING_rayGame)
-# include "rayGame.cpp"
-#endif
-
 #if defined(PLAYING_rollerGame)
 # include "rollerGame.cpp"
 #endif
 
 #if defined(PLAYING_butt2GoGame)
 # include "../../multiGamePrivate/src/butt2GoGame.cpp"
+#endif
+
+#if defined(PLAYING_rssGame)
+# include "../../multiGamePrivate/src/rssGame.cpp"
 #endif
 
 #ifdef _WIN32

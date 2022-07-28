@@ -32,6 +32,8 @@ void joinThread(Thread *thread);
 void destroyThread(Thread *thread);
 void exitThread();
 
+#if USES_THREADS
+
 #if defined(_WIN32)
 DWORD WINAPI threadProc(void *threadStruct) {
 	Thread *self = (Thread *)threadStruct;
@@ -175,3 +177,5 @@ void destroyThreadSafeQueue(ThreadSafeQueue *queue) {
 	free((void *)queue->data);
 	free(queue);
 }
+
+#endif
