@@ -1,5 +1,3 @@
-#define DO_FAST_EDGE_SPLICE 1
-
 struct SwfDataStream {
 	u8 *data;
 	int size;
@@ -580,6 +578,9 @@ enum SwfTagType {
 	SWF_TAG_SOUND_STREAM_BLOCK=19,
 	SWF_TAG_DO_ACTION=12,
 	SWF_TAG_DEFINE_BUTTON2=34,
+	SWF_TAG_IMPORT_ASSETS=57,
+	SWF_TAG_EXPORT_ASSETS=56,
+	SWF_TAG_IMPORT_ASSETS2=71,
 };
 struct RecordHeader {
 	SwfTagType type;
@@ -909,6 +910,10 @@ struct Swf {
 	int tagsNum;
 	int tagsMax;
 
+#define LOADED_SWFS_MAX 64
+	Swf *loadedSwfs[LOADED_SWFS_MAX];
+	int loadedSwfsNum;
+
 	SwfShape **allShapes;
 	int allShapesNum;
 
@@ -928,7 +933,7 @@ struct Swf {
 };
 
 Swf *loadSwf(char *path);
-SwfDrawable makeDrawableById(Swf *swf, int id, SwfTagType *tagType);
+SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
@@ -1535,7 +1540,7 @@ Swf *loadSwf(char *path) {
 					placeObject->pfHasBlendMode = readUB(&stream, 1);
 					placeObject->pfHasFilterList = readUB(&stream, 1);
 					placeObject->depth = readU16(&stream);
-					if (placeObject->pfHasClassName) placeObject->name = readString(&stream);
+					if (placeObject->pfHasClassName) placeObject->className = readString(&stream);
 					if (placeObject->pfHasCharacter) placeObject->characterId = readU16(&stream);
 					if (placeObject->pfHasMatrix) placeObject->matrix = readMatrix(&stream);
 					if (placeObject->pfHasColorTransform) placeObject->colorTransform = readColorTransformWithAlpha(&stream);
@@ -1879,6 +1884,25 @@ Swf *loadSwf(char *path) {
 			free(uncompressedData);
 
 			skipBytes(&stream, bytesLeft);
+		} else if (recordHeader.type == SWF_TAG_IMPORT_ASSETS) {
+			logf("Import Assets was depricated in SWF8!\n");
+			skipTag = true;
+		} else if (recordHeader.type == SWF_TAG_EXPORT_ASSETS) {
+			logf("Export Assets never happens in my SWFs?\n");
+			skipTag = true;
+		} else if (recordHeader.type == SWF_TAG_IMPORT_ASSETS2) {
+			char *url = readString(&stream);
+			read(&stream);
+			read(&stream);
+			int count = readU16(&stream);
+			if (count > 0) Panic("Can't load swf with import assets specified to characters\n");
+
+			char *dir = frameStringClone(path);
+			char *lastSlash = strrchr(dir, '/');
+			if (lastSlash) *lastSlash = 0;
+
+			if (swf->loadedSwfsNum > LOADED_SWFS_MAX-1) Panic("Too many loaded swfs!");
+			swf->loadedSwfs[swf->loadedSwfsNum++] = loadSwf(frameSprintf("%s/%s", dir, url));
 		} else if (recordHeader.type == SWF_TAG_DEFINE_BITS_JPEG2) {
 			logf("Saw JpegBits2\n");
 			skipTag = true; // #soon
@@ -1900,7 +1924,9 @@ Swf *loadSwf(char *path) {
 			logf("Skipping morphshape2\n");
 			skipTag = true; // I dunno yet.
 		} else if (
+			recordHeader.type == SWF_TAG_PLACE_OBJECT ||
 			recordHeader.type == SWF_TAG_PLACE_OBJECT2 ||
+			recordHeader.type == SWF_TAG_PLACE_OBJECT3 ||
 			recordHeader.type == SWF_TAG_SHOW_FRAME ||
 			recordHeader.type == SWF_TAG_FRAME_LABEL ||
 			recordHeader.type == SWF_TAG_REMOVE_OBJECT2
@@ -1962,7 +1988,6 @@ Swf *loadSwf(char *path) {
 			if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS) {
 				SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
 				hashMapSet(characterMap, &bitmap->characterId, (int)bitmap->characterId, &tagPointer);
-				// logf("Added %d\n", bitmap->characterId);
 			}
 		}
 	}
@@ -2063,9 +2088,8 @@ Swf *loadSwf(char *path) {
 						currentFrame = &sprite->frames[currentFrameIndex];
 					} else if (tag->type == SWF_TAG_PLACE_OBJECT) {
 						PlaceObject *placeObject = &tag->placeObject;
-						if (placeObject->pfHasCharacter) {
-							SwfTagType type;
-							SwfDrawable drawable = makeDrawableById(swf, placeObject->characterId, &type);
+						if (placeObject->pfHasCharacter || placeObject->pfHasClassName) {
+							SwfDrawable drawable = makeDrawableById(swf, placeObject);
 							// logf("Placing on to depth %d\n", placeObject->depth);
 							currentFrame->depths[placeObject->depth] = drawable;
 							if (currentFrame->depthsNum < placeObject->depth + 1) currentFrame->depthsNum = placeObject->depth + 1;
@@ -2074,7 +2098,7 @@ Swf *loadSwf(char *path) {
 						SwfDrawable *drawable = &currentFrame->depths[placeObject->depth];
 						if (placeObject->pfHasMatrix) {
 							drawable->matrix = toMatrix2x3(placeObject->matrix);
-						} else if (placeObject->pfHasCharacter) {
+						} else if (placeObject->pfHasCharacter || placeObject->pfHasClassName) {
 							drawable->matrix = toMatrix2x3(mat3());
 						}
 
@@ -2216,27 +2240,51 @@ int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int s
 	return destNum;
 }
 
-SwfDrawable makeDrawableById(Swf *swf, int id, SwfTagType *tagType) {
+SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject) {
 	SwfDrawable drawable = {};
-	u16 characterId = (u16)id;
-	SwfTagPointer *tagPointer;
-	if (hashMapGet(swf->characterMap, &characterId, (int)characterId, &tagPointer)) {
-		if (tagPointer->header.type == SWF_TAG_DEFINE_SHAPE) {
+
+	SwfTagType tagType;
+	void *characterPtr = NULL;
+
+	if (placeObject->pfHasClassName) {
+		for (int i = 0; i < swf->loadedSwfsNum; i++) {
+			Swf *loadedSwf = swf->loadedSwfs[i];
+			for (int i = 0; i < loadedSwf->allSpritesNum; i++) {
+				SwfSprite *sprite = loadedSwf->allSprites[i];
+				if (streq(placeObject->className, sprite->name)) {
+					tagType = SWF_TAG_DEFINE_SPRITE;
+					characterPtr = sprite;
+					break;
+				}
+			}
+			if (characterPtr) break;
+		}
+	} else {
+		SwfTagPointer *tagPointer = NULL;
+		u16 characterId = placeObject->characterId;
+		if (hashMapGet(swf->characterMap, &characterId, (int)characterId, &tagPointer)) {
+			tagType = tagPointer->header.type;
+			characterPtr = tagPointer->tag;
+		}
+	}
+
+	if (characterPtr) {
+		if (tagType == SWF_TAG_DEFINE_SHAPE) {
 			drawable.type = SWF_DRAWABLE_SHAPE;
-			drawable.shape = (SwfShape *)tagPointer->tag;
+			drawable.shape = (SwfShape *)characterPtr;
 			return drawable;
-		} else if (tagPointer->header.type == SWF_TAG_DEFINE_SPRITE) {
+		} else if (tagType == SWF_TAG_DEFINE_SPRITE) {
 			drawable.type = SWF_DRAWABLE_SPRITE;
-			drawable.sprite = (SwfSprite *)tagPointer->tag;
+			drawable.sprite = (SwfSprite *)characterPtr;
 			if (drawable.sprite->name && stringStartsWith(drawable.sprite->name, "Invis_")) {
 				drawable.type = SWF_DRAWABLE_NONE;
 				drawable.sprite = NULL;
 			}
 			return drawable;
-		} else if (tagPointer->header.type == SWF_TAG_DEFINE_EDIT_TEXT) {
+		} else if (tagType == SWF_TAG_DEFINE_EDIT_TEXT) {
 			drawable.type = SWF_DRAWABLE_SPRITE;
 			SwfSprite *sprite = (SwfSprite *)zalloc(sizeof(SwfSprite));
-			DefineEditText *editText = (DefineEditText *)tagPointer->tag;
+			DefineEditText *editText = (DefineEditText *)characterPtr;
 			sprite->isTextField = true;
 			sprite->textAlign = editText->align;
 			sprite->textColor = editText->textColor;
@@ -2264,6 +2312,12 @@ SwfSprite *getSpriteByName(Swf *swf, char *spriteName) {
 		if (streq(sprite->name, spriteName)) {
 			return sprite;
 		}
+	}
+
+	for (int i = 0; i < swf->loadedSwfsNum; i++) {
+		Swf *loadedSwf = swf->loadedSwfs[i];
+		SwfSprite *sprite = getSpriteByName(loadedSwf, spriteName);
+		if (sprite) return sprite;
 	}
 
 	return NULL;
@@ -2371,13 +2425,12 @@ void destroySwf(Swf *swf) {
 		free(tagPointer->tag);
 	}
 
-	for (int i = 0; i < swf->drawableNamesNum; i++) {
-		free(swf->drawableNames[i]);
-	}
-
+	for (int i = 0; i < swf->drawableNamesNum; i++) free(swf->drawableNames[i]);
 	free(swf->drawableNames);
 	free(swf->allShapes);
 	free(swf->allSprites);
 	free(swf->tags);
+
+	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
 	free(swf);
 }

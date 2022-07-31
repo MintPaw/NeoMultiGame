@@ -1058,7 +1058,6 @@ void drawSwfAnalyzer() {
 	if (ImGui::Button("Analyze")) aSys->swf = loadSwf(aSys->inputPath);
 	if (!aSys->swf) {
 		// if (ImGui::Button("Shared.swf")) strcpy(aSys->inputPath, "assets/swf/Shared.swf");
-		// if (ImGui::Button("SofiAnim.swf")) strcpy(aSys->inputPath, "assets/swf/SofiAnim.swf");
 	}
 
 	Swf *swf = aSys->swf;
@@ -1258,6 +1257,7 @@ void drawSwfAnalyzer() {
 		ImGui::EndChild();
 
 		ImGui::SameLine();
+#if 0
 		{ /// Shapes
 			ImGui::BeginChild("shapesChild", ImVec2(400, 500), true, 0); 
 			SwfShape *shape = aSys->swf->allShapes[aSys->selectedShape];
@@ -1346,5 +1346,6 @@ void drawSwfAnalyzer() {
 			}
 			ImGui::EndChild();
 		}
+#endif
 	}
 }

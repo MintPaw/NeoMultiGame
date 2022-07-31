@@ -352,7 +352,7 @@ void updateGame() {
 	endShader();
 #endif
 
-#if 1 // ngui test
+#if 0 // ngui test
 	clearRenderer(0xFF000000);
 
 	static Xform2 axeXform = {v2(), v2(1, 1), 0};
@@ -723,13 +723,43 @@ void updateGame() {
 	}
 #endif
 
+#if 1
+	static RenderTexture *soundTexture = NULL;;
+	if (!soundTexture) {
+		u8 *oggBytes;
+		int oggBytesSize;
+
+		oggBytes = (u8 *)readFile("assets/audio/monoPluck.ogg", &oggBytesSize);
+
+		int channels, sampleRate;
+		s16 *samples;
+		int samplesNum = stb_vorbis_decode_memory(oggBytes, oggBytesSize, &channels, &sampleRate, &samples);
+
+		if (channels != 1) logf("Not mono!!!\n");
+
+		soundTexture = createRenderTexture(800, 100);
+
+		pushTargetTexture(soundTexture);
+		clearRenderer(0xFF000000);
+		for (int i = 0; i < soundTexture->width; i++) {
+			int sampleIndex = clampMap(i, 0, soundTexture->width, 0, samplesNum);
+			float sample = clampMap(samples[sampleIndex], SHRT_MIN, SHRT_MAX, -1, 1);
+
+			Vec2 start = v2(i, soundTexture->height/2);
+			Vec2 end = start;
+			end.y += sample * (soundTexture->height/2);
+			// logf("%f (%d) (%d)\n", sample, samples[sampleIndex], sampleIndex);
+			drawLine(start, end, 1, 0xFFFFFFFF);
+		}
+		popTargetTexture();
+	}
+	drawSimpleTexture(soundTexture);
+#endif
+
 	game->time += elapsed;
 
 	drawOnScreenLog();
 }
-
-
-
 
 
 

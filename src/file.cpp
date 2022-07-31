@@ -372,11 +372,11 @@ bool fileExists(const char *fileName) {
 bool isFirstPathNewer(const char *firstPath, const char *secondPath);
 bool isFirstPathNewer(const char *firstPath, const char *secondPath) {
 	char realFirstPath[PATH_MAX_LEN];
-	strcpy(realFirstPath, filePathPrefix);
+	if (firstPath[1] != ':' && firstPath[0] != '/') strcpy(realFirstPath, filePathPrefix);
 	strcat(realFirstPath, firstPath);
 
 	char realSecondPath[PATH_MAX_LEN];
-	strcpy(realSecondPath, filePathPrefix);
+	if (secondPath[1] != ':' && secondPath[0] != '/') strcpy(realSecondPath, filePathPrefix);
 	strcat(realSecondPath, secondPath);
 
 #if defined(_WIN32)
@@ -414,11 +414,11 @@ bool isFirstPathNewer(const char *firstPath, const char *secondPath) {
 bool copyFile(const char *srcPath, const char *destPath);
 bool copyFile(const char *srcPath, const char *destPath) {
 	char realSrcPath[PATH_MAX_LEN];
-	strcpy(realSrcPath, filePathPrefix);
+	if (srcPath[1] != ':' && srcPath[0] != '/') strcpy(realSrcPath, filePathPrefix);
 	strcat(realSrcPath, srcPath);
 
 	char realDestPath[PATH_MAX_LEN];
-	strcpy(realDestPath, filePathPrefix);
+	if (destPath[1] != ':' && destPath[0] != '/') strcpy(realDestPath, filePathPrefix);
 	strcat(realDestPath, destPath);
 
 #if defined(_WIN32)

@@ -39,7 +39,7 @@ StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
-bool arraySwap(void *array, int arraySize, int elementSize, int index1, int index2);
+bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);
 #define ArraySplice(array, element) arraySplice((array), sizeof((array)), sizeof((array)[0]), element);
 bool arraySplice(void *array, int arraySize, int elementSize, void *element);
 bool arraySpliceIndex(void *array, int arrayMaxLength, int elementSize, int index);
