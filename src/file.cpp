@@ -413,11 +413,11 @@ bool isFirstPathNewer(const char *firstPath, const char *secondPath) {
 
 bool copyFile(const char *srcPath, const char *destPath);
 bool copyFile(const char *srcPath, const char *destPath) {
-	char realSrcPath[PATH_MAX_LEN];
+	char realSrcPath[PATH_MAX_LEN] = {};
 	if (srcPath[1] != ':' && srcPath[0] != '/') strcpy(realSrcPath, filePathPrefix);
 	strcat(realSrcPath, srcPath);
 
-	char realDestPath[PATH_MAX_LEN];
+	char realDestPath[PATH_MAX_LEN] = {};
 	if (destPath[1] != ':' && destPath[0] != '/') strcpy(realDestPath, filePathPrefix);
 	strcat(realDestPath, destPath);
 

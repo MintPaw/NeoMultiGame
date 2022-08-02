@@ -484,7 +484,7 @@ float getNumbersFromEndOfString(char *str) {
 
 	int charsToCut = 0;
 	for (int i = len-1; i >= 0; i--) {
-		if (isNumber(str[i]) || str[i] == '.') {
+		if (isNumber(str[i]) || str[i] == '.' || str[i] == '-') {
 			charsToCut++;
 		} else {
 			break;
