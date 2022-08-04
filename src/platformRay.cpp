@@ -146,7 +146,6 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->processHandle = GetCurrentProcess();
 #endif
 
-	initLoggingSystem();
 	pushRndSeed(time(NULL));
 
 #ifdef _WIN32

@@ -48,10 +48,6 @@ int pngAssetPathsNum = 0;
 int remoteZipsLoading = 0;
 void (*remoteLoadingDoneCallback)() = NULL;
 
-void initFileOperations(const char **possibleAssetPaths, int possibleAssetPathsNum) {
-	Panic("Don't call this");
-}
-
 void initFileOperations() {
 #if defined(_WIN32)
 	HMODULE hModule = GetModuleHandleW(NULL);
@@ -87,10 +83,7 @@ void initFileOperations() {
 		logf("Unzipping assets\n");
 		int preloadSize;
 		void *preloadData = readFile("assets/preloader.zip", &preloadSize);
-		Zip *zip = openZip((unsigned char *)preloadData, preloadSize);
-		// for (int i = 0; i < zip->headersNum; i++) printf("File: %s\n", zip->headers[i].fileName);
-		extractZip(zip);
-		closeZip(zip);
+		openAndExtractZip(preloadData, preloadSize);
 	}
 #endif
 	refreshAssetPaths();
@@ -124,10 +117,7 @@ void loadRemoteZip(const char *url, const char *path) {
 void loadedRemoteFile(const char *result) {
 	int size;
 	void *data = readFile(result, &size);
-	Zip *zip = openZip((unsigned char *)data, size);
-	// for (int i = 0; i < zip->headersNum; i++) printf("File: %s\n", zip->headers[i].fileName);
-	extractZip(zip);
-	closeZip(zip);
+	openAndExtractZip(data, size);
 	refreshAssetPaths();
 	remoteZipsLoading--;
 	if (remoteLoadingDoneCallback) remoteLoadingDoneCallback();

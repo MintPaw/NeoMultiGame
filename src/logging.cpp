@@ -28,6 +28,8 @@ void initLoggingSystem() {
 }
 
 void infof(const char *msg, ...) {
+	if (!logSys) initLoggingSystem();
+
 	va_list args;
 	va_start(args, msg);
 	int size = stbsp_vsnprintf(NULL, 0, msg, args);
@@ -45,7 +47,8 @@ void infof(const char *msg, ...) {
 }
 
 void logf(const char *msg, ...) {
-	if (logSys) IncMutex(&logSys->logfMutex);
+	if (!logSys) initLoggingSystem();
+	IncMutex(&logSys->logfMutex);
 
 	va_list args;
 
@@ -70,27 +73,10 @@ void logf(const char *msg, ...) {
 
 	LogfBuffer *buffer = loggerLogString(str);
 
-	if (logSys) DecMutex(&logSys->logfMutex);
+	DecMutex(&logSys->logfMutex);
 }
 
 LogfBuffer *loggerLogString(char *msg) {
-	if (!logSys) {
-#if defined(__EMSCRIPTEN__)
-		printf("%s", msg);
-#else
-		printf("\x1B[33m");
-		printf("%s", msg);
-		printf("\x1B[37m");
-#endif
-
-#if defined(_WIN32) && defined(FALLOW_DEBUG)
-    OutputDebugString(msg);
-#endif
-
-		fflush(stdout);
-		return NULL;
-	}
-
 	if (logSys->logs[0].buffer == NULL) {
 		for (int i = 0; i < LOGF_BUFFERS_MAX; i++) {
 			LogfBuffer *log = &logSys->logs[i];

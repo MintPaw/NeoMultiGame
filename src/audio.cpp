@@ -251,9 +251,11 @@ void updateAudio() {
 	if (!audio || audio->disabled) return;
 
 #if defined(__EMSCRIPTEN__)
-	EM_ASM({
-		if (AL.currentCtx.audioCtx.state == "suspended" && platform->frameCount % 8 == 0) AL.currentCtx.audioCtx.resume();
-	});
+	if (platform->frameCount % 8 == 0) {
+		EM_ASM({
+			if (AL.currentCtx.audioCtx.state == "suspended") AL.currentCtx.audioCtx.resume();
+		});
+	}
 #endif
 
 	int toProcess;

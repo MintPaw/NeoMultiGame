@@ -220,7 +220,7 @@ void nguiInit() {
 	ngui->defaultFont = createFont("assets/common/arial.ttf", 80);
 	ngui->uiScale = platform->windowScaling;
 
-	ngui->elementsMax = 128;
+	ngui->elementsMax = 512;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
 
 	ngui->globalStyleStack.varsMax = 1;
