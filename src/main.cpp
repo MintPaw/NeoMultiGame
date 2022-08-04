@@ -71,9 +71,11 @@ namespace Raylib {
 
 #include "stb_image_write.h"
 
-#include "miniz.c"
+#include "miniz.h"
 #undef inflate
 int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); }
+
+#include "zip.c"
 
 #define IncMutex(mutex) //@todo
 #define DecMutex(mutex) //@todo

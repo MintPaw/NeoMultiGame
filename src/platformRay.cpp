@@ -657,12 +657,7 @@ void initRenderer(int width, int height) {
 	setRendererBlendMode(BLEND_NORMAL);
 
 	{ /// Setup shaders
-#ifdef __EMSCRIPTEN__
-    char *glslFolder = "glsl100";
-#else
-    char *glslFolder = "glsl330";
-#endif
-
+#ifndef __EMSCRIPTEN__
 		renderer->alphaDiscardShader = loadShader(
 			NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
 			NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
@@ -687,12 +682,19 @@ void initRenderer(int width, int height) {
 		}
 
 		{
+#ifdef __EMSCRIPTEN__
+			char *glslFolder = "glsl100";
+#else
+			char *glslFolder = "glsl330";
+#endif
+
 			char *fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
 			renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
 			free(fs);
 
 			renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
 		}
+#endif
 	} ///
 
 	u64 whiteData = 0xFFFFFFFF;
@@ -722,6 +724,7 @@ Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path)
 	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl100/base.fs";
 #endif
 
+	logf("Loading shader %s %s\n", vsPath, fsPath);
 	char *vs = (char *)readFile(vsPath);
 	char *fs = (char *)readFile(fsPath);
 

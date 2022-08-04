@@ -684,11 +684,18 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	if (recurse.swapsNum) {
 		for (int i = startingCmdIndex; i < cmdList->cmdsNum; i++) {
 			VDrawCommand *cmd = &cmdList->cmds[i];
-			if (cmd->type != VDRAW_SET_LINE_STYLE && cmd->type != VDRAW_SET_SOLID_FILL) continue; //@todo allow gradients here
+			if (
+				cmd->type != VDRAW_SET_SOLID_FILL &&
+				cmd->type != VDRAW_SET_LINE_STYLE &&
+				cmd->type != VDRAW_SET_LINEAR_GRADIENT_FILL && 
+				cmd->type != VDRAW_SET_RADIAL_GRADIENT_FILL && 
+				cmd->type != VDRAW_SET_FOCAL_GRADIENT_FILL
+			) continue;
+
 			for (int i = 0; i < recurse.swapsNum; i++) {
 				VDrawPaletteSwap *swap = &recurse.swaps[i];
 				for (int i = 0; i < 16; i++) { //@speed You can only do colors[0] if it's a non-gradient
-					if (cmd->colors[i] == swap->from) {
+					if ((cmd->colors[i] & 0x00FFFFFF) == (swap->from & 0x00FFFFFF)) {
 						cmd->colors[i] = swap->to;
 					}
 				}
