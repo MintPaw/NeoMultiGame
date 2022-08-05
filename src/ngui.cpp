@@ -33,9 +33,11 @@ enum NguiStyleType {
 	NGUI_STYLE_TYPES_MAX=31,
 };
 
-enum NguiLayout {
-	NGUI_LAYOUT_VERTICAL,
-	NGUI_LAYOUT_GRID,
+enum NguiDirection {
+	NGUI_DIR_RIGHT,
+	NGUI_DIR_DOWN,
+	NGUI_DIR_LEFT,
+	NGUI_DIR_UP,
 };
 
 enum NguiDataType {
@@ -712,6 +714,20 @@ void nguiDraw(float elapsed) {
 				child->childRect.x += windowRect.x + windowPadding.x;
 				child->childRect.y += windowRect.y + windowPadding.y;
 			}
+
+			auto qsortChildrenToDraw = [](const void *a, const void *b)->int {
+				NguiElement *childA = *(NguiElement **)a;
+				NguiElement *childB = *(NguiElement **)b;
+				if (childA->hoveringTime < childB->hoveringTime) {
+					return -1;
+				} else if (childA->hoveringTime > childB->hoveringTime) {
+					return 1;
+				} else {
+					return 0;
+				}
+			};
+
+			qsort(children, childrenNum, sizeof(NguiElement *), qsortChildrenToDraw);
 
 			for (int i = 0; i < childrenNum; i++) { // Update
 				NguiElement *child = children[i];

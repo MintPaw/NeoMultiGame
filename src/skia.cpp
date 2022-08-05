@@ -160,8 +160,6 @@ struct SkiaSystem {
 	bool useCpuAA;
 	bool blurEnabled;
 
-	Vec2 currentBlur;
-
 	VDrawCommandsList immVDrawCommandsList;
 };
 SkiaSystem *skiaSys = NULL;
@@ -399,8 +397,8 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 			VDrawCommand *paintCmd = NULL;
 			if (subShape->fillStyleIndex != 0) {
 				FillStyle *newFillStyle = &shape->fillStyles[subShape->fillStyleIndex - 1];
-				// if (newFillStyle->gradient.spreadMode != 0) logf("Bad spread mode\n");
-				// if (newFillStyle->gradient.interpolationMode != 0) logf("Bad introplation mode\n");
+				// if (newFillStyle->gradient.spreadMode != 0) logf("Bad spread mode %d\n", newFillStyle->gradient.spreadMode);
+				// if (newFillStyle->gradient.interpolationMode != 0) logf("Bad introplation mode %d\n", newFillStyle->gradient.interpolationMode);
 
 				if (newFillStyle->fillStyleType == FILL_STYLE_SOLID) {
 					int color = newFillStyle->color;
@@ -467,7 +465,7 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 					paintCmd->colors[i] = argbToHex(a, r, g, b);
 				}
 			}
-		}
+		} ///
 
 		VDrawCommand *cmd = createCommand(cmdList, props.useClip ? VDRAW_CLIP_CACHED_PATH : VDRAW_DRAW_CACHED_PATH);
 		cmd->path = (SkPath *)subShape->runtimeCachedPath;
