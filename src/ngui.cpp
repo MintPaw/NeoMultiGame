@@ -388,7 +388,7 @@ void nguiInit() {
 
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(500, 500));
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
 	nguiPushStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED, 0.2);
 	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
@@ -691,9 +691,13 @@ void nguiDraw(float elapsed) {
 			Vec2 windowPadding = nguiGetStyleVec2(NGUI_STYLE_WINDOW_PADDING) * ngui->uiScale;
 			// windowPosition is not multiplied by ngui->uiScale because it's given by the user as screen coords
 			Vec2 windowPosition = nguiGetStyleVec2(NGUI_STYLE_WINDOW_POSITION);
-			Vec2 windowSize = childrenSize;
+
+			Vec2 windowSize = nguiGetStyleVec2(NGUI_STYLE_WINDOW_SIZE);
+			if (windowSize.x == 0) windowSize.x = childrenSize.x;
+			if (windowSize.y == 0) windowSize.y = childrenSize.y;
 			windowSize.x += windowPadding.x*2;
 			windowSize.y += windowPadding.y*2;
+
 			windowPosition -= windowSize * nguiGetStyleVec2(NGUI_STYLE_WINDOW_PIVOT);
 
 			float windowLerpSpeed = nguiGetStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED);
@@ -708,6 +712,9 @@ void nguiDraw(float elapsed) {
 			Rect windowRect = makeRect(window->position, window->size);
 
 			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
+
+			Rect clippingRect = makeRect();
+			if (windowSize.x < childrenSize.x || windowSize.y < childrenSize.y) clippingRect = windowRect;
 
 			for (int i = 0; i < childrenNum; i++) { // Window position
 				NguiElement *child = children[i];
@@ -728,6 +735,8 @@ void nguiDraw(float elapsed) {
 			};
 
 			qsort(children, childrenNum, sizeof(NguiElement *), qsortChildrenToDraw);
+
+			if (!isZero(clippingRect)) setScissor(clippingRect);
 
 			for (int i = 0; i < childrenNum; i++) { // Update
 				NguiElement *child = children[i];
@@ -901,6 +910,8 @@ void nguiDraw(float elapsed) {
 
 				popAlpha();
 			}
+
+			if (!isZero(clippingRect)) clearScissor();
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 			ngui->lastWindowRect = windowRect;
