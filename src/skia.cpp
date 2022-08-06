@@ -623,7 +623,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 						props.tint = recurse.tint;
 						props.colorTransform = recurse.colorTransform;
 
-						genDrawShape(drawable->shape, props, cmdList);
+						if (props.alpha > 0) genDrawShape(drawable->shape, props, cmdList);
 					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
 						DrawSpriteRecurseData newRecurse = recurse;
 						newRecurse.useClip = nextUseClip;
@@ -693,8 +693,9 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			for (int i = 0; i < recurse.swapsNum; i++) {
 				VDrawPaletteSwap *swap = &recurse.swaps[i];
 				for (int i = 0; i < 16; i++) { //@speed You can only do colors[0] if it's a non-gradient
+					u8 alphaByte = getAofArgb(cmd->colors[i]);
 					if ((cmd->colors[i] & 0x00FFFFFF) == (swap->from & 0x00FFFFFF)) {
-						cmd->colors[i] = swap->to;
+						cmd->colors[i] = setAofArgb(swap->to, alphaByte);
 					}
 				}
 			}

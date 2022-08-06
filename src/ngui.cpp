@@ -207,7 +207,7 @@ void nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
 bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
-bool nguiHoveringElement();
+float nguiHoveringElement();
 
 int getSizeForDataType(NguiDataType dataType);
 void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack);
@@ -836,7 +836,7 @@ void nguiDraw(float elapsed) {
 					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
 						Rect iconRect = getInnerRectOfAspect(graphicsRect, getSize(iconTexture), iconGravity);
-						setScissor(iconRect);
+						// setScissor(iconRect);
 
 						Matrix3 matrix = mat3();
 						matrix.TRANSLATE(iconRect.x, iconRect.y);
@@ -849,7 +849,7 @@ void nguiDraw(float elapsed) {
 
 						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 						drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
-						clearScissor();
+						// clearScissor();
 					}
 
 					{
@@ -1025,10 +1025,9 @@ bool nguiSlider(char *name, float *value, float min, float max) {
 	return element->justActive;
 }
 
-bool nguiHoveringElement() {
-	if (!ngui->lastElement) return false;
-	if (ngui->lastElement->hoveringTime != 0) return true;
-	return false;
+float nguiHoveringElement() {
+	if (!ngui->lastElement) return 0;
+	return ngui->lastElement->hoveringTime;
 }
 
 int getSizeForDataType(NguiDataType dataType) {
