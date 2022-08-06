@@ -102,6 +102,8 @@ struct NguiElement {
 	float timeSinceLastClicked;
 
 	Rect childRect;
+	Vec2 scroll;
+	Vec2 visualScroll;
 };
 
 struct Ngui {
@@ -716,10 +718,24 @@ void nguiDraw(float elapsed) {
 			Rect clippingRect = makeRect();
 			if (windowSize.x < childrenSize.x || windowSize.y < childrenSize.y) clippingRect = windowRect;
 
+			bool mouseInClipRect = true;
+			if (!isZero(clippingRect)) {
+				if (contains(windowRect, ngui->mouse)) {
+					mouseInClipRect = true;
+					window->scroll.y -= platform->mouseWheel * 15 * ngui->uiScale;
+				} else {
+					mouseInClipRect = false;
+				}
+				if (window->scroll.y < 0) window->scroll.y += -window->scroll.y * 0.2;
+				if (window->scroll.y > childrenSize.y - windowSize.y) window->scroll.y -= (window->scroll.y - childrenSize.y + windowSize.y) * 0.2;
+
+				window->visualScroll = lerp(window->visualScroll, window->scroll, 0.1);
+			}
+
 			for (int i = 0; i < childrenNum; i++) { // Window position
 				NguiElement *child = children[i];
-				child->childRect.x += windowRect.x + windowPadding.x;
-				child->childRect.y += windowRect.y + windowPadding.y;
+				child->childRect.x += windowRect.x + windowPadding.x - window->visualScroll.x;
+				child->childRect.y += windowRect.y + windowPadding.y - window->visualScroll.y;
 			}
 
 			auto qsortChildrenToDraw = [](const void *a, const void *b)->int {
@@ -802,7 +818,7 @@ void nguiDraw(float elapsed) {
 				if (child->type == NGUI_ELEMENT_BUTTON) {
 					Xform2 graphicsXform = createXform2();
 
-					if (contains(childRect, ngui->mouse) && !disabled) {
+					if (mouseInClipRect && contains(childRect, ngui->mouse) && !disabled) {
 						if (child->hoveringTime == 0) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
 						}
