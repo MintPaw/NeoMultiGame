@@ -995,9 +995,24 @@ void nguiDraw(float elapsed) {
 NguiElement *getAndReviveNguiElement(char *name) {
 	NguiElement *element = NULL;
 
+	char *rootName = strstr(name, "###");
+	if (rootName) {
+		rootName += 3;
+	} else {
+		rootName = name;
+	}
+
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *possibleElement = &ngui->elements[i];
-		if (streq(possibleElement->name, name) && possibleElement->parentId == ngui->currentParentId) {
+
+		char *possibleElementRootName = strstr(possibleElement->name, "###");
+		if (possibleElementRootName) {
+			possibleElementRootName += 3;
+		} else {
+			possibleElementRootName = possibleElement->name;
+		}
+
+		if (streq(possibleElementRootName, rootName) && possibleElement->parentId == ngui->currentParentId) {
 			element = possibleElement;
 			break;
 		}
@@ -1015,12 +1030,12 @@ NguiElement *getAndReviveNguiElement(char *name) {
 
 		element = &ngui->elements[ngui->elementsNum++];
 		memset(element, 0, sizeof(NguiElement));
-		strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
 		element->id = ++ngui->nextNguiElementId;
 		element->styleStack.varsMax = NGUI_STYLE_TYPES_MAX;
 		element->styleStack.vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * element->styleStack.varsMax);
 	}
 
+	strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
 	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
 	element->parentId = ngui->currentParentId;
