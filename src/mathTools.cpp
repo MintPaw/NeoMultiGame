@@ -237,6 +237,13 @@ float length(Vec2 vec) {
 	return vec.length();
 }
 
+Vec2 ceil(Vec2 vec);
+Vec2 ceil(Vec2 vec) {
+	vec.x = ceilf(vec.x);
+	vec.y = ceilf(vec.y);
+	return vec;
+}
+
 template <typename T>
 struct Vec2t {
 	T x;

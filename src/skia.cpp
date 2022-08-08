@@ -160,6 +160,8 @@ struct SkiaSystem {
 	bool useCpuAA;
 	bool blurEnabled;
 
+	Vec2 subFrameCachedScale;
+
 	VDrawCommandsList immVDrawCommandsList;
 };
 SkiaSystem *skiaSys = NULL;
@@ -179,6 +181,8 @@ void execCommands(VDrawCommandsList *cmdList);
 void clearSkia(int color=0);
 void startSkiaFrame();
 void endSkiaFrame();
+void startSkiaSubFrame(float scale);
+void endSkiaSubFrame();
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum);
 
@@ -516,7 +520,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			SpriteTransform *trans = &transforms[i];
 
 			for (int i = 0; i < trans->pathsNum; i++) {
-				if (streq(trans->paths[i], recurse.path)) {
+				if (streq(trans->paths[i], "*") || streq(trans->paths[i], recurse.path)) {
 					matchingTransform = trans;
 					break;
 				}
@@ -1005,6 +1009,27 @@ void endSkiaFrame() {
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
 #endif
 	}
+}
+
+void startSkiaSubFrame(float scale) {
+	skiaSys->subFrameCachedScale = skiaSys->scale;
+	skiaSys->scale = v2(scale, scale);
+	startSkiaFrame();
+}
+
+void endSkiaSubFrame() {
+	endSkiaFrame();
+	skiaSys->scale = skiaSys->subFrameCachedScale;
+}
+
+Texture *getSkiaFrameAsTexture(Vec2 size) {
+	RenderTexture *renderTexture = createRenderTexture(size.x, size.y);
+
+	pushTargetTexture(renderTexture);
+	drawSimpleTexture(skiaSys->backTexture);
+	popTargetTexture();
+
+	return renderTextureToTexture(renderTexture);
 }
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {

@@ -30,7 +30,8 @@ enum NguiStyleType {
 	NGUI_STYLE_HOVER_SOUND_PATH_PTR=28,
 	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR=29,
 	NGUI_STYLE_BUTTON_HOVER_SCALE=30,
-	NGUI_STYLE_TYPES_MAX=31,
+	NGUI_STYLE_SLIDER_IS_VERTICAL=31,
+	NGUI_STYLE_TYPES_MAX,
 };
 
 enum NguiDirection {
@@ -201,11 +202,10 @@ void nguiDraw(float elapsed);
 
 NguiElement *getAndReviveNguiElement(char *name);
 NguiElement *getNguiElementById(int id);
-int getNguiId(int parentId, char *name);
 
 void nguiSetNextWindowSize(Vec2 size);
 void nguiStartWindow(char *windowName, Vec2 size=v2(), Vec2 pivot=v2());
-void nguiEndWindow();
+NguiElement *nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
 bool nguiSlider(char *name, float *value, float min=0, float max=1);
 
@@ -388,6 +388,11 @@ void nguiInit() {
 	info->name = "Button hover scale";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_SLIDER_IS_VERTICAL];
+	info->enumName = "NGUI_STYLE_SLIDER_IS_VERTICAL";
+	info->name = "Slider is vertical";
+	info->dataType = NGUI_DATA_TYPE_INT;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
@@ -419,6 +424,7 @@ void nguiInit() {
 	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
 	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
+	nguiPushStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL, 0);
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -694,7 +700,7 @@ void nguiDraw(float elapsed) {
 			// windowPosition is not multiplied by ngui->uiScale because it's given by the user as screen coords
 			Vec2 windowPosition = nguiGetStyleVec2(NGUI_STYLE_WINDOW_POSITION);
 
-			Vec2 windowSize = nguiGetStyleVec2(NGUI_STYLE_WINDOW_SIZE);
+			Vec2 windowSize = nguiGetStyleVec2(NGUI_STYLE_WINDOW_SIZE) * ngui->uiScale;
 			if (windowSize.x == 0) windowSize.x = childrenSize.x;
 			if (windowSize.y == 0) windowSize.y = childrenSize.y;
 			windowSize.x += windowPadding.x*2;
@@ -722,20 +728,24 @@ void nguiDraw(float elapsed) {
 			if (!isZero(clippingRect)) {
 				if (contains(windowRect, ngui->mouse)) {
 					mouseInClipRect = true;
-					window->scroll.y -= platform->mouseWheel * 15 * ngui->uiScale;
+					window->scroll.y -= platform->mouseWheel * 0.04 * ngui->uiScale;
 				} else {
 					mouseInClipRect = false;
 				}
-				if (window->scroll.y < 0) window->scroll.y += -window->scroll.y * 0.2;
-				if (window->scroll.y > childrenSize.y - windowSize.y) window->scroll.y -= (window->scroll.y - childrenSize.y + windowSize.y) * 0.2;
-
-				window->visualScroll = lerp(window->visualScroll, window->scroll, 0.1);
+				window->scroll.y = Clamp01(window->scroll.y);
+			} else {
+				window->scroll = v2();
 			}
+
+			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
+
+			Vec2 scrollMax = childrenSize - windowSize;
+			Vec2 scrollOffset = window->visualScroll * scrollMax;
 
 			for (int i = 0; i < childrenNum; i++) { // Window position
 				NguiElement *child = children[i];
-				child->childRect.x += windowRect.x + windowPadding.x - window->visualScroll.x;
-				child->childRect.y += windowRect.y + windowPadding.y - window->visualScroll.y;
+				child->childRect.x += windowRect.x + windowPadding.x - scrollOffset.x;
+				child->childRect.y += windowRect.y + windowPadding.y - scrollOffset.y;
 			}
 
 			auto qsortChildrenToDraw = [](const void *a, const void *b)->int {
@@ -893,6 +903,7 @@ void nguiDraw(float elapsed) {
 					}
 				} else if (child->type == NGUI_ELEMENT_SLIDER) {
 					Rect graphicsRect = childRect;
+					bool vertical = nguiGetStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL);
 
 					drawElementBg(child, graphicsRect);
 
@@ -902,24 +913,49 @@ void nguiDraw(float elapsed) {
 						drawTextInRect(label, props, textRect, labelGravity);
 					}
 
-					Rect barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.2), v2(0.5, 0.8));
+					Rect barRect;
+					if (vertical) {
+						barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 1), v2(0.5, 0.5));
+					} else {
+						barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.2), v2(0.5, 0.8));
+					}
 					drawRect(barRect, child->fgColor);
 
 					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
-					Rect buttonRect = makeRect(0, 0, barRect.height*1.5, barRect.height*1.5);
-					buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
-					buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
+					Rect buttonRect;
+					bool useRectButton = false;
+					if (vertical) {
+						useRectButton = true;
+						Vec2 buttonScale = v2(0.9, 0.2);
+						buttonRect = makeRect(v2(0, 0), getSize(barRect)*buttonScale);
+						buttonRect.x = barRect.x + barRect.width/2 - buttonRect.width/2;
+						buttonRect.y = lerp(barRect.y, barRect.y + barRect.height - buttonRect.height, perc);
+					} else {
+						Vec2 buttonScale = v2(1.5, 1.5);
+						buttonRect = makeRect(0, 0, barRect.height*buttonScale.x, barRect.height*buttonScale.y);
+						buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
+						buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
+					}
 					// drawRect(buttonRect, labelTextColor);
 
-					Circle buttonCircle = makeCircle(getCenter(buttonRect), buttonRect.width/2);
-					drawCircle(buttonCircle, labelTextColor);
+					if (useRectButton) {
+						drawRect(buttonRect, labelTextColor);
+					} else {
+						Circle buttonCircle = makeCircle(getCenter(buttonRect), buttonRect.width/2);
+						drawCircle(buttonCircle, labelTextColor);
+					}
 
-					if (contains(buttonCircle, ngui->mouse) || contains(barRect, ngui->mouse)) {
+					if (contains(buttonRect, ngui->mouse) || contains(barRect, ngui->mouse)) {
 						if (platform->mouseJustDown) ngui->draggingId = child->id;
 					}
 
 					if (ngui->draggingId == child->id) {
-						float newPerc = Clamp01(norm(barRect.x, barRect.x + barRect.width, ngui->mouse.x));
+						float newPerc;
+						if (vertical) {
+							newPerc = Clamp01(norm(barRect.y, barRect.y + barRect.height, ngui->mouse.y));
+						} else {
+							newPerc = Clamp01(norm(barRect.x, barRect.x + barRect.width, ngui->mouse.x));
+						}
 						*(float *)child->valuePtr = lerp(child->valueMin, child->valueMax, newPerc);
 					}
 				}
@@ -1027,13 +1063,15 @@ void nguiStartWindow(char *name, Vec2 size, Vec2 pivot) {
 	if (!isZero(size)) nguiPopWindowPositionAndPivot();
 }
 
-void nguiEndWindow() {
+NguiElement *nguiEndWindow() {
 	NguiElement *window = getNguiElementById(ngui->currentParentId);
 	if (window) {
 		ngui->lastWindowRect = makeRect(window->position, window->size);
 	}
 
 	ngui->currentParentId = 0;
+
+	return window;
 }
 
 bool nguiButton(char *name, char *subText) {

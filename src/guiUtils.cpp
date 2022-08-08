@@ -2,6 +2,7 @@ bool guiInputRgb(const char *name, int *argb, bool showInputs=false);
 bool guiInputArgb(const char *name, int *argb, bool showInputs=false);
 void guiPushStyleColor(ImGuiCol style, int color);
 void guiPopStyleColor(int amount=1);
+int guiGetStyleColor(ImGuiCol style);
 
 bool guiInputRgb(const char *name, int *argb, bool showInputs) {
 	int a;
@@ -59,6 +60,11 @@ void guiPushStyleColor(ImGuiCol style, int color) {
 
 void guiPopStyleColor(int amount) {
 	ImGui::PopStyleColor(amount);
+}
+
+int guiGetStyleColor(ImGuiCol style) {
+	ImVec4 col = ImGui::GetStyleColorVec4(style);
+	return argbToHex(col.w, col.x, col.y, col.z);
 }
 
 bool guiColoredTreeNodeEx(char *label, ImGuiTreeNodeFlags flags=0);
