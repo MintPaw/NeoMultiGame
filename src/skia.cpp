@@ -1,4 +1,4 @@
-#define DO_DRAW_AFTER_CONTEXT_SWITCH 0
+#define DO_DRAW_AFTER_CONTEXT_SWITCH 1
 #define USE_MSAA_RENDERBUFFER 1
 
 struct VDrawPaletteSwap {
@@ -207,7 +207,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
 
-		skiaSys->useSaveLayerBlendMode = false;
 #if !defined(__EMSCRIPTEN__)
 		skiaSys->blurEnabled = true;
 #endif
@@ -424,10 +423,17 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 						paintCmd->position.x = newFillStyle->gradient.focalPoint;
 					}
 					paintCmd->matrix = newFillStyle->gradientMatrix;
+
+					float lastRatio = -1;
 					for (int i = 0; i < newFillStyle->gradient.coordsNum; i++) {
 						GradeCord *coord = &newFillStyle->gradient.coords[i];
-						paintCmd->colors[i] = applyColorTransform(coord->color, props.colorTransform);
-						paintCmd->gradientRatios[i] = (float)coord->ratio / 255.0;
+						paintCmd->colors[paintCmd->gradientRatiosNum] = applyColorTransform(coord->color, props.colorTransform);
+
+						float ratio = coord->ratio / 255.0;
+						if (ratio == lastRatio) continue;
+						lastRatio = ratio;
+
+						paintCmd->gradientRatios[paintCmd->gradientRatiosNum] = ratio;
 						paintCmd->gradientRatiosNum++;
 					}
 				} else if (newFillStyle->fillStyleType == FILL_STYLE_CLIPPED_BITMAP || newFillStyle->fillStyleType == FILL_STYLE_REPEATING_BITMAP) {
@@ -790,7 +796,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
 			SkBlendMode blendMode = SkBlendMode::kSrcOver;
-			if (cmd->blendMode == SWF_BLEND_NORMAL) {
+			if (cmd->blendMode == SWF_BLEND_NORMAL || cmd->blendMode == SWF_BLEND_NONE) {
 				blendMode = SkBlendMode::kSrcOver;
 			} else if (cmd->blendMode == SWF_BLEND_MULTIPLY) {
 				blendMode = SkBlendMode::kMultiply;
@@ -827,17 +833,25 @@ void execCommands(VDrawCommandsList *cmdList) {
 			paint.setColor(cmd->colors[0]);
 		} else if (cmd->type == VDRAW_SET_LINEAR_GRADIENT_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
+			paint.setColor(0xFFFFFFFF);
 
 			SkMatrix mat = toSkMatrix(cmd->matrix);
 			SkPoint points[2] = {SkPoint::Make(-16384/20, 0), SkPoint::Make(16384/20, 0)};
 			paint.setShader(SkGradientShader::MakeLinear(points, (SkColor *)cmd->colors, cmd->gradientRatios, cmd->gradientRatiosNum, SkTileMode::kClamp, 0, &mat));
 		} else if (cmd->type == VDRAW_SET_RADIAL_GRADIENT_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
+			paint.setColor(0xFFFFFFFF);
 
 			SkMatrix mat = toSkMatrix(cmd->matrix);
 			paint.setShader(SkGradientShader::MakeRadial( SkPoint::Make(0, 0), 16384.0/20, (SkColor *)cmd->colors, cmd->gradientRatios, cmd->gradientRatiosNum, SkTileMode::kClamp, 0, &mat));
+
+			// for (int i = 0; i < cmd->gradientRatiosNum; i++) {
+			// 	logf("Grad %d: 0x%X (%f)\n", i, cmd->colors[i], cmd->gradientRatios[i]);
+			// }
 		} else if (cmd->type == VDRAW_SET_FOCAL_GRADIENT_FILL) {
 			paint.setStyle(SkPaint::Style::kFill_Style);
+			paint.setColor(0xFFFFFFFF);
+
 			SkMatrix mat = toSkMatrix(cmd->matrix);
 			paint.setShader(SkGradientShader::MakeTwoPointConical(
 				SkPoint::Make(16384/20.0 * cmd->position.x, 0),
@@ -867,6 +881,8 @@ void execCommands(VDrawCommandsList *cmdList) {
 			}
 
 		} else if (cmd->type == VDRAW_BITMAP_FILL) {
+			paint.setStyle(SkPaint::Style::kFill_Style);
+			paint.setColor(0xFFFFFFFF);
 			SwfBitmap *bitmap = cmd->swfBitmap;
 			if (bitmap) {
 				if (!bitmap->bitmapRuntimePointer) {
@@ -1071,6 +1087,7 @@ void drawSwfAnalyzer() {
 		RenderTexture *shapeTexture;
 
 		bool showUnnamedSprites;
+		bool recordFrame;
 	};
 
 	static SwfASys *aSys = NULL;
@@ -1119,27 +1136,15 @@ void drawSwfAnalyzer() {
 		ImGui::InputInt("Frame", &aSys->selectedSpriteFrame);
 		aSys->selectedSpriteFrame = MathClamp(aSys->selectedSpriteFrame, 0, sprite->framesNum-1);
 
-		// ImGui::InputInt("Frame", &aSys->selectedSpriteFrame);
-		// aSys->selectedSpriteFrame = MathClamp(aSys->selectedSpriteFrame, 0, sprite->framesNum-1);
+		SkPictureRecorder recorder;
+		if (aSys->recordFrame) {
+			SkCanvas *pictureCanvas = recorder.beginRecording(skiaSys->width, skiaSys->height);
+			skiaSys->canvas = pictureCanvas;
+		}
+
 
 		int frame = aSys->selectedSpriteFrame;
 		Rect rect = sprite->frameBounds[frame];
-#if 0
-		pushSkiaCanvas(getSize(aSys->spriteTexture), true);
-
-		clearSkia(0xFFFFFFFF);
-		SpriteTransform trans;
-		initSpriteTransforms(&trans, 1);
-		trans.paths[trans.pathsNum++] = "_";
-		trans.matrix.SCALE(aSys->spriteScale);
-		trans.matrix.TRANSLATE(-rect.x, -rect.y);
-		trans.matrix.TRANSLATE(aSys->spriteOffset);
-		trans.frame = frame;
-		drawSprite(sprite, &trans, 1);
-
-		altCanvasToTexture(aSys->spriteTexture);
-		popSkiaCanvas();
-#else
 		Vec2 oldScale = skiaSys->scale;
 		skiaSys->scale = v2(1, 1);
 		startSkiaFrame();
@@ -1162,7 +1167,16 @@ void drawSwfAnalyzer() {
 		drawSimpleTexture(skiaSys->backTexture);
 		popTargetTexture();
 
-#endif
+		if (aSys->recordFrame) {
+			aSys->recordFrame = false;
+			skiaSys->canvas = skiaSys->mainCanvas;
+			sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
+			sk_sp<SkData> skiaData = picture->serialize();
+			void *data = (void *)skiaData->bytes();
+			int size = skiaData->size();
+			writeFile("assets/recording.skp", data, size);
+			logf("Wrote recording\n");
+		}
 
 		guiTexture(aSys->spriteTexture);
 		ImGui::DragFloat2("spriteOffset", &aSys->spriteOffset.x);
@@ -1227,6 +1241,9 @@ void drawSwfAnalyzer() {
 			destroyTexture(texture);
 		}
 
+		ImGui::SameLine();
+		if (ImGui::Button("Record skp")) aSys->recordFrame = true;
+
 		{ /// Drawables
 			SwfDrawable *drawables = NULL;
 			int drawablesNum = 0;
@@ -1288,10 +1305,18 @@ void drawSwfAnalyzer() {
 		ImGui::EndChild();
 
 		ImGui::SameLine();
-#if 0
 		{ /// Shapes
 			ImGui::BeginChild("shapesChild", ImVec2(400, 500), true, 0); 
 			SwfShape *shape = aSys->swf->allShapes[aSys->selectedShape];
+#if 1
+			for (int i = 0; i < shape->subShapesNum; i++) {
+				SwfSubShape *subShape = &shape->subShapes[i];
+				ImGui::Text("Fill style index: %d", subShape->fillStyleIndex);
+				ImGui::Text("Line style index: %d", subShape->lineStyleIndex);
+				ImGui::Text("Edges: %d", subShape->drawEdgesNum);
+				ImGui::Separator();
+			}
+#else
 
 			Vec2 oldScale = skiaSys->scale;
 			skiaSys->scale = v2(1, 1);
@@ -1375,8 +1400,8 @@ void drawSwfAnalyzer() {
 
 				ImGui::TreePop();
 			}
+#endif
 			ImGui::EndChild();
 		}
-#endif
 	}
 }

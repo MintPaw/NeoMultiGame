@@ -1,3 +1,5 @@
+bool swfLogShapeInfo = false;
+
 struct SwfDataStream {
 	u8 *data;
 	int size;
@@ -1082,6 +1084,8 @@ Swf *loadSwf(char *path) {
 				tag->lineStyles[tag->lineStylesNum++] = readLineStyle(&stream, shapeNum);
 			}
 
+			if (swfLogShapeInfo) logf("Starting shape %d fillStyles %d lineStyles\n", tag->fillStylesNum, tag->lineStylesNum);
+
 			int fillBits = readUB(&stream, 4);
 			int lineBits = readUB(&stream, 4);
 
@@ -1128,20 +1132,24 @@ Swf *loadSwf(char *path) {
 							cursor.x = record->styleChangeRecord.moveDeltaX;
 							cursor.y = record->styleChangeRecord.moveDeltaY;
 							record->styleChangeRecord.control = cursor;
+							if (swfLogShapeInfo) logf("Move to %f %f\n", cursor.x, cursor.y);
 						}
 						if (stateFillStyle0) {
 							record->styleChangeRecord.fillStyle0 = readUB(&stream, fillBits);
 							fillStyle0Index = record->styleChangeRecord.fillStyle0;
-							 if (fillStyle0Index != 0) fillStyle0Index += fillStyleIndexOffset;
+							if (swfLogShapeInfo) logf("Set fillStyle0 to index %d (And going to add %d)\n", fillStyle0Index, fillStyleIndexOffset);
+							if (fillStyle0Index != 0) fillStyle0Index += fillStyleIndexOffset;
 						}
 						if (stateFillStyle1) {
 							record->styleChangeRecord.fillStyle1 = readUB(&stream, fillBits);
 							fillStyle1Index = record->styleChangeRecord.fillStyle1;
+							if (swfLogShapeInfo) logf("Set fillStyle1 to index %d (And going to add %d)\n", fillStyle1Index, fillStyleIndexOffset);
 							if (fillStyle1Index != 0) fillStyle1Index += fillStyleIndexOffset;
 						}
 						if (stateLineStyle) {
 							record->styleChangeRecord.lineStyle = readUB(&stream, lineBits);
 							lineStyleIndex = record->styleChangeRecord.lineStyle;
+							if (swfLogShapeInfo) logf("Set lineStyle to index %d (And going to add %d)\n", lineStyleIndex, lineStyleIndexOffset);
 							if (lineStyleIndex != 0) lineStyleIndex += lineStyleIndexOffset;
 						}
 						if (stateNewStyles) {
@@ -1154,12 +1162,14 @@ Swf *loadSwf(char *path) {
 								lineStyleIndexOffset = tag->lineStylesNum;
 
 								int fillStyleCount = read(&stream);
+								if (swfLogShapeInfo) logf("Adding %d fillStyles (%d existing)\n", fillStyleCount, tag->fillStylesNum);
 								if (tag->fillStylesNum+fillStyleCount > 0) {
 									tag->fillStyles = (FillStyle *)resizeArray(tag->fillStyles, sizeof(FillStyle), tag->fillStylesNum, tag->fillStylesNum+fillStyleCount);
 								}
 								for (int i = 0; i < fillStyleCount; i++) tag->fillStyles[tag->fillStylesNum++] = readFillStyle(&stream, shapeNum);
 
 								int lineStyleCount = read(&stream);
+								if (swfLogShapeInfo) logf("Adding %d lineStyles (%d existing)\n", lineStyleCount, tag->lineStylesNum);
 								if (tag->lineStylesNum+lineStyleCount > 0) {
 									tag->lineStyles = (LineStyle *)resizeArray(tag->lineStyles, sizeof(LineStyle), tag->lineStylesNum, tag->lineStylesNum+lineStyleCount);
 								}
@@ -1177,6 +1187,7 @@ Swf *loadSwf(char *path) {
 
 					int straightFlag = readUB(&stream, 1);
 					if (straightFlag == 1) {
+						if (swfLogShapeInfo) logf("Drawing straight line\n");
 						record->type = SHAPE_RECORD_STRAIGHT_EDGE;
 						int numBits = readUB(&stream, 4);
 						int generalLineFlag = readUB(&stream, 1);
@@ -1189,6 +1200,7 @@ Swf *loadSwf(char *path) {
 						cursor += delta;
 						record->edgeRecord.control = cursor;
 					} else {
+						if (swfLogShapeInfo) logf("Drawing curved line\n");
 						record->type = SHAPE_RECORD_CURVED_EDGE;
 						int numBits = readUB(&stream, 4);
 						record->edgeRecord.start = cursor;

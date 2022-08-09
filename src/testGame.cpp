@@ -550,7 +550,7 @@ void updateGame() {
 		nguiPopStyleVar(NGUI_STYLE_WINDOW_POSITION);
 
 		nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(50, 50));
-		nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0.5, 0.5));
+		nguiPushStyleVec2(NGUI_STYLE_LABEL_GRAVITY, v2(0.5, 0.5));
 		nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(0, -20));
 		for (int i = 0; i < 20; i++) {
 			if (nguiButton(frameSprintf("Item #%d", i))) {
@@ -558,7 +558,7 @@ void updateGame() {
 			}
 		}
 		nguiPopStyleVar(NGUI_STYLE_BUTTON_HOVER_OFFSET);
-		nguiPopStyleVar(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
+		nguiPopStyleVar(NGUI_STYLE_LABEL_GRAVITY);
 		nguiPopStyleVar(NGUI_STYLE_ELEMENT_SIZE);
 
 		nguiEndWindow();

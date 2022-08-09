@@ -9,7 +9,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ELEMENT_PADDING=7,
 	NGUI_STYLE_ELEMENTS_IN_ROW=8,
 	NGUI_STYLE_ELEMENT_SIZE=9,
-	NGUI_STYLE_BUTTON_LABEL_GRAVITY=10,
+	NGUI_STYLE_LABEL_GRAVITY=10,
 	NGUI_STYLE_BUTTON_HOVER_OFFSET=11,
 	NGUI_STYLE_WINDOW_BG_COLOR=12,
 	NGUI_STYLE_BG_COLOR=13,
@@ -31,6 +31,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ACTIVE_SOUND_PATH_PTR=29,
 	NGUI_STYLE_BUTTON_HOVER_SCALE=30,
 	NGUI_STYLE_SLIDER_IS_VERTICAL=31,
+	NGUI_STYLE_LABEL_SIZE=32,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -283,8 +284,8 @@ void nguiInit() {
 	info->name = "Button size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_LABEL_GRAVITY];
-	info->enumName = "NGUI_STYLE_BUTTON_LABEL_GRAVITY";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_GRAVITY];
+	info->enumName = "NGUI_STYLE_LABEL_GRAVITY";
 	info->name = "Button label gravity";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
@@ -393,6 +394,11 @@ void nguiInit() {
 	info->name = "Slider is vertical";
 	info->dataType = NGUI_DATA_TYPE_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_SIZE];
+	info->enumName = "NGUI_STYLE_LABEL_SIZE";
+	info->name = "Label size";
+	info->dataType = NGUI_DATA_TYPE_VEC2;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
@@ -403,7 +409,7 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
-	nguiPushStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY, v2(0, 0));
+	nguiPushStyleVec2(NGUI_STYLE_LABEL_GRAVITY, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(20, 0));
 	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 	nguiPushStyleColorInt(NGUI_STYLE_BG_COLOR, 0xFF202020);
@@ -425,6 +431,7 @@ void nguiInit() {
 	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
 	nguiPushStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL, 0);
+	nguiPushStyleVec2(NGUI_STYLE_LABEL_SIZE, v2(1, 1));
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -786,7 +793,7 @@ void nguiDraw(float elapsed) {
 				int fgColor = nguiGetStyleColorInt(NGUI_STYLE_FG_COLOR);
 				int hoverTint = nguiGetStyleColorInt(NGUI_STYLE_HOVER_TINT);
 				int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
-				Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_BUTTON_LABEL_GRAVITY);
+				Vec2 labelGravity = nguiGetStyleVec2(NGUI_STYLE_LABEL_GRAVITY);
 				int labelTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 				bool disabled = nguiGetStyleInt(NGUI_STYLE_ELEMENT_DISABLED);
 				int disabledTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT);
@@ -888,7 +895,8 @@ void nguiDraw(float elapsed) {
 					}
 
 					{
-						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.85), v2(0, 0));
+						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
+						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*labelSize, labelGravity);
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
 						drawTextInRect(label, props, textRect, labelGravity);
 					}
