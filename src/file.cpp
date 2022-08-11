@@ -7,6 +7,8 @@ void refreshAssetPaths();
 
 #ifdef __linux__
 #include <dirent.h>
+#include <sys/stat.h>
+#include <errno.h>
 #endif
 
 enum FuzzyPathType {
@@ -603,6 +605,7 @@ bool writeFile(const char *fileName, void *data, int length) {
 	FILE *filePtr = fopen(realName, "wb");
 	if (!filePtr) {
 		logf("Cannot find file %s\n", realName);
+		printf("Why: %s\n", strerror(errno));
 		Assert(0);
 		return false;
 	}

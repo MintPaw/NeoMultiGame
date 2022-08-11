@@ -40,6 +40,7 @@ void writeU16(DataStream *stream, u16 value) { writeBytes(stream, &value, sizeof
 void writeFloat(DataStream *stream, float value) { writeBytes(stream, &value, 4); }
 void writeDouble(DataStream *stream, double value) { writeBytes(stream, &value, 8); }
 void writeRect(DataStream *stream, Rect value) { writeBytes(stream, &value, sizeof(Rect)); }
+void writeVec4(DataStream *stream, Vec4 value) { writeBytes(stream, &value, sizeof(Vec4)); }
 void writeVec3(DataStream *stream, Vec3 value) { writeBytes(stream, &value, sizeof(Vec3)); }
 void writeVec2(DataStream *stream, Vec2 value) { writeBytes(stream, &value, sizeof(Vec2)); }
 void writeVec2i(DataStream *stream, Vec2i value) { writeBytes(stream, &value, sizeof(Vec2i)); }

@@ -912,6 +912,8 @@ struct Swf {
 	int tagsNum;
 	int tagsMax;
 
+	char path[PATH_MAX_LEN];
+
 #define LOADED_SWFS_MAX 64
 	Swf *loadedSwfs[LOADED_SWFS_MAX];
 	int loadedSwfsNum;
@@ -937,6 +939,7 @@ struct Swf {
 Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
+SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
@@ -962,6 +965,7 @@ Swf *loadSwf(char *path) {
 	stream.size = swfSize;
 
 	Swf *swf = (Swf *)zalloc(sizeof(Swf));
+	strcpy(swf->path, path);
 	swf->drawableNamesMax = 8;
 	swf->drawableNames = (char **)malloc(sizeof(char *) * swf->drawableNamesMax);
 
@@ -2194,6 +2198,12 @@ Swf *loadSwf(char *path) {
 					}
 				}
 			}
+
+			if (sprite->name) {
+				SwfSprite *newSprite = getAliasedSprite(sprite, swf);
+				if (sprite != newSprite) swf->allSprites[i] = newSprite;
+			}
+
 		}
 	}
 
@@ -2288,6 +2298,7 @@ SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject) {
 		} else if (tagType == SWF_TAG_DEFINE_SPRITE) {
 			drawable.type = SWF_DRAWABLE_SPRITE;
 			drawable.sprite = (SwfSprite *)characterPtr;
+			if (drawable.sprite->name) drawable.sprite = getAliasedSprite(drawable.sprite, swf);
 			if (drawable.sprite->name && stringStartsWith(drawable.sprite->name, "Invis_")) {
 				drawable.type = SWF_DRAWABLE_NONE;
 				drawable.sprite = NULL;
@@ -2347,6 +2358,23 @@ int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
 	}
 
 	return -1;
+}
+
+SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf) {
+	for (int i = swf->loadedSwfsNum-1; i >= 0; i--) {
+		Swf *nextSwf = swf->loadedSwfs[i];
+		SwfSprite *newSprite = getAliasedSprite(sourceSprite, nextSwf);
+		if (newSprite) return newSprite;
+	}
+
+	for (int i = 0; i < swf->allSpritesNum; i++) {
+		SwfSprite *sprite = swf->allSprites[i];
+		if (streq(sprite->name, sourceSprite->name)) {
+			return sprite;
+		}
+	}
+
+	return NULL;
 }
 
 bool hasLabel(SwfSprite *sprite, char *label) {

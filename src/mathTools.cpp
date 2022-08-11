@@ -113,6 +113,7 @@ s16 FORCE_INLINE clampedS16Add(int left, int right);
 
 float map(float value, float sourceMin, float sourceMax, float destMin, float destMax, Ease ease = LINEAR);
 float clampMap(float value, float sourceMin, float sourceMax, float destMin, float destMax, Ease ease = LINEAR);
+float clampMap(float value, Vec4 sourceDest, Ease ease=LINEAR);
 float FORCE_INLINE dot(Vec2 a, Vec2 b);
 
 int argbToHex(unsigned char a, unsigned char r, unsigned char g, unsigned char b);
@@ -1863,6 +1864,11 @@ float clampMap(float value, float sourceMin, float sourceMax, float destMin, flo
 	perc = tweenEase(perc, ease);
 	return lerp(destMin, destMax, perc);
 }
+
+float clampMap(float value, Vec4 sourceDest, Ease ease) {
+	return clampMap(value, sourceDest.x, sourceDest.y, sourceDest.z, sourceDest.w, ease);
+}
+
 
 float dot(Vec2 a, Vec2 b) {
 	return a.x*b.x + a.x*b.y;

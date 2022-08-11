@@ -419,6 +419,7 @@ enum BlendMode {
 	BLEND_SCREEN,
 	BLEND_ADD,
 	BLEND_INVERT,
+	BLEND_RECOMMENDED,
 	BLEND_SKIA,
 };
 
@@ -1372,6 +1373,8 @@ void setRendererBlendMode(BlendMode blendMode) {
 	} else if (blendMode == BLEND_SKIA) {
 		Raylib::rlSetBlendFactors(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_FUNC_ADD);
 		Raylib::rlSetBlendMode(Raylib::BLEND_CUSTOM);
+	} else if (blendMode == BLEND_RECOMMENDED) {
+		Raylib::rlSetBlendMode(Raylib::BLEND_ALPHA);
 	}
 }
 
