@@ -48,13 +48,6 @@ struct Mesh {
 	u16 *inds;
 	int indsNum;
 
-	int material;
-	bool backFaceCulled;
-
-	char *diffusePath;
-	char *normalPath;
-	char *specularPath;
-
 	int vaoId;
 
 #define MAX_MESH_VERTEX_BUFFERS 7
@@ -167,8 +160,8 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 		mesh->inds[i] = readU16(stream);
 	}
 
-	mesh->material = readU32(stream);
-	mesh->backFaceCulled = readU8(stream);
+	readU32(stream); // Old material
+	readU8(stream); // Old backFaceCulled
 
 	readString(stream); // Old diffusePath
 	readString(stream); // Old normalPath
