@@ -167,7 +167,7 @@ struct SkiaSystem {
 SkiaSystem *skiaSys = NULL;
 
 void resetSkia(Vec2 size, Vec2 scale=v2(1, 1), bool useGpu=true, int msaaSamples=16);
-void drawSprite(SwfSprite *sprite, SpriteTransform *transforms=NULL, int transformsNum=0, DrawSpriteRecurseData recurse={});
+void drawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse={});
 void drawShape(SwfShape *shape, Matrix3 matrix, DrawShapeProps props);
 
 VDrawCommand *createCommand(VDrawCommandsList *cmdList, VDrawCommandType type);

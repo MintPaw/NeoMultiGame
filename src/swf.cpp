@@ -1309,6 +1309,8 @@ Swf *loadSwf(char *path) {
 							chain[chainNum++] = pathStart->origOrderIndex;
 							for (int i = 0; i < edgesLeftNum; i++) {
 								DrawEdgeRecord *possibleEarlier = edgesLeft[i];
+								if (possibleEarlier->fillStyleIndex != pathStart->fillStyleIndex) continue;
+								if (possibleEarlier->lineStyleIndex != pathStart->lineStyleIndex) continue;
 
 								Vec2 end;
 								if (possibleEarlier->type == DRAW_EDGE_STRAIGHT_EDGE) end = possibleEarlier->control;
@@ -1316,8 +1318,6 @@ Swf *loadSwf(char *path) {
 								if (!equal(pathStart->start, end)) continue;
 
 								bool inChain = false;
-								if (possibleEarlier->fillStyleIndex != pathStart->fillStyleIndex) continue;
-								if (possibleEarlier->lineStyleIndex != pathStart->lineStyleIndex) continue;
 								for (int i = 0; i < chainNum; i++) {
 									if (possibleEarlier->origOrderIndex == chain[i]) {
 										inChain = true;
@@ -1346,14 +1346,14 @@ Swf *loadSwf(char *path) {
 							for (int i = 0; i < edgesLeftNum; i++) {
 								DrawEdgeRecord *possibleNext = edgesLeft[i];
 
+								if (possibleNext->fillStyleIndex != pathStart->fillStyleIndex) continue;
+								if (possibleNext->lineStyleIndex != pathStart->lineStyleIndex) continue;
+								if (possibleNext->origOrderIndex == trueStartIndex) continue;
+
 								Vec2 end;
 								if (pathStart->type == DRAW_EDGE_STRAIGHT_EDGE) end = pathStart->control;
 								else if (pathStart->type == DRAW_EDGE_CURVED_EDGE) end = pathStart->anchor;
 								if (!equal(possibleNext->start, end)) continue;
-
-								if (possibleNext->fillStyleIndex != pathStart->fillStyleIndex) continue;
-								if (possibleNext->lineStyleIndex != pathStart->lineStyleIndex) continue;
-								if (possibleNext->origOrderIndex == trueStartIndex) continue;
 
 								foundNext = true;
 								pathStart = possibleNext;
@@ -2174,8 +2174,10 @@ Swf *loadSwf(char *path) {
 			}
 		}
 
+		/// Bounds and aliasing
 		for (int i = 0; i < swf->allSpritesNum; i++) {
 			SwfSprite *sprite = swf->allSprites[i];
+			if (!sprite->name) continue;
 
 			sprite->frameBounds = (Rect *)zalloc(sizeof(Rect) * sprite->framesNum);
 			for (int i = 0; i < sprite->framesNum; i++) {
@@ -2199,11 +2201,10 @@ Swf *loadSwf(char *path) {
 				}
 			}
 
-			if (sprite->name) {
+			{
 				SwfSprite *newSprite = getAliasedSprite(sprite, swf);
 				if (sprite != newSprite) swf->allSprites[i] = newSprite;
 			}
-
 		}
 	}
 

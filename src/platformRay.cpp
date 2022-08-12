@@ -525,6 +525,13 @@ struct Renderer {
 	Raylib::Shader danmakuShader;
 	int danmakuShaderHueShiftValueLoc;
 
+	Shader *outlineShader;
+	int outlineShaderResolutionLoc;
+	int outlineShaderOutlineSizeLoc;
+	int outlineShaderOutlineColorLoc;
+	int outlineShaderOutlineFadeOuterLoc;
+	int outlineShaderOutlineFadeInnerLoc;
+
 	int width;
 	int height;
 
@@ -696,6 +703,16 @@ void initRenderer(int width, int height) {
 			renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
 		}
 #endif
+
+		renderer->outlineShader = loadShader(
+			NULL, "assets/common/shaders/raylib/glsl330/outline.fs",
+			NULL, "assets/common/shaders/raylib/glsl100/outline.fs"
+		);
+		renderer->outlineShaderResolutionLoc = getUniformLocation(renderer->outlineShader, "resolution");
+		renderer->outlineShaderOutlineSizeLoc = getUniformLocation(renderer->outlineShader, "outlineSize");
+		renderer->outlineShaderOutlineColorLoc = getUniformLocation(renderer->outlineShader, "outlineColor");
+		renderer->outlineShaderOutlineFadeOuterLoc = getUniformLocation(renderer->outlineShader, "outlineFadeOuter");
+		renderer->outlineShaderOutlineFadeInnerLoc = getUniformLocation(renderer->outlineShader, "outlineFadeInner");
 	} ///
 
 	u64 whiteData = 0xFFFFFFFF;
@@ -903,6 +920,7 @@ RenderTexture *createRenderTexture(int width, int height, void *data, int flags)
 	renderTexture->height = height;
 	renderTexture->raylibRenderTexture = myLoadRenderTexture(width, height, flags);
 	if (data) setTextureData(renderTexture, data, width, height, flags);
+	setTextureSmooth(renderTexture, true);
 	return renderTexture;
 }
 

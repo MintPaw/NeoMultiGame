@@ -214,13 +214,11 @@ Vec2 v2(float x, float y) {
 	return vec;
 }
 
-bool equal(Vec2 a, Vec2 b) {
+bool FORCE_INLINE equal(Vec2 a, Vec2 b);
+bool FORCE_INLINE equal(Vec2 a, Vec2 b) {
 	float dx = b.x - a.x;
 	float dy = b.y - a.y;
-	float distSquared = dx*dx + dy*dy;
-
-	if (distSquared < 0.0001) return true;
-	return false;
+	return dx*dx + dy*dy < 0.0001;
 }
 
 float distance(Vec2 a, Vec2 b);
