@@ -728,18 +728,18 @@ void clearRenderer(int color) {
 }
 
 Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path) {
-#if !defined(GRAPHICS_API_OPENGL_33)
-	if ((vsPath && !vs100Path) || (fsPath && !fs100Path)) logf("Using glsl3.3 shader on incompatible platform\n");
+#ifdef __EMSCRIPTEN__
+	if ((vsPath && !vs100Path) || (fsPath && !fs100Path)) logf("Using glsl3.3 shader on incompatible platform (%s)\n", fsPath);
 	vsPath = vs100Path;
 	fsPath = fs100Path;
 #endif
 
-#if defined(GRAPHICS_API_OPENGL_33)
-	if (vsPath == NULL) vsPath = "assets/common/shaders/raylib/glsl330/base.vs";
-	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl330/base.fs";
-#else
+#ifdef __EMSCRIPTEN__
 	if (vsPath == NULL) vsPath = "assets/common/shaders/raylib/glsl100/base.vs";
 	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl100/base.fs";
+#else
+	if (vsPath == NULL) vsPath = "assets/common/shaders/raylib/glsl330/base.vs";
+	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl330/base.fs";
 #endif
 
 	logf("Loading shader %s %s\n", vsPath, fsPath);
