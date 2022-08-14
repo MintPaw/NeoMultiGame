@@ -14,7 +14,6 @@
 #define SAMPLE_RATE 44100
 
 struct Sound {
-	bool exists;
 	char *path;
 
 	float tweakVolume;
@@ -38,7 +37,6 @@ struct Sound {
 
 struct Channel {
 	int id;
-	bool exists;
 
 	Sound *sound;
 	int samplePosition;
@@ -53,6 +51,7 @@ struct Channel {
 
 	/// Private
 	float lastVolume;
+	bool markedForDeletion;
 };
 
 struct Audio {
@@ -60,9 +59,11 @@ struct Audio {
 	bool htmlAllowedAudio;
 
 	Channel channels[CHANNELS_MAX];
+	int channelsNum;
 	int nextChannelId;
+
 	Sound sounds[SOUNDS_MAX];
-	int channelsCount;
+	int soundsNum;
 
 	float masterVolume;
 	bool doInstantVolumeChanges;
@@ -98,7 +99,6 @@ Channel *getChannel(int id);
 void seekChannelPerc(Channel *channel, float perc);
 
 Sound *getSound(const char *path, bool onlyLoadRaw=false);
-// void updateAudio(); //@hack This is in main.cpp
 
 /// Private
 void mixSound(s16 *destBuffer, int destSamplesNum);
@@ -203,15 +203,7 @@ Channel *playSound(Sound *sound, bool looping) {
 		return NULL;
 	}
 
-	Channel *channel = NULL;
-	for (int i = 0; i < CHANNELS_MAX; i++) {
-		if (!audio->channels[i].exists) {
-			channel = &audio->channels[i];
-			break;
-		}
-	}
-
-	if (!channel) {
+	if (audio->channelsNum > CHANNELS_MAX-1) {
 		logf("There are no more sound channels!\n");
 		return NULL;
 	}
@@ -220,31 +212,28 @@ Channel *playSound(Sound *sound, bool looping) {
 		return playSound(getSound("assets/common/audio/silence.ogg"), looping);
 	}
 
+	Channel *channel = &audio->channels[audio->channelsNum++];
 	memset(channel, 0, sizeof(Channel));
-
 	channel->id = ++audio->nextChannelId;
 	channel->userVolume = 1;
 	channel->userVolume2 = 1;
-	channel->exists = true;
 	channel->looping = looping;
 
 	channel->lastVolume = 0;
 	channel->sound = sound;
 
 	sound->concurrentInstances++;
-	audio->channelsCount++;
 	return channel;
 }
 
 void stopChannel(int channelId) {
 	Channel *channel = getChannel(channelId);
-	if (channel) stopChannel(channel);
+	if (channel) channel->markedForDeletion = true;
 }
 
 void stopChannel(Channel *channel) {
 	if (channel->sound) channel->sound->concurrentInstances--;
-	audio->channelsCount--;
-	channel->exists = false;
+	channel->markedForDeletion = true;
 }
 
 void updateAudio() {
@@ -285,14 +274,22 @@ void updateAudio() {
 	}
 
 	CheckAudioError();
+
+	for (int i = 0; i < audio->channelsNum; i++) {
+		Channel *channel = &audio->channels[i];
+		if (channel->markedForDeletion) {
+			arraySpliceIndex(audio->channels, audio->channelsNum, sizeof(Channel), i);
+			audio->channelsNum--;
+			i--;
+			continue;
+		}
+	}
 }
 
 void mixSound(s16 *destBuffer, int destSamplesNum) {
 	memset(destBuffer, 0, destSamplesNum * sizeof(s16));
-	for (int i = 0; i < CHANNELS_MAX; i++) {
+	for (int i = 0; i < audio->channelsNum; i++) {
 		Channel *channel = &audio->channels[i];
-
-		if (!channel->exists) continue;
 		Sound *sound = channel->sound;
 
 		if (sound->samplesStreamed < sound->samplesTotal) {
@@ -399,9 +396,9 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 Channel *getChannel(int id) {
 	if (id == 0) return NULL;
 
-	for (int i = 0; i < CHANNELS_MAX; i++) {
+	for (int i = 0; i < audio->channelsNum; i++) {
 		Channel *channel = &audio->channels[i];
-		if (channel->exists && channel->id == id) return channel;
+		if (channel->id == id) return channel;
 	}
 
 	return NULL;
@@ -424,21 +421,10 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 
 	/// Not in store, look for file
 	if (fileExists(path)) {
-		Sound *sound = NULL;
-		for (int i = 0; i < SOUNDS_MAX; i++) {
-			if (!audio->sounds[i].exists) {
-				sound = &audio->sounds[i];
-				break;
-			}
-		}
+		if (audio->soundsNum > SOUNDS_MAX-1) Panic("There are no more sound slots\n");
 
-		if (!sound) {
-			logf("There are no more sound slots\n");
-			Assert(0);
-		}
-
+		Sound *sound = &audio->sounds[audio->soundsNum++];
 		memset(sound, 0, sizeof(Sound));
-		sound->exists = true;
 		sound->path = stringClone(path);
 		sound->tweakVolume = 1;
 		sound->maxConcurrentInstances = audio->defaultMaxConcurrentInstances;
