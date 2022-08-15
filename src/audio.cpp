@@ -2,11 +2,13 @@
 
 #include <AL/al.h>
 #include <AL/alc.h>
+#include <AL/alext.h>
 
 #ifdef __EMSCRIPTEN__
 # define SAMPLE_BUFFER_LIMIT (2048*2)
 #else
 # define SAMPLE_BUFFER_LIMIT (2048)
+// # define SAMPLE_BUFFER_LIMIT (2048)
 #endif
 
 #define CHANNELS_MAX 512
@@ -66,7 +68,6 @@ struct Audio {
 	int soundsNum;
 
 	float masterVolume;
-	bool doInstantVolumeChanges;
 
 	int memoryUsed;
 
@@ -83,7 +84,9 @@ struct Audio {
 	ALuint buffers[2];
 	ALuint source;
 
-	s16 *sampleBuffer;
+#define STORED_SAMPLES_MAX (SAMPLE_BUFFER_LIMIT*4)
+	s16 storedSamples[STORED_SAMPLES_MAX];
+	int storedSamplesPosition;
 };
 
 Audio *audio = NULL;
@@ -91,7 +94,7 @@ Audio *audio = NULL;
 void initAudio();
 
 void initSound(Sound *sound);
-void updateAudio();
+void updateAudio(float elapsed);
 Channel *playSound(Sound *sound, bool looping=false);
 void stopChannel(int channelId);
 void stopChannel(Channel *channel);
@@ -102,8 +105,12 @@ Sound *getSound(const char *path, bool onlyLoadRaw=false);
 
 /// Private
 void mixSound(s16 *destBuffer, int destSamplesNum);
+void mixSoundInToGlobalBuffer(int samplesToAdd);
 void checkAudioError(int lineNum);
+void reconnectAudioDevice();
 #define CheckAudioError() checkAudioError(__LINE__);
+
+/// FUNCTIONS^
 
 void initAudio() {
 	// logf("Initing audio (%.2fmb)\n", sizeof(Audio) / 1024.0 / 1024.0);
@@ -114,6 +121,33 @@ void initAudio() {
 	if (platform->isCommandLineOnly) {
 		audio->disabled = true;
 		return;
+	}
+
+	reconnectAudioDevice();
+
+#if 0
+	int isPlaying;
+	alGetSourcei(audio->source, AL_SOURCE_STATE, &isPlaying);
+	logf("Is playing: %d\n", isPlaying);
+#endif
+
+	CheckAudioError();
+
+	Sound *sound;
+	sound = getSound("assets/common/audio/silence.ogg");
+	sound->maxConcurrentInstances = 0;
+}
+
+void reconnectAudioDevice() {
+	if (audio->device) {
+		logf("Reconnecting...\n");
+		CheckAudioError();
+		// alcDestroyContext(audio->context);
+		// alcCloseDevice(audio->device);
+		CheckAudioError();
+
+		audio->context = NULL;
+		audio->device = NULL;
 	}
 
 	audio->device = alcOpenDevice(NULL);
@@ -163,18 +197,6 @@ void initAudio() {
 
 	alSourceQueueBuffers(audio->source, 2, audio->buffers);
 	alSourcePlay(audio->source);
-
-#if 0
-	int isPlaying;
-	alGetSourcei(audio->source, AL_SOURCE_STATE, &isPlaying);
-	logf("Is playing: %d\n", isPlaying);
-#endif
-
-	CheckAudioError();
-
-	Sound *sound;
-	sound = getSound("assets/common/audio/silence.ogg");
-	sound->maxConcurrentInstances = 0;
 }
 
 void initSound(Sound *sound) {
@@ -219,7 +241,7 @@ Channel *playSound(Sound *sound, bool looping) {
 	channel->userVolume2 = 1;
 	channel->looping = looping;
 
-	channel->lastVolume = 0;
+	channel->lastVolume = -1;
 	channel->sound = sound;
 
 	sound->concurrentInstances++;
@@ -236,7 +258,7 @@ void stopChannel(Channel *channel) {
 	channel->markedForDeletion = true;
 }
 
-void updateAudio() {
+void updateAudio(float elapsed) {
 	if (!audio || audio->disabled) return;
 
 #if defined(__EMSCRIPTEN__)
@@ -246,6 +268,19 @@ void updateAudio() {
 		});
 	}
 #endif
+
+#if 0 // Reconnect audio if disconnected (but not if default device changes!!!) (also doesn't work in html5)
+	if (platform->frameCount % 30 == 0) {
+		int connected = -1;
+		alcGetIntegerv(audio->device, ALC_CONNECTED, 1, &connected);
+		if (connected == 0) {
+			reconnectAudioDevice();
+		}
+	}
+#endif
+
+	int samplesToAdd = elapsed * SAMPLE_RATE * 2;
+	mixSoundInToGlobalBuffer(samplesToAdd);
 
 	int toProcess;
 	alGetSourcei(audio->source, AL_BUFFERS_PROCESSED, &toProcess);
@@ -257,14 +292,24 @@ void updateAudio() {
 		ALuint buffer;
 		alSourceUnqueueBuffers(audio->source, 1, &buffer);
 
-		if (!audio->sampleBuffer) audio->sampleBuffer = (s16 *)malloc(sizeof(s16) * SAMPLE_BUFFER_LIMIT);
-		mixSound(audio->sampleBuffer, SAMPLE_BUFFER_LIMIT);
+		int missingSamples = SAMPLE_BUFFER_LIMIT - audio->storedSamplesPosition;
+		if (missingSamples > 0) mixSoundInToGlobalBuffer(missingSamples);
 
-		alBufferData(buffer, AL_FORMAT_STEREO16, audio->sampleBuffer, SAMPLE_BUFFER_LIMIT * sizeof(s16), SAMPLE_RATE);
+		// if (audio->storedSamplesPosition < SAMPLE_BUFFER_LIMIT) logf("Not enough stored samples (%d)\n", SAMPLE_BUFFER_LIMIT-audio->storedSamplesPosition);
+		// if (audio->storedSamplesPosition >= SAMPLE_BUFFER_LIMIT) logf("You're ahead by %d samples\n", audio->storedSamplesPosition-SAMPLE_BUFFER_LIMIT);
+		alBufferData(buffer, AL_FORMAT_STEREO16, audio->storedSamples, SAMPLE_BUFFER_LIMIT * sizeof(s16), SAMPLE_RATE);
 		CheckAudioError();
 
 		alSourceQueueBuffers(audio->source, 1, &buffer);
 		CheckAudioError();
+
+		int samplesLeftInStore = audio->storedSamplesPosition - SAMPLE_BUFFER_LIMIT;
+		if (samplesLeftInStore <= 0) {
+			samplesLeftInStore = 0;
+		} else {
+			memmove(audio->storedSamples, audio->storedSamples + SAMPLE_BUFFER_LIMIT, sizeof(s16) * samplesLeftInStore);
+			audio->storedSamplesPosition -= SAMPLE_BUFFER_LIMIT;
+		}
 	}
 
 	if (requeued) {
@@ -287,6 +332,8 @@ void updateAudio() {
 }
 
 void mixSound(s16 *destBuffer, int destSamplesNum) {
+	if (destSamplesNum == 0) return;
+
 	memset(destBuffer, 0, destSamplesNum * sizeof(s16));
 	for (int i = 0; i < audio->channelsNum; i++) {
 		Channel *channel = &audio->channels[i];
@@ -302,7 +349,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 			if (sound->channels == 1) {
 				samplesGot = stb_vorbis_get_samples_short_interleaved(sound->vorbis, 1, &sound->samples[sound->samplesStreamed], destSamplesNum) * 1;
 			} else if (sound->channels == 2) {
-				samplesGot = stb_vorbis_get_samples_short_interleaved(sound->vorbis, 2, &sound->samples[sound->samplesStreamed], destSamplesNum) * 2;
+				samplesGot = stb_vorbis_get_samples_short_interleaved(sound->vorbis, 2, &sound->samples[sound->samplesStreamed], destSamplesNum * 2) * 2;
 			} else {
 				Panic("Can't play sound with more than 2 channels");
 			}
@@ -334,7 +381,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 		float startVol = vol;
 		float volAdd = 0;
 
-		if (vol != channel->lastVolume) {
+		if (vol != channel->lastVolume && channel->lastVolume != -1) {
 			float minVol = channel->lastVolume;
 			float maxVol = vol;
 			startVol = minVol;
@@ -345,11 +392,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 
 		for (int i = 0; i < destSamplesNum; i+=2) {
 			float curVol;
-			if (audio->doInstantVolumeChanges) {
-				curVol = vol;
-			} else {
-				curVol = startVol + volAdd * i;
-			}
+			curVol = startVol + volAdd * i;
 
 			s16 rightSample = 0;
 			s16 leftSample = 0;
@@ -391,6 +434,14 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 
 		channel->secondPosition = ((float)channel->samplePosition / (float)sound->samplesTotal) * sound->length;
 	}
+}
+
+void mixSoundInToGlobalBuffer(int samplesToAdd) {
+	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;
+	if (samplesToAdd > maxSamplesLeft) samplesToAdd = maxSamplesLeft;
+
+	mixSound(audio->storedSamples + audio->storedSamplesPosition, samplesToAdd);
+	audio->storedSamplesPosition += samplesToAdd;
 }
 
 Channel *getChannel(int id) {

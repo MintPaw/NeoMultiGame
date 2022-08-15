@@ -240,8 +240,8 @@ void platformUpdate() {
 		}
 	} ///
 
-	void updateAudio(); //@headerHack
-	updateAudio();
+	void updateAudio(float elapsed); //@headerHack
+	updateAudio(platform->elapsed);
 
 	void startRenderingFrame(); //@headerHack;
 	startRenderingFrame();
