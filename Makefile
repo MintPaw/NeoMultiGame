@@ -11,9 +11,9 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=gladiators2Game
-# GAME_NAME=concreteJungleGame
+GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=butt2GoGame
 # GAME_NAME=rssGame
@@ -976,7 +976,15 @@ genButt2GoZips:
 		$(SEVEN_ZIP) a -tzip ../ngHtml.zip .
 
 exportConcreteJungleBlenderAssets:
+	cp buildSystem/tools/mintPawPlugin.py "/c/Users/MintPaw/AppData/Roaming/Blender Foundation/Blender/3.0/scripts/addons"
 	$(BLENDER) /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/concreteJungle.blend \
 		-b -P /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/standaloneExportAssets.py
+
+doFastScript:
+	cp buildSystem/tools/mintPawPlugin.py "/c/Users/MintPaw/AppData/Roaming/Blender Foundation/Blender/3.0/scripts/addons"
+	$(BLENDER) /c/Users/MintPaw/Desktop/mocapTest/concreteJungleMocapSimple.blend -b -P buildSystem/tools/fastScript.py
+	# $(BLENDER) /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/concreteJungle.blend -b -P buildSystem/tools/fastScript.py
+
+# /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw
 
 -include ../multiGamePrivate/Makefile.in

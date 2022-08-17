@@ -56,8 +56,8 @@ char *mallocSprintf(const char *msg, ...);
 char *frameStringClone(const char *str);
 void freeFrameMemory();
 
-char *convertToHex(void *data, int size);
-void *convertFromHex(char *hex, int *outputSize=NULL, bool fast=false);
+char *convertToHexString(void *data, int size);
+void *convertFromHexString(char *hex, int *outputSize=NULL);
 
 int indexOfU32(u32 *haystack, int needle);
 
@@ -617,7 +617,7 @@ void arraySpread(void *array, int arrayNum, int elementSize, int afterIndex, int
 	memmove(dest, src, size);
 }
 
-char *convertToHex(void *data, int size) {
+char *convertToHexString(void *data, int size) {
 	int hexSize = size*2 + 256;
 	char *result = (char *)zalloc(hexSize);
 	unsigned char *pin = (unsigned char *)(data);
@@ -647,18 +647,13 @@ unsigned char hexCharToByte(unsigned char hex) {
 	}
 }
 
-void *convertFromHex(char *hex, int *outputSize, bool fast) {
+void *convertFromHexString(char *hex, int *outputSize) {
 	int hexLen = strlen(hex);
 
-	void *output;
-	if (fast) {
-		output = (unsigned char *)fastMalloc(hexLen/2);
-	} else {
-		output = (unsigned char *)malloc(hexLen/2);
-	}
+	u8 *output = (u8 *)malloc(hexLen/2);
 
 	for (int i = 0; i < hexLen/2; i++) {
-		((unsigned char *)output)[i] = (hexCharToByte(hex[i*2]) << 4) | hexCharToByte(hex[i*2 + 1]);
+		output[i] = (hexCharToByte(hex[i*2]) << 4) | hexCharToByte(hex[i*2 + 1]);
 	}
 
 	if (outputSize) *outputSize = hexLen/2;

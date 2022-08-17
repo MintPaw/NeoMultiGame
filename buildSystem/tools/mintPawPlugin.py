@@ -318,6 +318,12 @@ def writeSkeleton(ba, obj, skeleName):
     writeString(ba, skeleName) 
     ba.extend(struct.pack("<1I", frameCount))
 
+    # deformBoneNames = []
+    # for i in range(0, len(arm.bones)):
+    #     bone = arm.bones[i]
+    #     if bone == None: continue
+    #     if isDeformBone(bone): deformBoneNames.append(bone.name)
+
     ba.extend(struct.pack("<1i", len(arm.bones)))
     for bone in arm.bones:
         transformList = framesMap[bone.name]
@@ -418,9 +424,6 @@ class MESH_OP_export_content_for_concrete_jungle(bpy.types.Operator):
         saveModel(bpy.data.objects["Road"], "road", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
         saveModel(bpy.data.objects["Building1"], "building1", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
 
-        # saveModel(bpy.data.objects["M_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models");
-        # saveSkeleton(bpy.data.objects["S_Cube"], "simple", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
-
         return {"FINISHED"}
 
 class MESH_OP_export_content_for_models(bpy.types.Operator):
@@ -432,10 +435,78 @@ class MESH_OP_export_content_for_models(bpy.types.Operator):
         scn = bpy.data.scenes[0]
         world = bpy.data.worlds["World"]
 
-        saveModel(bpy.data.objects["Cube"], "cube", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models");
-        saveModel(bpy.data.objects["Sphere"], "sphere", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models");
+        saveModel(bpy.data.objects["Cube"], "cube", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models")
+        saveModel(bpy.data.objects["Sphere"], "sphere", "C:/Dropbox/MultiGame/multiGame/commonAssets/assets/common/models")
 
         return {"FINISHED"}
+
+class MESH_OP_do_fast_script(bpy.types.Operator):
+    bl_idname = "mesh.do_fast_script"
+    bl_label = "do_fast_script"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scn = bpy.data.scenes[0]
+        world = bpy.data.worlds["World"]
+
+        armObj = bpy.data.objects["ARM_Unit"]
+        arm = armObj.data
+
+        deformBoneNames = []
+        bonesThatStartWithDEF = []
+        for i in range(0, len(arm.bones)):
+            bone = arm.bones[i]
+            if bone == None:
+                continue
+            isDef = isDeformBone(bone);
+            if bone.name[0:3] == "DEF":
+                bonesThatStartWithDEF.append(bone.name)
+            if isDef:
+                if bone.parent:
+                    deformBoneNames.append(bone.name + "(" + bone.parent.name + ")")
+                else:
+                    deformBoneNames.append(bone.name)
+        print("Bones that start with def:")
+        bonesThatStartWithDEF = list(set(bonesThatStartWithDEF))
+        print(bonesThatStartWithDEF)
+        print(len(bonesThatStartWithDEF))
+
+        print("Deform bones:")
+        print(deformBoneNames)
+        print(len(deformBoneNames))
+        meshObj = bpy.data.objects["MESH_Unit"]
+        mesh = meshObj.data
+
+        outStrs = []
+        for i in range(0, len(mesh.polygons)):
+            poly = mesh.polygons[i]
+
+            for i in range(0, 3):
+                meshVertex = mesh.vertices[poly.vertices[i]]
+                realMeshVertex = meshObj.data.vertices[poly.vertices[i]]
+
+                boneIndexCount = 0
+                for i in range(0, len(realMeshVertex.groups)):
+                    groupIndex = realMeshVertex.groups[i].group
+                    vertexGroupName = meshObj.vertex_groups[groupIndex].name
+                    outStrs.append(str(groupIndex) + " " + vertexGroupName)
+
+        vertexGroupNames = list(set(outStrs))
+        print(vertexGroupNames)
+        print(len(vertexGroupNames))
+
+        return {"FINISHED"}
+
+def isDeformBone(bone):
+    if bone.use_deform:
+        return True
+
+    for child in bone.children:
+        if isDeformBone(child):
+            return True
+
+    return False
+
 
 class ExportPanel:
     bl_space_type = "VIEW_3D"
@@ -457,11 +528,13 @@ def register():
     bpy.utils.register_class(ExportMeshesOp)
     bpy.utils.register_class(MESH_OP_export_content_for_concrete_jungle)
     bpy.utils.register_class(MESH_OP_export_content_for_models)
+    bpy.utils.register_class(MESH_OP_do_fast_script)
 
 def unregister():
     bpy.utils.unregister_class(ExportSubPanel)
     bpy.utils.unregister_class(ExportMeshesOp)
     bpy.utils.unregister_class(MESH_OP_export_content_for_concrete_jungle)
     bpy.utils.unregister_class(MESH_OP_export_content_for_models)
+    bpy.utils.unregister_class(MESH_OP_do_fast_script)
 
 register()

@@ -109,6 +109,7 @@ call em++ %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_DIR%\main.c
 	-s ALLOW_MEMORY_GROWTH=1 ^
 	-s LLD_REPORT_UNDEFINED=1 ^
 	-s ERROR_ON_UNDEFINED_SYMBOLS=0 ^
+	-s INITIAL_MEMORY=64MB ^
 	--preload-file ..\assetsEmbed@assets
 
 xcopy %LIB_DIR%\*.js . /sy

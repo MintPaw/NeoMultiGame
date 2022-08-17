@@ -28,7 +28,9 @@ Vec2i readVec2i(DataStream *stream);
 
 DataStream *newDataStream();
 DataStream *loadDataStream(char *path);
+DataStream *loadDataStreamFromHexString(char *hexStr);
 void writeDataStream(char *path, DataStream *stream);
+char *writeToHexString(DataStream *stream);
 void destroyDataStream(DataStream *stream);
 
 void writeBytes(DataStream *stream, void *ptr, int size);
@@ -210,8 +212,29 @@ DataStream *loadDataStream(char *path) {
 	return stream;
 }
 
+DataStream *loadDataStreamFromHexString(char *hexStr) {
+	if (!hexStr || !hexStr[0]) return NULL;
+
+	int smallDataSize;
+	void *smallData = convertFromHexString(hexStr, &smallDataSize);
+
+	DataStream *stream = (DataStream *)zalloc(sizeof(DataStream));
+	stream->data = (u8 *)uncompressBytes(smallData, smallDataSize, &stream->dataMax);
+
+	free(smallData);
+	return stream;
+}
+
 void writeDataStream(char *path, DataStream *stream) {
 	writeFile(path, stream->data, stream->index);
+}
+
+char *writeToHexString(DataStream *stream) {
+	int newDataSize;
+	void *newData = compressBytes(stream->data, stream->index, &newDataSize);
+	char *hexStr = convertToHexString(newData, newDataSize);
+	free(newData);
+	return hexStr;
 }
 
 void destroyDataStream(DataStream *stream) {

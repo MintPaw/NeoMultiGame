@@ -796,7 +796,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
 			SkBlendMode blendMode = SkBlendMode::kSrcOver;
-			if (cmd->blendMode == SWF_BLEND_NORMAL || cmd->blendMode == SWF_BLEND_NONE) {
+			if (cmd->blendMode == SWF_BLEND_NORMAL || cmd->blendMode == SWF_BLEND_NONE || cmd->blendMode == 0) {
 				blendMode = SkBlendMode::kSrcOver;
 			} else if (cmd->blendMode == SWF_BLEND_MULTIPLY) {
 				blendMode = SkBlendMode::kMultiply;

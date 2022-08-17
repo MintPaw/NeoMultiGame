@@ -41,6 +41,50 @@ loadShotgunShell
 closeShotgun
 useWeaponOil
 
+Reanim:
+walk
+handsUpWalk
+//run
+jump
+land
+dashStart
+dashForward
+armorGain
+drinkPotionStart
+drinkPotionFinish
+drinkPotionFail
+startSnap(s)
+createWeapon
+stashOnBack
+stashOnHip
+fireShotgun
+openShotgun
+loadShotgunShell
+closeShotgun
+useWeaponOil
+
+knifeAttaks(s)
+swordWalk
+swordRun
+swordSlash(s)
+swordJump
+swordLand
+
+throw
+airThrow
+toss
+
+dodges
+blocks(s)
+
+knockdowns(s)/stands(s)
+knockedup
+
+wallBounce
+
+crumple
+
+idles
 
 Ending items:
 	- [L1] Estus

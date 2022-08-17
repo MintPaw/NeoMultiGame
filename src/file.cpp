@@ -32,7 +32,7 @@ void loadedRemoteFile(const char *result);
 void errorLoadingRemoteFile(const char *result);
 
 char *readTempSave();
-void writeTempSave(char *str);
+bool writeTempSave(char *str);
 
 int alphaSort(const void *a, const void *b) { char *str1 = *(char **)a; char *str2 = *(char **)b; return strcmp(str1, str2); }
 
@@ -50,6 +50,8 @@ int pngAssetPathsNum = 0;
 int remoteZipsLoading = 0;
 void (*remoteLoadingDoneCallback)() = NULL;
 
+bool cantSaveTempFiles = false;
+
 void initFileOperations() {
 #if defined(_WIN32)
 	HMODULE hModule = GetModuleHandleW(NULL);
@@ -64,13 +66,15 @@ void initFileOperations() {
 	strcpy(exeDir, "./");
 	strcpy(filePathPrefix, "");
 
-	EM_ASM(
-		FS.mkdir("/save");
-		FS.mount(IDBFS, {}, "/save");
-		FS.syncfs(true, function (err) {
-			console.log(err);
-		});
+	int canSave = EM_ASM_INT(
+		if (typeof(Storage) !== "undefined") {
+			return 1;
+		} else {
+			return 0;
+		}
 	);
+
+	if (!canSave) cantSaveTempFiles = true;
 #endif
 
 	if (!projectAssetDir[0]) {
@@ -729,52 +733,34 @@ void deleteFile(const char *fileName) {
 }
 
 char *readTempSave() {
-	char *path = frameMalloc(PATH_MAX_LEN);
+	if (cantSaveTempFiles) return NULL;
+
 #if defined(__EMSCRIPTEN__)
-	strcpy(path, "save/save.dat");
+	int bytesNeeded = EM_ASM_INT(
+		if (!localStorage.saveData) return 0;
+		return localStorage.saveData.length*4+1;
+	);
+	if (bytesNeeded == 0) return NULL;
+
+	char *str = (char *)zalloc(bytesNeeded);
+	EM_ASM(stringToUTF8(localStorage.saveData, $0, localStorage.saveData.length*4+1) , str);
+	return str;
 #else
-	snprintf(path, PATH_MAX_LEN, "%s/save.dat", exeDir);
+	char *path = frameSprintf("%s/save.dat", exeDir);
+	if (!fileExists(path)) return NULL;
+	char *str = (char *)readFile(path);
+	return str;
 #endif
-
-	{ /// Skipping readFile to avoid filePathPrefix
-		FILE *filePtr = fopen(path, "rb");
-		if (!filePtr) return NULL;
-
-		fseek(filePtr, 0, SEEK_END);
-		long fileSize = ftell(filePtr);
-		fseek(filePtr, 0, SEEK_SET);
-
-		char *str = (char *)malloc(fileSize + 1);
-		fread(str, fileSize, 1, filePtr);
-		fclose(filePtr);
-
-		str[fileSize] = 0;
-
-		return str;
-	}
-
 }
 
-void writeTempSave(char *str) {
-#if defined(__EMSCRIPTEN__)
-	writeFile("save/save.dat", str, strlen(str));
-	EM_ASM(
-		FS.syncfs(function (err) {
-			console.log(err);
-		});
-	);
-#else
-	char *path = frameMalloc(PATH_MAX_LEN);
-	snprintf(path, PATH_MAX_LEN, "%s/save.dat", exeDir);
+bool writeTempSave(char *str) {
+	if (cantSaveTempFiles) return false;
 
-	{ /// Skipping writeFile to avoid filePathPrefix
-	FILE *filePtr = fopen(path, "wb");
-	if (filePtr) {
-		fwrite(str, strlen(str), 1, filePtr);
-		fclose(filePtr);
-	} else {
-		logf("Failed to save game\n");
-	}
-	}
+#if defined(__EMSCRIPTEN__)
+	EM_ASM(localStorage.saveData = UTF8ToString($0), str);
+	return true;
+#else
+	writeFile(frameSprintf("%s/save.dat", exeDir), str, strlen(str));
+	return true;
 #endif
 }

@@ -91,7 +91,7 @@ void StringSave::loadString(const char *data) {
 			// logf("var |%s| size: |%s| = |%d|\n", nameStr, sizeStr, size);
 
 			int dataSize;
-			unsigned char *data = (unsigned char *)convertFromHex(dataCur, &dataSize, true);
+			unsigned char *data = (unsigned char *)convertFromHexString(dataCur, &dataSize);
 
 			save->addBytes(nameStr, data, size);
 			free(data);
@@ -161,7 +161,7 @@ char *StringSave::getAsString() {
 			int charsWritten = 0;
 
 			if (entry->type == STRING_SAVE_ENTRY_TYPE_BYTES) {
-				char *hexStr = convertToHex(entry->value, entry->size);
+				char *hexStr = convertToHexString(entry->value, entry->size);
 				int neededLineMax = strlen(hexStr) + strlen(entry->name) + 256;
 				if (lineMax < neededLineMax) {
 					free(line);

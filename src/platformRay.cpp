@@ -224,6 +224,9 @@ void platformUpdate() {
 		platform->rightMouseJustUp = Raylib::IsMouseButtonReleased(Raylib::MOUSE_BUTTON_RIGHT);
 		platform->rightMouseDown = Raylib::IsMouseButtonDown(Raylib::MOUSE_BUTTON_RIGHT);
 		platform->mouseWheel = Raylib::GetMouseWheelMove();
+#ifdef __EMSCRIPTEN__
+		platform->mouseWheel *= -1;
+#endif
 
 		Raylib::Vector2 mouse = Raylib::GetMousePosition();
 		platform->mouse.x = mouse.x;
@@ -742,7 +745,6 @@ Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path)
 	if (fsPath == NULL) fsPath = "assets/common/shaders/raylib/glsl330/base.fs";
 #endif
 
-	logf("Loading shader %s %s\n", vsPath, fsPath);
 	char *vs = (char *)readFile(vsPath);
 	char *fs = (char *)readFile(fsPath);
 
@@ -1692,10 +1694,14 @@ void guiStartFrame() {
 		io.MouseDown[1] = Raylib::IsMouseButtonDown(Raylib::MOUSE_RIGHT_BUTTON);
 		io.MouseDown[2] = Raylib::IsMouseButtonDown(Raylib::MOUSE_MIDDLE_BUTTON);
 
-		if (Raylib::GetMouseWheelMove() > 0)
-			io.MouseWheel += 1;
-		else if (Raylib::GetMouseWheelMove() < 0)
-			io.MouseWheel -= 1;
+
+#ifdef __EMSCRIPTEN__
+		if (Raylib::GetMouseWheelMove() > 0) io.MouseWheel -= 1;
+		else if (Raylib::GetMouseWheelMove() < 0) io.MouseWheel += 1;
+#else
+		if (Raylib::GetMouseWheelMove() > 0) io.MouseWheel += 1;
+		else if (Raylib::GetMouseWheelMove() < 0) io.MouseWheel -= 1;
+#endif
 
 		if ((io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) == 0)
 		{
