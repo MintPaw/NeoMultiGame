@@ -24,9 +24,9 @@ GAME_NAME=horseGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
-# GAME_NAME=concreteJungleGame
+GAME_NAME=concreteJungleGame
 # GAME_NAME=butt2GoGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
 endif
@@ -982,7 +982,7 @@ exportConcreteJungleBlenderAssets:
 
 doFastScript:
 	cp buildSystem/tools/mintPawPlugin.py "/c/Users/MintPaw/AppData/Roaming/Blender Foundation/Blender/3.0/scripts/addons"
-	$(BLENDER) /c/Users/MintPaw/Desktop/mocapTest/concreteJungleMocapSimple.blend -b -P buildSystem/tools/fastScript.py
+	$(BLENDER) /c/Users/MintPaw/Desktop/mocapTest/concreteJungleMocap.blend -b -P buildSystem/tools/fastScript.py
 	# $(BLENDER) /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw/concreteJungle.blend -b -P buildSystem/tools/fastScript.py
 
 # /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/__raw

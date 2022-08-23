@@ -11,7 +11,7 @@ in vec4 vertexTangent; // Actually boneWeights
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
-uniform mat4 boneTransforms[32]; // Must match BONES_MAX
+uniform mat4 boneTransforms[40]; // Must match BONES_MAX
 
 // Output vertex attributes (to fragment shader)
 out vec3 fragPosition;

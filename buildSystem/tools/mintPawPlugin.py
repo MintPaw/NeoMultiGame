@@ -43,7 +43,7 @@ def findArmature(obj):
     if obj.parent == None: return None
     return findArmature(obj.parent)
 
-def saveSubMesh(obj, meshName, path, materialIndex):
+def writeSubMesh(obj, meshName, path, materialIndex):
     for thing in bpy.data.objects:
         thing.select_set(False)
     obj.select_set(True);
@@ -58,12 +58,14 @@ def saveSubMesh(obj, meshName, path, materialIndex):
 
     boneNames = []
     if armature != None:
-        ba.extend(struct.pack("<1i", len(armature.data.bones)))
-        for bone in armature.data.bones:
-            boneNames.append(bone.name)
-            writeString(ba, bone.name)
-    else:
-        ba.extend(struct.pack("<1i", 0))
+        if len(armature.data.bones) > 50: simplifySkeleton(armature)
+        boneNames = getDeformBoneNames(armature.data)
+
+    print("Skeleton has " + str(len(boneNames)) + " bones")
+    ba.extend(struct.pack("<1i", len(boneNames)))
+    for i in range(0, len(boneNames)):
+        name = boneNames[i]
+        writeString(ba, name)
 
     vertsCount = 0
     for poly in mesh.polygons:
@@ -159,7 +161,7 @@ def saveSubMesh(obj, meshName, path, materialIndex):
 def writeMaterial(ba, obj, materialIndex):
     diffusePath = None
 
-    if obj != None and len(obj.data.materials) > 0:
+    if obj != None and len(obj.data.materials) > 0 and obj.data.materials[materialIndex]:
         materialNodeTree = obj.data.materials[materialIndex].node_tree
         if "MintMaterial" in materialNodeTree.nodes:
             mintMaterialNodes = materialNodeTree.nodes["MintMaterial"]
@@ -235,7 +237,7 @@ def writeModel(ba, obj, modelPath, depth=0):
         writeString(ba, meshName) # Actually meshPath, which is in the same dir
         writeMaterial(ba, newObj, ind)
         ba.extend(struct.pack("<1i", 0)) # childrenNum
-        saveSubMesh(newObj, meshName, modelPath + "/" + meshName, ind)
+        writeSubMesh(newObj, meshName, modelPath + "/" + meshName, ind)
 
     if newObj != None:
         for thing in bpy.data.objects:
@@ -256,7 +258,6 @@ def writeBone(ba, arm, bone, transformList):
         for i in range(0, len(arm.bones)):
             otherBone = arm.bones[i]
             if otherBone.name == bone.parent.name:
-                # parentIndex = arm.bones.items().index(bone.parent)
                 ba.append(i)
                 found = True
                 break
@@ -267,7 +268,7 @@ def writeBone(ba, arm, bone, transformList):
     writeVec3(ba, bone.matrix_local.to_euler("XYZ"))
     writeVec3(ba, bone.matrix_local.to_scale())
 
-    print(bone.name+" would add "+str(len(transformList))+" transforms")
+    # print(bone.name+" would add "+str(len(transformList))+" transforms")
     for vecs in transformList:
         writeVec3(ba, vecs[0]);
         writeVec3(ba, vecs[1]);
@@ -318,16 +319,31 @@ def writeSkeleton(ba, obj, skeleName):
     writeString(ba, skeleName) 
     ba.extend(struct.pack("<1I", frameCount))
 
-    # deformBoneNames = []
-    # for i in range(0, len(arm.bones)):
-    #     bone = arm.bones[i]
-    #     if bone == None: continue
-    #     if isDeformBone(bone): deformBoneNames.append(bone.name)
+    boneNames = getDeformBoneNames(arm)
+    ba.extend(struct.pack("<1i", len(boneNames)))
+    for name in boneNames:
+        transformList = framesMap[name]
+        bone = arm.bones[name]
+        # Write bone:
+        writeString(ba, bone.name)
+        if bone.parent == None:
+            ba.append(255) # -1
+        elif bone.parent.name in boneNames:
+            parentIndex = boneNames.index(bone.parent.name)
+            ba.append(parentIndex)
+        else:
+            print("Couldn't find parent for "+bone.name)
+            ba.append(255) # -1
 
-    ba.extend(struct.pack("<1i", len(arm.bones)))
-    for bone in arm.bones:
-        transformList = framesMap[bone.name]
-        writeBone(ba, arm, bone, transformList)
+        writeVec3(ba, bone.matrix_local.to_translation())
+        writeVec3(ba, bone.matrix_local.to_euler("XYZ"))
+        writeVec3(ba, bone.matrix_local.to_scale())
+
+        # print(bone.name+" would add "+str(len(transformList))+" transforms")
+        for vecs in transformList:
+            writeVec3(ba, vecs[0]);
+            writeVec3(ba, vecs[1]);
+            writeVec3(ba, vecs[2]);
 
     ba.extend(struct.pack("<1i", len(actions)))
     firstFrameCount = 0
@@ -342,6 +358,18 @@ def writeBaToFile(ba, path):
     outputFile = open(path, "wb")
     outputFile.write(ba)
     outputFile.close()
+
+def getDeformBoneNames(arm):
+    nonDeformOverrides = ["weapon.l", "weapon.r", "handIk.l", "handIkPole.l", "legIkPole.l", "legIk.l", "handIk.r", "handIkPole.r", "legIkPole.r", "legIk.r"]
+
+    deformBoneNames = []
+    for i in range(0, len(arm.bones)):
+        bone = arm.bones[i]
+        if bone == None: continue
+        if isDeformBone(bone) or bone.name in nonDeformOverrides: 
+            deformBoneNames.append(bone.name)
+
+    return deformBoneNames
 
 
 class ExportMeshesOp(bpy.types.Operator):
@@ -388,7 +416,20 @@ def saveModel(obj, name, path):
     writeBaToFile(ba, path + "/" + name + ".model")
     setAllArmsPoseMode("POSE")
 
+def simplifySkeleton(armObj):
+    bpy.context.view_layer.objects.active = armObj
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    for thing in bpy.data.objects:
+        thing.select_set(False)
+    armObj.select_set(True)
+
+    bpy.ops.object.mode_set(mode="POSE")
+    bpy.ops.armature.expykit_convert_gamefriendly(keep_backup=False, rename=armObj.name, eye_bones=False)
+
 def saveSkeleton(obj, name, path):
+    if len(obj.data.bones) > 50: simplifySkeleton(obj)
+
     setAllArmsPoseMode("REST")
     ba = bytearray()
     writeSkeleton(ba, obj, name);
@@ -448,6 +489,10 @@ class MESH_OP_do_fast_script(bpy.types.Operator):
     def execute(self, context):
         scn = bpy.data.scenes[0]
         world = bpy.data.worlds["World"]
+
+        saveModel(bpy.data.objects["TestUnitModel"], "mocapUnit", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/models/mocapUnit");
+        saveSkeleton(bpy.data.objects["rig"], "mocaprig", "C:/Dropbox/concreteJungle/concreteJungleGameAssets/assets/skeletons")
+        return {"FINISHED"}
 
         armObj = bpy.data.objects["ARM_Unit"]
         arm = armObj.data

@@ -833,6 +833,7 @@ struct Game {
 	bool debugDrawUnitBoxes;
 	bool debugDrawUnitModels;
 	bool debugDrawVision;
+	bool debugDisablePostProcessing;
 	bool debugNeverTakeDamage;
 	bool debugNeverLoseStamina;
 	bool debugAiNeverApproaches;
@@ -1310,6 +1311,24 @@ void updateGame() {
 					}
 				}
 
+				// {
+				// 	Model *model = getModel("assets/models/mocapUnit/mocapUnit.model");
+				// 	static Skeleton *skeleton = NULL;
+
+				// 	if (!skeleton) {
+				// 		skeleton = deriveSkeleton("assets/skeletons/mocaprig.skele");
+
+				// 		SkeletonBlend *blend = createSkeletonBlend(skeleton, "main", SKELETON_BLEND_ANIMATION);
+				// 		blend->animation = getAnimation(skeleton, "a1_remap");
+				// 	}
+
+				// 	updateSkeleton(skeleton, elapsed);
+
+				// 	Matrix4 modelMatrix = mat4();
+				// 	modelMatrix.SCALE(globals->actorModelScale*6);
+				// 	drawModel(model, modelMatrix, skeleton);
+				// }
+
 				setDepthMask(false);
 				for (int i = 0; i < game->billboardsNum; i++) {
 					DrawBillboardCall *billboard = &game->billboards[i];
@@ -1366,42 +1385,43 @@ void updateGame() {
 		popTargetTexture();
 	};
 
-	if (globals->posterizeNumColors != 0) {
-		copyBackGameTexture();
+	if (!game->debugDisablePostProcessing) {
+		if (globals->posterizeNumColors != 0) {
+			copyBackGameTexture();
 
-		pushTargetTexture(game->gameTextureFinal);
-		clearRenderer();
-		startShader(game->posterizeShader);
+			pushTargetTexture(game->gameTextureFinal);
+			clearRenderer();
+			startShader(game->posterizeShader);
 
-		drawSimpleTexture(game->gameTexture);
+			drawSimpleTexture(game->gameTexture);
 
-		endShader();
-		popTargetTexture();
+			endShader();
+			popTargetTexture();
+		}
+
+		if (globals->fxaaResolutionScale != 0) {
+			copyBackGameTexture();
+
+			pushTargetTexture(game->gameTextureFinal);
+			clearRenderer();
+			startShader(game->fxaaShader);
+
+			drawSimpleTexture(game->gameTexture);
+
+			endShader();
+			popTargetTexture();
+		}
+
+		if (globals->pixelizePower != 0) {
+			copyBackGameTexture();
+
+			pushTargetTexture(game->gameTextureFinal);
+			startShader(game->pixelizeShader);
+			drawSimpleTexture(game->gameTexture);
+			endShader();
+			popTargetTexture();
+		}
 	}
-
-	if (globals->fxaaResolutionScale != 0) {
-		copyBackGameTexture();
-
-		pushTargetTexture(game->gameTextureFinal);
-		clearRenderer();
-		startShader(game->fxaaShader);
-
-		drawSimpleTexture(game->gameTexture);
-
-		endShader();
-		popTargetTexture();
-	}
-
-	if (globals->pixelizePower != 0) {
-		copyBackGameTexture();
-
-		pushTargetTexture(game->gameTextureFinal);
-		startShader(game->pixelizeShader);
-		drawSimpleTexture(game->gameTexture);
-		endShader();
-		popTargetTexture();
-	}
-
 
 	{
 		RenderTexture *texture = game->gameTextureFinal;
@@ -1758,6 +1778,7 @@ void stepGame(float elapsed) {
 			ImGui::Checkbox("Draw unit boxes", &game->debugDrawUnitBoxes);
 			ImGui::Checkbox("Draw unit models", &game->debugDrawUnitModels);
 			ImGui::Checkbox("Draw vision", &game->debugDrawVision);
+			ImGui::Checkbox("Disable post processing", &game->debugDisablePostProcessing);
 			ImGui::Checkbox("Show prewarm", &game->debugShowPrewarm);
 			ImGui::Checkbox("Skip prewarm", &game->debugSkipPrewarm);
 			ImGui::Checkbox("Draw pathing", &game->debugDrawPathing);

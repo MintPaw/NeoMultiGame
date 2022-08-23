@@ -145,6 +145,8 @@ void readMesh(DataStream *stream, char *meshDir, Mesh *mesh) {
 		vert->boneWeights[2] = readFloat(stream);
 		vert->boneWeights[3] = readFloat(stream);
 
+		// logf("%d: %f, %f, %f\n", i, vert->position.x, vert->position.y, vert->position.z);
+
 		float sum = 0;
 		for (int i = 0; i < 4; i++) sum += vert->boneWeights[i];
 		if (sum == 0) {

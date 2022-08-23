@@ -1,3 +1,6 @@
+// Make dens respawn futher away
+// Make manual targeting
+// Make electricity
 enum ActorType {
 	ACTOR_NONE=0,
 	ACTOR_PLAYER=1,
@@ -634,7 +637,7 @@ void stepGame() {
 		}
 
 		{ /// Passive aggro
-			if (passiveAggroRange && actor->tick % 8 == 0) {
+			if (passiveAggroRange && actor->tick % 60 == 0) {
 				int actorsAroundNum;
 				Actor **actorsAround = getActorsAround(actor->position, passiveAggroRange, ACTOR_NONE, &actorsAroundNum);
 

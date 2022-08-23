@@ -70,7 +70,9 @@ char *readString(DataStream *stream) {
 		return NULL;
 	}
 
-	if (size > stream->dataMax-stream->index) logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	if (size > stream->dataMax-stream->index) {
+		logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	}
 
 	char *str = (char *)malloc(size);
 	strncpy(str, (const char *)&stream->data[stream->index], size);
@@ -86,7 +88,9 @@ char *readFrameString(DataStream *stream) {
 		return NULL;
 	}
 
-	if (size > stream->dataMax-stream->index) logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	if (size > stream->dataMax-stream->index) {
+		logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	}
 
 	char *str = (char *)frameMalloc(size);
 	strncpy(str, (const char *)&stream->data[stream->index], size);
@@ -104,7 +108,9 @@ void readStringInto(DataStream *stream, char *dest, int max) {
 		return;
 	}
 
-	if (size > stream->dataMax-stream->index) logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	if (size > stream->dataMax-stream->index) {
+		logf("Read too long of a string by %d bytes\n", size - stream->dataMax-stream->index);
+	}
 
 	strncpy(dest, (const char *)&stream->data[stream->index], MinNum(max, size));
 	stream->index += size;

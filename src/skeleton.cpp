@@ -19,7 +19,7 @@ struct Bone {
 	Matrix4 invModelSpaceMatrix;
 };
 
-#define BONES_MAX 32
+#define BONES_MAX 40
 struct BaseSkeleton {
 	char name[PATH_MAX_LEN];
 	char path[PATH_MAX_LEN];
