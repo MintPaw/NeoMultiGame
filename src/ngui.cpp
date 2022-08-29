@@ -32,6 +32,8 @@ enum NguiStyleType {
 	NGUI_STYLE_BUTTON_HOVER_SCALE=30,
 	NGUI_STYLE_SLIDER_IS_VERTICAL=31,
 	NGUI_STYLE_LABEL_SIZE=32,
+	NGUI_STYLE_ELEMENT_SPEED=33,
+	NGUI_STYLE_ICON_TINT=34,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -399,6 +401,16 @@ void nguiInit() {
 	info->name = "Label size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_SPEED];
+	info->enumName = "ELEMENT_SPEED";
+	info->name = "Element speed";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_TINT];
+	info->enumName = "NGUI_STYLE_ICON_TINT";
+	info->name = "Icon tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
@@ -432,6 +444,8 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
 	nguiPushStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL, 0);
 	nguiPushStyleVec2(NGUI_STYLE_LABEL_SIZE, v2(1, 1));
+	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_SPEED, 1);
+	nguiPushStyleColorInt(NGUI_STYLE_ICON_TINT, 0xFFFFFFFF);
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -655,6 +669,7 @@ void nguiDraw(float elapsed) {
 			Vec2 childrenSize = v2();
 			NguiElement *prevChild = NULL;
 			int elementsInRow = 0;
+			float rowHeight = 0;
 			for (int i = 0; i < childrenNum; i++) { // Layout
 				NguiElement *child = children[i];
 				ngui->currentStyleStack = &child->styleStack;
@@ -675,7 +690,10 @@ void nguiDraw(float elapsed) {
 				Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
 				Vec2 position = cursor;
 
-				if (child->alive == 1) child->position = lerp(child->position, position, 0.05);
+				if (rowHeight > elementSize.y) position.y += (rowHeight - elementSize.y)/2; //@hack Fix up y positions to be centered with previous items
+				rowHeight = MaxNum(rowHeight, elementSize.y);
+
+				if (child->alive == 1) child->position = lerp(child->position, position, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
 				Rect childRect = makeRect(child->position, elementSize) * ngui->uiScale;
 				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
 
@@ -693,8 +711,9 @@ void nguiDraw(float elapsed) {
 						cursor.x += elementSize.x + elementPadding.x;
 					} else {
 						cursor.x = 0;
-						cursor.y += elementSize.y + elementPadding.y;
+						cursor.y += rowHeight + elementPadding.y;
 						elementsInRow = 0;
+						rowHeight = 0;
 					}
 
 				}
@@ -785,6 +804,7 @@ void nguiDraw(float elapsed) {
 
 				float alpha = 1;
 				alpha *= child->alive;
+				alpha *= clampMap(child->creationTime, 0, 0.05, 0, 1);
 				pushAlpha(alpha);
 
 				Rect childRect = child->childRect;
@@ -865,7 +885,7 @@ void nguiDraw(float elapsed) {
 						if (perc > 0.75) bgColor = lerpColor(bgColor, activeTint, flashBrightness);
 					}
 
-					child->graphicsXform = lerp(child->graphicsXform, graphicsXform, 0.05);
+					child->graphicsXform = lerp(child->graphicsXform, graphicsXform, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
 
 					Rect graphicsRect = childRect;
 					graphicsRect.x += child->graphicsXform.translation.x;
@@ -890,7 +910,13 @@ void nguiDraw(float elapsed) {
 						matrix.SCALE(iconRect.width, iconRect.height);
 
 						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
-						drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
+						RenderProps props = newRenderProps();
+						props.srcWidth = props.srcHeight = 1;
+						props.matrix = matrix;
+						props.alpha = alpha;
+						props.tint = nguiGetStyleColorInt(NGUI_STYLE_ICON_TINT);
+						drawTexture(iconTexture, props);
+						// drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
 						// clearScissor();
 					}
 
@@ -1159,16 +1185,89 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		if (ImGui::Button("X")) shouldSpliceVar = true;
 		guiPopStyleColor();
 
-		char **styleTypesList = (char **)frameMalloc(sizeof(char *) * NGUI_STYLE_TYPES_MAX);
-		int styleTypesListNum = 0;
-		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
-			styleTypesList[styleTypesListNum++] = ngui->styleTypeInfos[i].enumName;
-		}
+		// char **styleTypesList = (char **)frameMalloc(sizeof(char *) * NGUI_STYLE_TYPES_MAX);
+		// int styleTypesListNum = 0;
+		// for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
+		// 	styleTypesList[styleTypesListNum++] = ngui->styleTypeInfos[i].enumName;
+		// }
 		ImGui::SameLine();
-		if (ImGui::Combo("###varType", (int *)&var->type, styleTypesList, NGUI_STYLE_TYPES_MAX, 20)) {
-			styleTypeInfo = &ngui->styleTypeInfos[var->type];
-			nguiGetStyleOfType(&ngui->globalStyleStack, var->type, styleTypeInfo->dataType, var->data); 
+
+		NguiStyleType *styleTypes = (NguiStyleType *)frameMalloc(sizeof(NguiStyleType *) * NGUI_STYLE_TYPES_MAX);
+		int styleTypesNum = 0;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_BG_COLOR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_POSITION;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_PIVOT;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_SIZE;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_PADDING;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_LERP_SPEED;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_DISABLED;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_DISABLED_TINT;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_PADDING;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENTS_IN_ROW;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SIZE;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SPEED;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_INDENT;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_BG_COLOR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_FG_COLOR;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_SIZE;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_GRAVITY;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_TEXT_COLOR;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_BUTTON_HOVER_OFFSET;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_BUTTON_HOVER_SCALE;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_HOVER_TINT;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_TINT;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_PTR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_ROTATION;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_SCALE;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_TRANSLATION;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_GRAVITY;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_ALPHA;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_TINT;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_HIGHLIGHT_TINT;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_HIGHLIGHT_CRUSH;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_HOVER_SOUND_PATH_PTR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_SOUND_PATH_PTR;
+
+		styleTypes[styleTypesNum++] = NGUI_STYLE_SLIDER_IS_VERTICAL;
+
+		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
+			NguiStyleType toAdd = (NguiStyleType)i;
+
+			bool shouldAdd = true;
+			for (int i = 0; i < styleTypesNum; i++) {
+				if (styleTypes[i] == toAdd) {
+					shouldAdd = false;
+					break;
+				}
+			}
+
+			if (shouldAdd) styleTypes[styleTypesNum++] = toAdd;
 		}
+
+		if (styleTypesNum > NGUI_STYLE_TYPES_MAX) logf("There's something very wrong with the style type order\n");
+
+		char *preview = ngui->styleTypeInfos[var->type].name;
+		if (ImGui::BeginCombo("###varType", preview)) {
+			for (int i = 0; i < styleTypesNum; i++) {
+				NguiStyleType styleType = styleTypes[i];
+				NguiStyleTypeInfo *info = &ngui->styleTypeInfos[styleType];
+				if (ImGui::Selectable(info->name, var->type == styleType)) {
+					var->type = styleType;
+					nguiGetStyleOfType(&ngui->globalStyleStack, var->type, info->dataType, var->data); 
+				}
+			}
+			ImGui::EndCombo();
+		}
+
 		ImGui::SameLine();
 
 		if (styleTypeInfo->dataType == NGUI_DATA_TYPE_INT) {

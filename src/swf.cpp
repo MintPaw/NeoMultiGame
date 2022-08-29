@@ -2177,7 +2177,6 @@ Swf *loadSwf(char *path) {
 		/// Bounds and aliasing
 		for (int i = 0; i < swf->allSpritesNum; i++) {
 			SwfSprite *sprite = swf->allSprites[i];
-			if (!sprite->name) continue;
 
 			sprite->frameBounds = (Rect *)zalloc(sizeof(Rect) * sprite->framesNum);
 			for (int i = 0; i < sprite->framesNum; i++) {
@@ -2201,7 +2200,7 @@ Swf *loadSwf(char *path) {
 				}
 			}
 
-			{
+			if (sprite->name) {
 				SwfSprite *newSprite = getAliasedSprite(sprite, swf);
 				if (sprite != newSprite) swf->allSprites[i] = newSprite;
 			}

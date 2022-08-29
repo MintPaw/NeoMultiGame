@@ -2,8 +2,10 @@ void initFileOperations();
 void initFileOperations(const char **possibleAssetPaths, int possibleAssetPathsNum);
 void refreshAssetPaths();
 
+#ifndef NO_ZIP
 #define ZIP_HEADER
 #include "zip.cpp"
+#endif
 
 #ifdef __linux__
 #include <dirent.h>
@@ -121,6 +123,7 @@ void loadRemoteZip(const char *url, const char *path) {
 }
 
 void loadedRemoteFile(const char *result) {
+#ifndef NO_ZIP
 	int size;
 	void *data = readFile(result, &size);
 	openAndExtractZip(data, size);
@@ -128,6 +131,7 @@ void loadedRemoteFile(const char *result) {
 	remoteZipsLoading--;
 	if (remoteLoadingDoneCallback) remoteLoadingDoneCallback();
 	logf("%s was loaded\n", result);
+#endif
 }
 
 void errorLoadingRemoteFile(const char *result) {

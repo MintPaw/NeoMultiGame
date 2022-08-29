@@ -11,6 +11,7 @@ void readBytes(DataStream *stream, void *ptr, int size);
 char *readString(DataStream *stream);
 char *readFrameString(DataStream *stream);
 void readStringInto(DataStream *stream, char *dest, int max);
+u64 readU64(DataStream *stream);
 u32 readU32(DataStream *stream);
 Matrix4 readMatrix4(DataStream *stream);
 Xform readXform(DataStream *stream);
@@ -27,15 +28,20 @@ Vec2 readVec2(DataStream *stream);
 Vec2i readVec2i(DataStream *stream);
 
 DataStream *newDataStream();
-DataStream *loadDataStream(char *path);
-DataStream *loadDataStreamFromHexString(char *hexStr);
-void writeDataStream(char *path, DataStream *stream);
-char *writeToHexString(DataStream *stream);
 void destroyDataStream(DataStream *stream);
 
 void writeBytes(DataStream *stream, void *ptr, int size);
 void writeString(DataStream *stream, char *string);
 
+#ifndef NO_DATA_STREAM_IO
+DataStream *loadDataStream(char *path);
+DataStream *loadDataStreamFromHexString(char *hexStr);
+void writeDataStream(char *path, DataStream *stream);
+char *writeToHexString(DataStream *stream);
+#endif //NO_DATA_STREAM_IO
+
+
+void writeU64(DataStream *stream, u64 value) { writeBytes(stream, &value, 8); }
 void writeU32(DataStream *stream, u32 value) { writeBytes(stream, &value, 4); }
 void writeU8(DataStream *stream, u8 value) { writeBytes(stream, &value, sizeof(u8)); }
 void writeU16(DataStream *stream, u16 value) { writeBytes(stream, &value, sizeof(u16)); }
@@ -119,6 +125,12 @@ void readStringInto(DataStream *stream, char *dest, int max) {
 u32 readU32(DataStream *stream) {
 	u32 ret;
 	readBytes(stream, &ret, 4);
+	return ret;
+}
+
+u64 readU64(DataStream *stream) {
+	u64 ret;
+	readBytes(stream, &ret, 8);
 	return ret;
 }
 
@@ -207,6 +219,33 @@ DataStream *newDataStream() {
 	return stream;
 }
 
+void destroyDataStream(DataStream *stream) {
+	free(stream->data);
+	free(stream);
+}
+
+void writeBytes(DataStream *stream, void *ptr, int size) {
+	while (stream->index + size > stream->dataMax-1) {
+		stream->data = (u8 *)resizeArray(stream->data, 1, stream->dataMax, stream->dataMax*2);
+		stream->dataMax *= 2;
+	}
+
+	if (size == 0) Panic("No 0\n");
+	memcpy(&stream->data[stream->index], ptr, size);
+	stream->index += size;
+}
+
+void writeString(DataStream *stream, char *string) {
+	if (!string) {
+		char data = 0;
+		writeBytes(stream, &data, 1);
+		return;
+	}
+
+	writeBytes(stream, string, strlen(string)+1);
+}
+
+#ifndef NO_DATA_STREAM_IO
 DataStream *loadDataStream(char *path) {
 	if (!fileExists(path)) return NULL;
 	DataStream *stream = (DataStream *)zalloc(sizeof(DataStream));
@@ -242,30 +281,6 @@ char *writeToHexString(DataStream *stream) {
 	free(newData);
 	return hexStr;
 }
+#endif //NO_DATA_STREAM_IO
 
-void destroyDataStream(DataStream *stream) {
-	free(stream->data);
-	free(stream);
-}
-
-void writeBytes(DataStream *stream, void *ptr, int size) {
-	while (stream->index + size > stream->dataMax-1) {
-		stream->data = (u8 *)resizeArray(stream->data, 1, stream->dataMax, stream->dataMax*2);
-		stream->dataMax *= 2;
-	}
-
-	if (size == 0) Panic("No 0\n");
-	memcpy(&stream->data[stream->index], ptr, size);
-	stream->index += size;
-}
-
-void writeString(DataStream *stream, char *string) {
-	if (!string) {
-		char data = 0;
-		writeBytes(stream, &data, 1);
-		return;
-	}
-
-	writeBytes(stream, string, strlen(string)+1);
-}
 #endif

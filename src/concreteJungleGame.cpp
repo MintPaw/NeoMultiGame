@@ -1319,7 +1319,7 @@ void updateGame() {
 				// 		skeleton = deriveSkeleton("assets/skeletons/mocaprig.skele");
 
 				// 		SkeletonBlend *blend = createSkeletonBlend(skeleton, "main", SKELETON_BLEND_ANIMATION);
-				// 		blend->animation = getAnimation(skeleton, "a1_remap");
+				// 		blend->animation = getAnimation(skeleton, "next");
 				// 	}
 
 				// 	updateSkeleton(skeleton, elapsed);

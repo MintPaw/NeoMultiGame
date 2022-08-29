@@ -723,7 +723,7 @@ void updateGame() {
 	}
 #endif
 
-#if 1
+#if 0
 	static RenderTexture *soundTexture = NULL;;
 	if (!soundTexture) {
 		u8 *oggBytes;

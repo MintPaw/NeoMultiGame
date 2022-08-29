@@ -526,7 +526,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			SpriteTransform *trans = &transforms[i];
 
 			for (int i = 0; i < trans->pathsNum; i++) {
-				if (streq(trans->paths[i], "*") || streq(trans->paths[i], recurse.path)) {
+				if (streq(trans->paths[i], "*") || streq(trans->paths[i], recurse.path)) { // I should probably remove "*"
 					matchingTransform = trans;
 					break;
 				}
@@ -1045,7 +1045,9 @@ Texture *getSkiaFrameAsTexture(Vec2 size) {
 	drawSimpleTexture(skiaSys->backTexture);
 	popTargetTexture();
 
-	return renderTextureToTexture(renderTexture);
+	Texture *texture = renderTextureToTexture(renderTexture);
+	setTextureClamped(texture, true);
+	return texture;
 }
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {

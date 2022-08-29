@@ -143,6 +143,11 @@ void freeFrom(Allocator *allocator, void *data) {
 	}
 }
 
+#ifndef IncMutex
+# define IncMutex
+# define DecMutex
+#endif
+
 void *allocateMemory(long size) {
 	if (!memSys) initMemory();
 	IncMutex(&memSys->_allocateFreeMutex);

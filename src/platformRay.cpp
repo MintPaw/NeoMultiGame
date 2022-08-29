@@ -1511,14 +1511,14 @@ void end3d() {
 }
 
 void startShader(Raylib::Shader shader) {
-	Raylib::BeginShaderMode(shader);
+	Raylib::rlSetShader(shader.id, shader.locs);
 }
 void startShader(Shader *shader) {
-	Raylib::BeginShaderMode(shader->raylibShader);
+	Raylib::rlSetShader(shader->raylibShader.id, shader->raylibShader.locs);
 }
 
 void endShader() {
-	Raylib::EndShaderMode();
+	Raylib::rlSetShader(Raylib::rlGetShaderIdDefault(), Raylib::rlGetShaderLocsDefault());
 }
 
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {

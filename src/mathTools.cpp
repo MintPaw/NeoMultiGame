@@ -9,6 +9,10 @@
 # define M_PI 3.14159265359
 #endif
 
+#ifndef FORCE_INLINE
+# define FORCE_INLINE
+#endif
+
 #define USE_BAD_COORDS
 
 struct Rect;
