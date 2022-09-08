@@ -341,6 +341,8 @@ void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
 }
 
 void drawOnScreenLog() {
+	if (!logSys) initLoggingSystem();
+
 	int logCount = 0;
 	for (int i = 0; i < LOGF_BUFFERS_MAX; i++) {
 		LogfBuffer *logBuffer = &logSys->logs[i];

@@ -164,7 +164,7 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->isInternalVersion = true;
 #endif
 
-	if (platform->isInternalVersion) logf("Starting raylib engine\n");
+	// if (platform->isInternalVersion) logf("Starting raylib engine\n");
 
 	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);

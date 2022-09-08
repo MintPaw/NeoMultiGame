@@ -27,7 +27,7 @@ Vec3 readVec3(DataStream *stream);
 Vec2 readVec2(DataStream *stream);
 Vec2i readVec2i(DataStream *stream);
 
-DataStream *newDataStream();
+DataStream *newDataStream(int startSize=8);
 void destroyDataStream(DataStream *stream);
 
 void writeBytes(DataStream *stream, void *ptr, int size);
@@ -212,9 +212,9 @@ Vec2i readVec2i(DataStream *stream) {
 	return ret;
 }
 
-DataStream *newDataStream() {
+DataStream *newDataStream(int startSize) {
 	DataStream *stream = (DataStream *)zalloc(sizeof(DataStream));
-	stream->dataMax = 8;
+	stream->dataMax = startSize;
 	stream->data = (u8 *)zalloc(stream->dataMax);
 	return stream;
 }

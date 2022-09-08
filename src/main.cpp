@@ -9,6 +9,14 @@
 #define STRINGIFYX(val) #val
 #define STRINGIFY(val) STRINGIFYX(val)
 
+
+#if (FALLOW_COMMAND_LINE_ONLY || __LINUX__)
+# ifndef NO_SKIA
+#  define NO_SKIA
+# endif
+#endif
+
+#ifndef NO_SKIA
 #define SK_GL
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -28,7 +36,7 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
-// #include "include/gpu/gl/GrGLDefines.h"
+#endif
 
 
 #ifdef RAYLIB_MODE
@@ -71,6 +79,23 @@ namespace Raylib {
 
 #include "stb_image_write.h"
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <tchar.h>
+#include <sys/stat.h> // Missing from the non-raylib version for some reason???
+#include <io.h>
+#include <psapi.h>
+#include <direct.h>
+#elif defined(__EMSCRIPTEN__)
+# include <emscripten.h>
+# include <emscripten/html5.h>
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <dirent.h>
+# include <semaphore.h>
+#endif
+
 #include "miniz.h"
 #undef inflate
 int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); }
@@ -81,21 +106,6 @@ int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); 
 #define DecMutex(mutex) //@todo
 #define FORCE_INLINE //@todo
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <tchar.h>
-#include <sys/stat.h> // Missing from the non-raylib version for some reason???
-#include <io.h>
-#include <psapi.h>
-#elif defined(__EMSCRIPTEN__)
-# include <emscripten.h>
-# include <emscripten/html5.h>
-# include <sys/types.h>
-# include <sys/stat.h>
-# include <dirent.h>
-# include <semaphore.h>
-#endif
 
 #define STB_VORBIS_HEADER_ONLY // This matters later for audio.cpp
 
@@ -143,10 +153,11 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 
 #include "ngui.cpp"
 
-#if (!FALLOW_COMMAND_LINE_ONLY && !__LINUX__)
-#include "swf.cpp"
-#include "skia.cpp"
+#ifdef SK_GL
+# include "swf.cpp"
+# include "skia.cpp"
 #endif
+
 #include "utils.cpp"
 
 #else // !RAYLIB_MODE
@@ -421,6 +432,10 @@ NanoTime mainNano;
 
 #if defined(PLAYING_rssGame)
 # include "../../multiGamePrivate/src/rssGame.cpp"
+#endif
+
+#if defined(PLAYING_cacheViz)
+# include STRINGIFY(ALT_CORE_PATH)
 #endif
 
 #ifdef _WIN32

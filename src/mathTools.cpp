@@ -2526,7 +2526,17 @@ float Matrix3::getRotationDeg() {
 
 Matrix3 Matrix3::multiply(Matrix3 other) {
 	Matrix3 ret;
-	ret = this->multiply(other.data);
+
+	ret.data[0] = this->data[0] * other.data[0] + this->data[3] * other.data[1] + this->data[6] * other.data[2];
+	ret.data[1] = this->data[1] * other.data[0] + this->data[4] * other.data[1] + this->data[7] * other.data[2];
+	ret.data[2] = this->data[2] * other.data[0] + this->data[5] * other.data[1] + this->data[8] * other.data[2];
+	ret.data[3] = this->data[0] * other.data[3] + this->data[3] * other.data[4] + this->data[6] * other.data[5];
+	ret.data[4] = this->data[1] * other.data[3] + this->data[4] * other.data[4] + this->data[7] * other.data[5];
+	ret.data[5] = this->data[2] * other.data[3] + this->data[5] * other.data[4] + this->data[8] * other.data[5];
+	ret.data[6] = this->data[0] * other.data[6] + this->data[3] * other.data[7] + this->data[6] * other.data[8];
+	ret.data[7] = this->data[1] * other.data[6] + this->data[4] * other.data[7] + this->data[7] * other.data[8];
+	ret.data[8] = this->data[2] * other.data[6] + this->data[5] * other.data[7] + this->data[8] * other.data[8];
+
 	return ret;
 }
 

@@ -15,14 +15,31 @@ struct HashMap {
 	int valueSize;
 	Allocator *allocator;
 	bool usesStreq;
+	bool ownsAllocator;
+
+	u64 memoryUsed;
 };
 
-HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator);
+HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator=NULL);
+void hashMapSet(HashMap *map, void *key, int hash, void *value);
+bool hashMapGet(HashMap *map, void *key, int hash, void *outValue=NULL);
+void destroyHashMap(HashMap *map);
+
 HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator) {
+	bool ownsAllocator = false;
+	if (!allocator) {
+		ownsAllocator = true;
+		allocator = (Allocator *)zalloc(sizeof(Allocator));
+		allocator->type = ALLOCATOR_DEFAULT;
+	}
+
 	HashMap *map = NULL;
 	map = (HashMap *)allocateFrom(allocator, sizeof(HashMap));
 	memset(map, 0, sizeof(HashMap));
+
 	map->allocator = allocator;
+	map->ownsAllocator = ownsAllocator;
+
 	map->listsNum = listsNum;
 	map->lists = (HashMapNode **)allocateFrom(map->allocator, sizeof(HashMapNode) * map->listsNum);
 	memset(map->lists, 0, sizeof(HashMapNode) * map->listsNum);
@@ -32,6 +49,7 @@ HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allo
 	return map;
 }
 
+int FORCE_INLINE hashToIndex(HashMap *map, int hash);
 int FORCE_INLINE hashToIndex(HashMap *map, int hash) {
 	int index = hash % map->listsNum;
 	if (index < 0) return -index;
@@ -68,16 +86,12 @@ void hashMapSet(HashMap *map, void *key, int hash, void *value) {
 	map->lists[index] = newNode;
 }
 
-bool hashMapGet(HashMap *map, void *key, int hash, void *outValue=NULL);
 bool hashMapGet(HashMap *map, void *key, int hash, void *outValue) {
 	int index = hashToIndex(map, hash);
 	HashMapNode *list = map->lists[index];
 
 	HashMapNode *temp = list;
 	while (temp) {
-		// static int iter = 0;
-		// iter++;
-		// if (iter % 10000 == 0) logf("Iter: %d\n", iter);
 		bool found = false;
 		if (map->usesStreq && streq(*(char **)temp->key, *(char **)key)) found = true;
 		if (!map->usesStreq && memcmp(temp->key, key, map->keySize) == 0) found = true;
@@ -104,6 +118,7 @@ void destroyHashMap(HashMap *map) {
 	}
 
 	freeFrom(map->allocator, map);
+	if (map->ownsAllocator) free(map->allocator);
 }
 
 //

@@ -756,6 +756,16 @@ void updateGame() {
 	drawSimpleTexture(soundTexture);
 #endif
 
+#if 1
+
+	char *url = "http://192.168.0.106/rss-bridge/?action=display&bridge=Youtube&context=Search+result&s=100+gecs+reaction&pa=&duration_min=1&duration_max=100&format=Atom";
+	char *hexStr = convertToHexString(url, strlen(url)+1);
+	logf("http://192.168.0.106/rssGame.bin?URLyt_hyperpop_reaction__X__%s\n", hexStr);
+	// if (keyJustPressed(' ')) {
+	// 	Sound *sound = getSound();
+	// }
+#endif
+
 	game->time += elapsed;
 
 	drawOnScreenLog();

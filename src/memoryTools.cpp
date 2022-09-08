@@ -1,6 +1,6 @@
-#define Gigabytes(x) (Megabytes(x)*1024)
-#define Megabytes(x) (Kilobytes(x)*1024)
-#define Kilobytes(x) ((x)*1024)
+#define Gigabytes(x) (Megabytes(x)*1024ll)
+#define Megabytes(x) (Kilobytes(x)*1024ll)
+#define Kilobytes(x) ((x)*1024ll)
 
 #define ArrayLength(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 #define ConsumeBytes(dest, src, count) do {memcpy(dest, src, count); src += count;}while(0);
@@ -79,6 +79,7 @@ int ALLOCATOR_FRAME = 2;
 struct Allocator {
 	int type;
 	void *data;
+	u32 memoryAllocated;
 };
 
 struct MemorySystem {
@@ -126,6 +127,7 @@ void initMemory() {
 }
 
 void *allocateFrom(Allocator *allocator, int size) {
+	allocator->memoryAllocated += size;
 	if (allocator->type == ALLOCATOR_DEFAULT) {
 		return malloc(size);
 	} else if (allocator->type == ALLOCATOR_FRAME) {
@@ -667,6 +669,7 @@ void *convertFromHexString(char *hex, int *outputSize) {
 }
 
 
+u32 stringHash32(const char *s);
 u32 stringHash32(const char *s) {
 	u32 hash = 0;
 
@@ -681,6 +684,14 @@ u32 stringHash32(const char *s) {
 	hash += (hash << 15);
 
 	return hash;
+}
+
+u32 hashU32(u32 x);
+u32 hashU32(u32 x) {
+	x = ((x >> 16) ^ x) * 0x45d9f3b;
+	x = ((x >> 16) ^ x) * 0x45d9f3b;
+	x = (x >> 16) ^ x;
+	return x;
 }
 
 void printBinary(u32 n);
