@@ -861,6 +861,8 @@ RenderTexture *createRenderTexture(const char *path, int flags) {
 }
 
 Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags) {
+	processBatchDraws(); // Very important
+
 	Raylib::RenderTexture2D target = { 0 };
 
 	target.id = Raylib::rlLoadFramebuffer(width, height);   // Load an empty framebuffer
@@ -1306,7 +1308,6 @@ void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
 
 	Raylib::rlSetTexture(0);
 }
-
 
 void pushTargetTexture(RenderTexture *renderTexture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");

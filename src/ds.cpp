@@ -117,8 +117,8 @@ void destroyHashMap(HashMap *map) {
 		}
 	}
 
-	freeFrom(map->allocator, map);
 	if (map->ownsAllocator) free(map->allocator);
+	freeFrom(map->allocator, map);
 }
 
 //

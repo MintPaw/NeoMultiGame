@@ -981,15 +981,15 @@ void endSkiaFrame() {
 
 		skiaSys->grDirectContext->flushAndSubmit();
 
-		clearScissor();
 		resetRenderContext();
+		clearScissor();
 
-#if RAYLIB_MODE
-		glBindVertexArray(0);
-		glVertexAttribDivisor(0, 0);
-		glVertexAttribDivisor(1, 0);
-		glVertexAttribDivisor(2, 0);
-#endif
+// #if RAYLIB_MODE
+// 		glBindVertexArray(0);
+// 		glVertexAttribDivisor(0, 0);
+// 		glVertexAttribDivisor(1, 0);
+// 		glVertexAttribDivisor(2, 0);
+// #endif
 
 		pushTargetTexture(skiaSys->backTexture);
 		clearRenderer();

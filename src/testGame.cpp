@@ -70,6 +70,17 @@ void updateGame() {
 	}
 
 #if 0
+
+	if (platform->frameCount % 10 == 0) {
+		logf("Playing sound\n");
+		Sound *sound = getSound("assets/audio/monoPluck.ogg");
+		Channel *channel = playSound(sound);
+		channel->userVolume = 0;
+	}
+
+#endif
+
+#if 0
 	if (platform->frameCount == 1) {
 		SpineBaseSkeleton *base = loadSpineBaseSkeleton("assets/spine/JiggleTest");
 		game->skeleton = deriveSkeleton(base);
@@ -757,14 +768,16 @@ void updateGame() {
 #endif
 
 #if 1
-
-	char *url = "http://192.168.0.106/rss-bridge/?action=display&bridge=Youtube&context=Search+result&s=100+gecs+reaction&pa=&duration_min=1&duration_max=100&format=Atom";
+	char *url = "http://192.168.0.106/rss-bridge/?action=display&bridge=Youtube&context=Search+result&s=vsauce+reaction&pa=&duration_min=2&duration_max=100&format=Atom";
 	char *hexStr = convertToHexString(url, strlen(url)+1);
 	logf("http://192.168.0.106/rssGame.bin?URLyt_hyperpop_reaction__X__%s\n", hexStr);
 	// if (keyJustPressed(' ')) {
 	// 	Sound *sound = getSound();
 	// }
 #endif
+
+
+
 
 	game->time += elapsed;
 

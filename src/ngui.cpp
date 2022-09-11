@@ -860,7 +860,7 @@ void nguiDraw(float elapsed) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
 						}
 
-						bgColor = tintColor(bgColor, hoverTint);
+						child->bgColor = tintColor(child->bgColor, hoverTint);
 						if (platform->mouseJustDown) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							child->bgColor = tintColor(child->bgColor, activeTint);
@@ -1256,12 +1256,13 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		if (styleTypesNum > NGUI_STYLE_TYPES_MAX) logf("There's something very wrong with the style type order\n");
 
 		char *preview = ngui->styleTypeInfos[var->type].name;
-		if (ImGui::BeginCombo("###varType", preview)) {
+		if (ImGui::BeginCombo("###varType", preview, ImGuiComboFlags_HeightLarge)) {
 			for (int i = 0; i < styleTypesNum; i++) {
 				NguiStyleType styleType = styleTypes[i];
 				NguiStyleTypeInfo *info = &ngui->styleTypeInfos[styleType];
 				if (ImGui::Selectable(info->name, var->type == styleType)) {
 					var->type = styleType;
+					styleTypeInfo = &ngui->styleTypeInfos[var->type];
 					nguiGetStyleOfType(&ngui->globalStyleStack, var->type, info->dataType, var->data); 
 				}
 			}

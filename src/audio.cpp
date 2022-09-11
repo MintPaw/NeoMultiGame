@@ -249,11 +249,11 @@ Channel *playSound(Sound *sound, bool looping) {
 }
 
 void stopChannel(int channelId) {
-	Channel *channel = getChannel(channelId);
-	if (channel) channel->markedForDeletion = true;
+	stopChannel(getChannel(channelId));
 }
 
 void stopChannel(Channel *channel) {
+	if (!channel) return;
 	if (channel->sound) channel->sound->concurrentInstances--;
 	channel->markedForDeletion = true;
 }
