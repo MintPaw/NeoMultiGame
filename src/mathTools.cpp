@@ -2036,7 +2036,7 @@ int tintColor(int color, int tint) {
 	int cA, cR, cG, cB;
 	hexToArgb(tint, &cA, &cR, &cG, &cB);
 	int ret = lerpColor(color, tint, (cA/255.0));
-	setAofArgb(ret, origAlpha);
+	ret = setAofArgb(ret, origAlpha);
 	return ret;
 }
 

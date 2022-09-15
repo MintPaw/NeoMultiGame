@@ -34,6 +34,7 @@ enum NguiStyleType {
 	NGUI_STYLE_LABEL_SIZE=32,
 	NGUI_STYLE_ELEMENT_SPEED=33,
 	NGUI_STYLE_ICON_TINT=34,
+	NGUI_STYLE_Y_POSITION_TINT=35,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -103,7 +104,6 @@ struct NguiElement {
 
 	float creationTime;
 	float hoveringTime;
-	float timeSinceLastClicked;
 
 	Rect childRect;
 	Vec2 scroll;
@@ -113,6 +113,7 @@ struct NguiElement {
 struct Ngui {
 	Font *defaultFont;
 	Vec2 mouse;
+	Vec2 screenSize;
 	float time;
 
 	NguiElement *elements;
@@ -121,6 +122,7 @@ struct Ngui {
 
 	Rect lastWindowRect;
 	NguiElement *lastElement;
+	bool elementClickedThisFrame;
 
 	int nextNguiElementId;
 	int currentOrderIndex;
@@ -139,6 +141,7 @@ struct Ngui {
 Ngui *ngui = NULL;
 
 void nguiInit();
+void nguiStartFrame();
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr);
 void nguiPushStyleInt(NguiStyleType type, int value);
@@ -411,6 +414,11 @@ void nguiInit() {
 	info->name = "Icon tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_Y_POSITION_TINT];
+	info->enumName = "NGUI_STYLE_Y_POSITION_TINT";
+	info->name = "Y position tint";
+	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
@@ -446,12 +454,17 @@ void nguiInit() {
 	nguiPushStyleVec2(NGUI_STYLE_LABEL_SIZE, v2(1, 1));
 	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_SPEED, 1);
 	nguiPushStyleColorInt(NGUI_STYLE_ICON_TINT, 0xFFFFFFFF);
+	nguiPushStyleColorInt(NGUI_STYLE_Y_POSITION_TINT, 0x30000000);
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
 	sound->tweakVolume = 0.1;
 	sound = getSound("assets/common/audio/clickEffect.ogg");
 	sound->tweakVolume = 0.1;
+}
+
+void nguiStartFrame() {
+	ngui->elementClickedThisFrame = false;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -824,6 +837,22 @@ void nguiDraw(float elapsed) {
 					labelTextColor = tintColor(labelTextColor, disabledTint);
 				}
 
+				{
+					float centerY = getCenter(childRect).y;
+					float minY = 0;
+					float maxY = ngui->screenSize.y;
+					float centerOffsetPerc = norm(minY, maxY, centerY);
+					centerOffsetPerc = fabs(centerOffsetPerc*2-1);
+
+					int yPositionTint = nguiGetStyleColorInt(NGUI_STYLE_Y_POSITION_TINT);
+					int tA = getAofArgb(yPositionTint);
+					tA *= centerOffsetPerc;
+					yPositionTint = setAofArgb(yPositionTint, tA);
+
+					bgColor = tintColor(bgColor, yPositionTint);
+					// labelTextColor = tintColor(labelTextColor, yPositionTint | 0x00FFFFFF);
+				}
+
 				if (child->bgColor == 0) child->bgColor = bgColor;
 				child->bgColor = lerpColor(child->bgColor, bgColor, 0.1);
 
@@ -847,7 +876,7 @@ void nguiDraw(float elapsed) {
 					props.uv1 = v2(1, 0);
 					props.srcWidth = props.srcHeight = 1;
 
-					int highlightColor=tintColor(child->bgColor, nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT));
+					int highlightColor = tintColor(child->bgColor, nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT));
 					props.tint = highlightColor;
 					drawTexture(renderer->linearGrad256, props);
 				};
@@ -861,11 +890,11 @@ void nguiDraw(float elapsed) {
 						}
 
 						child->bgColor = tintColor(child->bgColor, hoverTint);
+
 						if (platform->mouseJustDown) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							child->bgColor = tintColor(child->bgColor, activeTint);
 
-							child->timeSinceLastClicked = 0.001;
 							child->justActive = true;
 						}
 
@@ -874,15 +903,6 @@ void nguiDraw(float elapsed) {
 						child->hoveringTime += elapsed;
 					} else {
 						child->hoveringTime = 0;
-					}
-
-					float modByForFlash = 0.3;
-					if (child->timeSinceLastClicked > 0 && child->timeSinceLastClicked < modByForFlash*2) {
-						float moddedValue = fmod(child->timeSinceLastClicked, modByForFlash);
-						float perc = moddedValue / modByForFlash;
-						int activeTint = nguiGetStyleColorInt(NGUI_STYLE_ACTIVE_TINT);
-						float flashBrightness = nguiGetStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS);
-						if (perc > 0.75) bgColor = lerpColor(bgColor, activeTint, flashBrightness);
 					}
 
 					child->graphicsXform = lerp(child->graphicsXform, graphicsXform, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
@@ -970,7 +990,6 @@ void nguiDraw(float elapsed) {
 						buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
 						buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
 					}
-					// drawRect(buttonRect, labelTextColor);
 
 					if (useRectButton) {
 						drawRect(buttonRect, labelTextColor);
@@ -1017,7 +1036,6 @@ void nguiDraw(float elapsed) {
 
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
-		if (element->timeSinceLastClicked > 0) element->timeSinceLastClicked += elapsed;
 		element->creationTime += elapsed;
 		element->alive -= 0.05;
 	}
@@ -1192,6 +1210,9 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		// }
 		ImGui::SameLine();
 
+		NguiStyleType *hiddenStyleTypes = (NguiStyleType *)frameMalloc(sizeof(NguiStyleType *) * NGUI_STYLE_TYPES_MAX);
+		int hiddenStyleTypesNum = 0;
+
 		NguiStyleType *styleTypes = (NguiStyleType *)frameMalloc(sizeof(NguiStyleType *) * NGUI_STYLE_TYPES_MAX);
 		int styleTypesNum = 0;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_WINDOW_BG_COLOR;
@@ -1208,9 +1229,10 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SIZE;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SPEED;
 
-		styleTypes[styleTypesNum++] = NGUI_STYLE_INDENT;
+		hiddenStyleTypes[styleTypesNum++] = NGUI_STYLE_INDENT;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_BG_COLOR;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_FG_COLOR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_Y_POSITION_TINT;
 
 		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_SIZE;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_GRAVITY;
@@ -1221,7 +1243,7 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_HOVER_TINT;
 
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_TINT;
-		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS;
+		hiddenStyleTypes[hiddenStyleTypesNum++] = NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS;
 
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_PTR;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ICON_ROTATION;
@@ -1250,7 +1272,18 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 				}
 			}
 
-			if (shouldAdd) styleTypes[styleTypesNum++] = toAdd;
+			if (shouldAdd) {
+				for (int i = 0; i < hiddenStyleTypesNum; i++) {
+					if (hiddenStyleTypes[i] == toAdd) {
+						shouldAdd = false;
+						break;
+					}
+				}
+			}
+
+			if (shouldAdd) {
+				styleTypes[styleTypesNum++] = toAdd;
+			}
 		}
 
 		if (styleTypesNum > NGUI_STYLE_TYPES_MAX) logf("There's something very wrong with the style type order\n");

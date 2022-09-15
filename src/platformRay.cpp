@@ -246,9 +246,12 @@ void platformUpdate() {
 	void updateAudio(float elapsed); //@headerHack
 	updateAudio(platform->elapsed);
 
-	void startRenderingFrame(); //@headerHack;
+	void startRenderingFrame(); //@headerHack
 	startRenderingFrame();
 	guiStartFrame();
+
+	void nguiStartFrame(); //@headerHack
+	nguiStartFrame();
 
 	platform->updateCallback();
 
@@ -1313,7 +1316,6 @@ void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
 	Raylib::rlEnd();
 
 	Raylib::rlSetTexture(0);
-
 }
 
 void pushTargetTexture(RenderTexture *renderTexture) {
