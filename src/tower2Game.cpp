@@ -30,6 +30,9 @@ struct Chunk {
 	Rect rect;
 #define CHUNK_SIZE 7
 	Tile tiles[CHUNK_SIZE*CHUNK_SIZE];
+
+	Vec2i connections[4];
+	int connectionsNum;
 };
 
 struct World {
@@ -63,6 +66,7 @@ Game *game = NULL;
 void runGame();
 void updateGame();
 Chunk *createChunk(Vec2i position);
+Chunk *getChunkByPosition(Vec2i position);
 /// FUNCTIONS ^
 
 void runGame() {
@@ -105,89 +109,83 @@ void updateGame() {
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
 
-		{ /// Map gen
-			Vec2i *validChunks = (Vec2i *)frameMalloc(sizeof(Vec2i) * CHUNKS_MAX);
-			int validChunksNum = 0;
-
-			Vec2i *chunksCouldExpand = (Vec2i *)frameMalloc(sizeof(Vec2i) * CHUNKS_MAX);
+		{ /// Generate map
+			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk) * CHUNKS_MAX);
 			int chunksCouldExpandNum = 0;
 
-			auto isEmptyChunk = [validChunks, validChunksNum](Vec2i chunk)->bool {
-				for (int i = 0; i < validChunksNum; i++) {
-					if (equal(validChunks[i], chunk)) return false;
-				}
-				return true;
-			};
-
-			auto addNewExpandableChunkAround = [isEmptyChunk](Vec2i chunkToExpand, Vec2i *chunksCouldExpand, int *chunksCouldExpandNum) {
-				int dir = rndInt(0, 3);
-
-				Vec2i possibleNewExpandChunks[4];
-				int possibleNewExpandChunksNum = 0;
-				possibleNewExpandChunks[possibleNewExpandChunksNum++] = chunkToExpand + v2i(-1, 0);
-				possibleNewExpandChunks[possibleNewExpandChunksNum++] = chunkToExpand + v2i(1, 0);
-				possibleNewExpandChunks[possibleNewExpandChunksNum++] = chunkToExpand + v2i(0, -1);
-				possibleNewExpandChunks[possibleNewExpandChunksNum++] = chunkToExpand + v2i(0, 1);
-				for (int i = 0; i < possibleNewExpandChunksNum; i++) {
-					Vec2i possibleExpandChunk = possibleNewExpandChunks[i];
-					if (!isEmptyChunk(possibleExpandChunk)) {
-						arraySpliceIndex(possibleNewExpandChunks, possibleNewExpandChunksNum, sizeof(Vec2i), i);
-						possibleNewExpandChunksNum--;
-						i--;
-						continue;
-					}
-				}
-
-				if (possibleNewExpandChunksNum > 0) {
-					chunksCouldExpand[*chunksCouldExpandNum] = possibleNewExpandChunks[rndInt(0, possibleNewExpandChunksNum-1)];
-					*chunksCouldExpandNum = *chunksCouldExpandNum + 1;
-				}
-			};
-
-			validChunks[validChunksNum++] = v2i(0, 0);
-			int dir = rndInt(0, 3);
-			if (dir == 0) chunksCouldExpand[chunksCouldExpandNum++] = v2i(-1, 0);
-			else if (dir == 1) chunksCouldExpand[chunksCouldExpandNum++] = v2i(1, 0);
-			else if (dir == 2) chunksCouldExpand[chunksCouldExpandNum++] = v2i(0, -1);
-			else if (dir == 3) chunksCouldExpand[chunksCouldExpandNum++] = v2i(0, 1);
+			createChunk(v2i(0, 0));
 
 			for (;;) {
-				if (validChunksNum > CHUNKS_MAX-1) {
+				if (world->chunksNum > 45-1) {
 					logf("Done.\n");
 					break;
 				}
 
 				if (chunksCouldExpandNum == 0) {
-					addNewExpandableChunkAround(validChunks[rndInt(0, validChunksNum-1)], chunksCouldExpand, &chunksCouldExpandNum);
+					Chunk *randomChunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+					chunksCouldExpand[chunksCouldExpandNum++] = randomChunk;
 					continue;
 				}
 
 				int expandIndex = rndInt(0, chunksCouldExpandNum-1);
-				Vec2i chunkToExpand = chunksCouldExpand[expandIndex];
+				Chunk *chunkToExpand = chunksCouldExpand[expandIndex];
 
-				if (isEmptyChunk(chunkToExpand)) {
-					validChunks[validChunksNum++] = chunkToExpand;
-					addNewExpandableChunkAround(chunkToExpand, chunksCouldExpand, &chunksCouldExpandNum);
+				Vec2i possiblePositions[4];
+				int possiblePositionsNum = 0;
+				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(-1, 0);
+				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(1, 0);
+				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, -1);
+				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
+				for (int i = 0; i < possiblePositionsNum; i++) {
+					Vec2i possiblePosition = possiblePositions[i];
+					if (getChunkByPosition(possiblePosition)) {
+						arraySpliceIndex(possiblePositions, possiblePositionsNum, sizeof(Vec2i), i);
+						possiblePositionsNum--;
+						i--;
+						continue;
+					}
+				}
+
+				if (possiblePositionsNum > 0) {
+					Vec2i position = possiblePositions[rndInt(0, possiblePositionsNum-1)];
+					Chunk *newChunk = createChunk(position);
+					newChunk->connections[newChunk->connectionsNum++] = chunkToExpand->position;
+					chunkToExpand->connections[chunkToExpand->connectionsNum++] = newChunk->position;
+
+					chunksCouldExpand[chunksCouldExpandNum++] = newChunk;
 				}
 
 				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Vec2i), expandIndex);
 				chunksCouldExpandNum--;
 			}
 
-			for (int i = 0; i < validChunksNum; i++) {
-				Chunk *chunk = createChunk(validChunks[i]);
-				if (!chunk) continue;
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
 
 				for (int y = 0; y < CHUNK_SIZE; y++) {
 					for (int x = 0; x < CHUNK_SIZE; x++) {
-						int tileIndex = y*CHUNK_SIZE + x;
-						Tile *tile = &chunk->tiles[tileIndex];
-						if (x == CHUNK_SIZE/2 || y == CHUNK_SIZE/2) {
-							tile->type = TILE_ROAD;
-						} else {
-							tile->type = TILE_GROUND;
-						}
+						chunk->tiles[y * CHUNK_SIZE + x].type = TILE_GROUND;
 					}
+				}
+
+				Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+				bool cutUp = false;
+				bool cutDown = false;
+				bool cutLeft = false;
+				bool cutRight = false;
+				for (int i = 0; i < chunk->connectionsNum; i++) {
+					Vec2i connection = chunk->connections[i];
+					cutUp = cutUp || connection.y < chunk->position.y;
+					cutDown = cutDown || connection.y > chunk->position.y;
+					cutLeft = cutLeft || connection.x < chunk->position.x;
+					cutRight = cutRight || connection.x > chunk->position.x;
+				}
+
+				for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
+					if (cutLeft) chunk->tiles[centerTile.y * CHUNK_SIZE + (centerTile.x - i)].type = TILE_ROAD;
+					if (cutRight) chunk->tiles[centerTile.y * CHUNK_SIZE + (centerTile.x + i)].type = TILE_ROAD;
+					if (cutUp) chunk->tiles[(centerTile.y - i) * CHUNK_SIZE + centerTile.x].type = TILE_ROAD;
+					if (cutDown) chunk->tiles[(centerTile.y + i) * CHUNK_SIZE + centerTile.x].type = TILE_ROAD;
 				}
 			}
 		} ///
@@ -287,4 +285,15 @@ Chunk *createChunk(Vec2i position) {
 	chunk->rect.x = chunk->position.x * chunk->rect.width;
 	chunk->rect.y = chunk->position.y * chunk->rect.height;
 	return chunk;
+}
+
+Chunk *getChunkByPosition(Vec2i position) {
+	World *world = game->world;
+
+	for (int i = 0; i < world->chunksNum; i++) {
+		Chunk *chunk = &world->chunks[i];
+		if (equal(chunk->position, position)) return chunk;
+	}
+
+	return NULL;
 }
