@@ -464,6 +464,7 @@ void nguiInit() {
 }
 
 void nguiStartFrame() {
+	if (!ngui) return;
 	ngui->elementClickedThisFrame = false;
 }
 
