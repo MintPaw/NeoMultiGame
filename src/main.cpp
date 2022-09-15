@@ -438,6 +438,10 @@ NanoTime mainNano;
 # include STRINGIFY(ALT_CORE_PATH)
 #endif
 
+#if defined(PLAYING_tower2Game)
+# include "tower2Game.cpp"
+#endif
+
 #ifdef _WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else

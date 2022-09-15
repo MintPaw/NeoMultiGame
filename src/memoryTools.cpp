@@ -27,6 +27,7 @@ bool strContains(const char *haystack, const char *needle, bool caseInsentitive=
 char *strrstr(char *haystack, const char *needle);
 int countChar(const char *src, char value);
 bool stringStartsWith(const char *hayStack, const char *needle);
+bool stringStartsWithFast(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
 int toLowerCase(int letter);
 int toUpperCase(int letter);
@@ -301,14 +302,11 @@ char *mallocSprintf(const char *msg, ...) {
 	va_start(args, msg);
 	int size = stbsp_vsnprintf(NULL, 0, msg, args);
 	va_end(args);
-	// char buf[2];
-	// int size = vsnprintf(buf, 2, msg, args);
 	char *str = (char *)malloc(size+1);
 
 	va_start(args, msg);
 	stbsp_vsnprintf(str, size+1, msg, args);
 	va_end(args);
-	// vsnprintf(str, size+1, msg, args);
 	return str;
 }
 
@@ -317,14 +315,11 @@ char *frameSprintf(const char *msg, ...) {
 	va_start(args, msg);
 	int size = stbsp_vsnprintf(NULL, 0, msg, args);
 	va_end(args);
-	// char buf[2];
-	// int size = vsnprintf(buf, 2, msg, args);
 	char *str = frameMalloc(size+1);
 
 	va_start(args, msg);
 	stbsp_vsnprintf(str, size+1, msg, args);
 	va_end(args);
-	// vsnprintf(str, size+1, msg, args);
 	return str;
 }
 
@@ -462,6 +457,16 @@ int countChar(const char *src, char value) {
 bool stringStartsWith(const char *hayStack, const char *needle) {
 	if (strlen(needle) > strlen(hayStack)) return false;
 
+	int len = strlen(needle);
+	bool areSame = true;
+	for (int i = 0; i < len; i++)
+		if (needle[i] != hayStack[i])
+			areSame = false;
+
+	return areSame;
+}
+
+bool stringStartsWithFast(const char *hayStack, const char *needle) {
 	int len = strlen(needle);
 	bool areSame = true;
 	for (int i = 0; i < len; i++)

@@ -1377,6 +1377,7 @@ void popAlpha() {
 }
 
 void setRendererBlendMode(BlendMode blendMode) {
+	processBatchDraws();
 	Raylib::rlSetBlendMode(Raylib::BLEND_ALPHA);
 	Raylib::rlSetBlendMode(Raylib::BLEND_MULTIPLIED);
 
