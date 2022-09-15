@@ -27,6 +27,7 @@ struct Tile {
 #define TILE_SIZE 64
 struct Chunk {
 	Vec2i position;
+	Rect rect;
 #define CHUNK_SIZE 7
 	Tile tiles[CHUNK_SIZE*CHUNK_SIZE];
 };
@@ -61,6 +62,7 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
+Chunk *createChunk(Vec2i position);
 /// FUNCTIONS ^
 
 void runGame() {
@@ -117,7 +119,7 @@ void updateGame() {
 				return true;
 			};
 
-			auto addNewExpandableChunkAround = [isEmptyChunk, chunksCouldExpand, chunksCouldExpandNum](Vec2i chunkToExpand) mutable {
+			auto addNewExpandableChunkAround = [isEmptyChunk](Vec2i chunkToExpand, Vec2i *chunksCouldExpand, int *chunksCouldExpandNum) {
 				int dir = rndInt(0, 3);
 
 				Vec2i possibleNewExpandChunks[4];
@@ -137,7 +139,8 @@ void updateGame() {
 				}
 
 				if (possibleNewExpandChunksNum > 0) {
-					chunksCouldExpand[chunksCouldExpandNum++] = possibleNewExpandChunks[rndInt(0, possibleNewExpandChunksNum-1)];
+					chunksCouldExpand[*chunksCouldExpandNum] = possibleNewExpandChunks[rndInt(0, possibleNewExpandChunksNum-1)];
+					*chunksCouldExpandNum = *chunksCouldExpandNum + 1;
 				}
 			};
 
@@ -154,34 +157,40 @@ void updateGame() {
 					break;
 				}
 
-				if (chunksCouldExpandNum == 0) addNewExpandableChunkAround(validChunks[rndInt(0, validChunksNum-1)]);
+				if (chunksCouldExpandNum == 0) {
+					addNewExpandableChunkAround(validChunks[rndInt(0, validChunksNum-1)], chunksCouldExpand, &chunksCouldExpandNum);
+					continue;
+				}
 
 				int expandIndex = rndInt(0, chunksCouldExpandNum-1);
 				Vec2i chunkToExpand = chunksCouldExpand[expandIndex];
 
-				if (!isEmptyChunk(chunkToExpand)) {
-					arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Vec2i), expandIndex);
-					chunksCouldExpandNum--;
-					continue;
+				if (isEmptyChunk(chunkToExpand)) {
+					validChunks[validChunksNum++] = chunkToExpand;
+					addNewExpandableChunkAround(chunkToExpand, chunksCouldExpand, &chunksCouldExpandNum);
 				}
 
-				validChunks[validChunksNum++] = chunkToExpand;
-				addNewExpandableChunkAround(chunkToExpand);
+				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Vec2i), expandIndex);
+				chunksCouldExpandNum--;
+			}
+
+			for (int i = 0; i < validChunksNum; i++) {
+				Chunk *chunk = createChunk(validChunks[i]);
+				if (!chunk) continue;
+
+				for (int y = 0; y < CHUNK_SIZE; y++) {
+					for (int x = 0; x < CHUNK_SIZE; x++) {
+						int tileIndex = y*CHUNK_SIZE + x;
+						Tile *tile = &chunk->tiles[tileIndex];
+						if (x == CHUNK_SIZE/2 || y == CHUNK_SIZE/2) {
+							tile->type = TILE_ROAD;
+						} else {
+							tile->type = TILE_GROUND;
+						}
+					}
+				}
 			}
 		} ///
-
-		Chunk *chunk = &world->chunks[world->chunksNum++];
-		for (int y = 0; y < CHUNK_SIZE; y++) {
-			for (int x = 0; x < CHUNK_SIZE; x++) {
-				int tileIndex = y*CHUNK_SIZE + x;
-				Tile *tile = &chunk->tiles[tileIndex];
-				if (x == CHUNK_SIZE/2 || y == CHUNK_SIZE/2) {
-					tile->type = TILE_ROAD;
-				} else {
-					tile->type = TILE_GROUND;
-				}
-			}
-		}
 	}
 
 	Globals *globals = &game->globals;
@@ -195,39 +204,43 @@ void updateGame() {
 	clearRenderer();
 
 	Matrix3 cameraMatrix = mat3();
-	cameraMatrix.TRANSLATE(v2(platform->windowSize)/2);
-	cameraMatrix.SCALE(game->cameraZoom);
-	cameraMatrix.TRANSLATE(-v2(platform->windowSize)/2);
-	cameraMatrix.TRANSLATE(game->cameraPosition);
+	Rect screenRect = {};
+	{
+		cameraMatrix.TRANSLATE(v2(platform->windowSize)/2);
+		cameraMatrix.SCALE(game->cameraZoom);
+		cameraMatrix.TRANSLATE(-game->cameraPosition);
+
+		screenRect.width = platform->windowSize.x / game->cameraZoom;
+		screenRect.height = platform->windowSize.y / game->cameraZoom;
+		screenRect.x = game->cameraPosition.x - screenRect.width/2;
+		screenRect.y = game->cameraPosition.y - screenRect.height/2;
+	}
 
 	pushCamera2d(cameraMatrix);
 
 	{
 		Vec2 moveDir = v2();
-		if (keyPressed('W')) moveDir.y++;
-		if (keyPressed('S')) moveDir.y--;
-		if (keyPressed('A')) moveDir.x++;
-		if (keyPressed('D')) moveDir.x--;
+		if (keyPressed('W')) moveDir.y--;
+		if (keyPressed('S')) moveDir.y++;
+		if (keyPressed('A')) moveDir.x--;
+		if (keyPressed('D')) moveDir.x++;
 
 		game->cameraZoom += platform->mouseWheel * 0.1;
 		game->cameraZoom = mathClamp(game->cameraZoom, 0.1, 20);
 
-		game->cameraPosition += normalize(moveDir) * 10;
+		game->cameraPosition += normalize(moveDir) * 10 / game->cameraZoom;
 	}
 
 	for (int i = 0; i < world->chunksNum; i++) {
 		Chunk *chunk = &world->chunks[i];
-		Rect chunkRect = {};
-		chunkRect.width = TILE_SIZE * CHUNK_SIZE;
-		chunkRect.height = TILE_SIZE * CHUNK_SIZE;
-		chunkRect.x = chunk->position.x * chunkRect.width;
-		chunkRect.y = chunk->position.y * chunkRect.height;
+		if (!overlaps(screenRect, chunk->rect)) continue;
+
 		for (int y = 0; y < CHUNK_SIZE; y++) {
 			for (int x = 0; x < CHUNK_SIZE; x++) {
 				int tileIndex = y*CHUNK_SIZE + x;
 				Rect rect = {};
-				rect.x = x*TILE_SIZE + chunkRect.x;
-				rect.y = y*TILE_SIZE + chunkRect.y;
+				rect.x = x*TILE_SIZE + chunk->rect.x;
+				rect.y = y*TILE_SIZE + chunk->rect.y;
 				rect.width = TILE_SIZE;
 				rect.height = TILE_SIZE;
 				Tile *tile = &chunk->tiles[tileIndex];
@@ -242,7 +255,10 @@ void updateGame() {
 		}
 	}
 
+	// drawCircle(game->cameraPosition, 10, 0xFFFF0000);
+
 	popCamera2d();
+
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
 	if (game->debugShowFrameTimes) {
 		char *str = frameSprintf("%.1fms", platform->frameTimeAvg);
@@ -253,4 +269,22 @@ void updateGame() {
 	drawOnScreenLog();
 
 	game->time += elapsed;
+}
+
+Chunk *createChunk(Vec2i position) {
+	World *world = game->world;
+
+	if (world->chunksNum > CHUNKS_MAX-1) {
+		logf("Too many chunks!\n");
+		return NULL;
+	}
+
+	Chunk *chunk = &world->chunks[world->chunksNum++];
+	memset(chunk, 0, sizeof(Chunk));
+	chunk->position = position;
+	chunk->rect.width = TILE_SIZE * CHUNK_SIZE;
+	chunk->rect.height = TILE_SIZE * CHUNK_SIZE;
+	chunk->rect.x = chunk->position.x * chunk->rect.width;
+	chunk->rect.y = chunk->position.y * chunk->rect.height;
+	return chunk;
 }

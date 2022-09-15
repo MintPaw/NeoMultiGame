@@ -546,6 +546,8 @@ struct Renderer {
 	Matrix3 camera2dStack[CAMERA_2D_STACK_MAX];
 	int camera2dStackNum;
 	float current2dDrawDepth;
+	int currentDrawCount;
+	int maxDrawCallsPerBatch;
 
 #define ALPHA_STACK_MAX 128
 	float alphaStack[ALPHA_STACK_MAX];
@@ -662,6 +664,7 @@ void initRenderer(int width, int height) {
 	renderer = (Renderer *)zalloc(sizeof(Renderer));
 	renderer->width = width;
 	renderer->height = height;
+	renderer->maxDrawCallsPerBatch = 20000;
 
 	pushCamera2d(mat3());
 	pushAlpha(1);
@@ -1279,10 +1282,13 @@ void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors) {
 	verts3[2] = v3(verts[2], renderer->current2dDrawDepth);
 	verts3[3] = v3(verts[3], renderer->current2dDrawDepth);
 	drawTexturedQuad(textureId, verts3, uvs, colors);
-	renderer->current2dDrawDepth += 1.0/20000.0; // Should really be a fraction of the far-near clip plane
+	renderer->current2dDrawDepth += 1.0/renderer->maxDrawCallsPerBatch; // Should really be a fraction of the far-near clip plane
 }
 
 void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
+	if (renderer->currentDrawCount > renderer->maxDrawCallsPerBatch-10) processBatchDraws(); // Magic -10 :/
+	renderer->currentDrawCount++;
+
 	Raylib::rlCheckRenderBatchLimit(4);
 
 	Raylib::rlSetTexture(textureId);
@@ -1307,6 +1313,7 @@ void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
 	Raylib::rlEnd();
 
 	Raylib::rlSetTexture(0);
+
 }
 
 void pushTargetTexture(RenderTexture *renderTexture) {
@@ -1463,6 +1470,8 @@ void updateLightingShader(Camera camera) {
 
 void processBatchDraws() {
 	Raylib::rlDrawRenderBatchActive();
+	renderer->currentDrawCount = 0;
+	renderer->current2dDrawDepth = -1;
 }
 
 void resetRenderContext() {
@@ -1475,7 +1484,6 @@ void resetRenderContext() {
 
 void startRenderingFrame() {
 	Raylib::BeginDrawing();
-	renderer->current2dDrawDepth = -1;
 }
 
 void endRenderingFrame() {

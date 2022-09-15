@@ -897,6 +897,29 @@ devShipConcreteJungleGameToSelf:
 		$(SEVEN_ZIP) a -tzip selfShip.zip selfShip; \
 		mv selfShip.zip /c/Dropbox/Archive/devVersions/concreteJungle_$$(date +"%Y_%m_%d_%I_%M_%p").zip
 
+
+devShipTower2GameToSelf:
+	-$(MAKE) clean
+	cmd /c "\
+		set GAME_NAME=tower2Game&& \
+		set DEBUG_MODE=1&& \
+		set INTERNAL_MODE=0&& \
+		set OPTIMIZED_MODE=1&& \
+		buildSystem\$(WIN_BUILD_BAT).bat\
+		"
+	cd /c/bin; \
+		rm -rf pack; \
+		mkdir pack; \
+		cd pack; \
+		cp /c/bin/*.exe .; \
+		cp /c/bin/*.dll .; \
+		rsync -at --exclude '__*' --exclude '*.psd' --exclude '*.blend' --exclude '*.blend1' /c/Dropbox/MultiGame/multiGame/tower2GameAssets/assets .; \
+		rsync -a /c/bin/pack/* /c/bin/selfShip
+	
+	cd /c/bin; \
+		$(SEVEN_ZIP) a -tzip selfShip.zip selfShip; \
+		mv selfShip.zip /c/Dropbox/Archive/devVersions/tower2_$$(date +"%Y_%m_%d_%I_%M_%p").zip
+
 optimizeConcreteJunglePng:
 	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets -iname *.png -print0 | xargs -0 -P 8 -n 4 optipng -o1
 
