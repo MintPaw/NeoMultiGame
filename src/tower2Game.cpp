@@ -1,6 +1,14 @@
 struct Globals {
 };
 
+struct ActorTypeInfo {
+	bool isEnemy;
+
+	int price;
+	float range;
+	float maxHp;
+};
+
 enum ActorType {
 	ACTOR_NONE=0,
 	ACTOR_TOWER1, ACTOR_TOWER2, ACTOR_TOWER3, ACTOR_TOWER4,
@@ -16,6 +24,11 @@ struct Actor {
 
 	Vec2 position;
 	Vec2 velo;
+	float aimRads;
+
+	float hp;
+
+	float timeTillNextShot;
 
 	bool markedForDeletion;
 };
@@ -58,6 +71,12 @@ struct World {
 	int chunksNum;
 };
 
+enum Tool {
+	TOOL_NONE,
+	TOOL_BUILDING,
+	TOOL_SELECTED,
+};
+
 struct Game {
 	Font *defaultFont;
 
@@ -66,13 +85,19 @@ struct Game {
 	float timeScale;
 	float time;
 	Vec2 size;
-
-	World *world;
+	Vec2 mouse;
 
 	Vec2 cameraPosition;
 	float cameraZoom;
 
-	Vec2 mouse;
+	World *world;
+
+	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
+
+	Tool tool;
+	ActorType actorToBuild;
+
+	int money;
 
 	int wave;
 	bool playingWave;
@@ -96,7 +121,8 @@ void updateGame();
 Chunk *createChunk(Vec2i position);
 Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
-Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile);
+Vec2i chunkTileToWorldTile(Chunk *chunk, Vec2i tile);
+Chunk *worldToChunk(Vec2 position);
 Vec2i worldToTile(Vec2 position);
 Vec2 tileToWorld(Vec2i tile);
 Rect tileToWorldRect(Vec2i tile);
@@ -125,6 +151,7 @@ void runGame() {
 	initRenderer(res.x, res.y);
 	initTextureSystem();
 	initFonts();
+	nguiInit();
 
 	logf("Game+World is %.1fmb\n", (sizeof(World)+sizeof(Game)) / (float)(Megabytes(1)));
 
@@ -145,6 +172,22 @@ void updateGame() {
 
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
+
+		{ /// Setup actors
+			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+				ActorTypeInfo *info = &game->actorTypeInfos[i];
+				info->price = 100;
+				info->range = 5 * TILE_SIZE;
+				info->maxHp = 100;
+			}
+
+			ActorTypeInfo *info = NULL;
+
+			info = &game->actorTypeInfos[ACTOR_TOWER1];
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY1];
+			info->isEnemy = true;
+		} ///
 
 		{ /// Generate map
 			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk) * CHUNKS_MAX);
@@ -292,7 +335,7 @@ void updateGame() {
 				for (int y = 0; y < CHUNK_SIZE; y++) {
 					for (int x = 0; x < CHUNK_SIZE; x++) {
 						Vec2i localPos = v2i(x, y);
-						Vec2i worldPos = chunkToWorldTile(chunk, localPos);
+						Vec2i worldPos = chunkTileToWorldTile(chunk, localPos);
 
 						Tile *currentTile = getTileAt(worldPos);
 
@@ -346,6 +389,9 @@ void updateGame() {
 
 	game->size = v2(platform->windowSize);
 
+	ngui->mouse = platform->mouse;
+	ngui->screenSize = game->size;
+
 	Globals *globals = &game->globals;
 	World *world = game->world;
 
@@ -367,6 +413,7 @@ void updateGame() {
 				chunk->visible = true;
 			}
 		}
+		ImGui::InputInt("Money", &game->money);
 
 		ImGui::End();
 	}
@@ -453,8 +500,7 @@ void updateGame() {
 
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
-
-			int color = 0xFFFF00FF;
+			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
 			Rect rect = {};
 			rect.width = TILE_SIZE * 0.5;
@@ -462,12 +508,41 @@ void updateGame() {
 			rect.x = actor->position.x - rect.width/2;
 			rect.y = actor->position.y - rect.height/2;
 
-			float speed = 1;
+			float movementSpeed = 1;
 
-			if (actor->type == ACTOR_ENEMY1) {
+			if (actor->type == ACTOR_TOWER1) {
+				Circle range = makeCircle(actor->position, info->range);
+
+				Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
+				int enemiesInRangeNum = 0;
+				for (int i = 0; i < world->actorsNum; i++) {
+					Actor *other = &world->actors[i];
+					ActorTypeInfo *otherInfo = &game->actorTypeInfos[other->type];
+					if (!otherInfo->isEnemy) continue;
+
+					if (contains(range, other->position)) enemiesInRange[enemiesInRangeNum++] = other;
+				}
+
+				Actor *target = NULL;
+				if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
+
+				actor->timeTillNextShot -= elapsed;
+				if (target && actor->timeTillNextShot < 0) {
+					actor->timeTillNextShot = 1;
+					target->hp -= 10;
+				}
+
+				if (target) {
+					actor->aimRads = radsBetween(actor->position, target->position);
+				}
+
+				drawRect(rect, 0xFF800000);
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 4, 0xFFFF0000);
+			} else if (actor->type == ACTOR_ENEMY1) {
 				enemiesAlive++;
-
-				color = 0xFF008000;
 
 				Vec2 position = getPosition(rect);
 				Vec2 size = getSize(rect);
@@ -485,19 +560,32 @@ void updateGame() {
 					if (tile && !isZero(tile->flow)) dir += tile->flow;
 				}
 				dir = normalize(dir);
-				actor->velo = dir * speed;
+				actor->velo = dir * movementSpeed;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
 				if (overlaps(rect, goalRect)) {
 					actor->markedForDeletion = true;
 				}
+
+				drawRect(rect, 0xFF008000);
+
+				Rect hpBgRect = rect;
+				hpBgRect.height = 4;
+				hpBgRect.y = rect.y - hpBgRect.height - 4;
+				drawRect(hpBgRect, 0xFF004000);
+
+				Rect hpRect = hpBgRect;
+				hpRect.width *= actor->hp / info->maxHp;
+				drawRect(hpRect, 0xFF00FF00);
+			} else {
+				drawRect(rect, 0xFFFF00FF);
 			}
 
 			actor->velo *= 0.9;
 			actor->position += actor->velo;
 
-			drawRect(rect, color);
+			if (actor->hp <= 0 && info->maxHp > 0) actor->markedForDeletion = true;
 
 			if (game->debugShowActorVelo) {
 				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
@@ -523,6 +611,69 @@ void updateGame() {
 		}
 	}
 
+	{ /// Update hud and tool
+		if (game->tool != TOOL_BUILDING) {
+			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
+			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
+
+			if (nguiButton("Tower1")) {
+				game->tool = TOOL_BUILDING;
+				game->actorToBuild = ACTOR_TOWER1;
+			}
+			if (nguiButton("Tower2")) {
+				game->tool = TOOL_BUILDING;
+				game->actorToBuild = ACTOR_TOWER2;
+			}
+			if (nguiButton("Tower3")) {
+				game->tool = TOOL_BUILDING;
+				game->actorToBuild = ACTOR_TOWER3;
+			}
+
+			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+			nguiEndWindow();
+		}
+
+		if (game->tool == TOOL_BUILDING) {
+			if (platform->rightMouseDown) game->tool = TOOL_NONE;
+
+			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
+
+			Vec2i tilePosition = worldToTile(game->mouse);
+			Rect tileRect = tileToWorldRect(tilePosition);
+			drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(game->time*2)));
+
+			Vec2 center = getCenter(tileRect);
+
+			Circle range = makeCircle(getCenter(tileRect), info->range);
+			drawCircle(range, 0x80FF0000);
+
+			Tile *tile = getTileAt(tilePosition);
+
+			bool canBuild = true;
+			Chunk *chunk = worldToChunk(center);
+			if (!chunk) canBuild = false;
+			if (canBuild && !chunk->visible) canBuild = false;
+			if (canBuild && !tile) canBuild = false;
+			if (canBuild && tile->type != TILE_GROUND) canBuild = false;
+
+			for (int i = 0; i < world->actorsNum; i++) {
+				Actor *other = &world->actors[i];
+				if (equal(worldToTile(other->position), tilePosition)) canBuild = false;
+			}
+
+			if (canBuild && platform->mouseJustUp) {
+				if (game->money >= info->price) {
+					game->money -= info->price;
+					Actor *newTower = createActor(game->actorToBuild);
+					newTower->position = center;
+					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
+				} else {
+					infof("Not enough money\n");
+				}
+			}
+		}
+	} ///
+
 	if (game->playingWave) {
 		if (game->actorsToSpawnNum > 0) game->timeTillNextSpawn -= elapsed;
 		if (game->timeTillNextSpawn <= 0) {
@@ -534,7 +685,7 @@ void updateGame() {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
 				if (chunk->isPortal) {
-					spawnPoints[spawnPointsNum++] = tileToWorld(chunkToWorldTile(chunk, v2i(TILE_SIZE/2, TILE_SIZE/2)));
+					spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(TILE_SIZE/2, TILE_SIZE/2)));
 				}
 				for (int i = 0; i < chunk->connectionsNum; i++) {
 					Chunk *newChunk = getChunkAt(chunk->connections[i]);
@@ -594,6 +745,14 @@ void updateGame() {
 	// drawCircle(game->mouse, 10, 0xFFFF0000);
 
 	popCamera2d();
+
+	{
+		Rect rect = makeRect(0, 0, 350, 100);
+		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+		drawTextInRect(frameSprintf("Money $%d", game->money), props, rect);
+	}
+
+	nguiDraw(elapsed);
 
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
 	if (game->debugShowFrameTimes) {
@@ -670,10 +829,32 @@ Tile *getTileAt(Vec2i position) {
 	return tile;
 }
 
-Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile) {
+Vec2i chunkTileToWorldTile(Chunk *chunk, Vec2i tile) {
 	tile.x += chunk->position.x * CHUNK_SIZE;
 	tile.y += chunk->position.y * CHUNK_SIZE;
 	return tile;
+}
+
+Chunk *worldToChunk(Vec2 position) {
+	Vec2i chunkPosition = {};
+	while (position.x > CHUNK_SIZE-1) {
+		position.x -= CHUNK_SIZE * TILE_SIZE;
+		chunkPosition.x++;
+	}
+	while (position.x < 0) {
+		position.x += CHUNK_SIZE * TILE_SIZE;
+		chunkPosition.x--;
+	}
+	while (position.y > CHUNK_SIZE-1) {
+		position.y -= CHUNK_SIZE * TILE_SIZE;
+		chunkPosition.y++;
+	}
+	while (position.y < 0) {
+		position.y += CHUNK_SIZE * TILE_SIZE;
+		chunkPosition.y--;
+	}
+	Chunk *chunk = getChunkAt(chunkPosition);
+	return chunk;
 }
 
 Vec2i worldToTile(Vec2 position) {
@@ -715,6 +896,9 @@ Actor *createActor(ActorType type) {
 	memset(actor, 0, sizeof(Actor));
 	actor->id = ++world->nextActorId;
 	actor->type = type;
+
+	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	actor->hp = info->maxHp;
 
 	return actor;
 }
