@@ -57,7 +57,6 @@ struct Chunk {
 	int connectionsNum;
 
 	bool visible;
-	bool isPortal;
 };
 
 struct World {
@@ -83,16 +82,26 @@ struct Game {
 	Globals globals;
 	bool inEditor;
 	float timeScale;
-	float time;
 	Vec2 size;
 	Vec2 mouse;
+
+	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
+
+	/// Editor/debug
+	bool debugShowFrameTimes;
+	bool debugShowDijkstraValues;
+	bool debugShowFlowFieldValues;
+	bool debugDrawChunkLines;
+	bool debugDrawTileLines;
+	bool debugShowActorVelo;
+
+	/// Serialized
+	float time;
 
 	Vec2 cameraPosition;
 	float cameraZoom;
 
 	World *world;
-
-	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 
 	Tool tool;
 	ActorType actorToBuild;
@@ -105,14 +114,6 @@ struct Game {
 	ActorType actorsToSpawn[ACTORS_MAX];
 	int actorsToSpawnNum;
 	float timeTillNextSpawn;
-
-	/// Editor/debug
-	bool debugShowFrameTimes;
-	bool debugShowDijkstraValues;
-	bool debugShowFlowFieldValues;
-	bool debugDrawChunkLines;
-	bool debugDrawTileLines;
-	bool debugShowActorVelo;
 };
 Game *game = NULL;
 
@@ -129,6 +130,18 @@ Rect tileToWorldRect(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
+
+void saveState(char *path);
+void writeWorld(DataStream *stream, World *world);
+void writeActor(DataStream *stream, Actor *actor);
+void writeChunk(DataStream *stream, Chunk *chunk);
+void writeTile(DataStream *stream, Tile tile);
+
+void loadState(char *path);
+void readWorld(DataStream *stream, World *world, int version);
+void readActor(DataStream *stream, Actor *actor, int version);
+void readChunk(DataStream *stream, Chunk *chunk, int version);
+Tile readTile(DataStream *stream, int version);
 /// FUNCTIONS ^
 
 void runGame() {
@@ -238,11 +251,6 @@ void updateGame() {
 
 				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Vec2i), expandIndex);
 				chunksCouldExpandNum--;
-			}
-
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) chunk->isPortal = true;
 			}
 
 			for (int i = 0; i < world->chunksNum; i++) {
@@ -414,6 +422,22 @@ void updateGame() {
 			}
 		}
 		ImGui::InputInt("Money", &game->money);
+
+		for (int i = 1; i <= 9; i++) {
+			if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
+				saveState(frameSprintf("assets/states/%d.save_state", i));
+			}
+			ImGui::SameLine();
+		}
+		ImGui::NewLine();
+
+		for (int i = 1; i <= 9; i++) {
+			if (ImGui::Button(frameSprintf("%d##loadState%d", i, i))) {
+				loadState(frameSprintf("assets/states/%d.save_state", i));
+			}
+			ImGui::SameLine();
+		}
+		ImGui::NewLine();
 
 		ImGui::End();
 	}
@@ -683,8 +707,12 @@ void updateGame() {
 			int spawnPointsNum = 0;
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
+
+				bool isPortal = false; //@copyPastedIsPortal
+				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
+
 				if (!chunk->visible) continue;
-				if (chunk->isPortal) {
+				if (isPortal) {
 					spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(TILE_SIZE/2, TILE_SIZE/2)));
 				}
 				for (int i = 0; i < chunk->connectionsNum; i++) {
@@ -707,38 +735,44 @@ void updateGame() {
 				if (game->actorsToSpawnNum == 0) break;
 			}
 		}
-	} else {
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
-			if (!chunk->visible) continue;
+	}
 
-			for (int i = 0; i < chunk->connectionsNum; i++) {
-				Chunk *newChunk = getChunkAt(chunk->connections[i]);
-				Assert(newChunk);
+	{ /// Show explore buttons
+		if (!game->playingWave && game->tool == TOOL_NONE) {
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				if (!chunk->visible) continue;
 
-				if (newChunk->visible) continue;
+				for (int i = 0; i < chunk->connectionsNum; i++) {
+					Chunk *newChunk = getChunkAt(chunk->connections[i]);
+					Assert(newChunk);
 
-				Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
-				Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
+					if (newChunk->visible) continue;
 
-				if (contains(exploreRect, game->mouse)) {
-					exploreRect = inflatePerc(exploreRect, 0.1);
-					if (platform->mouseJustUp) {
-						newChunk->visible = true;
-						game->playingWave = true;
-						for (int i = 0; i < 10; i++) {
-							game->actorsToSpawn[game->actorsToSpawnNum++] = ACTOR_ENEMY1;
+					Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
+					Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
+
+					if (contains(exploreRect, game->mouse)) {
+						exploreRect = inflatePerc(exploreRect, 0.1);
+						if (platform->mouseJustUp) {
+							newChunk->visible = true;
+							game->playingWave = true;
+							for (int i = 0; i < 10; i++) {
+								game->actorsToSpawn[game->actorsToSpawnNum++] = ACTOR_ENEMY1;
+							}
 						}
 					}
+
+					drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
+
+					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
 				}
 
-				drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
-
-				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-				drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
+				bool isPortal = false; //@copyPastedIsPortal
+				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
+				if (isPortal) drawRect(chunk->rect, 0x80FF0000);
 			}
-
-			if (chunk->isPortal) drawRect(chunk->rect, 0x80FF0000);
 		}
 	}
 
@@ -901,4 +935,122 @@ Actor *createActor(ActorType type) {
 	actor->hp = info->maxHp;
 
 	return actor;
+}
+
+void saveState(char *path) {
+	DataStream *stream = newDataStream();
+
+	writeU32(stream, 0); // Version;
+	writeFloat(stream, game->time);
+	writeVec2(stream, game->cameraPosition);
+	writeFloat(stream, game->cameraZoom);
+	writeWorld(stream, game->world);
+	writeU32(stream, game->tool);
+	writeU32(stream, game->actorToBuild);
+	writeU32(stream, game->money);
+	writeU32(stream, game->wave);
+	writeU8(stream, game->playingWave);
+	writeU32(stream, game->actorsToSpawnNum);
+	for (int i = 0; i < game->actorsToSpawnNum; i++) writeU32(stream, game->actorsToSpawn[i]);
+	writeFloat(stream, game->timeTillNextSpawn);
+
+	writeDataStream(path, stream);
+	destroyDataStream(stream);
+}
+
+void writeWorld(DataStream *stream, World *world) {
+	writeU32(stream, world->actorsNum);
+	for (int i = 0; i < world->actorsNum; i++) writeActor(stream, &world->actors[i]);
+	writeU32(stream, world->nextActorId);
+
+	writeU32(stream, world->chunksNum);
+	for (int i = 0; i < world->chunksNum; i++) writeChunk(stream, &world->chunks[i]);
+}
+
+void writeActor(DataStream *stream, Actor *actor) {
+	writeU32(stream, actor->type);
+	writeU32(stream, actor->id);
+	writeVec2(stream, actor->position);
+	writeVec2(stream, actor->velo);
+	writeFloat(stream, actor->aimRads);
+	writeFloat(stream, actor->hp);
+	writeFloat(stream, actor->timeTillNextShot);
+	writeU8(stream, actor->markedForDeletion);
+}
+
+void writeChunk(DataStream *stream, Chunk *chunk) {
+	writeVec2i(stream, chunk->position);
+	writeRect(stream, chunk->rect);
+	for (int i = 0; i < CHUNK_SIZE*CHUNK_SIZE; i++) writeTile(stream, chunk->tiles[i]);
+	for (int i = 0; i < 4; i++) writeVec2i(stream, chunk->connections[i]);
+	writeU32(stream, chunk->connectionsNum);
+	writeU8(stream, chunk->visible);
+}
+
+void writeTile(DataStream *stream, Tile tile) {
+	writeU32(stream, tile.type);
+	writeVec2(stream, tile.flow);
+	writeU32(stream, tile.costSoFar);
+	writeU32(stream, tile.dijkstraValue);
+}
+
+void loadState(char *path) {
+	DataStream *stream = loadDataStream(path);
+	if (!stream) {
+		logf("No state at %s\n", path);
+		return;
+	}
+
+	int version = readU32(stream);
+	game->time = readFloat(stream);
+	game->cameraPosition = readVec2(stream);
+	game->cameraZoom = readFloat(stream);
+	readWorld(stream, game->world, version);
+	game->tool = (Tool)readU32(stream);
+	game->actorToBuild = (ActorType)readU32(stream);
+	game->money = readU32(stream);
+	game->wave = readU32(stream);
+	game->playingWave = readU8(stream);
+	game->actorsToSpawnNum = readU32(stream);
+	for (int i = 0; i < game->actorsToSpawnNum; i++) game->actorsToSpawn[i] = (ActorType)readU32(stream);
+	game->timeTillNextSpawn = readFloat(stream);
+
+	destroyDataStream(stream);
+}
+
+void readWorld(DataStream *stream, World *world, int version) {
+	world->actorsNum = readU32(stream);
+	for (int i = 0; i < world->actorsNum; i++) readActor(stream, &world->actors[i], version);
+	world->nextActorId = readU32(stream);
+	world->chunksNum = readU32(stream);
+	for (int i = 0; i < world->chunksNum; i++) readChunk(stream, &world->chunks[i], version);
+}
+
+void readActor(DataStream *stream, Actor *actor, int version) {
+	actor->type = (ActorType)readU32(stream);
+	actor->id = readU32(stream);
+	actor->position = readVec2(stream);
+	actor->velo = readVec2(stream);
+	actor->aimRads = readFloat(stream);
+	actor->hp = readFloat(stream);
+	actor->timeTillNextShot = readFloat(stream);
+	actor->markedForDeletion = readU8(stream);
+}
+
+void readChunk(DataStream *stream, Chunk *chunk, int version) {
+	chunk->position = readVec2i(stream);
+	chunk->rect = readRect(stream);
+	for (int i = 0; i < CHUNK_SIZE*CHUNK_SIZE; i++) chunk->tiles[i] = readTile(stream, version);
+	for (int i = 0; i < 4; i++) chunk->connections[i] = readVec2i(stream);
+	chunk->connectionsNum = readU32(stream);
+	chunk->visible = readU8(stream);
+}
+
+Tile readTile(DataStream *stream, int version) {
+	Tile tile = {};
+	tile.type = (TileType)readU32(stream);
+	tile.flow = readVec2(stream);
+	tile.costSoFar = readU32(stream);
+	tile.dijkstraValue = readU32(stream);
+	return tile;
 }

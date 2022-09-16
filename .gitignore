@@ -10,3 +10,4 @@ tags
 sesh
 Thumbs.db
 dynaGameAssets/
+*.save_state

@@ -1652,6 +1652,9 @@ void guiInit() {
 
 	io.ClipboardUserData = NULL;
 
+	ImGui::GetStyle().ScaleAllSizes(platform->windowScaling);
+	ImGui::GetIO().FontGlobalScale = platform->windowScaling;
+
 	{ /// Reload fonts
 		ImGuiIO& io = ImGui::GetIO();
 		unsigned char* pixels = NULL;
@@ -1668,9 +1671,6 @@ void guiInit() {
 		Raylib::UnloadImage(image);
 		io.Fonts->TexID = &gui->FontTexture;
 	}
-
-	ImGui::GetStyle().ScaleAllSizes(platform->windowScaling);
-	ImGui::GetIO().FontGlobalScale = platform->windowScaling;
 }
 
 void guiStartFrame() {
