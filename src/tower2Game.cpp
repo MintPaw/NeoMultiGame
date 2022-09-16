@@ -84,6 +84,8 @@ struct Game {
 	bool debugShowDijkstraValues;
 	bool debugShowFlowFieldValues;
 	bool debugDrawChunkLines;
+	bool debugDrawTileLines;
+	bool debugShowActorVelo;
 };
 Game *game = NULL;
 
@@ -94,6 +96,7 @@ Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
 Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile);
 Vec2i worldToTile(Vec2 position);
+Vec2 tileToWorld(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
@@ -179,7 +182,6 @@ void updateGame() {
 
 				if (possiblePositionsNum > 0) {
 					int chosenIndex = rndInt(0, possiblePositionsNum-1);
-					logf("%d (%d)\n", chosenIndex, possiblePositionsNum-1);
 					Vec2i position = possiblePositions[chosenIndex];
 					Chunk *newChunk = createChunk(position);
 					newChunk->connections[newChunk->connectionsNum++] = chunkToExpand->position;
@@ -355,6 +357,8 @@ void updateGame() {
 		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
 		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
+		ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
+		ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
 		if (ImGui::Button("Explore all")) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
@@ -433,8 +437,12 @@ void updateGame() {
 							drawLine(start, end, 4, 0xFFFF0000);
 						}
 					}
+
+					if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
 				}
 			}
+
+			if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
 		}
 	} ///
 
@@ -458,10 +466,10 @@ void updateGame() {
 				Vec2 position = getPosition(rect);
 				Vec2 size = getSize(rect);
 				Vec2 corners[4] = {
-					position + size*v2(-1, -1),
-					position + size*v2(1, -1),
-					position + size*v2(1, 1),
-					position + size*v2(-1, 1)
+					position + size*v2(0, 0),
+					position + size*v2(0, 1),
+					position + size*v2(1, 0),
+					position + size*v2(1, 1)
 				};
 
 				Vec2 dir = v2();
@@ -478,6 +486,15 @@ void updateGame() {
 			actor->position += actor->velo;
 
 			drawRect(rect, color);
+
+			if (game->debugShowActorVelo) {
+				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+				drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
+				// Vec2 start = actor->position;
+				// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
+				// drawLine(start, end, 5, 0xFFFF0000);
+			}
+
 		}
 	}
 
@@ -491,6 +508,9 @@ void updateGame() {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
+				if (chunk->isPortal) {
+					spawnPoints[spawnPointsNum++] = tileToWorld(chunkToWorldTile(chunk, v2i(TILE_SIZE/2, TILE_SIZE/2)));
+				}
 				for (int i = 0; i < chunk->connectionsNum; i++) {
 					Chunk *newChunk = getChunkAt(chunk->connections[i]);
 					Assert(newChunk);
@@ -543,31 +563,6 @@ void updateGame() {
 			}
 
 			if (chunk->isPortal) drawRect(chunk->rect, 0x80FF0000);
-		}
-	}
-
-	if (game->debugDrawChunkLines) {
-		Vec2i minChunk = v2i();
-		Vec2i maxChunk = v2i();
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
-			if (minChunk.x > chunk->position.x) minChunk.x = chunk->position.x;
-			if (minChunk.y > chunk->position.y) minChunk.y = chunk->position.y;
-			if (maxChunk.x < chunk->position.x) maxChunk.x = chunk->position.x;
-			if (maxChunk.y < chunk->position.y) maxChunk.y = chunk->position.y;
-		}
-
-		for (int y = minChunk.y; y < maxChunk.y; y++) {
-			Vec2 start = v2();
-			start.x = minChunk.x * CHUNK_SIZE * TILE_SIZE;
-			start.y = y * CHUNK_SIZE * TILE_SIZE;
-
-			Vec2 end = start;
-			start.x = maxChunk.x * CHUNK_SIZE * TILE_SIZE;
-
-			drawLine(start, end, 0xFFFF0000);
-		}
-		for (int x = minChunk.x; x < maxChunk.x; x++) {
 		}
 	}
 
@@ -658,9 +653,16 @@ Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile) {
 
 Vec2i worldToTile(Vec2 position) {
 	Vec2i tile;
-	tile.x = position.x / TILE_SIZE;
-	tile.y = position.y / TILE_SIZE;
+	tile.x = floorf(position.x / TILE_SIZE);
+	tile.y = floorf(position.y / TILE_SIZE);
 	return tile;
+}
+
+Vec2 tileToWorld(Vec2i tile) {
+	Vec2 position;
+	position.x = tile.x * TILE_SIZE + TILE_SIZE/2;
+	position.y = tile.y * TILE_SIZE + TILE_SIZE/2;
+	return position;
 }
 
 bool tileBlocksPathing(TileType type) {

@@ -1,8 +1,8 @@
 RenderProps newRenderProps();
 RenderProps newRenderProps(RenderTexture *texture, Rect rect);
 RenderProps newRenderProps(Texture *texture, Rect rect);
-void drawLine(Vec2 start, Vec2 end, int thickness=2, int color=0xFF888888);
-void drawLine(Line2 line, int thickness=2, int color=0xFF888888) { drawLine(line.start, line.end, thickness, color); }
+void drawLine(Vec2 start, Vec2 end, int thickness, int color);
+void drawLine(Line2 line, int thickness, int color) { drawLine(line.start, line.end, thickness, color); }
 void drawRectOutline(Rect rect, float outlineSize, int color);
 void drawRect(float x, float y, float width, float height, int color, int flags=0) { drawRect(makeRect(x, y, width, height), color, flags); }
 void drawCircle(Circle circle, int color) { drawCircle(circle.position, circle.radius, color); }
