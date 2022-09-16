@@ -16,6 +16,8 @@ struct Actor {
 
 	Vec2 position;
 	Vec2 velo;
+
+	bool markedForDeletion;
 };
 
 enum TileType {
@@ -97,6 +99,7 @@ Tile *getTileAt(Vec2i position);
 Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile);
 Vec2i worldToTile(Vec2 position);
 Vec2 tileToWorld(Vec2i tile);
+Rect tileToWorldRect(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
@@ -228,7 +231,6 @@ void updateGame() {
 
 		{ /// Build dijkstra
 			Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
-
 			Tile *goalTile = getTileAt(goal);
 			goalTile->type = TILE_HOME;
 
@@ -294,7 +296,7 @@ void updateGame() {
 
 						Tile *currentTile = getTileAt(worldPos);
 
-						if (currentTile->dijkstraValue <= 0) {
+						if (currentTile->dijkstraValue <= 0 || currentTile->type == TILE_HOME) {
 							currentTile->flow = v2();
 							continue;
 						}
@@ -431,7 +433,7 @@ void updateGame() {
 					}
 
 					if (game->debugShowFlowFieldValues) {
-						if (tile->type == TILE_ROAD) {
+						if (!isZero(tile->flow)) {
 							Vec2 start = getCenter(rect);
 							Vec2 end = start + tile->flow*TILE_SIZE/2;
 							drawLine(start, end, 4, 0xFFFF0000);
@@ -447,6 +449,8 @@ void updateGame() {
 	} ///
 
 	{ /// Update and draw actors
+		int enemiesAlive = 0;
+
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
 
@@ -461,6 +465,8 @@ void updateGame() {
 			float speed = 1;
 
 			if (actor->type == ACTOR_ENEMY1) {
+				enemiesAlive++;
+
 				color = 0xFF008000;
 
 				Vec2 position = getPosition(rect);
@@ -480,6 +486,12 @@ void updateGame() {
 				}
 				dir = normalize(dir);
 				actor->velo = dir * speed;
+
+				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+				Rect goalRect = tileToWorldRect(goal);
+				if (overlaps(rect, goalRect)) {
+					actor->markedForDeletion = true;
+				}
 			}
 
 			actor->velo *= 0.9;
@@ -494,7 +506,20 @@ void updateGame() {
 				// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
 				// drawLine(start, end, 5, 0xFFFF0000);
 			}
+		}
 
+		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
+			game->playingWave = false;
+		}
+	}
+
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		if (actor->markedForDeletion) {
+			arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
+			world->actorsNum--;
+			i--;
+			continue;
 		}
 	}
 
@@ -663,6 +688,15 @@ Vec2 tileToWorld(Vec2i tile) {
 	position.x = tile.x * TILE_SIZE + TILE_SIZE/2;
 	position.y = tile.y * TILE_SIZE + TILE_SIZE/2;
 	return position;
+}
+
+Rect tileToWorldRect(Vec2i tile) {
+	Rect rect;
+	rect.x = tile.x * TILE_SIZE;
+	rect.y = tile.y * TILE_SIZE;
+	rect.width = TILE_SIZE;
+	rect.height = TILE_SIZE;
+	return rect;
 }
 
 bool tileBlocksPathing(TileType type) {
