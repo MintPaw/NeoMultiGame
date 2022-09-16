@@ -15,13 +15,17 @@ struct Actor {
 	Vec3 position;
 };
 
-enum TypeType {
+enum TileType {
 	TILE_NONE,
+	TILE_HOME,
 	TILE_GROUND,
 	TILE_ROAD,
 };
 struct Tile {
-	u8 type;
+	TileType type;
+	Vec2 flow;
+	int costSoFar;
+	int dijkstraValue;
 };
 
 #define TILE_SIZE 64
@@ -60,13 +64,18 @@ struct Game {
 
 	/// Editor/debug
 	bool debugShowFrameTimes;
+	bool debugShowDijkstraValues;
+	bool debugShowFlowFieldValues;
 };
 Game *game = NULL;
 
 void runGame();
 void updateGame();
 Chunk *createChunk(Vec2i position);
-Chunk *getChunkByPosition(Vec2i position);
+Chunk *getChunkAt(Vec2i position);
+Tile *getTileAt(Vec2i position);
+Vec2i chunkToGlobalTile(Chunk *chunk, Vec2i tile);
+bool tileBlocksPathing(TileType type);
 /// FUNCTIONS ^
 
 void runGame() {
@@ -106,6 +115,9 @@ void updateGame() {
 
 		game->cameraZoom = 1;
 
+		game->debugShowDijkstraValues = true;
+		game->debugShowFlowFieldValues = true;
+
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
 
@@ -113,7 +125,7 @@ void updateGame() {
 			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk) * CHUNKS_MAX);
 			int chunksCouldExpandNum = 0;
 
-			createChunk(v2i(0, 0));
+			Chunk *chunk = createChunk(v2i(0, 0));
 
 			for (;;) {
 				if (world->chunksNum > 45-1) {
@@ -138,7 +150,7 @@ void updateGame() {
 				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
 				for (int i = 0; i < possiblePositionsNum; i++) {
 					Vec2i possiblePosition = possiblePositions[i];
-					if (getChunkByPosition(possiblePosition)) {
+					if (getChunkAt(possiblePosition)) {
 						arraySpliceIndex(possiblePositions, possiblePositionsNum, sizeof(Vec2i), i);
 						possiblePositionsNum--;
 						i--;
@@ -164,7 +176,8 @@ void updateGame() {
 
 				for (int y = 0; y < CHUNK_SIZE; y++) {
 					for (int x = 0; x < CHUNK_SIZE; x++) {
-						chunk->tiles[y * CHUNK_SIZE + x].type = TILE_GROUND;
+						Tile *tile = &chunk->tiles[y * CHUNK_SIZE + x];
+						tile->type = TILE_GROUND;
 					}
 				}
 
@@ -189,6 +202,121 @@ void updateGame() {
 				}
 			}
 		} ///
+
+		{ /// Build dijkstra
+			Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+
+			Tile *goalTile = getTileAt(goal);
+			goalTile->type = TILE_HOME;
+
+			{
+				Allocator priorityQueueAllocator = {};
+				priorityQueueAllocator.type = ALLOCATOR_FRAME;
+				PriorityQueue *frontier = createPriorityQueue(sizeof(Vec2i), &priorityQueueAllocator);
+				priorityQueuePush(frontier, &goal, 0);
+
+				Tile *startTile = getTileAt(goal);
+				startTile->costSoFar = 1;
+				startTile->dijkstraValue = 1;
+
+				while (frontier->length > 0) {
+					Vec2i current;
+					priorityQueueShift(frontier, &current);
+
+					Tile *currentTile = getTileAt(current);
+
+					if (tileBlocksPathing(currentTile->type)) {
+						currentTile->dijkstraValue = -1;
+						continue;
+					}
+
+					for (int i = 0; i < 4; i++) {
+						Vec2i neighbor = current;
+						if (i == 0) neighbor += v2i(-1, 0);
+						if (i == 1) neighbor += v2i(1, 0);
+						if (i == 2) neighbor += v2i(0, -1);
+						if (i == 3) neighbor += v2i(0, 1);
+
+						Tile *neighborTile = getTileAt(neighbor);
+						if (!neighborTile) continue;
+
+						if (tileBlocksPathing(neighborTile->type)) {
+							neighborTile->dijkstraValue = -1;
+							continue;
+						}
+
+						int newCost = currentTile->costSoFar + 1;
+
+						if (neighborTile->costSoFar == 0 || newCost < neighborTile->costSoFar) {
+							neighborTile->dijkstraValue = newCost;
+							neighborTile->costSoFar = newCost;
+
+							priorityQueuePush(frontier, &neighbor, newCost);
+						}
+					}
+				}
+
+				destroyPriorityQueue(frontier);
+			}
+		} ///
+
+		{ /// Build Flow Field
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+
+				for (int y = 0; y < CHUNK_SIZE; y++) {
+					for (int x = 0; x < CHUNK_SIZE; x++) {
+						Vec2i localPos = v2i(x, y);
+						Vec2i globalPos = chunkToGlobalTile(chunk, localPos);
+
+						Tile *currentTile = getTileAt(globalPos);
+
+						if (currentTile->dijkstraValue <= 0) {
+							currentTile->flow = v2();
+							continue;
+						}
+
+						bool canUseDiagonals = false;
+
+						//Go through all neighbours and find the one with the lowest distance
+						Vec2i min = v2i();
+						float minDist = 2;
+
+						for (int i = 0; i < 8; i++) {
+							if (!canUseDiagonals && i >= 4) continue;
+							Vec2i neighbor = globalPos;
+							if (i == 0) neighbor += v2i(-1, 0);
+							if (i == 1) neighbor += v2i(1, 0);
+							if (i == 2) neighbor += v2i(0, -1);
+							if (i == 3) neighbor += v2i(0, 1);
+							if (i == 4) neighbor += v2i(-1, -1);
+							if (i == 5) neighbor += v2i(1, 1);
+							if (i == 6) neighbor += v2i(1, -1);
+							if (i == 7) neighbor += v2i(-1, 1);
+
+							Tile *neighborTile = getTileAt(neighbor);
+							if (!neighborTile) continue;
+							if (neighborTile->dijkstraValue <= 0) continue;
+
+							int dist = neighborTile->dijkstraValue - currentTile->dijkstraValue;
+
+							if (dist < minDist) {
+								min = neighbor;
+								minDist = dist;
+							}
+						}
+
+						//If we found a valid neighbour, point in its direction
+						if (!isZero(min)) {
+							currentTile->flow = vectorBetween(v2(globalPos), v2(min));
+						} else {
+							currentTile->flow = v2();
+						}
+
+					}
+				}
+			}
+		} ///
 	}
 
 	Globals *globals = &game->globals;
@@ -198,6 +326,12 @@ void updateGame() {
 	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
+	if (game->inEditor) {
+		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
+		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
+		ImGui::End();
+	}
 
 	clearRenderer();
 
@@ -247,8 +381,22 @@ void updateGame() {
 
 				if (tile->type == TILE_ROAD) color = 0xFF966F02;
 				if (tile->type == TILE_GROUND) color = 0xFF017301;
+				if (tile->type == TILE_HOME) color = 0xFFFFF333;
 
 				drawRect(rect, color);
+
+				if (game->debugShowDijkstraValues) {
+					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
+				}
+
+				if (game->debugShowFlowFieldValues) {
+					if (tile->type == TILE_ROAD) {
+						Vec2 start = getCenter(rect);
+						Vec2 end = start + tile->flow*TILE_SIZE/2;
+						drawLine(start, end, 4, 0xFFFF0000);
+					}
+				}
 			}
 		}
 	}
@@ -287,7 +435,7 @@ Chunk *createChunk(Vec2i position) {
 	return chunk;
 }
 
-Chunk *getChunkByPosition(Vec2i position) {
+Chunk *getChunkAt(Vec2i position) {
 	World *world = game->world;
 
 	for (int i = 0; i < world->chunksNum; i++) {
@@ -296,4 +444,41 @@ Chunk *getChunkByPosition(Vec2i position) {
 	}
 
 	return NULL;
+}
+
+Tile *getTileAt(Vec2i position) {
+	Vec2i chunkPosition = {};
+	while (position.x > CHUNK_SIZE-1) {
+		position.x -= CHUNK_SIZE;
+		chunkPosition.x++;
+	}
+	while (position.x < 0) {
+		position.x += CHUNK_SIZE;
+		chunkPosition.x--;
+	}
+	while (position.y > CHUNK_SIZE-1) {
+		position.y -= CHUNK_SIZE;
+		chunkPosition.y++;
+	}
+	while (position.y < 0) {
+		position.y += CHUNK_SIZE;
+		chunkPosition.y--;
+	}
+
+	Chunk *chunk = getChunkAt(chunkPosition);
+	if (!chunk) return NULL;
+
+	Tile *tile = &chunk->tiles[position.y * CHUNK_SIZE + position.x];
+	return tile;
+}
+
+Vec2i chunkToGlobalTile(Chunk *chunk, Vec2i tile) {
+	tile.x += chunk->position.x * CHUNK_SIZE;
+	tile.y += chunk->position.y * CHUNK_SIZE;
+	return tile;
+}
+
+bool tileBlocksPathing(TileType type) {
+	if (type == TILE_GROUND) return true;
+	return false;
 }

@@ -247,6 +247,11 @@ Vec2 ceil(Vec2 vec) {
 	return vec;
 }
 
+u32 hash(Vec2 vec);
+u32 hash(Vec2 vec) {
+	return vec.x * vec.y;
+}
+
 template <typename T>
 struct Vec2t {
 	T x;
@@ -4325,6 +4330,9 @@ struct Vec2i {
 	void print(const char *label) {
 		logf("%s %d %d\n", label, this->x, this->y);
 	}
+
+	Vec2i operator+= (Vec2i b) { this->x += b.x; this->y += b.y; return *this; }
+	Vec2i operator-= (Vec2i b) { this->x -= b.x; this->y -= b.y; return *this; }
 };
 
 Vec2i operator+ (Vec2i a, Vec2i b) { return { a.x + b.x, a.y + b.y }; }
@@ -4348,8 +4356,19 @@ bool equal(Vec2i a, Vec2i b) {
 	return false;
 }
 
+Vec2 v2(Vec2i veci);
 Vec2 v2(Vec2i veci) {
 	return v2(veci.x, veci.y);
+}
+
+u32 hash(Vec2i vec);
+u32 hash(Vec2i vec) {
+	return vec.x * vec.y;
+}
+
+bool isZero(Vec2i vec);
+bool isZero(Vec2i vec) {
+	return vec.x == 0 && vec.y == 0;
 }
 
 /// /Vec2i
