@@ -20,7 +20,6 @@ void pushRndSeed(u32 newSeed) {
 
 	lcgSeedStack[lcgSeedStackNum++] = lcgSeed;
 	lcgSeed = newSeed;
-	// rnd_pcg_seed(&pcg, lcgSeed);
 }
 
 u32 popRndSeed() {
@@ -33,9 +32,7 @@ u32 popRndSeed() {
 	u32 oldSeed = lcgSeed;
 	lcgSeed = lcgSeedStack[lcgSeedStackNum-1];
 	lcgSeedStackNum--;
-	// rnd_pcg_seed(&pcg, lcgSeed);
 
-	// logf("Giving %d\n", oldSeed);
 	return oldSeed;
 }
 

@@ -6,13 +6,16 @@ enum ActorType {
 	ACTOR_TOWER1, ACTOR_TOWER2, ACTOR_TOWER3, ACTOR_TOWER4,
 	ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
 	ACTOR_TOWER9, ACTOR_TOWER10, ACTOR_TOWER11, ACTOR_TOWER12,
-	ACTOR_ENEMY,
+	ACTOR_ENEMY1,
 	ACTOR_BULLET = 64,
 	ACTOR_TYPES_MAX,
 };
 struct Actor {
 	ActorType type;
-	Vec3 position;
+	int id;
+
+	Vec2 position;
+	Vec2 velo;
 };
 
 enum TileType {
@@ -37,12 +40,16 @@ struct Chunk {
 
 	Vec2i connections[4];
 	int connectionsNum;
+
+	bool visible;
+	bool isPortal;
 };
 
 struct World {
 #define ACTORS_MAX 65535
 	Actor actors[ACTORS_MAX];
 	int actorsNum;
+	int nextActorId;
 
 #define CHUNKS_MAX 512
 	Chunk chunks[CHUNKS_MAX];
@@ -56,16 +63,27 @@ struct Game {
 	bool inEditor;
 	float timeScale;
 	float time;
+	Vec2 size;
 
 	World *world;
 
 	Vec2 cameraPosition;
 	float cameraZoom;
 
+	Vec2 mouse;
+
+	int wave;
+	bool playingWave;
+
+	ActorType actorsToSpawn[ACTORS_MAX];
+	int actorsToSpawnNum;
+	float timeTillNextSpawn;
+
 	/// Editor/debug
 	bool debugShowFrameTimes;
 	bool debugShowDijkstraValues;
 	bool debugShowFlowFieldValues;
+	bool debugDrawChunkLines;
 };
 Game *game = NULL;
 
@@ -74,8 +92,11 @@ void updateGame();
 Chunk *createChunk(Vec2i position);
 Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
-Vec2i chunkToGlobalTile(Chunk *chunk, Vec2i tile);
+Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile);
+Vec2i worldToTile(Vec2 position);
 bool tileBlocksPathing(TileType type);
+
+Actor *createActor(ActorType type);
 /// FUNCTIONS ^
 
 void runGame() {
@@ -99,7 +120,7 @@ void runGame() {
 	initTextureSystem();
 	initFonts();
 
-	logf("World is %.1fmb\n", sizeof(World) / (float)(Megabytes(1)));
+	logf("Game+World is %.1fmb\n", (sizeof(World)+sizeof(Game)) / (float)(Megabytes(1)));
 
 	platformUpdateLoop(updateGame);
 }
@@ -107,16 +128,14 @@ void runGame() {
 void updateGame() {
 	if (!game) {
 		game = (Game *)zalloc(sizeof(Game));
-		game->defaultFont = createFont("assets/common/arial.ttf", 20);
+		game->defaultFont = createFont("assets/common/arial.ttf", 80);
 
 		game->timeScale = 1;
 
 		maximizeWindow();
 
+		rndInt(0, 3); // Burn an rnd seed???
 		game->cameraZoom = 1;
-
-		game->debugShowDijkstraValues = true;
-		game->debugShowFlowFieldValues = true;
 
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
@@ -159,7 +178,9 @@ void updateGame() {
 				}
 
 				if (possiblePositionsNum > 0) {
-					Vec2i position = possiblePositions[rndInt(0, possiblePositionsNum-1)];
+					int chosenIndex = rndInt(0, possiblePositionsNum-1);
+					logf("%d (%d)\n", chosenIndex, possiblePositionsNum-1);
+					Vec2i position = possiblePositions[chosenIndex];
 					Chunk *newChunk = createChunk(position);
 					newChunk->connections[newChunk->connectionsNum++] = chunkToExpand->position;
 					chunkToExpand->connections[chunkToExpand->connectionsNum++] = newChunk->position;
@@ -173,13 +194,11 @@ void updateGame() {
 
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
+				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) chunk->isPortal = true;
+			}
 
-				for (int y = 0; y < CHUNK_SIZE; y++) {
-					for (int x = 0; x < CHUNK_SIZE; x++) {
-						Tile *tile = &chunk->tiles[y * CHUNK_SIZE + x];
-						tile->type = TILE_GROUND;
-					}
-				}
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
 
 				Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				bool cutUp = false;
@@ -201,6 +220,8 @@ void updateGame() {
 					if (cutDown) chunk->tiles[(centerTile.y + i) * CHUNK_SIZE + centerTile.x].type = TILE_ROAD;
 				}
 			}
+
+			world->chunks[0].visible = true;
 		} ///
 
 		{ /// Build dijkstra
@@ -267,9 +288,9 @@ void updateGame() {
 				for (int y = 0; y < CHUNK_SIZE; y++) {
 					for (int x = 0; x < CHUNK_SIZE; x++) {
 						Vec2i localPos = v2i(x, y);
-						Vec2i globalPos = chunkToGlobalTile(chunk, localPos);
+						Vec2i worldPos = chunkToWorldTile(chunk, localPos);
 
-						Tile *currentTile = getTileAt(globalPos);
+						Tile *currentTile = getTileAt(worldPos);
 
 						if (currentTile->dijkstraValue <= 0) {
 							currentTile->flow = v2();
@@ -284,7 +305,7 @@ void updateGame() {
 
 						for (int i = 0; i < 8; i++) {
 							if (!canUseDiagonals && i >= 4) continue;
-							Vec2i neighbor = globalPos;
+							Vec2i neighbor = worldPos;
 							if (i == 0) neighbor += v2i(-1, 0);
 							if (i == 1) neighbor += v2i(1, 0);
 							if (i == 2) neighbor += v2i(0, -1);
@@ -308,7 +329,7 @@ void updateGame() {
 
 						//If we found a valid neighbour, point in its direction
 						if (!isZero(min)) {
-							currentTile->flow = vectorBetween(v2(globalPos), v2(min));
+							currentTile->flow = vectorBetween(v2(worldPos), v2(min));
 						} else {
 							currentTile->flow = v2();
 						}
@@ -319,6 +340,8 @@ void updateGame() {
 		} ///
 	}
 
+	game->size = v2(platform->windowSize);
+
 	Globals *globals = &game->globals;
 	World *world = game->world;
 
@@ -328,8 +351,17 @@ void updateGame() {
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	if (game->inEditor) {
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
 		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
+		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
+		if (ImGui::Button("Explore all")) {
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				chunk->visible = true;
+			}
+		}
+
 		ImGui::End();
 	}
 
@@ -338,12 +370,14 @@ void updateGame() {
 	Matrix3 cameraMatrix = mat3();
 	Rect screenRect = {};
 	{
-		cameraMatrix.TRANSLATE(v2(platform->windowSize)/2);
+		cameraMatrix.TRANSLATE(game->size/2);
 		cameraMatrix.SCALE(game->cameraZoom);
 		cameraMatrix.TRANSLATE(-game->cameraPosition);
 
-		screenRect.width = platform->windowSize.x / game->cameraZoom;
-		screenRect.height = platform->windowSize.y / game->cameraZoom;
+		game->mouse = cameraMatrix.invert() * platform->mouse;
+
+		screenRect.width = game->size.x / game->cameraZoom;
+		screenRect.height = game->size.y / game->cameraZoom;
 		screenRect.x = game->cameraPosition.x - screenRect.width/2;
 		screenRect.y = game->cameraPosition.y - screenRect.height/2;
 	}
@@ -363,45 +397,181 @@ void updateGame() {
 		game->cameraPosition += normalize(moveDir) * 10 / game->cameraZoom;
 	}
 
-	for (int i = 0; i < world->chunksNum; i++) {
-		Chunk *chunk = &world->chunks[i];
-		if (!overlaps(screenRect, chunk->rect)) continue;
+	{ /// Draw map
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (!overlaps(screenRect, chunk->rect)) continue;
+			if (!chunk->visible) continue;
 
-		for (int y = 0; y < CHUNK_SIZE; y++) {
-			for (int x = 0; x < CHUNK_SIZE; x++) {
-				int tileIndex = y*CHUNK_SIZE + x;
-				Rect rect = {};
-				rect.x = x*TILE_SIZE + chunk->rect.x;
-				rect.y = y*TILE_SIZE + chunk->rect.y;
-				rect.width = TILE_SIZE;
-				rect.height = TILE_SIZE;
-				Tile *tile = &chunk->tiles[tileIndex];
+			for (int y = 0; y < CHUNK_SIZE; y++) {
+				for (int x = 0; x < CHUNK_SIZE; x++) {
+					int tileIndex = y*CHUNK_SIZE + x;
+					Rect rect = {};
+					rect.x = x*TILE_SIZE + chunk->rect.x;
+					rect.y = y*TILE_SIZE + chunk->rect.y;
+					rect.width = TILE_SIZE;
+					rect.height = TILE_SIZE;
+					Tile *tile = &chunk->tiles[tileIndex];
 
-				int color = 0x00000000;
+					int color = 0x00000000;
 
-				if (tile->type == TILE_ROAD) color = 0xFF966F02;
-				if (tile->type == TILE_GROUND) color = 0xFF017301;
-				if (tile->type == TILE_HOME) color = 0xFFFFF333;
+					if (tile->type == TILE_ROAD) color = 0xFF966F02;
+					if (tile->type == TILE_GROUND) color = 0xFF017301;
+					if (tile->type == TILE_HOME) color = 0xFFFFF333;
 
-				drawRect(rect, color);
+					drawRect(rect, color);
 
-				if (game->debugShowDijkstraValues) {
-					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-					drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
-				}
+					if (game->debugShowDijkstraValues) {
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
+					}
 
-				if (game->debugShowFlowFieldValues) {
-					if (tile->type == TILE_ROAD) {
-						Vec2 start = getCenter(rect);
-						Vec2 end = start + tile->flow*TILE_SIZE/2;
-						drawLine(start, end, 4, 0xFFFF0000);
+					if (game->debugShowFlowFieldValues) {
+						if (tile->type == TILE_ROAD) {
+							Vec2 start = getCenter(rect);
+							Vec2 end = start + tile->flow*TILE_SIZE/2;
+							drawLine(start, end, 4, 0xFFFF0000);
+						}
 					}
 				}
 			}
 		}
+	} ///
+
+	{ /// Update and draw actors
+		for (int i = 0; i < world->actorsNum; i++) {
+			Actor *actor = &world->actors[i];
+
+			int color = 0xFFFF00FF;
+
+			Rect rect = {};
+			rect.width = TILE_SIZE * 0.5;
+			rect.height = TILE_SIZE * 0.5;
+			rect.x = actor->position.x - rect.width/2;
+			rect.y = actor->position.y - rect.height/2;
+
+			float speed = 1;
+
+			if (actor->type == ACTOR_ENEMY1) {
+				color = 0xFF008000;
+
+				Vec2 position = getPosition(rect);
+				Vec2 size = getSize(rect);
+				Vec2 corners[4] = {
+					position + size*v2(-1, -1),
+					position + size*v2(1, -1),
+					position + size*v2(1, 1),
+					position + size*v2(-1, 1)
+				};
+
+				Vec2 dir = v2();
+				for (int i = 0; i < 4; i++) {
+					Vec2i tilePosition = worldToTile(corners[i]);
+					Tile *tile = getTileAt(tilePosition);
+					if (tile && !isZero(tile->flow)) dir += tile->flow;
+				}
+				dir = normalize(dir);
+				actor->velo = dir * speed;
+			}
+
+			actor->velo *= 0.9;
+			actor->position += actor->velo;
+
+			drawRect(rect, color);
+		}
 	}
 
-	// drawCircle(game->cameraPosition, 10, 0xFFFF0000);
+	if (game->playingWave) {
+		if (game->actorsToSpawnNum > 0) game->timeTillNextSpawn -= elapsed;
+		if (game->timeTillNextSpawn <= 0) {
+			game->timeTillNextSpawn += 1;
+
+			Vec2 *spawnPoints = (Vec2 *)frameMalloc(sizeof(Vec2) * CHUNKS_MAX);
+			int spawnPointsNum = 0;
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				if (!chunk->visible) continue;
+				for (int i = 0; i < chunk->connectionsNum; i++) {
+					Chunk *newChunk = getChunkAt(chunk->connections[i]);
+					Assert(newChunk);
+					if (newChunk->visible) continue;
+
+					Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
+					spawnPoints[spawnPointsNum++] = middle;
+				}
+			}
+
+			for (int i = 0; i < spawnPointsNum; i++) {
+				ActorType toSpawn = game->actorsToSpawn[0];
+				Actor *actor = createActor(ACTOR_ENEMY1);
+				actor->position = spawnPoints[i];
+
+				memmove(&game->actorsToSpawn[0], &game->actorsToSpawn[1], sizeof(ActorType) * (game->actorsToSpawnNum-1));
+				game->actorsToSpawnNum--;
+				if (game->actorsToSpawnNum == 0) break;
+			}
+		}
+	} else {
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (!chunk->visible) continue;
+
+			for (int i = 0; i < chunk->connectionsNum; i++) {
+				Chunk *newChunk = getChunkAt(chunk->connections[i]);
+				Assert(newChunk);
+
+				if (newChunk->visible) continue;
+
+				Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
+				Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
+
+				if (contains(exploreRect, game->mouse)) {
+					exploreRect = inflatePerc(exploreRect, 0.1);
+					if (platform->mouseJustUp) {
+						newChunk->visible = true;
+						game->playingWave = true;
+						for (int i = 0; i < 10; i++) {
+							game->actorsToSpawn[game->actorsToSpawnNum++] = ACTOR_ENEMY1;
+						}
+					}
+				}
+
+				drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
+
+				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+				drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
+			}
+
+			if (chunk->isPortal) drawRect(chunk->rect, 0x80FF0000);
+		}
+	}
+
+	if (game->debugDrawChunkLines) {
+		Vec2i minChunk = v2i();
+		Vec2i maxChunk = v2i();
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (minChunk.x > chunk->position.x) minChunk.x = chunk->position.x;
+			if (minChunk.y > chunk->position.y) minChunk.y = chunk->position.y;
+			if (maxChunk.x < chunk->position.x) maxChunk.x = chunk->position.x;
+			if (maxChunk.y < chunk->position.y) maxChunk.y = chunk->position.y;
+		}
+
+		for (int y = minChunk.y; y < maxChunk.y; y++) {
+			Vec2 start = v2();
+			start.x = minChunk.x * CHUNK_SIZE * TILE_SIZE;
+			start.y = y * CHUNK_SIZE * TILE_SIZE;
+
+			Vec2 end = start;
+			start.x = maxChunk.x * CHUNK_SIZE * TILE_SIZE;
+
+			drawLine(start, end, 0xFFFF0000);
+		}
+		for (int x = minChunk.x; x < maxChunk.x; x++) {
+		}
+	}
+
+	// drawCircle(game->mouse, 10, 0xFFFF0000);
 
 	popCamera2d();
 
@@ -428,10 +598,18 @@ Chunk *createChunk(Vec2i position) {
 	Chunk *chunk = &world->chunks[world->chunksNum++];
 	memset(chunk, 0, sizeof(Chunk));
 	chunk->position = position;
-	chunk->rect.width = TILE_SIZE * CHUNK_SIZE;
-	chunk->rect.height = TILE_SIZE * CHUNK_SIZE;
+	chunk->rect.width = CHUNK_SIZE * TILE_SIZE;
+	chunk->rect.height = CHUNK_SIZE * TILE_SIZE;
 	chunk->rect.x = chunk->position.x * chunk->rect.width;
 	chunk->rect.y = chunk->position.y * chunk->rect.height;
+
+	for (int y = 0; y < CHUNK_SIZE; y++) {
+		for (int x = 0; x < CHUNK_SIZE; x++) {
+			Tile *tile = &chunk->tiles[y * CHUNK_SIZE + x];
+			tile->type = TILE_GROUND;
+		}
+	}
+
 	return chunk;
 }
 
@@ -472,13 +650,35 @@ Tile *getTileAt(Vec2i position) {
 	return tile;
 }
 
-Vec2i chunkToGlobalTile(Chunk *chunk, Vec2i tile) {
+Vec2i chunkToWorldTile(Chunk *chunk, Vec2i tile) {
 	tile.x += chunk->position.x * CHUNK_SIZE;
 	tile.y += chunk->position.y * CHUNK_SIZE;
+	return tile;
+}
+
+Vec2i worldToTile(Vec2 position) {
+	Vec2i tile;
+	tile.x = position.x / TILE_SIZE;
+	tile.y = position.y / TILE_SIZE;
 	return tile;
 }
 
 bool tileBlocksPathing(TileType type) {
 	if (type == TILE_GROUND) return true;
 	return false;
+}
+
+Actor *createActor(ActorType type) {
+	World *world = game->world;
+
+	if (world->actorsNum > ACTORS_MAX-1) {
+		Panic("Too many actors\n"); //@robustness
+	}
+
+	Actor *actor = &world->actors[world->actorsNum++];
+	memset(actor, 0, sizeof(Actor));
+	actor->id = ++world->nextActorId;
+	actor->type = type;
+
+	return actor;
 }
