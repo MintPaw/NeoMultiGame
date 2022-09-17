@@ -7,15 +7,23 @@ struct ActorTypeInfo {
 	int price;
 	float range;
 	float maxHp;
+
+	float bulletSpeed;
 };
 
 enum ActorType {
 	ACTOR_NONE=0,
-	ACTOR_TOWER1, ACTOR_TOWER2, ACTOR_TOWER3, ACTOR_TOWER4,
-	ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
-	ACTOR_TOWER9, ACTOR_TOWER10, ACTOR_TOWER11, ACTOR_TOWER12,
-	ACTOR_ENEMY1,
-	ACTOR_BULLET = 64,
+	ACTOR_TOWER1, ACTOR_TOWER2, ACTOR_TOWER3, ACTOR_TOWER4, ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
+	ACTOR_TOWER9, ACTOR_TOWER10, ACTOR_TOWER11, ACTOR_TOWER12, ACTOR_TOWER13, ACTOR_TOWER14, ACTOR_TOWER15, ACTOR_TOWER16,
+	ACTOR_ENEMY1, ACTOR_ENEMY2, ACTOR_ENEMY3, ACTOR_ENEMY4, ACTOR_ENEMY5, ACTOR_ENEMY6, ACTOR_ENEMY7, ACTOR_ENEMY8,
+	ACTOR_ENEMY9, ACTOR_ENEMY10, ACTOR_ENEMY11, ACTOR_ENEMY12, ACTOR_ENEMY13, ACTOR_ENEMY14, ACTOR_ENEMY15, ACTOR_ENEMY16,
+	ACTOR_ENEMY17, ACTOR_ENEMY18, ACTOR_ENEMY19, ACTOR_ENEMY20, ACTOR_ENEMY21, ACTOR_ENEMY22, ACTOR_ENEMY23, ACTOR_ENEMY24,
+	ACTOR_ENEMY25, ACTOR_ENEMY26, ACTOR_ENEMY27, ACTOR_ENEMY28, ACTOR_ENEMY29, ACTOR_ENEMY30, ACTOR_ENEMY31, ACTOR_ENEMY32,
+	ACTOR_ENEMY33, ACTOR_ENEMY34, ACTOR_ENEMY35, ACTOR_ENEMY36, ACTOR_ENEMY37, ACTOR_ENEMY38, ACTOR_ENEMY39, ACTOR_ENEMY40,
+	ACTOR_ENEMY41, ACTOR_ENEMY42, ACTOR_ENEMY43, ACTOR_ENEMY44, ACTOR_ENEMY45, ACTOR_ENEMY46, ACTOR_ENEMY47, ACTOR_ENEMY48,
+	ACTOR_ENEMY49, ACTOR_ENEMY50, ACTOR_ENEMY51, ACTOR_ENEMY52, ACTOR_ENEMY53, ACTOR_ENEMY54, ACTOR_ENEMY55, ACTOR_ENEMY56,
+	ACTOR_ENEMY57, ACTOR_ENEMY58, ACTOR_ENEMY59, ACTOR_ENEMY60, ACTOR_ENEMY61, ACTOR_ENEMY62, ACTOR_ENEMY63, ACTOR_ENEMY64,
+	ACTOR_BULLET1,
 	ACTOR_TYPES_MAX,
 };
 struct Actor {
@@ -24,6 +32,7 @@ struct Actor {
 
 	Vec2 position;
 	Vec2 velo;
+	Vec2 accel;
 	float aimRads;
 
 	float hp;
@@ -31,6 +40,8 @@ struct Actor {
 	float timeTillNextShot;
 
 	bool markedForDeletion;
+
+	int bulletTarget;
 };
 
 enum TileType {
@@ -119,6 +130,9 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
+void stepGame(float elapsed, bool isLastStep);
+
+		void generateMapFields();
 Chunk *createChunk(Vec2i position);
 Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
@@ -130,6 +144,8 @@ Rect tileToWorldRect(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
+Actor *getActor(int id);
+Actor *createBullet(Actor *src, Actor *target);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -200,6 +216,9 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY1];
 			info->isEnemy = true;
+
+			info = &game->actorTypeInfos[ACTOR_BULLET1];
+			info->bulletSpeed = 20;
 		} ///
 
 		{ /// Generate map
@@ -280,119 +299,8 @@ void updateGame() {
 			world->chunks[0].visible = true;
 		} ///
 
-		{ /// Build dijkstra
-			Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
-			Tile *goalTile = getTileAt(goal);
-			goalTile->type = TILE_HOME;
+		generateMapFields();
 
-			{
-				Allocator priorityQueueAllocator = {};
-				priorityQueueAllocator.type = ALLOCATOR_FRAME;
-				PriorityQueue *frontier = createPriorityQueue(sizeof(Vec2i), &priorityQueueAllocator);
-				priorityQueuePush(frontier, &goal, 0);
-
-				Tile *startTile = getTileAt(goal);
-				startTile->costSoFar = 1;
-				startTile->dijkstraValue = 1;
-
-				while (frontier->length > 0) {
-					Vec2i current;
-					priorityQueueShift(frontier, &current);
-
-					Tile *currentTile = getTileAt(current);
-
-					if (tileBlocksPathing(currentTile->type)) {
-						currentTile->dijkstraValue = -1;
-						continue;
-					}
-
-					for (int i = 0; i < 4; i++) {
-						Vec2i neighbor = current;
-						if (i == 0) neighbor += v2i(-1, 0);
-						if (i == 1) neighbor += v2i(1, 0);
-						if (i == 2) neighbor += v2i(0, -1);
-						if (i == 3) neighbor += v2i(0, 1);
-
-						Tile *neighborTile = getTileAt(neighbor);
-						if (!neighborTile) continue;
-
-						if (tileBlocksPathing(neighborTile->type)) {
-							neighborTile->dijkstraValue = -1;
-							continue;
-						}
-
-						int newCost = currentTile->costSoFar + 1;
-
-						if (neighborTile->costSoFar == 0 || newCost < neighborTile->costSoFar) {
-							neighborTile->dijkstraValue = newCost;
-							neighborTile->costSoFar = newCost;
-
-							priorityQueuePush(frontier, &neighbor, newCost);
-						}
-					}
-				}
-
-				destroyPriorityQueue(frontier);
-			}
-		} ///
-
-		{ /// Build Flow Field
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-
-				for (int y = 0; y < CHUNK_SIZE; y++) {
-					for (int x = 0; x < CHUNK_SIZE; x++) {
-						Vec2i localPos = v2i(x, y);
-						Vec2i worldPos = chunkTileToWorldTile(chunk, localPos);
-
-						Tile *currentTile = getTileAt(worldPos);
-
-						if (currentTile->dijkstraValue <= 0 || currentTile->type == TILE_HOME) {
-							currentTile->flow = v2();
-							continue;
-						}
-
-						bool canUseDiagonals = false;
-
-						//Go through all neighbours and find the one with the lowest distance
-						Vec2i min = v2i();
-						float minDist = 2;
-
-						for (int i = 0; i < 8; i++) {
-							if (!canUseDiagonals && i >= 4) continue;
-							Vec2i neighbor = worldPos;
-							if (i == 0) neighbor += v2i(-1, 0);
-							if (i == 1) neighbor += v2i(1, 0);
-							if (i == 2) neighbor += v2i(0, -1);
-							if (i == 3) neighbor += v2i(0, 1);
-							if (i == 4) neighbor += v2i(-1, -1);
-							if (i == 5) neighbor += v2i(1, 1);
-							if (i == 6) neighbor += v2i(1, -1);
-							if (i == 7) neighbor += v2i(-1, 1);
-
-							Tile *neighborTile = getTileAt(neighbor);
-							if (!neighborTile) continue;
-							if (neighborTile->dijkstraValue <= 0) continue;
-
-							int dist = neighborTile->dijkstraValue - currentTile->dijkstraValue;
-
-							if (dist < minDist) {
-								min = neighbor;
-								minDist = dist;
-							}
-						}
-
-						//If we found a valid neighbour, point in its direction
-						if (!isZero(min)) {
-							currentTile->flow = vectorBetween(v2(worldPos), v2(min));
-						} else {
-							currentTile->flow = v2();
-						}
-
-					}
-				}
-			}
-		} ///
 	}
 
 	game->size = v2(platform->windowSize);
@@ -400,14 +308,32 @@ void updateGame() {
 	ngui->mouse = platform->mouse;
 	ngui->screenSize = game->size;
 
+	int stepsToTake = 1;
+	float elapsed = platform->elapsed;
+
+	if (game->timeScale > 1) {
+		stepsToTake = game->timeScale;
+	} else if (game->timeScale < 1) {
+		elapsed *= game->timeScale;
+	}
+
+	for (int i = 0; i < stepsToTake; i++) {
+		bool isLastStep = i == stepsToTake-1;
+		renderer->disabled = !isLastStep;
+		stepGame(elapsed, isLastStep);
+	}
+
+	guiDraw();
+}
+
+void stepGame(float elapsed, bool isLastStep) {
+	float timeScale = elapsed / (1/60.0);
+
 	Globals *globals = &game->globals;
 	World *world = game->world;
 
-	float elapsed = platform->elapsed * game->timeScale;
-	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
-
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
-	if (game->inEditor) {
+	if (game->inEditor && isLastStep) {
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
@@ -461,7 +387,7 @@ void updateGame() {
 
 	pushCamera2d(cameraMatrix);
 
-	{
+	if (isLastStep) {
 		Vec2 moveDir = v2();
 		if (keyPressed('W')) moveDir.y--;
 		if (keyPressed('S')) moveDir.y++;
@@ -472,6 +398,21 @@ void updateGame() {
 		game->cameraZoom = mathClamp(game->cameraZoom, 0.1, 20);
 
 		game->cameraPosition += normalize(moveDir) * 10 / game->cameraZoom;
+
+		for (int i = 1; i <= 9; i++) {
+			if (keyPressed(KEY_ALT) && keyJustReleased('0' + i)) {
+				loadState(frameSprintf("assets/states/%d.save_state", i));
+			}
+		}
+
+		if (keyJustPressed('-')) {
+			game->timeScale *= 0.5;
+			logf("Time scale: %.3f\n", game->timeScale);
+		}
+		if (keyJustPressed('=')) {
+			game->timeScale *= 2;
+			logf("Time scale: %.3f\n", game->timeScale);
+		}
 	}
 
 	{ /// Draw map
@@ -532,7 +473,7 @@ void updateGame() {
 			rect.x = actor->position.x - rect.width/2;
 			rect.y = actor->position.y - rect.height/2;
 
-			float movementSpeed = 1;
+			float movementSpeed = 0.2;
 
 			if (actor->type == ACTOR_TOWER1) {
 				Circle range = makeCircle(actor->position, info->range);
@@ -553,7 +494,7 @@ void updateGame() {
 				actor->timeTillNextShot -= elapsed;
 				if (target && actor->timeTillNextShot < 0) {
 					actor->timeTillNextShot = 1;
-					target->hp -= 10;
+					Actor *bullet = createBullet(actor, target);
 				}
 
 				if (target) {
@@ -584,7 +525,7 @@ void updateGame() {
 					if (tile && !isZero(tile->flow)) dir += tile->flow;
 				}
 				dir = normalize(dir);
-				actor->velo = dir * movementSpeed;
+				actor->accel = dir * movementSpeed;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
@@ -602,12 +543,29 @@ void updateGame() {
 				Rect hpRect = hpBgRect;
 				hpRect.width *= actor->hp / info->maxHp;
 				drawRect(hpRect, 0xFF00FF00);
+			} else if (actor->type == ACTOR_BULLET1) {
+				Actor *target = getActor(actor->bulletTarget);
+				if (target) {
+					actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
+					if (equal(actor->position, target->position)) {
+						target->hp -= 10;
+						actor->markedForDeletion = true;
+					}
+				} else {
+					actor->markedForDeletion = true;
+				}
+
+				Rect bulletRect = makeCenteredSquare(actor->position, 8);
+				drawRect(bulletRect, 0xFFFF0000);
 			} else {
 				drawRect(rect, 0xFFFF00FF);
 			}
 
-			actor->velo *= 0.9;
-			actor->position += actor->velo;
+			Vec2 damping = v2(0.1, 0.1);
+			actor->velo += (actor->accel - damping*actor->velo) * timeScale;
+			actor->accel = v2();
+
+			actor->position += actor->velo * timeScale;
 
 			if (actor->hp <= 0 && info->maxHp > 0) actor->markedForDeletion = true;
 
@@ -794,10 +752,120 @@ void updateGame() {
 		drawText(game->defaultFont, str, v2(300, 0), 0xFF808080);
 	}
 
-	guiDraw();
 	drawOnScreenLog();
 
 	game->time += elapsed;
+}
+
+void generateMapFields() {
+	World *world = game->world;
+
+	/// Build dijkstra
+	Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+	Tile *goalTile = getTileAt(goal);
+	goalTile->type = TILE_HOME;
+
+	{
+		Allocator priorityQueueAllocator = {};
+		priorityQueueAllocator.type = ALLOCATOR_FRAME;
+		PriorityQueue *frontier = createPriorityQueue(sizeof(Vec2i), &priorityQueueAllocator);
+		priorityQueuePush(frontier, &goal, 0);
+
+		Tile *startTile = getTileAt(goal);
+		startTile->costSoFar = 1;
+		startTile->dijkstraValue = 1;
+
+		while (frontier->length > 0) {
+			Vec2i current;
+			priorityQueueShift(frontier, &current);
+
+			Tile *currentTile = getTileAt(current);
+
+			for (int i = 0; i < 4; i++) {
+				Vec2i neighbor = current;
+				if (i == 0) neighbor += v2i(-1, 0);
+				if (i == 1) neighbor += v2i(1, 0);
+				if (i == 2) neighbor += v2i(0, -1);
+				if (i == 3) neighbor += v2i(0, 1);
+
+				Tile *neighborTile = getTileAt(neighbor);
+				if (!neighborTile) continue;
+
+				int cost = 1;
+				if (tileBlocksPathing(neighborTile->type)) {
+					cost += 10;
+				}
+
+				int newCost = currentTile->costSoFar + cost;
+
+				if (neighborTile->costSoFar == 0 || newCost < neighborTile->costSoFar) {
+					neighborTile->dijkstraValue = newCost;
+					neighborTile->costSoFar = newCost;
+
+					priorityQueuePush(frontier, &neighbor, newCost);
+				}
+			}
+		}
+
+		destroyPriorityQueue(frontier);
+	}
+
+	/// Build Flow Field
+	for (int i = 0; i < world->chunksNum; i++) {
+		Chunk *chunk = &world->chunks[i];
+
+		for (int y = 0; y < CHUNK_SIZE; y++) {
+			for (int x = 0; x < CHUNK_SIZE; x++) {
+				Vec2i localPos = v2i(x, y);
+				Vec2i worldPos = chunkTileToWorldTile(chunk, localPos);
+
+				Tile *currentTile = getTileAt(worldPos);
+
+				if (currentTile->dijkstraValue <= 0 || currentTile->type == TILE_HOME) {
+					currentTile->flow = v2();
+					continue;
+				}
+
+				bool canUseDiagonals = false;
+
+				//Go through all neighbours and find the one with the lowest distance
+				Vec2i min = v2i();
+				float minDist = 2;
+
+				for (int i = 0; i < 8; i++) {
+					if (!canUseDiagonals && i >= 4) continue;
+					Vec2i neighbor = worldPos;
+					if (i == 0) neighbor += v2i(-1, 0);
+					if (i == 1) neighbor += v2i(1, 0);
+					if (i == 2) neighbor += v2i(0, -1);
+					if (i == 3) neighbor += v2i(0, 1);
+					if (i == 4) neighbor += v2i(-1, -1);
+					if (i == 5) neighbor += v2i(1, 1);
+					if (i == 6) neighbor += v2i(1, -1);
+					if (i == 7) neighbor += v2i(-1, 1);
+
+					Tile *neighborTile = getTileAt(neighbor);
+					if (!neighborTile) continue;
+					if (neighborTile->dijkstraValue <= 0) continue;
+
+					int dist = neighborTile->dijkstraValue - currentTile->dijkstraValue;
+
+					if (dist < minDist) {
+						min = neighbor;
+						minDist = dist;
+					}
+				}
+
+				//If we found a valid neighbour, point in its direction
+				if (!isZero(min)) {
+					currentTile->flow = vectorBetween(v2(worldPos), v2(min));
+				} else {
+					currentTile->flow = v2();
+				}
+
+			}
+		}
+	}
 }
 
 Chunk *createChunk(Vec2i position) {
@@ -937,10 +1005,29 @@ Actor *createActor(ActorType type) {
 	return actor;
 }
 
+Actor *getActor(int id) {
+	World *world = game->world;
+	if (id == 0) return NULL;
+
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		if (actor->id == id) return actor;
+	}
+	return NULL;
+}
+
+Actor *createBullet(Actor *src, Actor *target) {
+	Actor *bullet = createActor(ACTOR_BULLET1);
+	bullet->position = src->position;
+	bullet->bulletTarget = target->id;
+	return bullet;
+}
+
 void saveState(char *path) {
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 0); // Version;
+	writeU32(stream, 1); // Version;
+	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
 	writeFloat(stream, game->cameraZoom);
@@ -1002,6 +1089,7 @@ void loadState(char *path) {
 	}
 
 	int version = readU32(stream);
+	if (version >= 1) lcgSeed = readU32(stream);
 	game->time = readFloat(stream);
 	game->cameraPosition = readVec2(stream);
 	game->cameraZoom = readFloat(stream);
@@ -1016,6 +1104,8 @@ void loadState(char *path) {
 	game->timeTillNextSpawn = readFloat(stream);
 
 	destroyDataStream(stream);
+
+	generateMapFields();
 }
 
 void readWorld(DataStream *stream, World *world, int version) {
