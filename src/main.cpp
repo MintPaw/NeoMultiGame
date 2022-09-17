@@ -134,6 +134,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "ds.cpp"
 #include "compression.cpp"
 #include "logging.cpp"
+#include "memoryTracking.cpp"
 #include "file.cpp"
 #include "dataStream.cpp"
 #include "platformRay.cpp"

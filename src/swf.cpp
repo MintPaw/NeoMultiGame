@@ -882,10 +882,10 @@ enum SwfDrawableType {
 
 struct SwfDrawable {
 	char *name; // 8
-	Matrix2x3 matrix; // 24
-	int clipDepth; // 4
 	ColorTransform *colorTransform; // 8
 	SwfFilter *filters; // 8
+	Matrix2x3 matrix; // 24
+	u16 clipDepth; // 2
 	u8 filtersNum; // 2
 	/*SwfBlendMode*/u8 spriteBlendMode; // 1
 
@@ -924,10 +924,6 @@ struct Swf {
 	SwfSprite **allSprites;
 	int allSpritesNum;
 
-	char **drawableNames;
-	int drawableNamesNum;
-	int drawableNamesMax;
-
 #define SWF_FONT_NAMES_MAX 32
 	DefineFontName defineFontNames[SWF_FONT_NAMES_MAX];
 	int defineFontNamesNum;
@@ -949,6 +945,7 @@ int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 u32 totalDrawables = 0;
 void *makeDrawables(int drawablesNum) {
 	totalDrawables += drawablesNum;
+	if (totalDrawables % 1000 == 0) logf("%d drawables\n", totalDrawables);
 	return zalloc(sizeof(SwfDrawable) * drawablesNum);
 }
 
@@ -966,8 +963,6 @@ Swf *loadSwf(char *path) {
 
 	Swf *swf = (Swf *)zalloc(sizeof(Swf));
 	strcpy(swf->path, path);
-	swf->drawableNamesMax = 8;
-	swf->drawableNames = (char **)malloc(sizeof(char *) * swf->drawableNamesMax);
 
 	swf->header.sig[0] = read(&stream);
 	swf->header.sig[1] = read(&stream);
@@ -2025,6 +2020,7 @@ Swf *loadSwf(char *path) {
 			SwfTagType tagType = tagPointer->header.type;
 			if (tagType == SWF_TAG_DEFINE_SHAPE) {
 				SwfShape *shape = (SwfShape *)tagPointer->tag;
+				if (shape->drawEdges) free(shape->drawEdges);
 				for (int i = 0; i < shape->fillStylesNum; i++) {
 					FillStyle *fill = &shape->fillStyles[i];
 					if (fill->fillStyleType == FILL_STYLE_CLIPPED_BITMAP || fill->fillStyleType == FILL_STYLE_REPEATING_BITMAP) {
@@ -2120,13 +2116,7 @@ Swf *loadSwf(char *path) {
 
 						if (placeObject->pfHasClipDepth) drawable->clipDepth = placeObject->clipDepth;
 						if (placeObject->name) {
-							if (swf->drawableNamesNum > swf->drawableNamesMax-1) {
-								swf->drawableNames = (char **)resizeArray(swf->drawableNames, sizeof(char *), swf->drawableNamesNum, swf->drawableNamesMax * 1.5);
-								swf->drawableNamesMax *= 1.5;
-							}
-							char *name = stringClone(placeObject->name);
-							swf->drawableNames[swf->drawableNamesNum++] = name;
-							drawable->name = name;
+							drawable->name = stringClone(placeObject->name);
 							free(placeObject->name);
 						}
 
@@ -2465,8 +2455,6 @@ void destroySwf(Swf *swf) {
 		free(tagPointer->tag);
 	}
 
-	for (int i = 0; i < swf->drawableNamesNum; i++) free(swf->drawableNames[i]);
-	free(swf->drawableNames);
 	free(swf->allShapes);
 	free(swf->allSprites);
 	free(swf->tags);

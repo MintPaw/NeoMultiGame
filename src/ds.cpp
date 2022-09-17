@@ -21,6 +21,7 @@ struct HashMap {
 };
 
 HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator=NULL);
+int FORCE_INLINE hashToIndex(HashMap *map, int hash);
 void hashMapSet(HashMap *map, void *key, int hash, void *value);
 bool hashMapGet(HashMap *map, void *key, int hash, void *outValue=NULL);
 void destroyHashMap(HashMap *map);
@@ -49,7 +50,6 @@ HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allo
 	return map;
 }
 
-int FORCE_INLINE hashToIndex(HashMap *map, int hash);
 int FORCE_INLINE hashToIndex(HashMap *map, int hash) {
 	int index = hash % map->listsNum;
 	if (index < 0) return -index;

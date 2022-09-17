@@ -5,6 +5,11 @@
 #define ArrayLength(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 #define ConsumeBytes(dest, src, count) do {memcpy(dest, src, count); src += count;}while(0);
 
+#ifndef IncMutex
+# define IncMutex
+# define DecMutex
+#endif
+
 typedef int8_t   s8;
 typedef int16_t  s16;
 typedef int32_t  s32;
@@ -45,12 +50,6 @@ bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int inde
 bool arraySplice(void *array, int arraySize, int elementSize, void *element);
 bool arraySpliceIndex(void *array, int arrayMaxLength, int elementSize, int index);
 
-void *allocateMemory(long size, const char *fileName, int lineNum);
-void freeMemory(void *mem);
-void *reallocMemory(void *mem, long newSize);
-void fastFree(void *mem);
-void *fastMalloc(long size);
-
 char *frameMalloc(int size);
 char *frameSprintf(const char *msg, ...);
 char *mallocSprintf(const char *msg, ...);
@@ -63,17 +62,19 @@ void *convertFromHexString(char *hex, int *outputSize=NULL);
 int indexOfU32(u32 *haystack, int needle);
 
 struct MemoryChunk {
-	unsigned char *data;
+	u8 *data;
 	int size;
-	unsigned long id;
+	u32 id;
 };
 
 #define COMPRESS_FRAME_MEMORY
-#define ALLOW_FAST_MEMORY_HACKS
 
-// #define malloc(size) allocateMemory(size)
-// #define free(ptr) freeMemory(ptr)
-// #define realloc(ptr, newSize) reallocMemory(ptr, newSize)
+void *allocateTrackedMemory(long size);
+void freeTrackedMemory(void *mem);
+void *reallocTrackedMemory(void *mem, long newSize);
+// #define malloc(size) allocateTrackedMemory(size)
+// #define free(ptr) freeTrackedMemory(ptr)
+// #define realloc(ptr, newSize) reallocTrackedMemory(ptr, newSize)
 
 int ALLOCATOR_DEFAULT = 1;
 int ALLOCATOR_FRAME = 2;
@@ -144,120 +145,6 @@ void freeFrom(Allocator *allocator, void *data) {
 	} else if (allocator->type == ALLOCATOR_FRAME) {
 		return;
 	}
-}
-
-#ifndef IncMutex
-# define IncMutex
-# define DecMutex
-#endif
-
-void *allocateMemory(long size) {
-	if (!memSys) initMemory();
-	IncMutex(&memSys->_allocateFreeMutex);
-
-	memSys->total += size;
-	memSys->allTime += size;
-
-	if (memSys->activeChunksNum >= memSys->activeChunksMax) {
-		memSys->activeChunksMax++;
-		memSys->activeChunksMax *= 2;
-		memSys->activeChunks = (MemoryChunk **)(realloc)(memSys->activeChunks, sizeof(MemoryChunk *) * memSys->activeChunksMax);
-	}
-
-#if 1
-	MemoryChunk *chunk;
-	if (memSys->emptyChunksNum > 0) {
-		chunk = memSys->emptyChunks[memSys->emptyChunksNum-1];
-		memSys->emptyChunksNum--;
-	} else {
-		chunk = (MemoryChunk *)(malloc)(sizeof(MemoryChunk));
-	}
-#else
-	MemoryChunk *chunk = (MemoryChunk *)(malloc)(sizeof(MemoryChunk));
-#endif
-
-	memSys->activeChunks[memSys->activeChunksNum++] = chunk;
-
-	chunk->id = memSys->currentChunkId++;
-	// if (chunk->id == 100000) Panic("Break");
-	chunk->size = size;
-
-	chunk->data = (unsigned char *)(malloc)(size);
-
-	DecMutex(&memSys->_allocateFreeMutex);
-	return chunk->data;
-}
-
-void *fastMalloc(long size) {
-#if defined(ALLOW_FAST_MEMORY_HACKS)
-	return (malloc)(size);
-#else
-	return malloc(size);
-#endif
-}
-
-void freeMemory(void *mem) {
-	if (!memSys) initMemory();
-	IncMutex(&memSys->_allocateFreeMutex);
-
-	int chunkIndex = -1;
-	for (int i = 0; i < memSys->activeChunksNum; i++) {
-		if (memSys->activeChunks[i]->data == mem) {
-			chunkIndex = i;
-			break;
-		}
-	}
-
-	// if (chunkIndex == -1) Panic("Couldn't find chunk to free!");
-
-	(free)(mem);
-
-	if (chunkIndex != -1) {
-		MemoryChunk *chunk = memSys->activeChunks[chunkIndex];
-		memSys->total -= chunk->size;
-		if (chunkIndex != memSys->activeChunksNum) {
-			arraySwap(memSys->activeChunks, memSys->activeChunksNum, sizeof(MemoryChunk *), chunkIndex, memSys->activeChunksNum-1);
-		}
-		memSys->activeChunksNum--;
-
-#if 1
-		if (memSys->emptyChunksNum >= memSys->emptyChunksMax) {
-			memSys->emptyChunksMax++;
-			memSys->emptyChunksMax *= 2;
-			memSys->emptyChunks = (MemoryChunk **)(realloc)(memSys->emptyChunks, sizeof(MemoryChunk *) * memSys->emptyChunksMax);
-		}
-		memSys->emptyChunks[memSys->emptyChunksNum++] = chunk;
-#else
-		(free)(chunk);
-#endif
-	}
-
-	DecMutex(&memSys->_allocateFreeMutex);
-}
-
-void fastFree(void *mem) {
-#if defined(ALLOW_FAST_MEMORY_HACKS)
-	(free)(mem);
-#else
-	free(mem);
-#endif
-}
-
-void *reallocMemory(void *mem, long newSize) {
-	MemoryChunk *oldChunk = NULL;
-	for (int i = 0; i < memSys->activeChunksNum; i++) {
-		MemoryChunk *chunk = memSys->activeChunks[i];
-		if (chunk->data == mem) {
-			oldChunk = chunk;
-			break;
-		}
-	}
-
-	if (!oldChunk) Panic("Old chunk not found");
-
-	void *newMem = zalloc(newSize);
-	memcpy(newMem, oldChunk->data, oldChunk->size);
-	return newMem;
 }
 
 char *frameMalloc(int size) {
