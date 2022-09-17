@@ -21,6 +21,8 @@ struct DrawSpriteRecurseData {
 	char *text;
 	VDrawPaletteSwap *swaps;
 	int swapsNum;
+
+	HashMap *nameTransformMap;
 };
 
 struct SpriteLayerProps {
@@ -366,12 +368,11 @@ void pushSpriteMatrix(VDrawCommandsList *cmdList, Matrix3 mat) {
 		return;
 	}
 
-	Matrix3 topMatrix = skiaSys->matrixStack[skiaSys->matrixStackNum-1];
-	topMatrix = topMatrix * mat;
-	skiaSys->matrixStack[skiaSys->matrixStackNum++] = topMatrix;
+	Matrix3 newMatrix = skiaSys->matrixStack[skiaSys->matrixStackNum-1] * mat;
+	skiaSys->matrixStack[skiaSys->matrixStackNum++] = newMatrix;
 
 	VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_MATRIX);
-	cmd->matrix = topMatrix;
+	cmd->matrix = newMatrix;
 }
 void popSpriteMatrix(VDrawCommandsList *cmdList) {
 	skiaSys->matrixStackNum--;
@@ -502,6 +503,18 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 		recurse.colorTransform = makeColorTransform();
 		recurse.blendMode = SWF_BLEND_NORMAL;
 
+		Allocator *allocator = (Allocator *)frameMalloc(sizeof(Allocator));
+		allocator->type = ALLOCATOR_FRAME;
+		recurse.nameTransformMap = createHashMap(sizeof(char *), sizeof(SpriteTransform *), 64, allocator);
+		recurse.nameTransformMap->usesStreq = true;
+		for (int i = 0; i < transformsNum; i++) {
+			SpriteTransform *transform = &transforms[i];
+			for (int i = 0; i < transform->pathsNum; i++) {
+				char *path = transform->paths[i];
+				hashMapSet(recurse.nameTransformMap, &path, (int)stringHash32(path), &transform);
+			}
+		}
+
 		if (skiaSys->canvas == skiaSys->mainCanvas && !isNested) localMatrix.SCALE(skiaSys->scale);
 
 		firstSprite = true;
@@ -522,18 +535,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 		if (strlen(recurse.path) != 0) strcat(recurse.path, ".");
 		strcat(recurse.path, name);
 
-		for (int i = 0; i < transformsNum; i++) {
-			SpriteTransform *trans = &transforms[i];
-
-			for (int i = 0; i < trans->pathsNum; i++) {
-				if (streq(trans->paths[i], "*") || streq(trans->paths[i], recurse.path)) { // I should probably remove "*"
-					matchingTransform = trans;
-					break;
-				}
-			}
-
-			if (matchingTransform) break;
-		}
+		hashMapGet(recurse.nameTransformMap, &recurse.path, (int)stringHash32(recurse.path), &matchingTransform);
 	}
 
 	int frame = 0;
