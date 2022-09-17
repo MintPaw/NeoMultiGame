@@ -6,9 +6,18 @@ struct ActorTypeInfo {
 
 	int price;
 	float range;
+
 	float maxHp;
+	float maxArmor;
+	float maxShield;
+	float hpGainPerSec;
+	float armorGainPerSec;
+	float shieldGainPerSec;
+	float movementSpeed;
 
 	float bulletSpeed;
+
+	int enemySpawnStartingWave;
 };
 
 enum ActorType {
@@ -36,6 +45,8 @@ struct Actor {
 	float aimRads;
 
 	float hp;
+	float armor;
+	float shield;
 
 	float timeTillNextShot;
 
@@ -146,6 +157,7 @@ bool tileBlocksPathing(TileType type);
 Actor *createActor(ActorType type);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
+void dealDamage(Actor *src, Actor *dest);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -216,6 +228,55 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY1];
 			info->isEnemy = true;
+			info->enemySpawnStartingWave = 1;
+			info->movementSpeed = 2;
+			info->maxHp = 100;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY2];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 3;
+			info->movementSpeed = 2;
+			info->maxHp = 300;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY3];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 5;
+			info->movementSpeed = 1.75;
+			info->maxHp = 400;
+			info->maxArmor = 200;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY4];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 7;
+			info->movementSpeed = 1.75;
+			info->maxHp = 800;
+			info->hpGainPerSec = 25;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY5];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 9;
+			info->movementSpeed = 1.75;
+			info->maxHp = 400;
+			info->maxArmor = 600;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY6];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 11;
+			info->movementSpeed = 1;
+			info->maxHp = 300;
+			info->maxArmor = 1500;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY7];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 13;
+			info->movementSpeed = 1.25;
+			info->maxHp = 2000;
+
+			info = &game->actorTypeInfos[ACTOR_ENEMY8];
+			info->isEnemy = true;
+			info->enemySpawnStartingWave = 15;
+			info->movementSpeed = 1;
+			info->maxHp = 20000;
 
 			info = &game->actorTypeInfos[ACTOR_BULLET1];
 			info->bulletSpeed = 20;
@@ -348,6 +409,8 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 		}
 		ImGui::InputInt("Money", &game->money);
+		ImGui::InputInt("Wave", &game->wave);
+		ImGui::Checkbox("playingWave", &game->playingWave);
 
 		for (int i = 1; i <= 9; i++) {
 			if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
@@ -506,7 +569,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				line.start = getCenter(rect);
 				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 				drawLine(line, 4, 0xFFFF0000);
-			} else if (actor->type == ACTOR_ENEMY1) {
+			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
 				Vec2 position = getPosition(rect);
@@ -535,20 +598,45 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				drawRect(rect, 0xFF008000);
 
-				Rect hpBgRect = rect;
-				hpBgRect.height = 4;
-				hpBgRect.y = rect.y - hpBgRect.height - 4;
-				drawRect(hpBgRect, 0xFF004000);
+				{
+					Rect vitalityRect = rect;
+					vitalityRect.height = 4;
+					vitalityRect.y = rect.y - vitalityRect.height - 4;
+					float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
 
-				Rect hpRect = hpBgRect;
-				hpRect.width *= actor->hp / info->maxHp;
-				drawRect(hpRect, 0xFF00FF00);
+					float maxHpPerc = info->maxHp / totalPoints;
+					Rect hpRect = vitalityRect;
+					hpRect.width *= maxHpPerc;
+					hpRect.width *= actor->hp / info->maxHp;
+					drawRect(hpRect, 0xFF00FF00);
+
+					float maxArmorPerc = info->maxArmor / totalPoints;
+					Rect armorRect = vitalityRect;
+					armorRect.x += maxHpPerc * vitalityRect.width;
+					armorRect.width *= maxArmorPerc;
+					armorRect.width *= actor->armor / info->maxArmor;
+					drawRect(armorRect, 0xFFFFD66E);
+
+					float maxShieldPerc = info->maxShield / totalPoints;
+					Rect shieldRect = vitalityRect;
+					shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
+					shieldRect.width *= maxShieldPerc;
+					shieldRect.width *= actor->shield / info->maxShield;
+					drawRect(shieldRect, 0xFF718691);
+				}
+
+				actor->hp += info->hpGainPerSec * elapsed;
+				actor->armor += info->armorGainPerSec * elapsed;
+				actor->shield += info->shieldGainPerSec * elapsed;
+				actor->hp = mathClamp(actor->hp, 0, info->maxHp);
+				actor->armor = mathClamp(actor->armor, 0, info->maxArmor);
+				actor->shield = mathClamp(actor->shield, 0, info->maxShield);
 			} else if (actor->type == ACTOR_BULLET1) {
 				Actor *target = getActor(actor->bulletTarget);
 				if (target) {
 					actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
 					if (equal(actor->position, target->position)) {
-						target->hp -= 10;
+						dealDamage(actor, target);
 						actor->markedForDeletion = true;
 					}
 				} else {
@@ -581,7 +669,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
 			game->playingWave = false;
 		}
-	}
+	} ///
 
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
@@ -685,7 +773,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			for (int i = 0; i < spawnPointsNum; i++) {
 				ActorType toSpawn = game->actorsToSpawn[0];
-				Actor *actor = createActor(ACTOR_ENEMY1);
+				Actor *actor = createActor(toSpawn);
 				actor->position = spawnPoints[i];
 
 				memmove(&game->actorsToSpawn[0], &game->actorsToSpawn[1], sizeof(ActorType) * (game->actorsToSpawnNum-1));
@@ -715,8 +803,28 @@ void stepGame(float elapsed, bool isLastStep) {
 						if (platform->mouseJustUp) {
 							newChunk->visible = true;
 							game->playingWave = true;
-							for (int i = 0; i < 10; i++) {
-								game->actorsToSpawn[game->actorsToSpawnNum++] = ACTOR_ENEMY1;
+							game->wave++;
+
+							ActorType *possibleActors = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
+							int possibleActorsNum = 0;
+
+							for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+								ActorTypeInfo *info = &game->actorTypeInfos[i];
+								if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= game->wave) {
+									possibleActors[possibleActorsNum++] = (ActorType)i;
+								}
+								if (possibleActorsNum == 0) {
+									logf("No possible actor types to spawn???\n");
+									possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
+								}
+							}
+
+							int maxEnemies = game->wave * game->wave;
+							for (int i = 0; i < maxEnemies; i++) {
+								float value = rndFloat(0, 1);
+								value = tweenEase(value, QUAD_IN);
+								int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
+								game->actorsToSpawn[game->actorsToSpawnNum++] = possibleActors[index];
 							}
 						}
 					}
@@ -732,7 +840,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (isPortal) drawRect(chunk->rect, 0x80FF0000);
 			}
 		}
-	}
+	} ///
 
 	// drawCircle(game->mouse, 10, 0xFFFF0000);
 
@@ -1001,6 +1109,8 @@ Actor *createActor(ActorType type) {
 
 	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 	actor->hp = info->maxHp;
+	actor->armor = info->maxArmor;
+	actor->shield = info->maxShield;
 
 	return actor;
 }
@@ -1023,10 +1133,25 @@ Actor *createBullet(Actor *src, Actor *target) {
 	return bullet;
 }
 
+void dealDamage(Actor *src, Actor *dest) {
+	float damage = 10;
+	float damageLeft = damage;
+
+	float shieldDamage = MinNum(damageLeft, dest->shield);
+	damageLeft -= shieldDamage;
+	dest->shield -= shieldDamage;
+
+	float armorDamage = MinNum(damageLeft, dest->armor);
+	damageLeft -= armorDamage;
+	dest->armor -= armorDamage;
+
+	dest->hp -= damageLeft;
+}
+
 void saveState(char *path) {
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 1); // Version;
+	writeU32(stream, 2); // Version;
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -1061,6 +1186,8 @@ void writeActor(DataStream *stream, Actor *actor) {
 	writeVec2(stream, actor->velo);
 	writeFloat(stream, actor->aimRads);
 	writeFloat(stream, actor->hp);
+	writeFloat(stream, actor->armor);
+	writeFloat(stream, actor->shield);
 	writeFloat(stream, actor->timeTillNextShot);
 	writeU8(stream, actor->markedForDeletion);
 }
@@ -1123,6 +1250,8 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 	actor->velo = readVec2(stream);
 	actor->aimRads = readFloat(stream);
 	actor->hp = readFloat(stream);
+	if (version >= 2) actor->armor = readFloat(stream);
+	if (version >= 2) actor->shield = readFloat(stream);
 	actor->timeTillNextShot = readFloat(stream);
 	actor->markedForDeletion = readU8(stream);
 }
