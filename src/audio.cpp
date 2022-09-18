@@ -5,10 +5,9 @@
 #include <AL/alext.h>
 
 #ifdef __EMSCRIPTEN__
-# define SAMPLE_BUFFER_LIMIT (2048*2)
+# define SAMPLE_BUFFER_LIMIT (4096)
 #else
-# define SAMPLE_BUFFER_LIMIT (2048)
-// # define SAMPLE_BUFFER_LIMIT (2048)
+# define SAMPLE_BUFFER_LIMIT (4096)
 #endif
 
 #define CHANNELS_MAX 512
@@ -289,11 +288,14 @@ void updateAudio(float elapsed) {
 	for(int i = 0; i < toProcess; i++) {
 		requeued = true;
 
+		int missingSamples = SAMPLE_BUFFER_LIMIT - audio->storedSamplesPosition;
+		if (missingSamples > 0) {
+			logf("Audio lag: %d\n", missingSamples);
+			mixSoundInToGlobalBuffer(missingSamples);
+		}
+
 		ALuint buffer;
 		alSourceUnqueueBuffers(audio->source, 1, &buffer);
-
-		int missingSamples = SAMPLE_BUFFER_LIMIT - audio->storedSamplesPosition;
-		if (missingSamples > 0) mixSoundInToGlobalBuffer(missingSamples);
 
 		// if (audio->storedSamplesPosition < SAMPLE_BUFFER_LIMIT) logf("Not enough stored samples (%d)\n", SAMPLE_BUFFER_LIMIT-audio->storedSamplesPosition);
 		// if (audio->storedSamplesPosition >= SAMPLE_BUFFER_LIMIT) logf("You're ahead by %d samples\n", audio->storedSamplesPosition-SAMPLE_BUFFER_LIMIT);
@@ -437,8 +439,11 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 }
 
 void mixSoundInToGlobalBuffer(int samplesToAdd) {
+	if (samplesToAdd % 2 == 1) samplesToAdd--;
 	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;
-	if (samplesToAdd > maxSamplesLeft) samplesToAdd = maxSamplesLeft;
+	if (samplesToAdd > maxSamplesLeft) {
+		samplesToAdd = maxSamplesLeft;
+	}
 
 	mixSound(audio->storedSamples + audio->storedSamplesPosition, samplesToAdd);
 	audio->storedSamplesPosition += samplesToAdd;

@@ -245,7 +245,7 @@ void platformUpdate() {
 	} ///
 
 	void updateAudio(float elapsed); //@headerHack
-	updateAudio(platform->elapsed);
+	updateAudio(platform->realElapsed);
 
 	void startRenderingFrame(); //@headerHack
 	startRenderingFrame();
