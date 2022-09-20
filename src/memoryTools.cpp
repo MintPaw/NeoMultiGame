@@ -342,18 +342,6 @@ int countChar(const char *src, char value) {
 }
 
 bool stringStartsWith(const char *hayStack, const char *needle) {
-	if (strlen(needle) > strlen(hayStack)) return false;
-
-	int len = strlen(needle);
-	bool areSame = true;
-	for (int i = 0; i < len; i++)
-		if (needle[i] != hayStack[i])
-			areSame = false;
-
-	return areSame;
-}
-
-bool stringStartsWithFast(const char *hayStack, const char *needle) {
 	int len = strlen(needle);
 	bool areSame = true;
 	for (int i = 0; i < len; i++)

@@ -290,7 +290,7 @@ void updateAudio(float elapsed) {
 
 		int missingSamples = SAMPLE_BUFFER_LIMIT - audio->storedSamplesPosition;
 		if (missingSamples > 0) {
-			logf("Audio lag: %d\n", missingSamples);
+			// logf("Audio lag: %d\n", missingSamples);
 			mixSoundInToGlobalBuffer(missingSamples);
 		}
 

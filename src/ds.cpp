@@ -20,10 +20,20 @@ struct HashMap {
 	u64 memoryUsed;
 };
 
+struct HashMapIterator {
+	HashMap *hashMap;
+	int listIndex;
+	HashMapNode *currentNode;
+};
+
 HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator=NULL);
 int FORCE_INLINE hashToIndex(HashMap *map, int hash);
 void hashMapSet(HashMap *map, void *key, int hash, void *value);
 bool hashMapGet(HashMap *map, void *key, int hash, void *outValue=NULL);
+
+HashMapNode *init(HashMapIterator *iter, HashMap *hashMap);
+HashMapNode *next(HashMapIterator *iter);
+
 void destroyHashMap(HashMap *map);
 
 HashMap *createHashMap(int keySize, int valueSize, int listsNum, Allocator *allocator) {
@@ -65,7 +75,7 @@ void hashMapSet(HashMap *map, void *key, int hash, void *value) {
 		if (map->usesStreq && streq(*(char **)temp->key, *(char **)key)) found = true;
 		if (!map->usesStreq && memcmp(temp->key, key, map->keySize) == 0) found = true;
 		if (found) {
-			memcpy(temp->key, key, map->keySize);
+			// memcpy(temp->key, key, map->keySize); You don't need to update the key every call
 			memcpy(temp->value, value, map->valueSize);
 			return;
 		}
@@ -103,6 +113,31 @@ bool hashMapGet(HashMap *map, void *key, int hash, void *outValue) {
 	}
 
 	return false;
+}
+
+HashMapNode *init(HashMapIterator *iter, HashMap *hashMap) {
+	iter->hashMap = hashMap;
+	iter->listIndex = 0;
+	iter->currentNode = iter->hashMap->lists[0];
+	if (!iter->currentNode) next(iter);
+	return iter->currentNode;
+}
+
+HashMapNode *next(HashMapIterator *iter) {
+	for (;;) {
+		if (iter->currentNode) {
+			iter->currentNode = iter->currentNode->next;
+			if (iter->currentNode) return iter->currentNode;
+		}
+
+		if (iter->listIndex == iter->hashMap->listsNum-1) return NULL;
+
+		iter->listIndex++;
+		iter->currentNode = iter->hashMap->lists[iter->listIndex];
+		if (iter->currentNode) return iter->currentNode;
+	}
+
+	return iter->currentNode;
 }
 
 void destroyHashMap(HashMap *map) {
