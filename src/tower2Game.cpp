@@ -2,10 +2,18 @@ struct Globals {
 };
 
 struct ActorTypeInfo {
+	bool isTower;
 	bool isEnemy;
 
-	int price;
+	float damage;
+	float hpDamageMulti;
+	float armorDamageMulti;
+	float shieldDamageMulti;
 	float range;
+	float rpm;
+	float mana; // Not used yet
+	int price;
+	float priceMulti;
 
 	float maxHp;
 	float maxArmor;
@@ -32,7 +40,10 @@ enum ActorType {
 	ACTOR_ENEMY41, ACTOR_ENEMY42, ACTOR_ENEMY43, ACTOR_ENEMY44, ACTOR_ENEMY45, ACTOR_ENEMY46, ACTOR_ENEMY47, ACTOR_ENEMY48,
 	ACTOR_ENEMY49, ACTOR_ENEMY50, ACTOR_ENEMY51, ACTOR_ENEMY52, ACTOR_ENEMY53, ACTOR_ENEMY54, ACTOR_ENEMY55, ACTOR_ENEMY56,
 	ACTOR_ENEMY57, ACTOR_ENEMY58, ACTOR_ENEMY59, ACTOR_ENEMY60, ACTOR_ENEMY61, ACTOR_ENEMY62, ACTOR_ENEMY63, ACTOR_ENEMY64,
-	ACTOR_BULLET1,
+	ACTOR_BULLET1, ACTOR_BULLET2, ACTOR_BULLET3, ACTOR_BULLET4,
+	ACTOR_BULLET5, ACTOR_BULLET6, ACTOR_BULLET7, ACTOR_BULLET8,
+	ACTOR_BULLET9, ACTOR_BULLET10, ACTOR_BULLET11, ACTOR_BULLET12,
+	ACTOR_BULLET13, ACTOR_BULLET14, ACTOR_BULLET15, ACTOR_BULLET16,
 	ACTOR_TYPES_MAX,
 };
 struct Actor {
@@ -53,6 +64,9 @@ struct Actor {
 	bool markedForDeletion;
 
 	int bulletTarget;
+	int parentTower;
+
+	float time;
 };
 
 enum TileType {
@@ -143,7 +157,7 @@ void runGame();
 void updateGame();
 void stepGame(float elapsed, bool isLastStep);
 
-		void generateMapFields();
+void generateMapFields();
 Chunk *createChunk(Vec2i position);
 Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
@@ -157,7 +171,9 @@ bool tileBlocksPathing(TileType type);
 Actor *createActor(ActorType type);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
-void dealDamage(Actor *src, Actor *dest);
+void dealDamage(Actor *bullet, Actor *dest);
+
+Actor **getActorsInRange(Circle range, int *outNum);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -215,65 +231,91 @@ void updateGame() {
 		World *world = game->world;
 
 		{ /// Setup actors
-			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+			for (int i = ACTOR_TOWER1; i <= ACTOR_TOWER16; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
-				info->price = 100;
-				info->range = 5 * TILE_SIZE;
-				info->maxHp = 100;
+				info->isTower = true;
+			}
+
+			for (int i = ACTOR_ENEMY1; i <= ACTOR_ENEMY64; i++) {
+				ActorTypeInfo *info = &game->actorTypeInfos[i];
+				info->isEnemy = true;
 			}
 
 			ActorTypeInfo *info = NULL;
 
 			info = &game->actorTypeInfos[ACTOR_TOWER1];
+			info->damage = 10;
+			info->hpDamageMulti = 10;
+			info->armorDamageMulti = 5;
+			info->shieldDamageMulti = 5;
+			info->range = 5 * TILE_SIZE;
+			info->rpm = 20;
+			info->mana = 0;
+			info->price = 10;
+			info->priceMulti = 15;
+
+			info = &game->actorTypeInfos[ACTOR_TOWER2];
+			info->damage = 20;
+			info->hpDamageMulti = 10;
+			info->armorDamageMulti = 15;
+			info->shieldDamageMulti = 5;
+			info->range = 10 * TILE_SIZE;
+			info->rpm = 10;
+			info->mana = 0;
+			info->price = 200;
+			info->priceMulti = 75;
+
+			info = &game->actorTypeInfos[ACTOR_TOWER3];
+			info->damage = 10;
+			info->hpDamageMulti = 6;
+			info->armorDamageMulti = 3;
+			info->shieldDamageMulti = 9;
+			info->range = 1.5 * TILE_SIZE;
+			info->rpm = 30;
+			info->mana = 5;
+			info->price = 200;
+			info->priceMulti = 75;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY1];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 1;
 			info->movementSpeed = 2;
 			info->maxHp = 100;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY2];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 3;
 			info->movementSpeed = 2;
 			info->maxHp = 300;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY3];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 5;
 			info->movementSpeed = 1.75;
 			info->maxHp = 400;
 			info->maxArmor = 200;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY4];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 7;
 			info->movementSpeed = 1.75;
 			info->maxHp = 800;
 			info->hpGainPerSec = 25;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY5];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 9;
 			info->movementSpeed = 1.75;
 			info->maxHp = 400;
 			info->maxArmor = 600;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY6];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 11;
 			info->movementSpeed = 1;
 			info->maxHp = 300;
 			info->maxArmor = 1500;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY7];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 13;
 			info->movementSpeed = 1.25;
 			info->maxHp = 2000;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY8];
-			info->isEnemy = true;
 			info->enemySpawnStartingWave = 15;
 			info->movementSpeed = 1;
 			info->maxHp = 20000;
@@ -538,37 +580,42 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			float movementSpeed = 0.2;
 
-			if (actor->type == ACTOR_TOWER1) {
+			bool towerShouldFire = false;
+			Actor *target = NULL;
+			if (info->isTower) {
 				Circle range = makeCircle(actor->position, info->range);
 
-				Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
-				int enemiesInRangeNum = 0;
-				for (int i = 0; i < world->actorsNum; i++) {
-					Actor *other = &world->actors[i];
-					ActorTypeInfo *otherInfo = &game->actorTypeInfos[other->type];
-					if (!otherInfo->isEnemy) continue;
+				int enemiesInRangeNum;
+				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
 
-					if (contains(range, other->position)) enemiesInRange[enemiesInRangeNum++] = other;
-				}
-
-				Actor *target = NULL;
 				if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
+				if (target) actor->aimRads = radsBetween(actor->position, target->position);
 
 				actor->timeTillNextShot -= elapsed;
+
 				if (target && actor->timeTillNextShot < 0) {
-					actor->timeTillNextShot = 1;
+					actor->timeTillNextShot = 1.0/(info->rpm/60.0);
+					towerShouldFire = true;
+				}
+			}
+
+			if (actor->type == ACTOR_TOWER1) {
+				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
 
-				if (target) {
-					actor->aimRads = radsBetween(actor->position, target->position);
-				}
-
 				drawRect(rect, 0xFF800000);
+
 				Line2 line;
 				line.start = getCenter(rect);
 				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 				drawLine(line, 4, 0xFFFF0000);
+			} else if (actor->type == ACTOR_TOWER2) {
+				if (towerShouldFire) {
+					Actor *bullet = createBullet(actor, target);
+				}
+
+				drawRect(rect, 0xFF909090);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -645,6 +692,33 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				Rect bulletRect = makeCenteredSquare(actor->position, 8);
 				drawRect(bulletRect, 0xFFFF0000);
+			} else if (actor->type == ACTOR_BULLET2) {
+				if (actor->time == 0) {
+					Actor *target = getActor(actor->bulletTarget);
+					if (target) {
+						actor->position = target->position;
+					}
+				}
+
+				float delayTime = 0.5;
+				float explodeRange = 2 * TILE_SIZE;
+				if (actor->time < delayTime) {
+					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
+					drawCircle(actor->position, explodeRange*ghostPerc, 0x20900000);
+				}
+
+				if (actor->time >= delayTime) {
+					Circle circle = makeCircle(actor->position, explodeRange);
+					drawCircle(circle, 0xFFFFFFFF);
+					actor->markedForDeletion = true;
+
+					int enemiesInRangeNum;
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						Actor *enemy = enemiesInRange[i];
+						dealDamage(actor, enemy);
+					}
+				}
 			} else {
 				drawRect(rect, 0xFFFF00FF);
 			}
@@ -664,6 +738,8 @@ void stepGame(float elapsed, bool isLastStep) {
 				// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
 				// drawLine(start, end, 5, 0xFFFF0000);
 			}
+
+			actor->time += elapsed;
 		}
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
@@ -732,6 +808,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 
 			if (canBuild && platform->mouseJustUp) {
+				float price = 0;
 				if (game->money >= info->price) {
 					game->money -= info->price;
 					Actor *newTower = createActor(game->actorToBuild);
@@ -813,10 +890,11 @@ void stepGame(float elapsed, bool isLastStep) {
 								if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= game->wave) {
 									possibleActors[possibleActorsNum++] = (ActorType)i;
 								}
-								if (possibleActorsNum == 0) {
-									logf("No possible actor types to spawn???\n");
-									possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
-								}
+							}
+
+							if (possibleActorsNum == 0) {
+								logf("No possible actor types to spawn???\n");
+								possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
 							}
 
 							int maxEnemies = game->wave * game->wave;
@@ -1127,25 +1205,54 @@ Actor *getActor(int id) {
 }
 
 Actor *createBullet(Actor *src, Actor *target) {
-	Actor *bullet = createActor(ACTOR_BULLET1);
+	ActorType bulletType = ACTOR_BULLET1;
+	if (src->type == ACTOR_TOWER1) bulletType = ACTOR_BULLET1;
+	else if (src->type == ACTOR_TOWER2) bulletType = ACTOR_BULLET2;
+
+	Actor *bullet = createActor(bulletType);
 	bullet->position = src->position;
 	bullet->bulletTarget = target->id;
+	bullet->parentTower = src->id;
 	return bullet;
 }
 
-void dealDamage(Actor *src, Actor *dest) {
-	float damage = 10;
+void dealDamage(Actor *bullet, Actor *dest) {
+	Actor *tower = getActor(bullet->parentTower);
+	if (!tower) return;
+
+	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
+
+	float damage = towerInfo->damage;
 	float damageLeft = damage;
 
 	float shieldDamage = MinNum(damageLeft, dest->shield);
 	damageLeft -= shieldDamage;
-	dest->shield -= shieldDamage;
+	dest->shield -= shieldDamage * towerInfo->shieldDamageMulti;
 
 	float armorDamage = MinNum(damageLeft, dest->armor);
 	damageLeft -= armorDamage;
-	dest->armor -= armorDamage;
+	dest->armor -= armorDamage * towerInfo->armorDamageMulti;
 
-	dest->hp -= damageLeft;
+	dest->hp -= damageLeft * towerInfo->hpDamageMulti;
+}
+
+Actor **getActorsInRange(Circle range, int *outNum) {
+	World *world = game->world;
+
+	*outNum = 0;
+
+	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
+	int enemiesInRangeNum = 0;
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
+		if (!otherInfo->isEnemy) continue;
+
+		if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
+	}
+
+	*outNum = enemiesInRangeNum;
+	return enemiesInRange;
 }
 
 void saveState(char *path) {
