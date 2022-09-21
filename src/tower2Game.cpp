@@ -32,8 +32,8 @@ struct ActorTypeInfo {
 
 enum ActorType {
 	ACTOR_NONE=0,
-	ACTOR_BALLISA_TOWER, ACTOR_MORTAR_TOWER, ACTOR_TESLA_TOWER, ACTOR_TOWER4, ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
-	ACTOR_TOWER9, ACTOR_TOWER10, ACTOR_TOWER11, ACTOR_TOWER12, ACTOR_TOWER13, ACTOR_TOWER14, ACTOR_TOWER15, ACTOR_TOWER16,
+	ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
+	ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON, ACTOR_TOWER13, ACTOR_TOWER14, ACTOR_TOWER15, ACTOR_MANA_SIPHON,
 	ACTOR_ENEMY1, ACTOR_ENEMY2, ACTOR_ENEMY3, ACTOR_ENEMY4, ACTOR_ENEMY5, ACTOR_ENEMY6, ACTOR_ENEMY7, ACTOR_ENEMY8,
 	ACTOR_ENEMY9, ACTOR_ENEMY10, ACTOR_ENEMY11, ACTOR_ENEMY12, ACTOR_ENEMY13, ACTOR_ENEMY14, ACTOR_ENEMY15, ACTOR_ENEMY16,
 	ACTOR_ENEMY17, ACTOR_ENEMY18, ACTOR_ENEMY19, ACTOR_ENEMY20, ACTOR_ENEMY21, ACTOR_ENEMY22, ACTOR_ENEMY23, ACTOR_ENEMY24,
@@ -239,7 +239,7 @@ void updateGame() {
 				sprintf(info->name, "Actor %d", i);
 			}
 
-			for (int i = ACTOR_BALLISA_TOWER; i <= ACTOR_TOWER16; i++) {
+			for (int i = ACTOR_BALLISTA; i <= ACTOR_PARTICLE_CANNON; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				info->isTower = true;
 			}
@@ -251,7 +251,7 @@ void updateGame() {
 
 			ActorTypeInfo *info = NULL;
 
-			info = &game->actorTypeInfos[ACTOR_BALLISA_TOWER];
+			info = &game->actorTypeInfos[ACTOR_BALLISTA];
 			strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 10;
 			info->hpDamageMulti = 10;
@@ -275,7 +275,7 @@ void updateGame() {
 			info->price = 200;
 			info->priceMulti = 75;
 
-			info = &game->actorTypeInfos[ACTOR_TESLA_TOWER];
+			info = &game->actorTypeInfos[ACTOR_TESLA_COIL];
 			strncpy(info->name, "Tesla Coil", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 10;
 			info->hpDamageMulti = 6;
@@ -286,6 +286,48 @@ void updateGame() {
 			info->mana = 5;
 			info->price = 200;
 			info->priceMulti = 75;
+
+			info = &game->actorTypeInfos[ACTOR_FROST_KEEP];
+			strncpy(info->name, "Frost Keep", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 5;
+			info->hpDamageMulti = 10;
+			info->armorDamageMulti = 5;
+			info->shieldDamageMulti = 5;
+			info->range = 2 * TILE_SIZE;
+			info->rpm = 180;
+			info->mana = 2;
+			info->price = 250;
+			info->priceMulti = 100;
+
+			info = &game->actorTypeInfos[ACTOR_FLAME_THROWER];
+			strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 5;
+			info->hpDamageMulti = 6;
+			info->armorDamageMulti = 9;
+			info->shieldDamageMulti = 3;
+			info->range = 4 * TILE_SIZE;
+			info->rpm = 60;
+			info->mana = 1;
+			info->price = 300;
+			info->priceMulti = 75;
+
+			info = &game->actorTypeInfos[ACTOR_POISON_SPRAYER];
+			strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 5;
+			info->hpDamageMulti = 6;
+			info->armorDamageMulti = 3;
+			info->shieldDamageMulti = 9;
+			info->range = 4 * TILE_SIZE;
+			info->rpm = 60;
+			info->mana = 1;
+			info->price = 300;
+			info->priceMulti = 75;
+
+			info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
+			strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 0;
+			info->price = 100;
+			info->priceMulti = 10;
 
 			info = &game->actorTypeInfos[ACTOR_ENEMY1];
 			info->enemySpawnStartingWave = 1;
@@ -616,7 +658,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 			}
 
-			if (actor->type == ACTOR_BALLISA_TOWER) {
+			if (actor->type == ACTOR_BALLISTA) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
@@ -633,7 +675,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 
 				drawRect(rect, 0xFF525252);
-			} else if (actor->type == ACTOR_TESLA_TOWER) {
+			} else if (actor->type == ACTOR_TESLA_COIL) {
 				if (towerShouldFire) {
 					Circle circle = makeCircle(actor->position, info->range);
 					drawCircle(circle, 0xFFB8FFFA);
@@ -793,7 +835,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
 
-			for (int i = ACTOR_BALLISA_TOWER; i <= ACTOR_TOWER8; i++) {
+			for (int i = ACTOR_BALLISTA; i <= ACTOR_TESLA_COIL; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				float price = info->price + info->priceMulti*typeCounts[i];
 				char *label = frameSprintf("%s $%.0f\n", info->name, price);
@@ -1234,7 +1276,7 @@ Actor *getActor(int id) {
 
 Actor *createBullet(Actor *src, Actor *target) {
 	ActorType bulletType = ACTOR_BULLET1;
-	if (src->type == ACTOR_BALLISA_TOWER) bulletType = ACTOR_BULLET1;
+	if (src->type == ACTOR_BALLISTA) bulletType = ACTOR_BULLET1;
 	else if (src->type == ACTOR_MORTAR_TOWER) bulletType = ACTOR_BULLET2;
 
 	Actor *bullet = createActor(bulletType);
