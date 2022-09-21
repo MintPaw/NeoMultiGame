@@ -177,6 +177,7 @@ Actor *createBullet(Actor *src, Actor *target);
 void dealDamage(Actor *bullet, Actor *dest);
 
 Actor **getActorsInRange(Circle range, int *outNum);
+void startNextWave();
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -383,8 +384,10 @@ void updateGame() {
 
 			Chunk *chunk = createChunk(v2i(0, 0));
 
+			int maxChunks = 45;
+
 			for (;;) {
-				if (world->chunksNum > 45-1) {
+				if (world->chunksNum > maxChunks-1) {
 					logf("Done.\n");
 					break;
 				}
@@ -505,7 +508,44 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 		ImGui::InputInt("Money", &game->money);
 		ImGui::InputInt("Wave", &game->wave);
-		ImGui::Checkbox("playingWave", &game->playingWave);
+		ImGui::SameLine();
+		if (ImGui::Button("Next wave")) startNextWave();
+
+		if (ImGui::Button("Add 1000 random ballistas")) {
+			int added = 0;
+			int iters = 0;
+			for (;;) {
+				if (added > 1000) break;
+				if (iters >= 10000) {
+					logf("Failed after 10000...\n");
+					break;
+				}
+
+				Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+				if (!chunk->visible) continue;
+				Vec2i chunkTilePos;
+				chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
+				chunkTilePos.y = rndInt(0, CHUNK_SIZE-1);
+				Tile *tile = &chunk->tiles[chunkTilePos.y * CHUNK_SIZE + chunkTilePos.x];
+				Vec2i tilePos = chunkTileToWorldTile(chunk, chunkTilePos);
+
+				bool canBuild = true;
+				if (tile->type != TILE_GROUND) canBuild = false;
+
+				for (int i = 0; i < world->actorsNum; i++) {
+					Actor *other = &world->actors[i];
+					if (equal(worldToTile(other->position), tilePos)) canBuild = false;
+				}
+
+				if (canBuild) {
+					Actor *newTower = createActor(ACTOR_BALLISTA);
+					newTower->position = tileToWorld(tilePos);
+					added++;
+				}
+
+				iters++;
+			}
+		}
 
 		for (int i = 1; i <= 9; i++) {
 			if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
@@ -906,7 +946,8 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				if (!chunk->visible) continue;
 				if (isPortal) {
-					spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(TILE_SIZE/2, TILE_SIZE/2)));
+					spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
+					drawCircle(spawnPoints[spawnPointsNum-1], 32, 0xFF0000FF);
 				}
 				for (int i = 0; i < chunk->connectionsNum; i++) {
 					Chunk *newChunk = getChunkAt(chunk->connections[i]);
@@ -949,31 +990,7 @@ void stepGame(float elapsed, bool isLastStep) {
 						exploreRect = inflatePerc(exploreRect, 0.1);
 						if (platform->mouseJustUp) {
 							newChunk->visible = true;
-							game->playingWave = true;
-							game->wave++;
-
-							ActorType *possibleActors = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
-							int possibleActorsNum = 0;
-
-							for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
-								ActorTypeInfo *info = &game->actorTypeInfos[i];
-								if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= game->wave) {
-									possibleActors[possibleActorsNum++] = (ActorType)i;
-								}
-							}
-
-							if (possibleActorsNum == 0) {
-								logf("No possible actor types to spawn???\n");
-								possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
-							}
-
-							int maxEnemies = game->wave * game->wave;
-							for (int i = 0; i < maxEnemies; i++) {
-								float value = rndFloat(0, 1);
-								value = tweenEase(value, QUAD_IN);
-								int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
-								game->actorsToSpawn[game->actorsToSpawnNum++] = possibleActors[index];
-							}
+							startNextWave();
 						}
 					}
 
@@ -1049,7 +1066,7 @@ void generateMapFields() {
 
 				int cost = 1;
 				if (tileBlocksPathing(neighborTile->type)) {
-					cost += 10;
+					cost += 9999;
 				}
 
 				int newCost = currentTile->costSoFar + cost;
@@ -1330,6 +1347,34 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 
 	*outNum = enemiesInRangeNum;
 	return enemiesInRange;
+}
+
+void startNextWave() {
+	game->playingWave = true;
+	game->wave++;
+
+	ActorType *possibleActors = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
+	int possibleActorsNum = 0;
+
+	for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+		ActorTypeInfo *info = &game->actorTypeInfos[i];
+		if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= game->wave) {
+			possibleActors[possibleActorsNum++] = (ActorType)i;
+		}
+	}
+
+	if (possibleActorsNum == 0) {
+		logf("No possible actor types to spawn???\n");
+		possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
+	}
+
+	int maxEnemies = game->wave * game->wave;
+	for (int i = 0; i < maxEnemies; i++) {
+		float value = rndFloat(0, 1);
+		value = tweenEase(value, QUAD_IN);
+		int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
+		game->actorsToSpawn[game->actorsToSpawnNum++] = possibleActors[index];
+	}
 }
 
 void saveState(char *path) {
