@@ -32,7 +32,7 @@ struct ActorTypeInfo {
 
 enum ActorType {
 	ACTOR_NONE=0,
-	ACTOR_TOWER1, ACTOR_TOWER2, ACTOR_TOWER3, ACTOR_TOWER4, ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
+	ACTOR_BALLISA_TOWER, ACTOR_MORTAR_TOWER, ACTOR_TESLA_TOWER, ACTOR_TOWER4, ACTOR_TOWER5, ACTOR_TOWER6, ACTOR_TOWER7, ACTOR_TOWER8,
 	ACTOR_TOWER9, ACTOR_TOWER10, ACTOR_TOWER11, ACTOR_TOWER12, ACTOR_TOWER13, ACTOR_TOWER14, ACTOR_TOWER15, ACTOR_TOWER16,
 	ACTOR_ENEMY1, ACTOR_ENEMY2, ACTOR_ENEMY3, ACTOR_ENEMY4, ACTOR_ENEMY5, ACTOR_ENEMY6, ACTOR_ENEMY7, ACTOR_ENEMY8,
 	ACTOR_ENEMY9, ACTOR_ENEMY10, ACTOR_ENEMY11, ACTOR_ENEMY12, ACTOR_ENEMY13, ACTOR_ENEMY14, ACTOR_ENEMY15, ACTOR_ENEMY16,
@@ -144,6 +144,7 @@ struct Game {
 	Tool tool;
 	ActorType actorToBuild;
 
+	int hp;
 	int money;
 
 	int wave;
@@ -238,7 +239,7 @@ void updateGame() {
 				sprintf(info->name, "Actor %d", i);
 			}
 
-			for (int i = ACTOR_TOWER1; i <= ACTOR_TOWER16; i++) {
+			for (int i = ACTOR_BALLISA_TOWER; i <= ACTOR_TOWER16; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				info->isTower = true;
 			}
@@ -250,7 +251,7 @@ void updateGame() {
 
 			ActorTypeInfo *info = NULL;
 
-			info = &game->actorTypeInfos[ACTOR_TOWER1];
+			info = &game->actorTypeInfos[ACTOR_BALLISA_TOWER];
 			strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 10;
 			info->hpDamageMulti = 10;
@@ -262,7 +263,7 @@ void updateGame() {
 			info->price = 10;
 			info->priceMulti = 15;
 
-			info = &game->actorTypeInfos[ACTOR_TOWER2];
+			info = &game->actorTypeInfos[ACTOR_MORTAR_TOWER];
 			strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 20;
 			info->hpDamageMulti = 10;
@@ -274,7 +275,8 @@ void updateGame() {
 			info->price = 200;
 			info->priceMulti = 75;
 
-			info = &game->actorTypeInfos[ACTOR_TOWER3];
+			info = &game->actorTypeInfos[ACTOR_TESLA_TOWER];
+			strncpy(info->name, "Tesla Coil", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 10;
 			info->hpDamageMulti = 6;
 			info->armorDamageMulti = 3;
@@ -411,8 +413,8 @@ void updateGame() {
 			world->chunks[0].visible = true;
 		} ///
 
+		game->hp = 10;
 		generateMapFields();
-
 	}
 
 	game->size = v2(platform->windowSize);
@@ -614,7 +616,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 			}
 
-			if (actor->type == ACTOR_TOWER1) {
+			if (actor->type == ACTOR_BALLISA_TOWER) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
@@ -625,12 +627,25 @@ void stepGame(float elapsed, bool isLastStep) {
 				line.start = getCenter(rect);
 				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 				drawLine(line, 4, 0xFFFF0000);
-			} else if (actor->type == ACTOR_TOWER2) {
+			} else if (actor->type == ACTOR_MORTAR_TOWER) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
 
-				drawRect(rect, 0xFF909090);
+				drawRect(rect, 0xFF525252);
+			} else if (actor->type == ACTOR_TESLA_TOWER) {
+				if (towerShouldFire) {
+					Circle circle = makeCircle(actor->position, info->range);
+					drawCircle(circle, 0xFFB8FFFA);
+					int enemiesInRangeNum;
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						Actor *enemy = enemiesInRange[i];
+						dealDamage(actor, enemy);
+					}
+				}
+
+				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -655,6 +670,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
 				if (overlaps(rect, goalRect)) {
+					game->hp--;
 					actor->markedForDeletion = true;
 				}
 
@@ -777,7 +793,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
 
-			for (int i = ACTOR_TOWER1; i <= ACTOR_TOWER3; i++) {
+			for (int i = ACTOR_BALLISA_TOWER; i <= ACTOR_TOWER8; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				float price = info->price + info->priceMulti*typeCounts[i];
 				char *label = frameSprintf("%s $%.0f\n", info->name, price);
@@ -786,19 +802,6 @@ void stepGame(float elapsed, bool isLastStep) {
 					game->actorToBuild = (ActorType)i;
 				}
 			}
-
-			// if (nguiButton("Tower1")) {
-			// 	game->tool = TOOL_BUILDING;
-			// 	game->actorToBuild = ACTOR_TOWER1;
-			// }
-			// if (nguiButton("Tower2")) {
-			// 	game->tool = TOOL_BUILDING;
-			// 	game->actorToBuild = ACTOR_TOWER2;
-			// }
-			// if (nguiButton("Tower3")) {
-			// 	game->tool = TOOL_BUILDING;
-			// 	game->actorToBuild = ACTOR_TOWER3;
-			// }
 
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
@@ -952,7 +955,7 @@ void stepGame(float elapsed, bool isLastStep) {
 	{
 		Rect rect = makeRect(0, 0, 350, 100);
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-		drawTextInRect(frameSprintf("Money $%d", game->money), props, rect);
+		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d", game->hp, game->money), props, rect);
 	}
 
 	nguiDraw(elapsed);
@@ -1231,8 +1234,8 @@ Actor *getActor(int id) {
 
 Actor *createBullet(Actor *src, Actor *target) {
 	ActorType bulletType = ACTOR_BULLET1;
-	if (src->type == ACTOR_TOWER1) bulletType = ACTOR_BULLET1;
-	else if (src->type == ACTOR_TOWER2) bulletType = ACTOR_BULLET2;
+	if (src->type == ACTOR_BALLISA_TOWER) bulletType = ACTOR_BULLET1;
+	else if (src->type == ACTOR_MORTAR_TOWER) bulletType = ACTOR_BULLET2;
 
 	Actor *bullet = createActor(bulletType);
 	bullet->position = src->position;
@@ -1241,8 +1244,15 @@ Actor *createBullet(Actor *src, Actor *target) {
 	return bullet;
 }
 
-void dealDamage(Actor *bullet, Actor *dest) {
-	Actor *tower = getActor(bullet->parentTower);
+void dealDamage(Actor *src, Actor *dest) {
+	Actor *tower = NULL;
+
+	ActorTypeInfo *srcInfo = &game->actorTypeInfos[src->type];
+	if (srcInfo->isTower) {
+		tower = src;
+	} else {
+		tower = getActor(src->parentTower);
+	}
 	if (!tower) return;
 
 	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
@@ -1283,7 +1293,7 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 void saveState(char *path) {
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 2); // Version;
+	writeU32(stream, 3); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -1291,6 +1301,7 @@ void saveState(char *path) {
 	writeWorld(stream, game->world);
 	writeU32(stream, game->tool);
 	writeU32(stream, game->actorToBuild);
+	writeU32(stream, game->hp);
 	writeU32(stream, game->money);
 	writeU32(stream, game->wave);
 	writeU8(stream, game->playingWave);
@@ -1355,6 +1366,7 @@ void loadState(char *path) {
 	readWorld(stream, game->world, version);
 	game->tool = (Tool)readU32(stream);
 	game->actorToBuild = (ActorType)readU32(stream);
+	game->hp = version >= 3 ? readU32(stream) : 10;
 	game->money = readU32(stream);
 	game->wave = readU32(stream);
 	game->playingWave = readU8(stream);
