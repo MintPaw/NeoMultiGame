@@ -2,6 +2,8 @@ struct Globals {
 };
 
 struct ActorTypeInfo {
+#define ACTOR_TYPE_NAME_MAX_LEN 128
+	char name[ACTOR_TYPE_NAME_MAX_LEN];
 	bool isTower;
 	bool isEnemy;
 
@@ -231,6 +233,11 @@ void updateGame() {
 		World *world = game->world;
 
 		{ /// Setup actors
+			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+				ActorTypeInfo *info = &game->actorTypeInfos[i];
+				sprintf(info->name, "Actor %d", i);
+			}
+
 			for (int i = ACTOR_TOWER1; i <= ACTOR_TOWER16; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				info->isTower = true;
@@ -244,6 +251,7 @@ void updateGame() {
 			ActorTypeInfo *info = NULL;
 
 			info = &game->actorTypeInfos[ACTOR_TOWER1];
+			strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 10;
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 5;
@@ -255,6 +263,7 @@ void updateGame() {
 			info->priceMulti = 15;
 
 			info = &game->actorTypeInfos[ACTOR_TOWER2];
+			strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 20;
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 15;
@@ -491,6 +500,12 @@ void stepGame(float elapsed, bool isLastStep) {
 	}
 
 	pushCamera2d(cameraMatrix);
+
+	int *typeCounts = (int *)frameMalloc(sizeof(int) * ACTOR_TYPES_MAX);
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		typeCounts[actor->type]++;
+	}
 
 	if (isLastStep) {
 		Vec2 moveDir = v2();
@@ -762,18 +777,28 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
 
-			if (nguiButton("Tower1")) {
-				game->tool = TOOL_BUILDING;
-				game->actorToBuild = ACTOR_TOWER1;
+			for (int i = ACTOR_TOWER1; i <= ACTOR_TOWER3; i++) {
+				ActorTypeInfo *info = &game->actorTypeInfos[i];
+				float price = info->price + info->priceMulti*typeCounts[i];
+				char *label = frameSprintf("%s $%.0f\n", info->name, price);
+				if (nguiButton(label)) {
+					game->tool = TOOL_BUILDING;
+					game->actorToBuild = (ActorType)i;
+				}
 			}
-			if (nguiButton("Tower2")) {
-				game->tool = TOOL_BUILDING;
-				game->actorToBuild = ACTOR_TOWER2;
-			}
-			if (nguiButton("Tower3")) {
-				game->tool = TOOL_BUILDING;
-				game->actorToBuild = ACTOR_TOWER3;
-			}
+
+			// if (nguiButton("Tower1")) {
+			// 	game->tool = TOOL_BUILDING;
+			// 	game->actorToBuild = ACTOR_TOWER1;
+			// }
+			// if (nguiButton("Tower2")) {
+			// 	game->tool = TOOL_BUILDING;
+			// 	game->actorToBuild = ACTOR_TOWER2;
+			// }
+			// if (nguiButton("Tower3")) {
+			// 	game->tool = TOOL_BUILDING;
+			// 	game->actorToBuild = ACTOR_TOWER3;
+			// }
 
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
@@ -808,9 +833,9 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 
 			if (canBuild && platform->mouseJustUp) {
-				float price = 0;
-				if (game->money >= info->price) {
-					game->money -= info->price;
+				float price = info->price + info->priceMulti*typeCounts[game->actorToBuild];
+				if (game->money >= price) {
+					game->money -= price;
 					Actor *newTower = createActor(game->actorToBuild);
 					newTower->position = center;
 					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
