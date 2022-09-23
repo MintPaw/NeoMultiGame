@@ -613,7 +613,9 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				}
 				if (drawable->name && stringStartsWith(drawable->name, "LAYEREND_")) {
 					char *layerToEnd = drawable->name + strlen("LAYEREND_");
-					if (!streq(layerToEnd, currentLayerName)) logf("Tried to end layer %s, but we're in layer %s\n", layerToEnd, currentLayerName);
+					if (!streq(layerToEnd, currentLayerName)) {
+						logf("Tried to end layer %s, but we're in layer %s (in %s)\n", layerToEnd, currentLayerName, recurse.path);
+					}
 					currentLayerName = NULL;
 				}
 

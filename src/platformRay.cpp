@@ -1654,7 +1654,7 @@ void guiInit() {
 	io.ClipboardUserData = NULL;
 
 	ImGui::GetStyle().ScaleAllSizes(platform->windowScaling);
-	ImGui::GetIO().FontGlobalScale = platform->windowScaling;
+	ImGui::GetIO().FontGlobalScale *= platform->windowScaling;
 
 	{ /// Reload fonts
 		ImGuiIO& io = ImGui::GetIO();

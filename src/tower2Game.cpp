@@ -76,12 +76,15 @@ enum TileType {
 	TILE_HOME,
 	TILE_GROUND,
 	TILE_ROAD,
+	TILE_MANA_CRYSTAL,
 };
 struct Tile {
 	TileType type;
 	Vec2 flow;
 	int costSoFar;
 	int dijkstraValue;
+	u8 height;
+	float perlinValue;
 };
 
 #define TILE_SIZE 64
@@ -129,6 +132,7 @@ struct Game {
 	bool debugShowFrameTimes;
 	bool debugShowDijkstraValues;
 	bool debugShowFlowFieldValues;
+	bool debugShowPerlinValues;
 	bool debugDrawChunkLines;
 	bool debugDrawTileLines;
 	bool debugShowActorVelo;
@@ -447,11 +451,20 @@ void updateGame() {
 					cutRight = cutRight || connection.x > chunk->position.x;
 				}
 
+				Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
+				int toMakeRoadNum = 0;
 				for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
-					if (cutLeft) chunk->tiles[centerTile.y * CHUNK_SIZE + (centerTile.x - i)].type = TILE_ROAD;
-					if (cutRight) chunk->tiles[centerTile.y * CHUNK_SIZE + (centerTile.x + i)].type = TILE_ROAD;
-					if (cutUp) chunk->tiles[(centerTile.y - i) * CHUNK_SIZE + centerTile.x].type = TILE_ROAD;
-					if (cutDown) chunk->tiles[(centerTile.y + i) * CHUNK_SIZE + centerTile.x].type = TILE_ROAD;
+					if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
+					if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
+					if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
+					if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
+				}
+
+				for (int i = 0; i < toMakeRoadNum; i++) {
+					Vec2i pos = toMakeRoad[i];
+					Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
+					tile->type = TILE_ROAD;
+					tile->height = 0;
 				}
 			}
 
@@ -497,6 +510,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
+		ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
 		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
 		ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
 		ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
@@ -637,11 +651,19 @@ void stepGame(float elapsed, bool isLastStep) {
 
 					int color = 0x00000000;
 
-					if (tile->type == TILE_ROAD) color = 0xFF966F02;
-					if (tile->type == TILE_GROUND) color = 0xFF017301;
 					if (tile->type == TILE_HOME) color = 0xFFFFF333;
+					if (tile->type == TILE_GROUND || tile->type == TILE_MANA_CRYSTAL) color = 0xFF017301;
+					if (tile->type == TILE_ROAD) color = 0xFF966F02;
+
+					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
+					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
+					color = lerpColor(color, 0xFF000000, heightShadePerc);
 
 					drawRect(rect, color);
+
+					if (tile->type == TILE_MANA_CRYSTAL) {
+						drawRect(inflatePerc(rect, -0.6), 0xFF19C4FF);
+					}
 
 					if (game->debugShowDijkstraValues) {
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
@@ -654,6 +676,11 @@ void stepGame(float elapsed, bool isLastStep) {
 							Vec2 end = start + tile->flow*TILE_SIZE/2;
 							drawLine(start, end, 4, 0xFFFF0000);
 						}
+					}
+
+					if (game->debugShowPerlinValues) {
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect(frameSprintf("%.02f", tile->perlinValue), props, rect);
 					}
 
 					if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
@@ -1002,7 +1029,10 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				bool isPortal = false; //@copyPastedIsPortal
 				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
-				if (isPortal) drawRect(chunk->rect, 0x80FF0000);
+				if (isPortal) {
+					Rect portalTileRect = tileToWorldRect(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
+					drawRect(portalTileRect, 0x80FF0000);
+				}
 			}
 		}
 	} ///
@@ -1157,10 +1187,24 @@ Chunk *createChunk(Vec2i position) {
 	chunk->rect.x = chunk->position.x * chunk->rect.width;
 	chunk->rect.y = chunk->position.y * chunk->rect.height;
 
+	Vec2 baseHeightPerlinPos = v2(chunk->position + v2i(1000, 1000));
+	if (baseHeightPerlinPos.x < 0 || baseHeightPerlinPos.y < 0) logf("baseHeightPerlinPos is %f %f\n", baseHeightPerlinPos.x, baseHeightPerlinPos.y);
+
+	float manaCrystalPerc = 0.01;
+
 	for (int y = 0; y < CHUNK_SIZE; y++) {
 		for (int x = 0; x < CHUNK_SIZE; x++) {
 			Tile *tile = &chunk->tiles[y * CHUNK_SIZE + x];
 			tile->type = TILE_GROUND;
+
+			Vec2 heightPerlinPos = baseHeightPerlinPos + (v2(x, y) / v2(CHUNK_SIZE, CHUNK_SIZE));
+			float perlinValue = perlin2d(heightPerlinPos.x, heightPerlinPos.y);
+			tile->perlinValue = perlinValue;
+			tile->height = clampMap(perlinValue, 0.5, 1, 0, 3);
+
+			if (rndPerc(manaCrystalPerc)) {
+				tile->type = TILE_MANA_CRYSTAL;
+			}
 		}
 	}
 
@@ -1380,7 +1424,7 @@ void startNextWave() {
 void saveState(char *path) {
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 3); // version
+	writeU32(stream, 4); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -1436,6 +1480,7 @@ void writeTile(DataStream *stream, Tile tile) {
 	writeVec2(stream, tile.flow);
 	writeU32(stream, tile.costSoFar);
 	writeU32(stream, tile.dijkstraValue);
+	writeU8(stream, tile.height);
 }
 
 void loadState(char *path) {
@@ -1502,5 +1547,6 @@ Tile readTile(DataStream *stream, int version) {
 	tile.flow = readVec2(stream);
 	tile.costSoFar = readU32(stream);
 	tile.dijkstraValue = readU32(stream);
+	if (version >= 4) tile.height = readU8(stream);
 	return tile;
 }

@@ -945,7 +945,7 @@ int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 u32 totalDrawables = 0;
 void *makeDrawables(int drawablesNum) {
 	totalDrawables += drawablesNum;
-	if (totalDrawables % 1000 == 0) logf("%d drawables\n", totalDrawables);
+	// if (totalDrawables % 1000 == 0) logf("%d drawables\n", totalDrawables);
 	return zalloc(sizeof(SwfDrawable) * drawablesNum);
 }
 

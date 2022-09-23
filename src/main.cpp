@@ -131,6 +131,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "dataStream.cpp"
 
 #include "rnd.cpp"
+#include "perlin.cpp"
 #include "ds.cpp"
 #include "compression.cpp"
 #include "logging.cpp"
