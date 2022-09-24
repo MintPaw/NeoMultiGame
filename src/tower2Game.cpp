@@ -1,3 +1,4 @@
+#define FROST_FALL_DISTANCE 64
 struct Globals {
 };
 
@@ -42,7 +43,7 @@ enum ActorType {
 	ACTOR_ENEMY41, ACTOR_ENEMY42, ACTOR_ENEMY43, ACTOR_ENEMY44, ACTOR_ENEMY45, ACTOR_ENEMY46, ACTOR_ENEMY47, ACTOR_ENEMY48,
 	ACTOR_ENEMY49, ACTOR_ENEMY50, ACTOR_ENEMY51, ACTOR_ENEMY52, ACTOR_ENEMY53, ACTOR_ENEMY54, ACTOR_ENEMY55, ACTOR_ENEMY56,
 	ACTOR_ENEMY57, ACTOR_ENEMY58, ACTOR_ENEMY59, ACTOR_ENEMY60, ACTOR_ENEMY61, ACTOR_ENEMY62, ACTOR_ENEMY63, ACTOR_ENEMY64,
-	ACTOR_BULLET1, ACTOR_BULLET2, ACTOR_BULLET3, ACTOR_BULLET4,
+	ACTOR_BALLISTA_ARROW, ACTOR_MORTAR, ACTOR_FROST, ACTOR_BULLET4,
 	ACTOR_BULLET5, ACTOR_BULLET6, ACTOR_BULLET7, ACTOR_BULLET8,
 	ACTOR_BULLET9, ACTOR_BULLET10, ACTOR_BULLET11, ACTOR_BULLET12,
 	ACTOR_BULLET13, ACTOR_BULLET14, ACTOR_BULLET15, ACTOR_BULLET16,
@@ -60,6 +61,11 @@ struct Actor {
 	float hp;
 	float armor;
 	float shield;
+
+	int slow;
+	int poison;
+	int burn;
+	int bleed;
 
 	float timeTillNextShot;
 
@@ -179,6 +185,7 @@ Actor *createActor(ActorType type);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
 void dealDamage(Actor *bullet, Actor *dest);
+Rect getRect(Actor *actor);
 
 Actor **getActorsInRange(Circle range, int *outNum);
 void startNextWave();
@@ -378,7 +385,7 @@ void updateGame() {
 			info->movementSpeed = 1;
 			info->maxHp = 20000;
 
-			info = &game->actorTypeInfos[ACTOR_BULLET1];
+			info = &game->actorTypeInfos[ACTOR_BALLISTA_ARROW];
 			info->bulletSpeed = 20;
 		} ///
 
@@ -472,6 +479,7 @@ void updateGame() {
 		} ///
 
 		game->hp = 10;
+		game->money = 1000;
 		generateMapFields();
 	}
 
@@ -698,30 +706,45 @@ void stepGame(float elapsed, bool isLastStep) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
-			Rect rect = {};
-			rect.width = TILE_SIZE * 0.5;
-			rect.height = TILE_SIZE * 0.5;
-			rect.x = actor->position.x - rect.width/2;
-			rect.y = actor->position.y - rect.height/2;
+			Rect rect = getRect(actor);
 
-			float movementSpeed = 0.2;
+			float movementSpeed = info->movementSpeed;
+			movementSpeed *= clampMap(actor->slow, 0, 60, 1, 0.4);
+			actor->slow -= 6;
+			if (actor->slow < 0) actor->slow = 0;
+
+			bool towerCaresAboutTargets = true;
+			bool towerIsActiveBetweenWaves = true;
+
+			if (actor->type == ACTOR_FROST_KEEP) {
+				towerCaresAboutTargets = false;
+				towerIsActiveBetweenWaves = false;
+			}
 
 			bool towerShouldFire = false;
 			Actor *target = NULL;
 			if (info->isTower) {
-				Circle range = makeCircle(actor->position, info->range);
+				if (towerCaresAboutTargets) {
+					Circle range = makeCircle(actor->position, info->range);
 
-				int enemiesInRangeNum;
-				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
+					int enemiesInRangeNum;
+					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
 
-				if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
-				if (target) actor->aimRads = radsBetween(actor->position, target->position);
+					if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
+					if (target) actor->aimRads = radsBetween(actor->position, target->position);
+				}
 
-				actor->timeTillNextShot -= elapsed;
+				bool isActive = true;
+				if (!game->playingWave && !towerIsActiveBetweenWaves) isActive = false;
+				if (!target && towerCaresAboutTargets) isActive = false;
 
-				if (target && actor->timeTillNextShot < 0) {
-					actor->timeTillNextShot = 1.0/(info->rpm/60.0);
-					towerShouldFire = true;
+				if (isActive) {
+					actor->timeTillNextShot -= elapsed;
+
+					if (actor->timeTillNextShot < 0) {
+						actor->timeTillNextShot = 1.0/(info->rpm/60.0);
+						towerShouldFire = true;
+					}
 				}
 			}
 
@@ -755,6 +778,44 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 
 				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
+			} else if (actor->type == ACTOR_FROST_KEEP) {
+				if (towerShouldFire) {
+					Vec2i towerTilePos = worldToTile(actor->position);
+					Vec2i min = towerTilePos;
+					min.x -= (info->range / TILE_SIZE);
+					min.y -= (info->range / TILE_SIZE);
+
+					Vec2i max = towerTilePos;
+					max.x += (info->range / TILE_SIZE);
+					max.y += (info->range / TILE_SIZE);
+
+					Vec2i *possibleTiles = (Vec2i *)frameMalloc(sizeof(Vec2i) * ((max.x - min.x) + (max.y - min.y) + 1));
+					int possibleTilesNum = 0;
+
+					for (int y = min.y; y <= max.y; y++) {
+						for (int x = min.x; x <= max.x; x++) {
+							Vec2i tilePos = v2i(x, y);
+							Rect rect = tileToWorldRect(tilePos);
+							Tile *tile = getTileAt(tilePos);
+							if (!tile) continue;
+							if (!tileBlocksPathing(tile->type)) {
+								possibleTiles[possibleTilesNum++] = tilePos;
+							}
+						}
+					} 
+
+					if (possibleTilesNum > 0) {
+						Vec2i tilePos = possibleTiles[rndInt(0, possibleTilesNum-1)];
+						Actor *bullet = createBullet(actor, NULL);
+						bullet->position = tileToWorld(tilePos);
+						bullet->position.x += rndFloat(-0.5, 0.5) * (float)TILE_SIZE;
+						bullet->position.y += rndFloat(-0.5, 0.5) * (float)TILE_SIZE;
+						bullet->position.y -= FROST_FALL_DISTANCE;
+						bullet->position.y += TILE_SIZE/2;
+					}
+				}
+
+				drawRect(rect, 0xFFE3F0F5);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -774,7 +835,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					if (tile && !isZero(tile->flow)) dir += tile->flow;
 				}
 				dir = normalize(dir);
-				actor->accel = dir * movementSpeed;
+				actor->accel = dir * (movementSpeed * elapsed) * 5;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
@@ -785,8 +846,8 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				drawRect(rect, 0xFF008000);
 
+				Rect vitalityRect = rect;
 				{
-					Rect vitalityRect = rect;
 					vitalityRect.height = 4;
 					vitalityRect.y = rect.y - vitalityRect.height - 4;
 					float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
@@ -812,13 +873,20 @@ void stepGame(float elapsed, bool isLastStep) {
 					drawRect(shieldRect, 0xFF718691);
 				}
 
+				if (actor->slow > 0) {
+					Rect slowRect = vitalityRect;
+					slowRect.y -= slowRect.height + 4;
+					slowRect.width *= clampMap(actor->slow, 0, 5000, 0, 1, QUINT_OUT);
+					drawRect(slowRect, 0xFF01335C);
+				}
+
 				actor->hp += info->hpGainPerSec * elapsed;
 				actor->armor += info->armorGainPerSec * elapsed;
 				actor->shield += info->shieldGainPerSec * elapsed;
 				actor->hp = mathClamp(actor->hp, 0, info->maxHp);
 				actor->armor = mathClamp(actor->armor, 0, info->maxArmor);
 				actor->shield = mathClamp(actor->shield, 0, info->maxShield);
-			} else if (actor->type == ACTOR_BULLET1) {
+			} else if (actor->type == ACTOR_BALLISTA_ARROW) {
 				Actor *target = getActor(actor->bulletTarget);
 				if (target) {
 					actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
@@ -832,7 +900,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				Rect bulletRect = makeCenteredSquare(actor->position, 8);
 				drawRect(bulletRect, 0xFFFF0000);
-			} else if (actor->type == ACTOR_BULLET2) {
+			} else if (actor->type == ACTOR_MORTAR) {
 				if (actor->time == 0) {
 					Actor *target = getActor(actor->bulletTarget);
 					if (target) {
@@ -859,6 +927,26 @@ void stepGame(float elapsed, bool isLastStep) {
 						dealDamage(actor, enemy);
 					}
 				}
+			} else if (actor->type == ACTOR_FROST) {
+				int maxTime = 10;
+				float fallSpeedPerSec = FROST_FALL_DISTANCE / (float)maxTime;
+				actor->position.y += fallSpeedPerSec * elapsed;
+				rect = makeCenteredSquare(getCenter(rect), 8);
+
+				Circle range = makeCircle(getCenter(rect), rect.width/2); // Purposely way larger
+
+				int enemiesInRangeNum;
+				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
+				for (int i = 0; i < enemiesInRangeNum; i++) {
+					Actor *enemy = enemiesInRange[i];
+					if (overlaps(getRect(enemy), rect)) {
+						enemy->slow += 300;
+						actor->markedForDeletion = true;
+					}
+				}
+
+				drawRect(rect, 0xFFFFFFFF);
+				if (actor->time > maxTime) actor->markedForDeletion = true;
 			} else {
 				drawRect(rect, 0xFFFF00FF);
 			}
@@ -902,13 +990,19 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
 
-			for (int i = ACTOR_BALLISTA; i <= ACTOR_TESLA_COIL; i++) {
-				ActorTypeInfo *info = &game->actorTypeInfos[i];
-				float price = info->price + info->priceMulti*typeCounts[i];
+			ActorType typesCanBuy[] = {
+				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER
+			};
+			int typesCanBuyNum = ArrayLength(typesCanBuy);
+
+			for (int i = 0; i < typesCanBuyNum; i++) {
+				ActorType actorType = typesCanBuy[i];
+				ActorTypeInfo *info = &game->actorTypeInfos[actorType];
+				float price = info->price + info->priceMulti*typeCounts[actorType];
 				char *label = frameSprintf("%s $%.0f\n", info->name, price);
 				if (nguiButton(label)) {
 					game->tool = TOOL_BUILDING;
-					game->actorToBuild = (ActorType)i;
+					game->actorToBuild = actorType;
 				}
 			}
 
@@ -1190,8 +1284,6 @@ Chunk *createChunk(Vec2i position) {
 	Vec2 baseHeightPerlinPos = v2(chunk->position + v2i(1000, 1000));
 	if (baseHeightPerlinPos.x < 0 || baseHeightPerlinPos.y < 0) logf("baseHeightPerlinPos is %f %f\n", baseHeightPerlinPos.x, baseHeightPerlinPos.y);
 
-	float manaCrystalPerc = 0.01;
-
 	for (int y = 0; y < CHUNK_SIZE; y++) {
 		for (int x = 0; x < CHUNK_SIZE; x++) {
 			Tile *tile = &chunk->tiles[y * CHUNK_SIZE + x];
@@ -1201,10 +1293,6 @@ Chunk *createChunk(Vec2i position) {
 			float perlinValue = perlin2d(heightPerlinPos.x, heightPerlinPos.y);
 			tile->perlinValue = perlinValue;
 			tile->height = clampMap(perlinValue, 0.5, 1, 0, 3);
-
-			if (rndPerc(manaCrystalPerc)) {
-				tile->type = TILE_MANA_CRYSTAL;
-			}
 		}
 	}
 
@@ -1336,13 +1424,14 @@ Actor *getActor(int id) {
 }
 
 Actor *createBullet(Actor *src, Actor *target) {
-	ActorType bulletType = ACTOR_BULLET1;
-	if (src->type == ACTOR_BALLISTA) bulletType = ACTOR_BULLET1;
-	else if (src->type == ACTOR_MORTAR_TOWER) bulletType = ACTOR_BULLET2;
+	ActorType bulletType = ACTOR_BALLISTA_ARROW;
+	if (src->type == ACTOR_BALLISTA) bulletType = ACTOR_BALLISTA_ARROW;
+	else if (src->type == ACTOR_MORTAR_TOWER) bulletType = ACTOR_MORTAR;
+	else if (src->type == ACTOR_FROST_KEEP) bulletType = ACTOR_FROST;
 
 	Actor *bullet = createActor(bulletType);
 	bullet->position = src->position;
-	bullet->bulletTarget = target->id;
+	if (target) bullet->bulletTarget = target->id;
 	bullet->parentTower = src->id;
 	return bullet;
 }
@@ -1374,6 +1463,15 @@ void dealDamage(Actor *src, Actor *dest) {
 	dest->hp -= damageLeft * towerInfo->hpDamageMulti;
 }
 
+Rect getRect(Actor *actor) {
+	Rect rect = {};
+	rect.width = TILE_SIZE * 0.5;
+	rect.height = TILE_SIZE * 0.5;
+	rect.x = actor->position.x - rect.width/2;
+	rect.y = actor->position.y - rect.height/2;
+	return rect;
+}
+
 Actor **getActorsInRange(Circle range, int *outNum) {
 	World *world = game->world;
 
@@ -1386,7 +1484,8 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
 		if (!otherInfo->isEnemy) continue;
 
-		if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
+		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
+		if (contains(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
 	}
 
 	*outNum = enemiesInRangeNum;
@@ -1550,3 +1649,5 @@ Tile readTile(DataStream *stream, int version) {
 	if (version >= 4) tile.height = readU8(stream);
 	return tile;
 }
+
+//@consider Frost keep has a square range
