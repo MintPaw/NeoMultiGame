@@ -4457,6 +4457,16 @@ Tri2 operator*(Matrix3 matrix, Tri2 tri) {
 	return ret;
 }
 
+
+Tri2 makeTri2(Vec2 a, Vec2 b, Vec2 c);
+Tri2 makeTri2(Vec2 a, Vec2 b, Vec2 c) {
+	Tri2 tri;
+	tri.verts[0] = a;
+	tri.verts[1] = b;
+	tri.verts[2] = c;
+	return tri;
+}
+
 void toTris(Rect rect, Tri2 *tri0, Tri2 *tri1);
 void toTris(Rect rect, Tri2 *tri0, Tri2 *tri1) {
 	tri0->verts[0].x = rect.x;
@@ -4528,6 +4538,27 @@ bool overlaps(Tri2 tri0, Tri2 tri1) {
 			if (overlaps(line0, line1)) return true;
 		}
 	}
+	return false;
+}
+
+bool overlaps(Rect rect, Tri2 tri);
+bool overlaps(Rect rect, Tri2 tri) {
+	Tri2 rectTri0;
+	Tri2 rectTri1;
+	{
+		Vec2 pos = getPosition(rect);
+		Vec2 size = getPosition(rect);
+		rectTri0.verts[0] = pos + size*v2(0, 0);
+		rectTri0.verts[1] = pos + size*v2(0, 1);
+		rectTri0.verts[2] = pos + size*v2(1, 0);
+
+		rectTri1.verts[0] = pos + size*v2(1, 0);
+		rectTri1.verts[1] = pos + size*v2(0, 1);
+		rectTri1.verts[2] = pos + size*v2(1, 1);
+	}
+
+	if (overlaps(tri, rectTri0)) return true;
+	if (overlaps(tri, rectTri1)) return true;
 	return false;
 }
 /// / Tri2

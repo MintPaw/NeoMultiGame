@@ -1,4 +1,8 @@
 #define FROST_FALL_DISTANCE 64
+#define POISON_COLOR (0xFF6B4876)
+#define BURN_COLOR (0xFFDCAB2C)
+#define BLEED_COLOR (0xFF770000)
+
 struct Globals {
 };
 
@@ -62,10 +66,10 @@ struct Actor {
 	float armor;
 	float shield;
 
-	int slow;
-	int poison;
-	int burn;
-	int bleed;
+	float slow;
+	float poison;
+	float burn;
+	float bleed;
 
 	float timeTillNextShot;
 
@@ -184,10 +188,12 @@ bool tileBlocksPathing(TileType type);
 Actor *createActor(ActorType type);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
+void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti);
 void dealDamage(Actor *bullet, Actor *dest);
 Rect getRect(Actor *actor);
 
 Actor **getActorsInRange(Circle range, int *outNum);
+Actor **getActorsInRange(Tri2 range, int *outNum);
 void startNextWave();
 
 void saveState(char *path);
@@ -709,9 +715,33 @@ void stepGame(float elapsed, bool isLastStep) {
 			Rect rect = getRect(actor);
 
 			float movementSpeed = info->movementSpeed;
-			movementSpeed *= clampMap(actor->slow, 0, 60, 1, 0.4);
-			actor->slow -= 6;
-			if (actor->slow < 0) actor->slow = 0;
+			movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
+
+			actor->slow -= 6*elapsed;
+
+			if (actor->poison) {
+				float toInflict = MinNum(actor->poison, 24*elapsed);
+				actor->poison -= toInflict;
+				if (actor->poison < 0) actor->poison = 0;
+
+				dealDamage(actor, toInflict, 1, 0.5, 0.5);
+			}
+
+			if (actor->burn) {
+				float toInflict = MinNum(actor->burn, 24*elapsed);
+				actor->burn -= toInflict;
+				if (actor->burn < 0) actor->burn = 0;
+
+				dealDamage(actor, toInflict, 0.5, 1, 0.5);
+			}
+
+			if (actor->bleed) {
+				float toInflict = MinNum(actor->bleed, 24*elapsed);
+				actor->bleed -= toInflict;
+				if (actor->bleed < 0) actor->bleed = 0;
+
+				dealDamage(actor, toInflict, 0.5, 0.5, 1);
+			}
 
 			bool towerCaresAboutTargets = true;
 			bool towerIsActiveBetweenWaves = true;
@@ -816,6 +846,68 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 
 				drawRect(rect, 0xFFE3F0F5);
+			} else if (actor->type == ACTOR_FLAME_THROWER) {
+				drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
+
+				if (towerShouldFire) {
+					Vec2 start = actor->position;
+					float angle = toRad(15);
+					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * info->range;
+					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * info->range;
+
+					Tri2 tri = makeTri2(start, end0, end1);
+					drawLine(tri.verts[0], tri.verts[1], 5, BURN_COLOR);
+					drawLine(tri.verts[1], tri.verts[2], 5, BURN_COLOR);
+					drawLine(tri.verts[2], tri.verts[0], 5, BURN_COLOR);
+
+					int enemiesInRangeNum = 0;
+					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum);
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						int amount = info->damage;
+						Actor *enemy = enemiesInRange[i];
+						if (enemy->shield > 0) amount *= info->shieldDamageMulti;
+						else if (enemy->armor > 0) amount *= info->armorDamageMulti;
+						else amount *= info->hpDamageMulti;
+
+						enemy->burn += amount;
+					}
+				}
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 12, 0xFF000000);
+			} else if (actor->type == ACTOR_POISON_SPRAYER) {
+				drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
+
+				if (towerShouldFire) {
+					Vec2 start = actor->position;
+					float angle = toRad(15);
+					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * info->range;
+					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * info->range;
+
+					Tri2 tri = makeTri2(start, end0, end1);
+					drawLine(tri.verts[0], tri.verts[1], 5, POISON_COLOR);
+					drawLine(tri.verts[1], tri.verts[2], 5, POISON_COLOR);
+					drawLine(tri.verts[2], tri.verts[0], 5, POISON_COLOR);
+
+					int enemiesInRangeNum = 0;
+					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum);
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						int amount = info->damage;
+						Actor *enemy = enemiesInRange[i];
+						if (enemy->shield > 0) amount *= info->shieldDamageMulti;
+						else if (enemy->armor > 0) amount *= info->armorDamageMulti;
+						else amount *= info->hpDamageMulti;
+
+						enemy->poison += amount;
+					}
+				}
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 12, 0xFF000000);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -876,13 +968,36 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (actor->slow > 0) {
 					Rect slowRect = vitalityRect;
 					slowRect.y -= slowRect.height + 4;
-					slowRect.width *= clampMap(actor->slow, 0, 5000, 0, 1, QUINT_OUT);
+					slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
 					drawRect(slowRect, 0xFF01335C);
 				}
 
-				actor->hp += info->hpGainPerSec * elapsed;
-				actor->armor += info->armorGainPerSec * elapsed;
-				actor->shield += info->shieldGainPerSec * elapsed;
+				if (actor->poison) {
+					Rect textRect = getRect(actor);
+					textRect.x -= textRect.width;
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+				}
+
+				if (actor->burn) {
+					Rect textRect = getRect(actor);
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+				}
+
+				if (actor->bleed) {
+					Rect textRect = getRect(actor);
+					textRect.x += textRect.width;
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+				}
+
+				if (!actor->bleed) actor->hp += info->hpGainPerSec * elapsed;
+				if (!actor->burn) actor->armor += info->armorGainPerSec * elapsed;
+				if (!actor->poison) actor->shield += info->shieldGainPerSec * elapsed;
 				actor->hp = mathClamp(actor->hp, 0, info->maxHp);
 				actor->armor = mathClamp(actor->armor, 0, info->maxArmor);
 				actor->shield = mathClamp(actor->shield, 0, info->maxShield);
@@ -920,7 +1035,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					drawCircle(circle, 0xFFFFFFFF);
 					actor->markedForDeletion = true;
 
-					int enemiesInRangeNum;
+					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
@@ -935,12 +1050,12 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				Circle range = makeCircle(getCenter(rect), rect.width/2); // Purposely way larger
 
-				int enemiesInRangeNum;
+				int enemiesInRangeNum = 0;
 				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
 				for (int i = 0; i < enemiesInRangeNum; i++) {
 					Actor *enemy = enemiesInRange[i];
 					if (overlaps(getRect(enemy), rect)) {
-						enemy->slow += 300;
+						enemy->slow += 6;
 						actor->markedForDeletion = true;
 					}
 				}
@@ -1450,17 +1565,21 @@ void dealDamage(Actor *src, Actor *dest) {
 	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
 
 	float damage = towerInfo->damage;
-	float damageLeft = damage;
+	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
+}
+
+void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti) {
+	float damageLeft = amount;
 
 	float shieldDamage = MinNum(damageLeft, dest->shield);
 	damageLeft -= shieldDamage;
-	dest->shield -= shieldDamage * towerInfo->shieldDamageMulti;
+	dest->shield -= shieldDamage * shieldDamageMulti;
 
 	float armorDamage = MinNum(damageLeft, dest->armor);
 	damageLeft -= armorDamage;
-	dest->armor -= armorDamage * towerInfo->armorDamageMulti;
+	dest->armor -= armorDamage * armorDamageMulti;
 
-	dest->hp -= damageLeft * towerInfo->hpDamageMulti;
+	dest->hp -= damageLeft * hpDamageMulti;
 }
 
 Rect getRect(Actor *actor) {
@@ -1486,6 +1605,26 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 
 		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
 		if (contains(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
+	}
+
+	*outNum = enemiesInRangeNum;
+	return enemiesInRange;
+}
+
+Actor **getActorsInRange(Tri2 range, int *outNum) {
+	World *world = game->world;
+
+	*outNum = 0;
+
+	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
+	int enemiesInRangeNum = 0;
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
+		if (!otherInfo->isEnemy) continue;
+
+		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
+		if (overlaps(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
 	}
 
 	*outNum = enemiesInRangeNum;
