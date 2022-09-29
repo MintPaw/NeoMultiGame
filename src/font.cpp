@@ -1,5 +1,5 @@
-#define FONT_WIDTH_LIMIT 1024
-#define FONT_HEIGHT_LIMIT 1024
+#define FONT_WIDTH_LIMIT 2048
+#define FONT_HEIGHT_LIMIT 2048
 
 #define Font __OTHER_FONT // Because X11 has a Font typedef // And so does raylib
 struct Font {

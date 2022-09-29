@@ -31,6 +31,7 @@ bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
 bool strContains(const char *haystack, const char *needle, bool caseInsentitive=false);
 char *strrstr(char *haystack, const char *needle);
 int countChar(const char *src, char value);
+int countString(char *src, char *value);
 bool stringStartsWith(const char *hayStack, const char *needle);
 bool stringStartsWithFast(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
@@ -43,6 +44,8 @@ int getIntAtEndOfString(char *str);
 
 StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
+
+char **frameSplitString(char *str, char *delim, int *outStrings);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);
@@ -341,6 +344,16 @@ int countChar(const char *src, char value) {
 	return total;
 }
 
+int countString(char *src, char *value) {
+	int count = 0;
+	const char *tmp = src;
+	while (tmp = strstr(tmp, value)) {
+		count++;
+		tmp++;
+	}
+	return count;
+}
+
 bool stringStartsWith(const char *hayStack, const char *needle) {
 	int len = strlen(needle);
 	bool areSame = true;
@@ -434,6 +447,48 @@ void addText(StringBuilder *builder, char *string, int count) {
 
 	strncat(builder->string, string, count);
 	builder->count += count;
+}
+
+char **frameSplitString(char *str, char *delim, int *outStringsNum) {
+	int outMax = countString(str, delim)+1;
+	char **out = (char **)frameMalloc(sizeof(char *) * outMax);
+	int outNum = 0;
+
+	int lineMax = 512;
+	char *line = (char *)frameMalloc(lineMax);
+
+	int delimLen = strlen(delim);
+
+	char *lineStart = str;
+	for (;;) {
+		char *lineEnd = strstr(lineStart, delim);
+
+		bool shouldBreak = false;
+		if (!lineEnd) {
+			lineEnd = &lineStart[strlen(lineStart)];
+			shouldBreak = true;
+
+			int lineLen = lineEnd - lineStart;
+			if (lineLen == 0) break;
+		}
+
+		int lineLen = lineEnd - lineStart;
+		if (lineLen > lineMax-1) {
+			lineMax = lineLen+1;
+			line = (char *)frameMalloc(lineMax);
+		}
+
+		line = strncpy(line, lineStart, lineLen);
+		line[lineLen] = 0;
+
+		out[outNum++] = line;
+
+		if (shouldBreak) break;
+		lineStart = lineEnd+delimLen;
+	}
+
+	*outStringsNum = outNum;
+	return out;
 }
 
 unsigned char *elementBuffer = NULL;

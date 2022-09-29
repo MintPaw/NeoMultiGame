@@ -436,6 +436,10 @@ NanoTime mainNano;
 # include "../../multiGamePrivate/src/rssGame.cpp"
 #endif
 
+#if defined(PLAYING_pkGame)
+# include "../../multiGamePrivate/src/pkGame.cpp"
+#endif
+
 #if defined(PLAYING_cacheViz)
 # include STRINGIFY(ALT_CORE_PATH)
 #endif

@@ -122,7 +122,7 @@ struct Ngui {
 
 	Rect lastWindowRect;
 	NguiElement *lastElement;
-	bool elementClickedThisFrame;
+	bool elementJustDownThisFrame;
 
 	int nextNguiElementId;
 	int currentOrderIndex;
@@ -465,7 +465,7 @@ void nguiInit() {
 
 void nguiStartFrame() {
 	if (!ngui) return;
-	ngui->elementClickedThisFrame = false;
+	ngui->elementJustDownThisFrame = false;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -893,6 +893,7 @@ void nguiDraw(float elapsed) {
 						child->bgColor = tintColor(child->bgColor, hoverTint);
 
 						if (platform->mouseJustDown) {
+							ngui->elementJustDownThisFrame = true;
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							child->bgColor = tintColor(child->bgColor, activeTint);
 

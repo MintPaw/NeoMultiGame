@@ -1270,9 +1270,9 @@ void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, 
 		int a, r, g, b;
 		hexToArgb(tint, &a, &r, &g, &b);
 		a *= alpha;
-		r *= a/255.0;
-		g *= a/255.0;
-		b *= a/255.0;
+		// r *= a/255.0; // Very bad!
+		// g *= a/255.0;
+		// b *= a/255.0;
 		colors[i] = argbToHex(a, r, g, b);
 	}
 
@@ -1392,6 +1392,7 @@ void setRendererBlendMode(BlendMode blendMode) {
 	Raylib::rlSetBlendMode(Raylib::BLEND_MULTIPLIED);
 
 	if (blendMode == BLEND_NORMAL) {
+		// void rlSetBlendFactors(int glSrcFactor, int glDstFactor, int glEquation);
 		Raylib::rlSetBlendFactors(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_FUNC_ADD);
 		Raylib::rlSetBlendMode(Raylib::BLEND_CUSTOM);
 	} else if (blendMode == BLEND_MULTIPLY) {

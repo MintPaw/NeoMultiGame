@@ -47,7 +47,7 @@ enum ActorType {
 	ACTOR_ENEMY41, ACTOR_ENEMY42, ACTOR_ENEMY43, ACTOR_ENEMY44, ACTOR_ENEMY45, ACTOR_ENEMY46, ACTOR_ENEMY47, ACTOR_ENEMY48,
 	ACTOR_ENEMY49, ACTOR_ENEMY50, ACTOR_ENEMY51, ACTOR_ENEMY52, ACTOR_ENEMY53, ACTOR_ENEMY54, ACTOR_ENEMY55, ACTOR_ENEMY56,
 	ACTOR_ENEMY57, ACTOR_ENEMY58, ACTOR_ENEMY59, ACTOR_ENEMY60, ACTOR_ENEMY61, ACTOR_ENEMY62, ACTOR_ENEMY63, ACTOR_ENEMY64,
-	ACTOR_BALLISTA_ARROW, ACTOR_MORTAR, ACTOR_FROST, ACTOR_BULLET4,
+	ACTOR_ARROW, ACTOR_MORTAR, ACTOR_FROST, ACTOR_SAW,
 	ACTOR_BULLET5, ACTOR_BULLET6, ACTOR_BULLET7, ACTOR_BULLET8,
 	ACTOR_BULLET9, ACTOR_BULLET10, ACTOR_BULLET11, ACTOR_BULLET12,
 	ACTOR_BULLET13, ACTOR_BULLET14, ACTOR_BULLET15, ACTOR_BULLET16,
@@ -191,6 +191,7 @@ Actor *createBullet(Actor *src, Actor *target);
 void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti);
 void dealDamage(Actor *bullet, Actor *dest);
 Rect getRect(Actor *actor);
+Vec2 getFlowDirForRect(Rect rect);
 
 Actor **getActorsInRange(Circle range, int *outNum);
 Actor **getActorsInRange(Tri2 range, int *outNum);
@@ -341,6 +342,74 @@ void updateGame() {
 			info->price = 300;
 			info->priceMulti = 75;
 
+			info = &game->actorTypeInfos[ACTOR_SHREDDER];
+			strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 10;
+			info->hpDamageMulti = 20;
+			info->armorDamageMulti = 10;
+			info->shieldDamageMulti = 10;
+			info->range = 5 * TILE_SIZE;
+			info->rpm = 5;
+			info->price = 500;
+			info->priceMulti = 100;
+
+			info = &game->actorTypeInfos[ACTOR_ENCAMPENT];
+			strncpy(info->name, "Encampent", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 20;
+			info->hpDamageMulti = 10;
+			info->armorDamageMulti = 15;
+			info->shieldDamageMulti = 5;
+			info->range = 2 * TILE_SIZE;
+			info->rpm = 5;
+			info->price = 500;
+			info->priceMulti = 100;
+
+			info = &game->actorTypeInfos[ACTOR_LOOKOUT];
+			strncpy(info->name, "Lookout", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 1;
+			info->hpDamageMulti = 2;
+			info->armorDamageMulti = 1;
+			info->shieldDamageMulti = 3;
+			info->range = 8 * TILE_SIZE;
+			info->rpm = 0;
+			info->price = 500;
+			info->priceMulti = 100;
+
+			info = &game->actorTypeInfos[ACTOR_RADAR];
+			strncpy(info->name, "Radar", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 20;
+			info->hpDamageMulti = 20;
+			info->armorDamageMulti = 10;
+			info->shieldDamageMulti = 10;
+			info->range = 30 * TILE_SIZE;
+			info->rpm = 700;
+			info->price = 1000;
+			info->priceMulti = 250;
+
+			info = &game->actorTypeInfos[ACTOR_OBELISK];
+			strncpy(info->name, "Obelisk", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 8;
+			info->hpDamageMulti = 5;
+			info->armorDamageMulti = 10;
+			info->shieldDamageMulti = 2;
+			info->range = 5 * TILE_SIZE;
+			info->rpm = 360;
+			info->mana = 2;
+			info->price = 1000;
+			info->priceMulti = 250;
+
+			info = &game->actorTypeInfos[ACTOR_PARTICLE_CANNON];
+			strncpy(info->name, "Particle Cannon", ACTOR_TYPE_NAME_MAX_LEN);
+			info->damage = 50;
+			info->hpDamageMulti = 15;
+			info->armorDamageMulti = 10;
+			info->shieldDamageMulti = 20;
+			info->range = 20 * TILE_SIZE;
+			info->rpm = 360;
+			info->mana = 12;
+			info->price = 1000;
+			info->priceMulti = 250;
+
 			info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
 			strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
 			info->damage = 0;
@@ -391,7 +460,7 @@ void updateGame() {
 			info->movementSpeed = 1;
 			info->maxHp = 20000;
 
-			info = &game->actorTypeInfos[ACTOR_BALLISTA_ARROW];
+			info = &game->actorTypeInfos[ACTOR_ARROW];
 			info->bulletSpeed = 20;
 		} ///
 
@@ -629,7 +698,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		game->cameraZoom += platform->mouseWheel * 0.1;
 		game->cameraZoom = mathClamp(game->cameraZoom, 0.1, 20);
 
-		game->cameraPosition += normalize(moveDir) * 10 / game->cameraZoom;
+		game->cameraPosition += normalize(moveDir) * 20 / game->cameraZoom;
 
 		for (int i = 1; i <= 9; i++) {
 			if (keyPressed(KEY_ALT) && keyJustReleased('0' + i)) {
@@ -908,25 +977,23 @@ void stepGame(float elapsed, bool isLastStep) {
 				line.start = getCenter(rect);
 				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 				drawLine(line, 12, 0xFF000000);
+			} else if (actor->type == ACTOR_SHREDDER) {
+				if (towerShouldFire) {
+					Actor *bullet = createBullet(actor, target);
+				}
+
+				drawRect(rect, 0xFF800000);
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
+				drawLine(line, 4, 0xFFFF0000);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
-				Vec2 position = getPosition(rect);
-				Vec2 size = getSize(rect);
-				Vec2 corners[4] = {
-					position + size*v2(0, 0),
-					position + size*v2(0, 1),
-					position + size*v2(1, 0),
-					position + size*v2(1, 1)
-				};
+				Vec2 dir = getFlowDirForRect(rect);
 
-				Vec2 dir = v2();
-				for (int i = 0; i < 4; i++) {
-					Vec2i tilePosition = worldToTile(corners[i]);
-					Tile *tile = getTileAt(tilePosition);
-					if (tile && !isZero(tile->flow)) dir += tile->flow;
-				}
-				dir = normalize(dir);
 				actor->accel = dir * (movementSpeed * elapsed) * 5;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
@@ -1001,7 +1068,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				actor->hp = mathClamp(actor->hp, 0, info->maxHp);
 				actor->armor = mathClamp(actor->armor, 0, info->maxArmor);
 				actor->shield = mathClamp(actor->shield, 0, info->maxShield);
-			} else if (actor->type == ACTOR_BALLISTA_ARROW) {
+			} else if (actor->type == ACTOR_ARROW) {
 				Actor *target = getActor(actor->bulletTarget);
 				if (target) {
 					actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
@@ -1062,6 +1129,22 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				drawRect(rect, 0xFFFFFFFF);
 				if (actor->time > maxTime) actor->markedForDeletion = true;
+			} else if (actor->type == ACTOR_SAW) {
+				Vec2 dir = getFlowDirForRect(getRect(actor));
+				actor->accel = dir * (5 * elapsed) * 5;
+				// Actor *target = getActor(actor->bulletTarget);
+				// if (target) {
+				// 	actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
+				// 	if (equal(actor->position, target->position)) {
+				// 		dealDamage(actor, target);
+				// 		actor->markedForDeletion = true;
+				// 	}
+				// } else {
+				// 	actor->markedForDeletion = true;
+				// }
+
+				Rect bulletRect = makeCenteredSquare(actor->position, 8);
+				drawRect(bulletRect, 0xFFFF0000);
 			} else {
 				drawRect(rect, 0xFFFF00FF);
 			}
@@ -1106,7 +1189,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
 
 			ActorType typesCanBuy[] = {
-				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER
+				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER
 			};
 			int typesCanBuyNum = ArrayLength(typesCanBuy);
 
@@ -1539,10 +1622,11 @@ Actor *getActor(int id) {
 }
 
 Actor *createBullet(Actor *src, Actor *target) {
-	ActorType bulletType = ACTOR_BALLISTA_ARROW;
-	if (src->type == ACTOR_BALLISTA) bulletType = ACTOR_BALLISTA_ARROW;
+	ActorType bulletType = ACTOR_ARROW;
+	if (src->type == ACTOR_BALLISTA) bulletType = ACTOR_ARROW;
 	else if (src->type == ACTOR_MORTAR_TOWER) bulletType = ACTOR_MORTAR;
 	else if (src->type == ACTOR_FROST_KEEP) bulletType = ACTOR_FROST;
+	else if (src->type == ACTOR_SHREDDER) bulletType = ACTOR_SAW;
 
 	Actor *bullet = createActor(bulletType);
 	bullet->position = src->position;
@@ -1589,6 +1673,26 @@ Rect getRect(Actor *actor) {
 	rect.x = actor->position.x - rect.width/2;
 	rect.y = actor->position.y - rect.height/2;
 	return rect;
+}
+
+Vec2 getFlowDirForRect(Rect rect) {
+	Vec2 position = getPosition(rect);
+	Vec2 size = getSize(rect);
+	Vec2 corners[4] = {
+		position + size*v2(0, 0),
+		position + size*v2(0, 1),
+		position + size*v2(1, 0),
+		position + size*v2(1, 1)
+	};
+
+	Vec2 dir = v2();
+	for (int i = 0; i < 4; i++) {
+		Vec2i tilePosition = worldToTile(corners[i]);
+		Tile *tile = getTileAt(tilePosition);
+		if (tile && !isZero(tile->flow)) dir += tile->flow;
+	}
+	dir = normalize(dir);
+	return dir;
 }
 
 Actor **getActorsInRange(Circle range, int *outNum) {

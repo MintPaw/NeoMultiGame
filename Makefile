@@ -12,12 +12,13 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
 # GAME_NAME=horseGame
-GAME_NAME=tower2Game
+# GAME_NAME=tower2Game
 # GAME_NAME=gladiators2Game
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=butt2GoGame
 # GAME_NAME=rssGame
+GAME_NAME=pkGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -25,8 +26,9 @@ GAME_NAME=horseGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
-GAME_NAME=concreteJungleGame
+# GAME_NAME=concreteJungleGame
 # GAME_NAME=butt2GoGame
+GAME_NAME=tower2Game
 # GAME_NAME=horseGame
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame

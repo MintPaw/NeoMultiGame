@@ -2430,7 +2430,6 @@ void destroySwf(Swf *swf) {
 			SwfShape *shape = (SwfShape *)tagPointer->tag;
 			free(shape->fillStyles);
 			free(shape->lineStyles);
-			free(shape->drawEdges);
 		} else if (tagPointer->header.type == SWF_TAG_DEFINE_SPRITE) {
 			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
 			for (int i = 0; i < sprite->framesNum; i++) {
