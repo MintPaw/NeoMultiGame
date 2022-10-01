@@ -719,8 +719,8 @@ void *readFile(const char *fileName, int *outSize) {
 }
 
 void deleteFile(const char *fileName) {
-	char realName[PATH_MAX_LEN];
-	strcpy(realName, filePathPrefix);
+	char realName[PATH_MAX_LEN] = {};
+	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, fileName);
 
 #if defined(_WIN32)

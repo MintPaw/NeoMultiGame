@@ -36,7 +36,7 @@ void writeString(DataStream *stream, char *string);
 #ifndef NO_DATA_STREAM_IO
 DataStream *loadDataStream(char *path);
 DataStream *loadDataStreamFromHexString(char *hexStr);
-void writeDataStream(char *path, DataStream *stream);
+bool writeDataStream(char *path, DataStream *stream);
 char *writeToHexString(DataStream *stream);
 #endif //NO_DATA_STREAM_IO
 
@@ -270,8 +270,8 @@ DataStream *loadDataStreamFromHexString(char *hexStr) {
 	return stream;
 }
 
-void writeDataStream(char *path, DataStream *stream) {
-	writeFile(path, stream->data, stream->index);
+bool writeDataStream(char *path, DataStream *stream) {
+	return writeFile(path, stream->data, stream->index);
 }
 
 char *writeToHexString(DataStream *stream) {

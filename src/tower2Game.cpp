@@ -76,7 +76,12 @@ struct Actor {
 	bool markedForDeletion;
 
 	int bulletTarget;
+	Vec2 bulletTargetPosition;
 	int parentTower;
+
+#define SAW_HIT_LIST_MAX 64
+	int *sawHitList;
+	int sawHitListNum;
 
 	float time;
 };
@@ -186,6 +191,7 @@ Rect tileToWorldRect(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
+void deinitActor(Actor *actor);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
 void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti);
@@ -826,7 +832,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (towerCaresAboutTargets) {
 					Circle range = makeCircle(actor->position, info->range);
 
-					int enemiesInRangeNum;
+					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
 
 					if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
@@ -868,7 +874,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (towerShouldFire) {
 					Circle circle = makeCircle(actor->position, info->range);
 					drawCircle(circle, 0xFFB8FFFA);
-					int enemiesInRangeNum;
+					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
@@ -1130,18 +1136,81 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawRect(rect, 0xFFFFFFFF);
 				if (actor->time > maxTime) actor->markedForDeletion = true;
 			} else if (actor->type == ACTOR_SAW) {
-				Vec2 dir = getFlowDirForRect(getRect(actor));
-				actor->accel = dir * (5 * elapsed) * 5;
-				// Actor *target = getActor(actor->bulletTarget);
-				// if (target) {
-				// 	actor->position = moveTowards(actor->position, target->position, info->bulletSpeed*timeScale);
-				// 	if (equal(actor->position, target->position)) {
-				// 		dealDamage(actor, target);
-				// 		actor->markedForDeletion = true;
-				// 	}
-				// } else {
-				// 	actor->markedForDeletion = true;
-				// }
+				float bulletSpeed = 5;
+				if (!isZero(actor->bulletTargetPosition)) {
+					if (distance(actor->position, actor->bulletTargetPosition) < bulletSpeed*5) {
+						actor->position = actor->bulletTargetPosition;
+						actor->bulletTargetPosition = v2();
+					} else {
+						Vec2 dir = normalize(actor->bulletTargetPosition - actor->position);
+						actor->accel = dir * (bulletSpeed * elapsed) * 5;
+					}
+				} else {
+					Vec2i tilePos = worldToTile(actor->position);
+					Tile *tile = getTileAt(tilePos);
+
+					Vec2i next = v2i();
+					int nextCost = 0;
+					for (int i = 0; i < 8; i++) {
+						Vec2i neighbor = tilePos;
+						if (i == 0) neighbor += v2i(-1, 0);
+						if (i == 1) neighbor += v2i(1, 0);
+						if (i == 2) neighbor += v2i(0, -1);
+						if (i == 3) neighbor += v2i(0, 1);
+						if (i == 4) neighbor += v2i(-1, -1);
+						if (i == 5) neighbor += v2i(1, 1);
+						if (i == 6) neighbor += v2i(1, -1);
+						if (i == 7) neighbor += v2i(-1, 1);
+
+						Tile *tile = getTileAt(neighbor);
+						if (!tile) continue;
+						if (tileBlocksPathing(tile->type)) continue;
+
+						Chunk *chunk = worldToChunk(tileToWorld(neighbor));
+						if (!chunk) continue;
+						if (!chunk->visible) continue;
+
+						if (nextCost < tile->dijkstraValue) {
+							next = neighbor;
+							nextCost = tile->dijkstraValue;
+						}
+					}
+
+					if (!isZero(next)) {
+						Vec2 nextWorld = tileToWorld(next);
+						Vec2 dir = normalize(nextWorld - actor->position);
+						actor->accel = dir * (bulletSpeed * elapsed) * 5;
+					} else {
+						logf("No next tile for saw??\n"); //@incomplete
+					}
+				}
+
+				if (!actor->markedForDeletion) {
+					Actor *saw = actor;
+
+					float sawSize = 32;
+					Circle circle = makeCircle(saw->position, sawSize);
+
+					int enemiesInRangeNum = 0;
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						Actor *enemy = enemiesInRange[i];
+
+						bool canHit = true;
+						for (int i = 0; i < saw->sawHitListNum; i++) {
+							if (saw->sawHitList[i] == enemy->id) {
+								canHit = false;
+								break;
+							}
+						}
+
+						if (!canHit) continue;
+
+						if (saw->sawHitListNum > 6-1) saw->markedForDeletion = true;
+						saw->sawHitList[saw->sawHitListNum++] = enemy->id;
+						dealDamage(saw, enemy);
+					}
+				}
 
 				Rect bulletRect = makeCenteredSquare(actor->position, 8);
 				drawRect(bulletRect, 0xFFFF0000);
@@ -1176,6 +1245,7 @@ void stepGame(float elapsed, bool isLastStep) {
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
 		if (actor->markedForDeletion) {
+			deinitActor(actor);
 			arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
 			world->actorsNum--;
 			i--;
@@ -1186,7 +1256,7 @@ void stepGame(float elapsed, bool isLastStep) {
 	{ /// Update hud and tool
 		if (game->tool != TOOL_BUILDING) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
-			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 9);
+			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
 			ActorType typesCanBuy[] = {
 				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER
@@ -1354,6 +1424,15 @@ void stepGame(float elapsed, bool isLastStep) {
 
 void generateMapFields() {
 	World *world = game->world;
+	for (int i = 0; i < world->chunksNum; i++) {
+		Chunk *chunk = &world->chunks[i];
+		for (int i = 0; i < CHUNK_SIZE*CHUNK_SIZE; i++) {
+			Tile *tile = &chunk->tiles[i];
+			tile->flow = v2();
+			tile->dijkstraValue = 0;
+			tile->costSoFar = 0;
+		}
+	}
 
 	/// Build dijkstra
 	Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
@@ -1607,7 +1686,15 @@ Actor *createActor(ActorType type) {
 	actor->armor = info->maxArmor;
 	actor->shield = info->maxShield;
 
+	if (actor->type == ACTOR_SAW) {
+		actor->sawHitList = (int *)zalloc(sizeof(int) * SAW_HIT_LIST_MAX);
+	}
+
 	return actor;
+}
+
+void deinitActor(Actor *actor) {
+	if (actor->sawHitList) free(actor->sawHitList);
 }
 
 Actor *getActor(int id) {
@@ -1631,6 +1718,7 @@ Actor *createBullet(Actor *src, Actor *target) {
 	Actor *bullet = createActor(bulletType);
 	bullet->position = src->position;
 	if (target) bullet->bulletTarget = target->id;
+	if (bullet->type == ACTOR_SAW && target) bullet->bulletTargetPosition = target->position;
 	bullet->parentTower = src->id;
 	return bullet;
 }
@@ -1644,7 +1732,10 @@ void dealDamage(Actor *src, Actor *dest) {
 	} else {
 		tower = getActor(src->parentTower);
 	}
-	if (!tower) return;
+	if (!tower) {
+		logf("Null damage source?\n");
+		return;
+	}
 
 	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
 
@@ -1826,6 +1917,12 @@ void writeTile(DataStream *stream, Tile tile) {
 }
 
 void loadState(char *path) {
+	World *world = game->world;
+	for (int i = 0; i < world->actorsNum; i++) {
+		Actor *actor = &world->actors[i];
+		deinitActor(actor);
+	}
+
 	DataStream *stream = loadDataStream(path);
 	if (!stream) {
 		logf("No state at %s\n", path);

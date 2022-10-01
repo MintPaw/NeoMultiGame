@@ -4294,6 +4294,7 @@ bool contains(Capsule2 capsule, Vec2 point) {
 
 void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs);
 void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs) {
+	secs = fabs(secs);
 	*outHours = 0;
 	*outMins = 0;
 	*outSecs = 0;
@@ -4314,7 +4315,9 @@ char *secsToHMSFrameString(float timeLeft) {
 	secsToHMS(&hours, &mins, &secs, timeLeft);
 
 	char *str = NULL;
-	if (mins > 0) {
+	if (hours > 0) {
+		str = frameSprintf("%dh %dm %ds", hours, mins, secs);
+	} else if (mins > 0) {
 		str = frameSprintf("%dm %ds", mins, secs);
 	} else {
 		str = frameSprintf("%ds", secs);

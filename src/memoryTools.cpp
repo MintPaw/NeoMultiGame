@@ -454,9 +454,6 @@ char **frameSplitString(char *str, char *delim, int *outStringsNum) {
 	char **out = (char **)frameMalloc(sizeof(char *) * outMax);
 	int outNum = 0;
 
-	int lineMax = 512;
-	char *line = (char *)frameMalloc(lineMax);
-
 	int delimLen = strlen(delim);
 
 	char *lineStart = str;
@@ -467,21 +464,14 @@ char **frameSplitString(char *str, char *delim, int *outStringsNum) {
 		if (!lineEnd) {
 			lineEnd = &lineStart[strlen(lineStart)];
 			shouldBreak = true;
-
-			int lineLen = lineEnd - lineStart;
-			if (lineLen == 0) break;
 		}
 
 		int lineLen = lineEnd - lineStart;
-		if (lineLen > lineMax-1) {
-			lineMax = lineLen+1;
-			line = (char *)frameMalloc(lineMax);
+		if (lineLen != 0) {
+			char *line = (char *)frameMalloc(lineLen+1);
+			line = strncpy(line, lineStart, lineLen);
+			out[outNum++] = line;
 		}
-
-		line = strncpy(line, lineStart, lineLen);
-		line[lineLen] = 0;
-
-		out[outNum++] = line;
 
 		if (shouldBreak) break;
 		lineStart = lineEnd+delimLen;
