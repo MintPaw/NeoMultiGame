@@ -147,6 +147,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "skeleton.cpp"
 #include "mesh.cpp"
 #include "models.cpp"
+#include "pass.cpp"
 
 #include "threads.cpp"
 #include "stringSave.cpp"
