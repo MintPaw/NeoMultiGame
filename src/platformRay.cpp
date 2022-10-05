@@ -258,6 +258,7 @@ void platformUpdate() {
 
 	guiDraw();
 	Raylib::rlDrawRenderBatchActive();
+
 	void endRenderingFrame(); //@headerHack
 	endRenderingFrame();
 

@@ -83,6 +83,8 @@ struct Actor {
 	int *sawHitList;
 	int sawHitListNum;
 
+	int amountPaid;
+
 	float time;
 };
 
@@ -185,6 +187,8 @@ Game *game = NULL;
 void runGame();
 void updateGame();
 void stepGame(float elapsed, bool isLastStep);
+
+bool isMouseClicked();
 
 void generateMapFields();
 Chunk *createChunk(Vec2i position);
@@ -817,6 +821,14 @@ void stepGame(float elapsed, bool isLastStep) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
+			bool isSelected = false;
+			for (int i = 0; i < game->selectedActorsNum; i++) {
+				if (game->selectedActors[i] == actor->id) {
+					isSelected = true;
+					break;
+				}
+			}
+
 			Rect rect = getRect(actor);
 
 			float movementSpeed = info->movementSpeed;
@@ -883,12 +895,16 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 
 				if (game->tool == TOOL_NONE || game->tool == TOOL_SELECTED) {
-					if (platform->mouseJustDown && contains(getRect(actor), game->mouse)) {
+					if (isMouseClicked() && contains(getRect(actor), game->mouse)) {
 						game->prevTool = TOOL_NONE;
 						game->tool = TOOL_SELECTED;
 						game->selectedActorsNum = 0;
 						game->selectedActors[game->selectedActorsNum++] = actor->id;
 					}
+				}
+
+				if (isSelected) {
+					drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
 				}
 			}
 
@@ -1349,8 +1365,6 @@ void stepGame(float elapsed, bool isLastStep) {
 			Tile *tile = getTileAt(tilePosition);
 
 			bool canBuild = true;
-			if (game->toolTime < 0.05) canBuild = false;
-
 			Chunk *chunk = worldToChunk(center);
 			if (!chunk) canBuild = false;
 			if (canBuild && !chunk->visible) canBuild = false;
@@ -1362,11 +1376,12 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (equal(worldToTile(other->position), tilePosition)) canBuild = false;
 			}
 
-			if (canBuild && platform->mouseJustUp) {
+			if (canBuild && isMouseClicked()) {
 				float price = info->price + info->priceMulti*typeCounts[game->actorToBuild];
 				if (game->money >= price) {
 					game->money -= price;
 					Actor *newTower = createActor(game->actorToBuild);
+					newTower->amountPaid = price;
 					newTower->position = center;
 					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
 				} else {
@@ -1376,13 +1391,45 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 
 		if (game->tool == TOOL_SELECTED) {
-			if (platform->mouseJustDown && game->toolTime > 0.05) {
-				game->tool = TOOL_NONE;
-				game->selectedActorsNum = 0;
+			nguiStartWindow("Selected window", game->size*v2(0.5, 1), v2(0.5, 1));
+			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
+
+			if (nguiButton("Sell")) {
+				for (int i = 0; i < game->selectedActorsNum; i++) {
+					Actor *actor = getActor(game->selectedActors[i]);
+					if (!actor) continue;
+
+					actor->markedForDeletion = true;
+					game->money += actor->amountPaid;
+				}
 			}
+
+			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+			nguiEndWindow();
+
+			int existingSelectedActors = 0;
+			for (int i = 0; i < game->selectedActorsNum; i++) {
+				Actor *actor = getActor(game->selectedActors[i]);
+				if (actor) existingSelectedActors++;
+			}
+
+			if (isMouseClicked()) game->selectedActorsNum = 0;
+
+			if (game->selectedActorsNum == 0 || existingSelectedActors == 0) game->tool = TOOL_NONE;
 		}
 
 		game->toolTime += elapsed;
+
+		for (int i = 0; i < game->selectedActorsNum; i++) {
+			Actor *actor = getActor(game->selectedActors[i]);
+			if (!actor) continue;
+			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+
+			if (info->isTower) {
+				Circle range = makeCircle(actor->position, info->range);
+				drawCircle(range, 0x80FF0000);
+			}
+		}
 	} ///
 
 	if (game->playingWave) {
@@ -1442,7 +1489,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 					if (contains(exploreRect, game->mouse)) {
 						exploreRect = inflatePerc(exploreRect, 0.1);
-						if (platform->mouseJustUp) {
+						if (isMouseClicked()) {
 							newChunk->visible = true;
 							startNextWave();
 						}
@@ -1485,6 +1532,16 @@ void stepGame(float elapsed, bool isLastStep) {
 	drawOnScreenLog();
 
 	game->time += elapsed;
+}
+
+bool isMouseClicked() {
+	bool ret = platform->mouseJustDown;
+	if (ngui->mouseHoveringThisFrame) ret = false;
+	if (ngui->mouseHoveringLastFrame) ret = false;
+	if (ngui->mouseJustDownThisFrame) ret = false;
+	if (game->prevTool != game->tool) ret = false;
+	if (game->toolTime < 0.05) ret = false;
+	return ret;
 }
 
 void generateMapFields() {

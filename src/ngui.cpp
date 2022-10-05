@@ -123,6 +123,8 @@ struct Ngui {
 	Rect lastWindowRect;
 	NguiElement *lastElement;
 	bool mouseJustDownThisFrame;
+	bool mouseHoveringThisFrame;
+	bool mouseHoveringLastFrame;
 
 	int nextNguiElementId;
 	int currentOrderIndex;
@@ -466,6 +468,8 @@ void nguiInit() {
 void nguiStartFrame() {
 	if (!ngui) return;
 	ngui->mouseJustDownThisFrame = false;
+	ngui->mouseHoveringLastFrame = ngui->mouseHoveringThisFrame;
+	ngui->mouseHoveringThisFrame = false;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -777,7 +781,10 @@ void nguiDraw(float elapsed) {
 				window->scroll = v2();
 			}
 
-			if (platform->mouseJustDown && contains(windowRect, ngui->mouse)) ngui->mouseJustDownThisFrame = true;
+			if (contains(windowRect, ngui->mouse)) {
+				ngui->mouseHoveringThisFrame = true;
+				if (platform->mouseJustDown) ngui->mouseJustDownThisFrame = true;
+			}
 
 			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
 
