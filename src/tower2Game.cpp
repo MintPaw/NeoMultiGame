@@ -187,6 +187,8 @@ struct Game {
 
 	int hp;
 	int money;
+	float mana;
+	float maxMana;
 
 	int wave;
 	bool playingWave;
@@ -612,6 +614,8 @@ void updateGame() {
 
 		game->hp = 10;
 		game->money = 1000;
+		game->mana = 100;
+		game->maxMana = 100;
 		generateMapFields();
 
 		game->cameraZoom = 1;
@@ -666,6 +670,8 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 		}
 		ImGui::InputInt("Money", &game->money);
+		ImGui::InputFloat("Mana", &game->mana);
+		ImGui::InputFloat("MaxMana", &game->mana);
 		ImGui::InputInt("Wave", &game->wave);
 		ImGui::SameLine();
 		if (ImGui::Button("Next wave")) startNextWave();
@@ -1234,9 +1240,9 @@ void stepGame(float elapsed, bool isLastStep) {
 				int maxTime = 10;
 				float fallSpeedPerSec = FROST_FALL_DISTANCE / (float)maxTime;
 				actor->position.y += fallSpeedPerSec * elapsed;
-				rect = makeCenteredSquare(getCenter(rect), 8);
+				rect = makeCenteredSquare(getCenter(rect), 32);
 
-				Circle range = makeCircle(getCenter(rect), rect.width/2); // Purposely way larger
+				Circle range = makeCircle(getCenter(rect), rect.width/2);
 
 				int enemiesInRangeNum = 0;
 				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
@@ -1248,7 +1254,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					}
 				}
 
-				drawRect(rect, 0xFFFFFFFF);
+				drawRect(rect, 0x80FFFFFF);
 				if (actor->time > maxTime) actor->markedForDeletion = true;
 			} else if (actor->type == ACTOR_SAW) {
 				float bulletSpeed = 5;
@@ -1353,8 +1359,8 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
-			saveState("assets/states/autosave.save_state");
 			game->playingWave = false;
+			if (game->hp > 0) saveState("assets/states/autosave.save_state");
 		}
 	} ///
 
@@ -1462,6 +1468,11 @@ void stepGame(float elapsed, bool isLastStep) {
 
 					actor->markedForDeletion = true;
 					game->money += actor->amountPaid;
+
+					arraySpliceIndex(game->selectedActors, game->selectedActorsNum, sizeof(int), i);
+					game->selectedActorsNum--;
+					i--;
+					continue;
 				}
 			}
 
@@ -1478,15 +1489,9 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
 
-			int existingSelectedActors = 0;
-			for (int i = 0; i < game->selectedActorsNum; i++) {
-				Actor *actor = getActor(game->selectedActors[i]);
-				if (actor) existingSelectedActors++;
-			}
-
 			if (isMouseClicked()) game->selectedActorsNum = 0;
 
-			if (game->selectedActorsNum == 0 || existingSelectedActors == 0) game->tool = TOOL_NONE;
+			if (game->selectedActorsNum == 0) game->tool = TOOL_NONE;
 		}
 
 		game->toolTime += elapsed;
@@ -1541,6 +1546,10 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (game->actorsToSpawnNum == 0) break;
 			}
 		}
+
+		float manaRegenPerSec = 1;
+		game->mana += manaRegenPerSec * elapsed;
+		if (game->mana > game->maxMana) game->mana = game->maxMana;
 	}
 
 	{ /// Show explore buttons
@@ -1589,16 +1598,13 @@ void stepGame(float elapsed, bool isLastStep) {
 	{
 		Rect rect = makeRect(0, 0, 350, 100);
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d", game->hp, game->money), props, rect);
+		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d\nMana: %.0f/%.0f", game->hp, game->money, game->mana/game->maxMana), props, rect);
 	}
 
 	nguiDraw(elapsed);
 
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
-	if (game->debugShowFrameTimes) {
-		char *str = frameSprintf("%.1fms", platform->frameTimeAvg);
-		drawText(game->defaultFont, str, v2(300, 0), 0xFF808080);
-	}
+	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
 	drawOnScreenLog();
 
@@ -2048,9 +2054,10 @@ void startNextWave() {
 }
 
 void saveState(char *path) {
+	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 6); // version
+	writeU32(stream, 7); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -2064,6 +2071,8 @@ void saveState(char *path) {
 	writeU32(stream, game->actorToBuild);
 	writeU32(stream, game->hp);
 	writeU32(stream, game->money);
+	writeU32(stream, game->mana);
+	writeU32(stream, game->maxMana);
 	writeU32(stream, game->wave);
 	writeU8(stream, game->playingWave);
 
@@ -2139,6 +2148,8 @@ void loadState(char *path) {
 	game->actorToBuild = (ActorType)readU32(stream);
 	game->hp = version >= 3 ? readU32(stream) : 10;
 	game->money = readU32(stream);
+	game->mana = version >= 7 ? readFloat(stream) : 100;
+	game->maxMana = version >= 7 ? readFloat(stream) : 100;
 	game->wave = readU32(stream);
 	game->playingWave = readU8(stream);
 	game->actorsToSpawnNum = readU32(stream);
