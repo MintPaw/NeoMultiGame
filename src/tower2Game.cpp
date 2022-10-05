@@ -35,6 +35,30 @@ struct ActorTypeInfo {
 	int enemySpawnStartingWave;
 };
 
+enum Priority {
+	PRIORITY_PROGRESS,
+	PRIORITY_MOST_HEALTH,
+	PRIORITY_MOST_ARMOR,
+	PRIORITY_MOST_SHIELD,
+	PRIORITY_LEAST_HEALTH,
+	PRIORITY_LEAST_ARMOR,
+	PRIORITY_LEAST_SHIELD,
+	PRIORITY_FASTEST,
+	PRIORITY_SLOWEST,
+	PRIORITIES_MAX,
+};
+char *priorityStrings[] = {
+	"Progress",
+	"Most health",
+	"Most armor",
+	"Most shield",
+	"Least health",
+	"Least armor",
+	"Least shield",
+	"Fastest",
+	"Slowest",
+};
+
 enum ActorType {
 	ACTOR_NONE=0,
 	ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
@@ -70,10 +94,12 @@ struct Actor {
 	float poison;
 	float burn;
 	float bleed;
-
-	float timeTillNextShot;
+	float movementSpeed;
 
 	bool markedForDeletion;
+
+	Priority priority;
+	float timeTillNextShot;
 
 	int bulletTarget;
 	Vec2 bulletTargetPosition;
@@ -840,8 +866,8 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			Rect rect = getRect(actor);
 
-			float movementSpeed = info->movementSpeed;
-			movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
+			actor->movementSpeed = info->movementSpeed;
+			actor->movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
 
 			actor->slow -= 6*elapsed;
 
@@ -886,7 +912,32 @@ void stepGame(float elapsed, bool isLastStep) {
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
 
-					if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
+					Actor *bestEnemy = NULL;
+					float bestEnemyScore = 0;
+					for (int i = 0; i < enemiesInRangeNum; i++) {
+						Actor *enemy = enemiesInRange[i];
+						// ActorTypeInfo *enemyInfo = &game->actorTypeInfos[enemy->type];
+						float score = 0;
+						if (actor->priority == PRIORITY_PROGRESS) {
+							Tile *tile = getTileAt(worldToTile(enemy->position));
+							if (tile) score = -tile->dijkstraValue;
+						}
+						if (actor->priority == PRIORITY_MOST_HEALTH) score = enemy->hp;
+						if (actor->priority == PRIORITY_MOST_ARMOR) score = enemy->armor;
+						if (actor->priority == PRIORITY_MOST_SHIELD) score = enemy->shield;
+						if (actor->priority == PRIORITY_LEAST_HEALTH) score = -enemy->hp;
+						if (actor->priority == PRIORITY_LEAST_ARMOR) score = -enemy->armor;
+						if (actor->priority == PRIORITY_LEAST_SHIELD) score = -enemy->shield;
+						if (actor->priority == PRIORITY_FASTEST) score = enemy->movementSpeed;
+						if (actor->priority == PRIORITY_SLOWEST) score = -enemy->movementSpeed;
+
+						if (bestEnemy == NULL || bestEnemyScore < score) {
+							bestEnemy = enemy;
+							bestEnemyScore = score;
+						}
+					}
+					target = bestEnemy;
+					// if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
 					if (target) actor->aimRads = radsBetween(actor->position, target->position);
 				}
 
@@ -1064,7 +1115,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				Vec2 dir = getFlowDirForRect(rect);
 
-				actor->accel = dir * (movementSpeed * elapsed) * 5;
+				actor->accel = dir * (actor->movementSpeed * elapsed) * 5;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
@@ -1411,6 +1462,16 @@ void stepGame(float elapsed, bool isLastStep) {
 
 					actor->markedForDeletion = true;
 					game->money += actor->amountPaid;
+				}
+			}
+
+			if (game->selectedActorsNum == 1) {
+				Actor *actor = getActor(game->selectedActors[0]);
+				if (nguiButton(frameSprintf("Priority: %s", priorityStrings[actor->priority]))) {
+					actor->priority = (Priority)((int)actor->priority + 1);
+					if (actor->priority > PRIORITIES_MAX-1) {
+						actor->priority = (Priority)0;
+					}
 				}
 			}
 
