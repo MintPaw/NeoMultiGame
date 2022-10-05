@@ -18,7 +18,7 @@ struct ActorTypeInfo {
 	float shieldDamageMulti;
 	float range;
 	float rpm;
-	float mana; // Not used yet
+	float mana;
 	int price;
 	float priceMulti;
 
@@ -90,16 +90,16 @@ struct Actor {
 	float armor;
 	float shield;
 
+	float timeTillNextShot;
+	bool markedForDeletion;
+
 	float slow;
 	float poison;
 	float burn;
 	float bleed;
 	float movementSpeed;
 
-	bool markedForDeletion;
-
 	Priority priority;
-	float timeTillNextShot;
 
 	int bulletTarget;
 	Vec2 bulletTargetPosition;
@@ -232,6 +232,7 @@ Rect tileToWorldRect(Vec2i tile);
 bool tileBlocksPathing(TileType type);
 
 Actor *createActor(ActorType type);
+void initActor(Actor *actor);
 void deinitActor(Actor *actor);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
@@ -373,7 +374,7 @@ void updateGame() {
 			info->shieldDamageMulti = 5;
 			info->range = 2 * TILE_SIZE;
 			info->rpm = 180;
-			info->mana = 2;
+			info->mana = 2.0/3.0;
 			info->price = 250;
 			info->priceMulti = 100;
 
@@ -956,7 +957,12 @@ void stepGame(float elapsed, bool isLastStep) {
 
 					if (actor->timeTillNextShot < 0) {
 						actor->timeTillNextShot = 1.0/(info->rpm/60.0);
-						towerShouldFire = true;
+
+						float manaCost = info->mana;
+						if (game->mana > manaCost) {
+							game->mana -= manaCost;
+							towerShouldFire = true;
+						}
 					}
 				}
 
@@ -1360,7 +1366,13 @@ void stepGame(float elapsed, bool isLastStep) {
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
 			game->playingWave = false;
-			if (game->hp > 0) saveState("assets/states/autosave.save_state");
+			if (game->hp > 0) {
+				if (fileExists("assets/states/autosave.save_state")) {
+					if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
+					copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
+				}
+				saveState("assets/states/autosave.save_state");
+			}
 		}
 	} ///
 
@@ -1598,7 +1610,7 @@ void stepGame(float elapsed, bool isLastStep) {
 	{
 		Rect rect = makeRect(0, 0, 350, 100);
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d\nMana: %.0f/%.0f", game->hp, game->money, game->mana/game->maxMana), props, rect);
+		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d\nMana: %.1f/%.1f", game->hp, game->money, game->mana, game->maxMana), props, rect);
 	}
 
 	nguiDraw(elapsed);
@@ -1877,21 +1889,23 @@ Actor *createActor(ActorType type) {
 
 	Actor *actor = &world->actors[world->actorsNum++];
 	memset(actor, 0, sizeof(Actor));
-	actor->id = ++world->nextActorId;
 	actor->type = type;
+	initActor(actor);
+	actor->id = ++world->nextActorId;
 
 	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 	actor->hp = info->maxHp;
 	actor->armor = info->maxArmor;
 	actor->shield = info->maxShield;
 
-	if (actor->type == ACTOR_SAW) {
-		actor->sawHitList = (int *)zalloc(sizeof(int) * SAW_HIT_LIST_MAX);
-	}
-
 	return actor;
 }
 
+void initActor(Actor *actor) {
+	if (actor->type == ACTOR_SAW) {
+		actor->sawHitList = (int *)zalloc(sizeof(int) * SAW_HIT_LIST_MAX);
+	}
+}
 void deinitActor(Actor *actor) {
 	if (actor->sawHitList) free(actor->sawHitList);
 }
@@ -2057,7 +2071,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 7); // version
+	writeU32(stream, 8); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -2071,8 +2085,8 @@ void saveState(char *path) {
 	writeU32(stream, game->actorToBuild);
 	writeU32(stream, game->hp);
 	writeU32(stream, game->money);
-	writeU32(stream, game->mana);
-	writeU32(stream, game->maxMana);
+	writeFloat(stream, game->mana);
+	writeFloat(stream, game->maxMana);
 	writeU32(stream, game->wave);
 	writeU8(stream, game->playingWave);
 
@@ -2101,12 +2115,30 @@ void writeActor(DataStream *stream, Actor *actor) {
 	writeU32(stream, actor->id);
 	writeVec2(stream, actor->position);
 	writeVec2(stream, actor->velo);
+	writeVec2(stream, actor->accel);
 	writeFloat(stream, actor->aimRads);
 	writeFloat(stream, actor->hp);
 	writeFloat(stream, actor->armor);
 	writeFloat(stream, actor->shield);
 	writeFloat(stream, actor->timeTillNextShot);
 	writeU8(stream, actor->markedForDeletion);
+
+	writeFloat(stream, actor->slow);
+	writeFloat(stream, actor->poison);
+	writeFloat(stream, actor->burn);
+	writeFloat(stream, actor->bleed);
+	writeFloat(stream, actor->movementSpeed);
+	writeU32(stream, actor->priority);
+	writeU32(stream, actor->bulletTarget);
+	writeVec2(stream, actor->bulletTargetPosition);
+	writeU32(stream, actor->parentTower);
+
+	writeU32(stream, actor->sawHitListNum);
+	for (int i = 0; i < actor->sawHitListNum; i++) writeU32(stream, actor->sawHitList[i]);
+
+	writeU32(stream, actor->amountPaid);
+
+	writeFloat(stream, actor->time);
 }
 
 void writeChunk(DataStream *stream, Chunk *chunk) {
@@ -2176,15 +2208,36 @@ void readWorld(DataStream *stream, World *world, int version) {
 
 void readActor(DataStream *stream, Actor *actor, int version) {
 	actor->type = (ActorType)readU32(stream);
+	initActor(actor);
 	actor->id = readU32(stream);
 	actor->position = readVec2(stream);
 	actor->velo = readVec2(stream);
+	actor->accel = version >= 8 ? readVec2(stream) : v2();
 	actor->aimRads = readFloat(stream);
 	actor->hp = readFloat(stream);
 	if (version >= 2) actor->armor = readFloat(stream);
 	if (version >= 2) actor->shield = readFloat(stream);
 	actor->timeTillNextShot = readFloat(stream);
 	actor->markedForDeletion = readU8(stream);
+
+	if (version >= 8) {
+		actor->slow = readFloat(stream);
+		actor->poison = readFloat(stream);
+		actor->burn = readFloat(stream);
+		actor->bleed = readFloat(stream);
+		actor->movementSpeed = readFloat(stream);
+		actor->priority = (Priority)readU32(stream);
+		actor->bulletTarget = readU32(stream);
+		actor->bulletTargetPosition = readVec2(stream);
+		actor->parentTower = readU32(stream);
+
+		actor->sawHitListNum = readU32(stream);
+		for (int i = 0; i < actor->sawHitListNum; i++) actor->sawHitList[i] = readU32(stream);
+
+		actor->amountPaid = readU32(stream);
+
+		actor->time = readFloat(stream);
+	}
 }
 
 void readChunk(DataStream *stream, Chunk *chunk, int version) {
@@ -2207,3 +2260,4 @@ Tile readTile(DataStream *stream, int version) {
 }
 
 //@consider Frost keep has a square range
+//@consider Everything but the frost keep scale mana usage by base damage?
