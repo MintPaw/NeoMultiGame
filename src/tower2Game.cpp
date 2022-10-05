@@ -159,8 +159,11 @@ struct Game {
 	float cameraZoom;
 
 	World *world;
+	bool shouldReset;
 
+	Tool prevTool;
 	Tool tool;
+	float toolTime;
 	ActorType actorToBuild;
 
 	int hp;
@@ -172,6 +175,10 @@ struct Game {
 	ActorType actorsToSpawn[ACTORS_MAX];
 	int actorsToSpawnNum;
 	float timeTillNextSpawn;
+
+#define SELECTED_ACTORS_MAX 2048
+	int selectedActors[SELECTED_ACTORS_MAX];
+	int selectedActorsNum;
 };
 Game *game = NULL;
 
@@ -253,8 +260,18 @@ void updateGame() {
 		maximizeWindow();
 
 		rndInt(0, 3); // Burn an rnd seed???
-		game->cameraZoom = 1;
+	}
 
+	if (game->shouldReset) {
+		game->shouldReset = false;
+
+		World *world = game->world;
+		for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
+		free(world);
+		game->world = NULL;
+	}
+
+	if (!game->world) {
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
 
@@ -562,6 +579,9 @@ void updateGame() {
 		game->hp = 10;
 		game->money = 1000;
 		generateMapFields();
+
+		game->cameraZoom = 1;
+		game->cameraPosition = v2();
 	}
 
 	game->size = v2(platform->windowSize);
@@ -650,14 +670,22 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 		}
 
-		for (int i = 1; i <= 9; i++) {
-			if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
-				saveState(frameSprintf("assets/states/%d.save_state", i));
-			}
+		static bool sAllowSaving = false;
+		ImGui::Checkbox("Allow saving", &sAllowSaving);
+		if (sAllowSaving) {
+			ImGui::Text("S:");
 			ImGui::SameLine();
+			for (int i = 1; i <= 9; i++) {
+				if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
+					saveState(frameSprintf("assets/states/%d.save_state", i));
+				}
+				ImGui::SameLine();
+			}
+			ImGui::NewLine();
 		}
-		ImGui::NewLine();
 
+		ImGui::Text("L:");
+		ImGui::SameLine();
 		for (int i = 1; i <= 9; i++) {
 			if (ImGui::Button(frameSprintf("%d##loadState%d", i, i))) {
 				loadState(frameSprintf("assets/states/%d.save_state", i));
@@ -665,6 +693,8 @@ void stepGame(float elapsed, bool isLastStep) {
 			ImGui::SameLine();
 		}
 		ImGui::NewLine();
+
+		if (ImGui::Button("Reset game")) game->shouldReset = true;
 
 		ImGui::End();
 	}
@@ -849,6 +879,15 @@ void stepGame(float elapsed, bool isLastStep) {
 					if (actor->timeTillNextShot < 0) {
 						actor->timeTillNextShot = 1.0/(info->rpm/60.0);
 						towerShouldFire = true;
+					}
+				}
+
+				if (game->tool == TOOL_NONE || game->tool == TOOL_SELECTED) {
+					if (platform->mouseJustDown && contains(getRect(actor), game->mouse)) {
+						game->prevTool = TOOL_NONE;
+						game->tool = TOOL_SELECTED;
+						game->selectedActorsNum = 0;
+						game->selectedActors[game->selectedActorsNum++] = actor->id;
 					}
 				}
 			}
@@ -1244,7 +1283,17 @@ void stepGame(float elapsed, bool isLastStep) {
 
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
+
 		if (actor->markedForDeletion) {
+			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+			if (info->isEnemy) {
+				if (actor->type == ACTOR_ENEMY1) {
+					game->money += 4; 
+				} else {
+					game->money += info->enemySpawnStartingWave;
+				}
+			}
+
 			deinitActor(actor);
 			arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
 			world->actorsNum--;
@@ -1254,7 +1303,12 @@ void stepGame(float elapsed, bool isLastStep) {
 	}
 
 	{ /// Update hud and tool
-		if (game->tool != TOOL_BUILDING) {
+		if (game->prevTool != game->tool) {
+			game->prevTool = game->tool;
+			game->toolTime = 0;
+		}
+
+		if (game->tool == TOOL_NONE) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
@@ -1295,6 +1349,8 @@ void stepGame(float elapsed, bool isLastStep) {
 			Tile *tile = getTileAt(tilePosition);
 
 			bool canBuild = true;
+			if (game->toolTime < 0.05) canBuild = false;
+
 			Chunk *chunk = worldToChunk(center);
 			if (!chunk) canBuild = false;
 			if (canBuild && !chunk->visible) canBuild = false;
@@ -1318,6 +1374,15 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 			}
 		}
+
+		if (game->tool == TOOL_SELECTED) {
+			if (platform->mouseJustDown && game->toolTime > 0.05) {
+				game->tool = TOOL_NONE;
+				game->selectedActorsNum = 0;
+			}
+		}
+
+		game->toolTime += elapsed;
 	} ///
 
 	if (game->playingWave) {
@@ -1857,21 +1922,29 @@ void startNextWave() {
 void saveState(char *path) {
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 4); // version
+	writeU32(stream, 6); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
 	writeFloat(stream, game->cameraZoom);
 	writeWorld(stream, game->world);
+
+	writeU32(stream, game->prevTool);
 	writeU32(stream, game->tool);
+	writeFloat(stream, game->toolTime);
+
 	writeU32(stream, game->actorToBuild);
 	writeU32(stream, game->hp);
 	writeU32(stream, game->money);
 	writeU32(stream, game->wave);
 	writeU8(stream, game->playingWave);
+
 	writeU32(stream, game->actorsToSpawnNum);
 	for (int i = 0; i < game->actorsToSpawnNum; i++) writeU32(stream, game->actorsToSpawn[i]);
 	writeFloat(stream, game->timeTillNextSpawn);
+
+	writeU32(stream, game->selectedActorsNum);
+	for (int i = 0; i < game->selectedActorsNum; i++) writeU32(stream, game->selectedActors[i]);
 
 	writeDataStream(path, stream);
 	destroyDataStream(stream);
@@ -1918,10 +1991,7 @@ void writeTile(DataStream *stream, Tile tile) {
 
 void loadState(char *path) {
 	World *world = game->world;
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
-		deinitActor(actor);
-	}
+	for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
 
 	DataStream *stream = loadDataStream(path);
 	if (!stream) {
@@ -1935,7 +2005,9 @@ void loadState(char *path) {
 	game->cameraPosition = readVec2(stream);
 	game->cameraZoom = readFloat(stream);
 	readWorld(stream, game->world, version);
+	if (version >= 6) game->prevTool = (Tool)readU32(stream);
 	game->tool = (Tool)readU32(stream);
+	if (version >= 6) game->toolTime = readFloat(stream);
 	game->actorToBuild = (ActorType)readU32(stream);
 	game->hp = version >= 3 ? readU32(stream) : 10;
 	game->money = readU32(stream);
@@ -1944,6 +2016,11 @@ void loadState(char *path) {
 	game->actorsToSpawnNum = readU32(stream);
 	for (int i = 0; i < game->actorsToSpawnNum; i++) game->actorsToSpawn[i] = (ActorType)readU32(stream);
 	game->timeTillNextSpawn = readFloat(stream);
+
+	if (version >= 5) {
+		game->selectedActorsNum = readU32(stream);
+		for (int i = 0; i < game->selectedActorsNum; i++) game->selectedActors[i] = readU32(stream);
+	}
 
 	destroyDataStream(stream);
 
