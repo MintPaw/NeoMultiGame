@@ -277,7 +277,7 @@ void platformUpdate() {
 	}
 
 	{ // Calculate memory usage
-#if _WIN32
+#if defined(_WIN32) && defined(FALLOW_DEBUG)
     PROCESS_MEMORY_COUNTERS pmc;
 		if (GetProcessMemoryInfo(platform->processHandle, &pmc, sizeof(pmc))) {
 			platform->memoryUsage = pmc.WorkingSetSize;

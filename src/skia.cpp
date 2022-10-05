@@ -557,7 +557,10 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	char *text = recurse.text;
 
 	bool canDraw = true;
-	if (!sprite->isTextField && frame > sprite->framesNum-1) frame = sprite->framesNum-1;
+	if (!sprite->isTextField) {
+		if (frame > sprite->framesNum-1) frame = sprite->framesNum-1;
+		if (frame < 0) frame = 0;
+	}
 
 	pushSpriteMatrix(cmdList, localMatrix);
 

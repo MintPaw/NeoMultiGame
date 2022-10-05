@@ -122,7 +122,7 @@ struct Ngui {
 
 	Rect lastWindowRect;
 	NguiElement *lastElement;
-	bool elementJustDownThisFrame;
+	bool mouseJustDownThisFrame;
 
 	int nextNguiElementId;
 	int currentOrderIndex;
@@ -465,7 +465,7 @@ void nguiInit() {
 
 void nguiStartFrame() {
 	if (!ngui) return;
-	ngui->elementJustDownThisFrame = false;
+	ngui->mouseJustDownThisFrame = false;
 }
 
 void nguiPushStyleOfType(NguiStyleStack *styleStack, NguiStyleType type, NguiDataType dataType, void *ptr) {
@@ -777,6 +777,8 @@ void nguiDraw(float elapsed) {
 				window->scroll = v2();
 			}
 
+			if (platform->mouseJustDown && contains(windowRect, ngui->mouse)) ngui->mouseJustDownThisFrame = true;
+
 			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
 
 			Vec2 scrollMax = childrenSize - windowSize;
@@ -893,7 +895,6 @@ void nguiDraw(float elapsed) {
 						child->bgColor = tintColor(child->bgColor, hoverTint);
 
 						if (platform->mouseJustDown) {
-							ngui->elementJustDownThisFrame = true;
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							child->bgColor = tintColor(child->bgColor, activeTint);
 
@@ -910,9 +911,23 @@ void nguiDraw(float elapsed) {
 					child->graphicsXform = lerp(child->graphicsXform, graphicsXform, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
 
 					Rect graphicsRect = childRect;
+
+					bool alreadyOffScreen = false;
+					if (graphicsRect.x + graphicsRect.width > ngui->screenSize.x) alreadyOffScreen = true;
+					if (graphicsRect.x < 0) alreadyOffScreen = true;
+					if (graphicsRect.y + graphicsRect.height > ngui->screenSize.y) alreadyOffScreen = true;
+					if (graphicsRect.y < 0) alreadyOffScreen = true;
+
 					graphicsRect.x += child->graphicsXform.translation.x;
 					graphicsRect.y += child->graphicsXform.translation.y;
 					graphicsRect = inflatePerc(graphicsRect, child->graphicsXform.scale - 1);
+
+					if (!alreadyOffScreen) {
+						if (graphicsRect.x + graphicsRect.width > ngui->screenSize.x) graphicsRect.x -= (graphicsRect.x + graphicsRect.width) - ngui->screenSize.x;
+						if (graphicsRect.x < 0) graphicsRect.x += -graphicsRect.x;
+						if (graphicsRect.y + graphicsRect.height > ngui->screenSize.y) graphicsRect.y -= (graphicsRect.y + graphicsRect.height) - ngui->screenSize.y;
+						if (graphicsRect.y < 0) graphicsRect.y += -graphicsRect.y;
+					}
 
 					drawElementBg(child, graphicsRect);
 

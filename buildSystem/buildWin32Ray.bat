@@ -104,8 +104,8 @@ if ERRORLEVEL 1 (
 )
 
 type %PROJECT_DIR%\errors.err
-copy %LIB_DIR%\win64\*.dll .
 
+@copy %LIB_DIR%\win64\*.dll . 1>nul 2>nul
 @copy %LIB_DIR%\win64\*.pdb . 1>nul 2>nul
 
 popd

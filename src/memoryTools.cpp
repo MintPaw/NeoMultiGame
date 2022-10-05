@@ -33,7 +33,6 @@ char *strrstr(char *haystack, const char *needle);
 int countChar(const char *src, char value);
 int countString(char *src, char *value);
 bool stringStartsWith(const char *hayStack, const char *needle);
-bool stringStartsWithFast(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
 int toLowerCase(int letter);
 int toUpperCase(int letter);
@@ -347,7 +346,7 @@ int countChar(const char *src, char value) {
 int countString(char *src, char *value) {
 	int count = 0;
 	const char *tmp = src;
-	while (tmp = strstr(tmp, value)) {
+	while ((tmp = strstr(tmp, value))) {
 		count++;
 		tmp++;
 	}
@@ -355,6 +354,8 @@ int countString(char *src, char *value) {
 }
 
 bool stringStartsWith(const char *hayStack, const char *needle) {
+	if (strlen(needle) > strlen(hayStack)) return false;
+
 	int len = strlen(needle);
 	bool areSame = true;
 	for (int i = 0; i < len; i++)
