@@ -145,15 +145,6 @@ struct Game {
 
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 
-	/// Editor/debug
-	bool debugShowFrameTimes;
-	bool debugShowDijkstraValues;
-	bool debugShowFlowFieldValues;
-	bool debugShowPerlinValues;
-	bool debugDrawChunkLines;
-	bool debugDrawTileLines;
-	bool debugShowActorVelo;
-
 	/// Serialized
 	float time;
 
@@ -181,6 +172,17 @@ struct Game {
 #define SELECTED_ACTORS_MAX 2048
 	int selectedActors[SELECTED_ACTORS_MAX];
 	int selectedActorsNum;
+
+	/// Editor/debug
+	bool debugShowFrameTimes;
+	bool debugShowDijkstraValues;
+	bool debugShowFlowFieldValues;
+	bool debugShowPerlinValues;
+	bool debugDrawChunkLines;
+	bool debugDrawTileLines;
+	bool debugShowActorVelo;
+
+	char debugNewSaveStateName[PATH_MAX_LEN];
 };
 Game *game = NULL;
 
@@ -255,6 +257,7 @@ void runGame() {
 }
 
 void updateGame() {
+	bool isFirstStart = false;
 	if (!game) {
 		game = (Game *)zalloc(sizeof(Game));
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
@@ -264,6 +267,7 @@ void updateGame() {
 		maximizeWindow();
 
 		rndInt(0, 3); // Burn an rnd seed???
+		isFirstStart = true;
 	}
 
 	if (game->shouldReset) {
@@ -586,6 +590,8 @@ void updateGame() {
 
 		game->cameraZoom = 1;
 		game->cameraPosition = v2();
+
+		if (isFirstStart) loadState("assets/states/autosave.save_state");
 	}
 
 	game->size = v2(platform->windowSize);
@@ -674,30 +680,33 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 		}
 
-		static bool sAllowSaving = false;
-		ImGui::Checkbox("Allow saving", &sAllowSaving);
-		if (sAllowSaving) {
-			ImGui::Text("S:");
-			ImGui::SameLine();
-			for (int i = 1; i <= 9; i++) {
-				if (ImGui::Button(frameSprintf("%d##saveState%d", i, i))) {
-					saveState(frameSprintf("assets/states/%d.save_state", i));
-				}
-				ImGui::SameLine();
-			}
-			ImGui::NewLine();
-		}
+		ImGui::Separator();
 
-		ImGui::Text("L:");
+		ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
 		ImGui::SameLine();
-		for (int i = 1; i <= 9; i++) {
-			if (ImGui::Button(frameSprintf("%d##loadState%d", i, i))) {
-				loadState(frameSprintf("assets/states/%d.save_state", i));
-			}
-			ImGui::SameLine();
+		if (ImGui::Button("Save")) {
+			saveState(frameSprintf("assets/states/%s.save_state", game->debugNewSaveStateName));
+			game->debugNewSaveStateName[0] = 0;
+			refreshAssetPaths();
 		}
-		ImGui::NewLine();
 
+		int pathCount = 0;
+		for (int i = 0; i < assetPathsNum; i++) {
+			char *path = assetPaths[i];
+			if (strstr(path, "assets/states/")) {
+				char *name = frameStringClone(path) + strlen("assets/states/");
+				char *dotPos = strchr(name, '.');
+				if (dotPos) *dotPos = 0;
+				if (ImGui::Button(name)) {
+					loadState(path);
+				}
+				if ((pathCount+1) % 5 != 0) ImGui::SameLine();
+				pathCount++;
+			}
+		}
+
+		ImGui::NewLine();
+		ImGui::Separator();
 		if (ImGui::Button("Reset game")) game->shouldReset = true;
 
 		ImGui::End();
@@ -1293,6 +1302,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
+			saveState("assets/states/autosave.save_state");
 			game->playingWave = false;
 		}
 	} ///
