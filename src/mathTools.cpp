@@ -4225,13 +4225,33 @@ bool isZero(Line2 line) {
 
 bool overlaps(Line2 line1, Line2 line2);
 bool overlaps(Line2 line1, Line2 line2) {
-  float uA = ((line2.end.x-line2.start.x)*(line1.start.y-line2.start.y) - (line2.end.y-line2.start.y)*(line1.start.x-line2.start.x)) /
+	// https://stackoverflow.com/questions/9043805
+	float a = line1.start.x;
+	float b = line1.start.y;
+	float c = line1.end.x;
+	float d = line1.end.y;
+	float p = line2.start.x;
+	float q = line2.start.y;
+	float r = line2.end.x;
+	float s = line2.end.y;
+	float det, gamma, lambda;
+	det = (c - a) * (s - q) - (r - p) * (d - b);
+	if (det == 0) {
+		return false;
+	} else {
+		lambda = ((s - q) * (r - a) + (p - r) * (s - b)) / det;
+		gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
+		return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
+	}
+#if 0 // Wrong somehow???
+	float uA = ((line2.end.x-line2.start.x)*(line1.start.y-line2.start.y) - (line2.end.y-line2.start.y)*(line1.start.x-line2.start.x)) /
 		((line2.end.y-line2.start.y)*(line1.end.x-line1.start.x) - (line2.end.x-line2.start.x)*(line1.end.y-line1.start.y));
-  float uB = ((line1.end.x-line1.start.x)*(line1.start.y-line2.start.y) - (line1.end.y-line1.start.y)*(line1.start.x-line2.start.x)) /
+	float uB = ((line1.end.x-line1.start.x)*(line1.start.y-line2.start.y) - (line1.end.y-line1.start.y)*(line1.start.x-line2.start.x)) /
 		((line2.end.y-line2.start.y)*(line1.end.x-line1.start.x) - (line2.end.x-line2.start.x)*(line1.end.y-line1.start.y));
 
-  if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) return true;
-  return false;
+	if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) return true;
+	return false;
+#endif
 }
 
 bool overlaps(Rect rect, Line2 line);
@@ -4546,22 +4566,22 @@ bool overlaps(Tri2 tri0, Tri2 tri1) {
 
 bool overlaps(Rect rect, Tri2 tri);
 bool overlaps(Rect rect, Tri2 tri) {
-	Tri2 rectTri0;
-	Tri2 rectTri1;
-	{
-		Vec2 pos = getPosition(rect);
-		Vec2 size = getPosition(rect);
-		rectTri0.verts[0] = pos + size*v2(0, 0);
-		rectTri0.verts[1] = pos + size*v2(0, 1);
-		rectTri0.verts[2] = pos + size*v2(1, 0);
+	if (contains(rect, tri.verts[0])) return true;
+	if (overlaps(tri, getCenter(rect))) return true;
 
-		rectTri1.verts[0] = pos + size*v2(1, 0);
-		rectTri1.verts[1] = pos + size*v2(0, 1);
-		rectTri1.verts[2] = pos + size*v2(1, 1);
+	Line2 rectLines[4];
+	toLines(rect, rectLines);
+
+	Line2 triLines[3];
+	toLines(tri, rectLines);
+
+	for (int i = 0; i < 4; i++) {
+		Line2 rectLine = rectLines[i];
+		for (int i = 0; i < 3; i++) {
+			Line2 triLine = triLines[i];
+			if (overlaps(rectLine, triLine)) return true;
+		}
 	}
-
-	if (overlaps(tri, rectTri0)) return true;
-	if (overlaps(tri, rectTri1)) return true;
 	return false;
 }
 /// / Tri2

@@ -171,14 +171,15 @@ struct Game {
 
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 
+	bool shouldReset;
+
 	/// Serialized
+	World *world;
+
 	float time;
 
 	Vec2 cameraPosition;
 	float cameraZoom;
-
-	World *world;
-	bool shouldReset;
 
 	Tool prevTool;
 	Tool tool;
@@ -622,6 +623,14 @@ void updateGame() {
 		game->cameraZoom = 1;
 		game->cameraPosition = v2();
 
+		game->time = 0;
+		game->tool = TOOL_NONE;
+		game->toolTime = 0;
+		game->wave = 0;
+		game->playingWave = false;
+		game->actorsToSpawnNum = 0;
+		game->timeTillNextSpawn = 0;
+
 		if (isFirstStart) loadState("assets/states/autosave.save_state");
 	}
 
@@ -952,9 +961,8 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (!game->playingWave && !towerIsActiveBetweenWaves) isActive = false;
 				if (!target && towerCaresAboutTargets) isActive = false;
 
+				actor->timeTillNextShot -= elapsed;
 				if (isActive) {
-					actor->timeTillNextShot -= elapsed;
-
 					if (actor->timeTillNextShot < 0) {
 						actor->timeTillNextShot = 1.0/(info->rpm/60.0);
 
@@ -1610,7 +1618,14 @@ void stepGame(float elapsed, bool isLastStep) {
 	{
 		Rect rect = makeRect(0, 0, 350, 100);
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-		drawTextInRect(frameSprintf("Hp: %d\nMoney $%d\nMana: %.1f/%.1f", game->hp, game->money, game->mana, game->maxMana), props, rect);
+		drawTextInRect(frameSprintf(
+			"Hp: %d\nMoney $%d\nMana: %.1f/%.1f (+%.1f/s(fake))",
+			game->hp,
+			game->money,
+			game->mana,
+			game->maxMana,
+			1
+		), props, rect);
 	}
 
 	nguiDraw(elapsed);
@@ -2031,8 +2046,9 @@ Actor **getActorsInRange(Tri2 range, int *outNum) {
 		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
 		if (!otherInfo->isEnemy) continue;
 
-		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
-		if (overlaps(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
+		if (overlaps(getRect(actor), range)) {
+			enemiesInRange[enemiesInRangeNum++] = actor;
+		}
 	}
 
 	*outNum = enemiesInRangeNum;
