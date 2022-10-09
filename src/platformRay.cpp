@@ -63,6 +63,7 @@ struct Platform {
 	float *frameTimes;
 	int frameTimesMax;
 	float frameTimeAvg;
+	float frameTimeHighest;
 
 	int memoryUsage;
 
@@ -273,7 +274,11 @@ void platformUpdate() {
 		platform->frameTimes[platform->frameCount % platform->frameTimesMax] = getMsPassed(platform->frameNano);
 
 		platform->frameTimeAvg = 0;
-		for (int i = 0; i < platform->frameTimesMax; i++) platform->frameTimeAvg += platform->frameTimes[i];
+		platform->frameTimeHighest = 0;
+		for (int i = 0; i < platform->frameTimesMax; i++) {
+			platform->frameTimeAvg += platform->frameTimes[i];
+			if (platform->frameTimeHighest < platform->frameTimes[i]) platform->frameTimeHighest = platform->frameTimes[i];
+		}
 		platform->frameTimeAvg /= platform->frameTimesMax;
 	}
 

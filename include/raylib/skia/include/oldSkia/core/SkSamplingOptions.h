@@ -14,12 +14,16 @@
 enum class SkFilterMode {
     kNearest,   // single sample point (nearest neighbor)
     kLinear,    // interporate between 2x2 sample points (bilinear interpolation)
+
+    kLast = kLinear,
 };
 
 enum class SkMipmapMode {
     kNone,      // ignore mipmap levels, sample from the "base"
     kNearest,   // sample from the nearest level
     kLinear,    // interpolate between the two nearest levels
+
+    kLast = kLinear,
 };
 
 /*
@@ -41,6 +45,10 @@ enum class SkMipmapMode {
  */
 struct SkCubicResampler {
     float B, C;
+
+    // Historic default for kHigh_SkFilterQuality
+    static constexpr SkCubicResampler Mitchell() { return {1/3.0f, 1/3.0f}; }
+    static constexpr SkCubicResampler CatmullRom() { return {0.0f, 1/2.0f}; }
 };
 
 struct SK_API SkSamplingOptions {
@@ -62,15 +70,22 @@ struct SK_API SkSamplingOptions {
         , filter(fm)
         , mipmap(mm) {}
 
+    explicit SkSamplingOptions(SkFilterMode fm)
+        : useCubic(false)
+        , filter(fm)
+        , mipmap(SkMipmapMode::kNone) {}
+
     explicit SkSamplingOptions(const SkCubicResampler& c)
         : useCubic(true)
         , cubic(c) {}
 
+#ifdef SK_SUPPORT_LEGACY_FILTERQUALITY
     enum MediumBehavior {
         kMedium_asMipmapNearest,    // historic cpu behavior
         kMedium_asMipmapLinear,     // historic gpu behavior
     };
     explicit SkSamplingOptions(SkFilterQuality, MediumBehavior = kMedium_asMipmapNearest);
+#endif
 
     bool operator==(const SkSamplingOptions& other) const {
         return useCubic == other.useCubic

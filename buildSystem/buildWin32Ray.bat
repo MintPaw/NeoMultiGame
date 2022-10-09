@@ -93,7 +93,7 @@ if not exist winRayObj\stb_sprintf.obj (
 	cd..
 )
 
-%COMPILER% %DEBUG_ARGS% %OPT_ARGS% -EHsc -nologo ^
+%COMPILER% /std:c++17 %DEBUG_ARGS% %OPT_ARGS% -EHsc -nologo ^
 	-I%INCLUDE_DIR%\raylib -I%INCLUDE_DIR%\raylib\skia %LIB_DIR%\raylib\win64\*.obj %LIB_DIR%\raylib\win64\*.lib %LIBS% winRayObj\*.obj %SRC_DIR%\main.cpp ^
 	%DEFINES% %ALT_CORE_PATH_DEFINES% -DRAYLIB_MODE /D STB_SPRINTF_OBJ /D STB_IMAGE_WRITE_OBJ /D STB_IMAGE_OBJ /D STB_TRUETYPE_OBJ /D STB_RECTPACK_OBJ /D IMGUI_OBJ ^
 	-link /DEBUG -out:%GAME_NAME%.exe > %PROJECT_DIR%\errors.err

@@ -170,6 +170,7 @@ struct Game {
 	Vec2 mouse;
 
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
+	int actorTypeCounts[ACTOR_TYPES_MAX];
 
 	bool shouldReset;
 
@@ -787,10 +788,10 @@ void stepGame(float elapsed, bool isLastStep) {
 
 	pushCamera2d(cameraMatrix);
 
-	int *typeCounts = (int *)frameMalloc(sizeof(int) * ACTOR_TYPES_MAX);
+	memset(game->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
-		typeCounts[actor->type]++;
+		game->actorTypeCounts[actor->type]++;
 	}
 
 	if (isLastStep) {
@@ -1266,7 +1267,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				float explodeRange = 2 * TILE_SIZE;
 				if (actor->time < delayTime) {
 					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
-					drawCircle(actor->position, explodeRange*ghostPerc, 0x20900000);
+					drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
 				}
 
 				if (actor->time >= delayTime) {
@@ -1454,7 +1455,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			for (int i = 0; i < typesCanBuyNum; i++) {
 				ActorType actorType = typesCanBuy[i];
 				ActorTypeInfo *info = &game->actorTypeInfos[actorType];
-				float price = info->price + info->priceMulti*typeCounts[actorType];
+				float price = info->price + info->priceMulti*game->actorTypeCounts[actorType];
 				char *label = frameSprintf("%s $%.0f\n", info->name, price);
 				if (nguiButton(label)) {
 					game->tool = TOOL_BUILDING;
@@ -1495,11 +1496,10 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 
 			if (canBuild && isMouseClicked()) {
-				float price = info->price + info->priceMulti*typeCounts[game->actorToBuild];
+				float price = info->price + info->priceMulti*game->actorTypeCounts[game->actorToBuild];
 				if (game->money >= price) {
 					game->money -= price;
 					Actor *newTower = createActor(game->actorToBuild);
-					newTower->amountPaid = price;
 					newTower->position = center;
 					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
 				} else {
@@ -1515,10 +1515,11 @@ void stepGame(float elapsed, bool isLastStep) {
 			if (nguiButton("Sell")) {
 				for (int i = 0; i < game->selectedActorsNum; i++) {
 					Actor *actor = getActor(game->selectedActors[i]);
-					if (!actor) continue;
+					ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
 					actor->markedForDeletion = true;
 					game->money += actor->amountPaid;
+					game->money += info->price + ((game->actorTypeCounts[actor->type]-1) * info->priceMulti);
 
 					arraySpliceIndex(game->selectedActors, game->selectedActorsNum, sizeof(int), i);
 					game->selectedActorsNum--;
@@ -1549,7 +1550,6 @@ void stepGame(float elapsed, bool isLastStep) {
 
 		for (int i = 0; i < game->selectedActorsNum; i++) {
 			Actor *actor = getActor(game->selectedActors[i]);
-			if (!actor) continue;
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
 			if (info->isTower) {

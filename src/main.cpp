@@ -32,6 +32,7 @@
 #include "include/core/SkPixelRef.h"
 #include "include/core/SkPixelRef.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkColorSpace.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/gpu/GrDirectContext.h"

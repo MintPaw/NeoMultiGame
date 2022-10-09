@@ -253,8 +253,18 @@ public:
     /**
      * Purge GPU resources that haven't been used in the past 'msNotUsed' milliseconds or are
      * otherwise marked for deletion, regardless of whether the context is under budget.
+     *
+     * If 'scratchResourcesOnly' is true all unlocked scratch resources older than 'msNotUsed' will
+     * be purged but the unlocked resources with persistent data will remain. If
+     * 'scratchResourcesOnly' is false then all unlocked resources older than 'msNotUsed' will be
+     * purged.
+     *
+     * @param msNotUsed              Only unlocked resources not used in these last milliseconds
+     *                               will be cleaned up.
+     * @param scratchResourcesOnly   If true only unlocked scratch resources will be purged.
      */
-    void performDeferredCleanup(std::chrono::milliseconds msNotUsed);
+    void performDeferredCleanup(std::chrono::milliseconds msNotUsed,
+                                bool scratchResourcesOnly=false);
 
     // Temporary compatibility API for Android.
     void purgeResourcesNotUsedInMs(std::chrono::milliseconds msNotUsed) {
@@ -399,11 +409,6 @@ public:
     bool supportsDistanceFieldText() const;
 
     void storeVkPipelineCacheData();
-
-    // Returns the gpu memory size of the the texture that backs the passed in SkImage. Returns 0 if
-    // the SkImage is not texture backed. For external format textures this will also return 0 as we
-    // cannot determine the correct size.
-    static size_t ComputeImageSize(sk_sp<SkImage> image, GrMipmapped, bool useNextPow2 = false);
 
     /**
      * Retrieve the default GrBackendFormat for a given SkColorType and renderability.
@@ -796,6 +801,25 @@ public:
     SkString dump() const;
 #endif
 
+    class DirectContextID {
+    public:
+        static GrDirectContext::DirectContextID Next();
+
+        DirectContextID() : fID(SK_InvalidUniqueID) {}
+
+        bool operator==(const DirectContextID& that) const { return fID == that.fID; }
+        bool operator!=(const DirectContextID& that) const { return !(*this == that); }
+
+        void makeInvalid() { fID = SK_InvalidUniqueID; }
+        bool isValid() const { return fID != SK_InvalidUniqueID; }
+
+    private:
+        constexpr DirectContextID(uint32_t id) : fID(id) {}
+        uint32_t fID;
+    };
+
+    DirectContextID directContextID() const { return fDirectContextID; }
+
     // Provides access to functions that aren't part of the public API.
     GrDirectContextPriv priv();
     const GrDirectContextPriv priv() const;  // NOLINT(readability-const-return-type)
@@ -811,6 +835,20 @@ protected:
     GrDirectContext* asDirectContext() override { return this; }
 
 private:
+    // This call will make sure out work on the GPU is finished and will execute any outstanding
+    // asynchronous work (e.g. calling finished procs, freeing resources, etc.) related to the
+    // outstanding work on the gpu. The main use currently for this function is when tearing down or
+    // abandoning the context.
+    //
+    // When we finish up work on the GPU it could trigger callbacks to the client. In the case we
+    // are abandoning the context we don't want the client to be able to use the GrDirectContext to
+    // issue more commands during the callback. Thus before calling this function we set the
+    // GrDirectContext's state to be abandoned. However, we need to be able to get by the abaonded
+    // check in the call to know that it is safe to execute this. The shouldExecuteWhileAbandoned
+    // bool is used for this signal.
+    void syncAllOutstandingGpuWork(bool shouldExecuteWhileAbandoned);
+
+    const DirectContextID                   fDirectContextID;
     // fTaskGroup must appear before anything that uses it (e.g. fGpu), so that it is destroyed
     // after all of its users. Clients of fTaskGroup will generally want to ensure that they call
     // wait() on it as they are being destroyed, to avoid the possibility of pending tasks being

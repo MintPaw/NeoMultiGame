@@ -100,7 +100,7 @@ if [%OPTIMIZED_MODE%]==[1] (
 	set OPT_ARGS=
 )
 
-call em++ %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_DIR%\main.cpp ^
+call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_DIR%\main.cpp ^
 	%LIB_DIR%\libraylib.a %LIB_DIR%\libskia.a -I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
 	-lidbfs.js ^
 	-fno-rtti -fno-exceptions -Wno-c++11-compat-deprecated-writable-strings -Wno-writable-strings ^

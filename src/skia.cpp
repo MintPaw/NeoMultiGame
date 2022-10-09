@@ -209,9 +209,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
 
-#if !defined(__EMSCRIPTEN__)
 		skiaSys->blurEnabled = true;
-#endif
 
 		SkGraphics::Init();
 	}
@@ -260,34 +258,34 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 			skiaSys->grDirectContext = grDirectContext.release();
 		}
 
-	if (skiaSys->skiaTexture) destroyTexture(skiaSys->skiaTexture);
-	skiaSys->skiaTexture = createTexture(skiaSys->width, skiaSys->height);
-	setTextureSmooth(skiaSys->skiaTexture, true);
+		if (skiaSys->skiaTexture) destroyTexture(skiaSys->skiaTexture);
+		skiaSys->skiaTexture = createTexture(skiaSys->width, skiaSys->height);
+		setTextureSmooth(skiaSys->skiaTexture, true);
 
-	sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
-	SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
+		sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
+		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
 
-	GrGLTextureInfo textureInfo = {};
+		GrGLTextureInfo textureInfo = {};
 #if RAYLIB_MODE
-	int skiaTextureId = skiaSys->skiaTexture->raylibTexture.id;
+		int skiaTextureId = skiaSys->skiaTexture->raylibTexture.id;
 #else
-	int skiaTextureId = skiaSys->skiaTexture->id;
+		int skiaTextureId = skiaSys->skiaTexture->id;
 #endif
-	textureInfo.fTarget = GL_TEXTURE_2D;
-	textureInfo.fID = skiaTextureId;
-	textureInfo.fFormat = GL_RGBA8;
+		textureInfo.fTarget = GL_TEXTURE_2D;
+		textureInfo.fID = skiaTextureId;
+		textureInfo.fFormat = GL_RGBA8;
 
-	GrBackendTexture backendTexture(skiaSys->skiaTexture->width, skiaSys->skiaTexture->height, GrMipmapped::kNo, textureInfo);
+		GrBackendTexture backendTexture(skiaSys->skiaTexture->width, skiaSys->skiaTexture->height, GrMipmapped::kNo, textureInfo);
 
-	skiaSys->gpuSurface = SkSurface::MakeFromBackendTexture(
-		skiaSys->grDirectContext,
-		backendTexture,
-		kBottomLeft_GrSurfaceOrigin,
-		0,
-		kRGBA_8888_SkColorType,
-		colorSpace,
-		&surfaceProps
-	).release();
+		skiaSys->gpuSurface = SkSurface::MakeFromBackendTexture(
+			skiaSys->grDirectContext,
+			backendTexture,
+			kBottomLeft_GrSurfaceOrigin,
+			0,
+			kRGBA_8888_SkColorType,
+			colorSpace,
+			&surfaceProps
+		).release();
 
 		if (!skiaSys->gpuSurface) {
 			if (msaaSamples == 16) {
@@ -316,7 +314,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 
 		// glPopClientAttrib();
 	} else {
-		SkImageInfo info = SkImageInfo::Make(skiaSys->width, skiaSys->height, kRGBA_8888_SkColorType, kPremul_SkAlphaType, NULL);
+		SkImageInfo info = SkImageInfo::Make(skiaSys->width, skiaSys->height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 		skiaSys->bitmap.allocPixels(info);
 
 		skiaSys->mainCanvas = new SkCanvas(skiaSys->bitmap);
