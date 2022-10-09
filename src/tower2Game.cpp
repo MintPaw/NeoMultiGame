@@ -75,6 +75,7 @@ enum ActorType {
 	ACTOR_BULLET5, ACTOR_BULLET6, ACTOR_BULLET7, ACTOR_BULLET8,
 	ACTOR_BULLET9, ACTOR_BULLET10, ACTOR_BULLET11, ACTOR_BULLET12,
 	ACTOR_BULLET13, ACTOR_BULLET14, ACTOR_BULLET15, ACTOR_BULLET16,
+	ACTOR_MANA_CRYSTAL,
 	ACTOR_TYPES_MAX,
 };
 struct Actor {
@@ -119,7 +120,6 @@ enum TileType {
 	TILE_HOME,
 	TILE_GROUND,
 	TILE_ROAD,
-	TILE_MANA_CRYSTAL,
 };
 struct Tile {
 	TileType type;
@@ -242,8 +242,8 @@ void dealDamage(Actor *bullet, Actor *dest);
 Rect getRect(Actor *actor);
 Vec2 getFlowDirForRect(Rect rect);
 
-Actor **getActorsInRange(Circle range, int *outNum);
-Actor **getActorsInRange(Tri2 range, int *outNum);
+Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
+Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
 
 void saveState(char *path);
@@ -375,7 +375,7 @@ void updateGame() {
 			info->shieldDamageMulti = 5;
 			info->range = 2 * TILE_SIZE;
 			info->rpm = 180;
-			info->mana = 2.0/3.0;
+			info->mana = 0.3;
 			info->price = 250;
 			info->priceMulti = 100;
 
@@ -473,7 +473,6 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
 			strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 0;
 			info->price = 100;
 			info->priceMulti = 10;
 
@@ -612,6 +611,21 @@ void updateGame() {
 			}
 
 			world->chunks[0].visible = true;
+
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				for (int y = 0; y < CHUNK_SIZE; y++) {
+					for (int x = 0; x < CHUNK_SIZE; x++) {
+						int tileIndex = y*CHUNK_SIZE + x;
+						Tile *tile = &chunk->tiles[tileIndex];
+						if (tile->type != TILE_GROUND) continue;
+						if (rndPerc(0.01)) {
+							Actor *actor = createActor(ACTOR_MANA_CRYSTAL);
+							actor->position = tileToWorld(chunkTileToWorldTile(chunk, v2i(x, y)));
+						}
+					}
+				}
+			}
 		} ///
 
 		game->hp = 10;
@@ -826,7 +840,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					int color = 0x00000000;
 
 					if (tile->type == TILE_HOME) color = 0xFFFFF333;
-					if (tile->type == TILE_GROUND || tile->type == TILE_MANA_CRYSTAL) color = 0xFF017301;
+					if (tile->type == TILE_GROUND) color = 0xFF017301;
 					if (tile->type == TILE_ROAD) color = 0xFF966F02;
 
 					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
@@ -834,10 +848,6 @@ void stepGame(float elapsed, bool isLastStep) {
 					color = lerpColor(color, 0xFF000000, heightShadePerc);
 
 					drawRect(rect, color);
-
-					if (tile->type == TILE_MANA_CRYSTAL) {
-						drawRect(inflatePerc(rect, -0.6), 0xFF19C4FF);
-					}
 
 					if (game->debugShowDijkstraValues) {
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
@@ -871,6 +881,12 @@ void stepGame(float elapsed, bool isLastStep) {
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+
+			bool shouldDraw = true;
+			{
+				Chunk *chunk = worldToChunk(actor->position);
+				if (chunk && !chunk->visible) shouldDraw = false;
+			}
 
 			bool isSelected = false;
 			for (int i = 0; i < game->selectedActorsNum; i++) {
@@ -926,7 +942,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					Circle range = makeCircle(actor->position, info->range);
 
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum, true);
 
 					Actor *bestEnemy = NULL;
 					float bestEnemyScore = 0;
@@ -1010,7 +1026,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					Circle circle = makeCircle(actor->position, info->range);
 					drawCircle(circle, 0xFFB8FFFA);
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
 						dealDamage(actor, enemy);
@@ -1071,7 +1087,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					drawLine(tri.verts[2], tri.verts[0], 5, BURN_COLOR);
 
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						int amount = info->damage;
 						Actor *enemy = enemiesInRange[i];
@@ -1102,7 +1118,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					drawLine(tri.verts[2], tri.verts[0], 5, POISON_COLOR);
 
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						int amount = info->damage;
 						Actor *enemy = enemiesInRange[i];
@@ -1130,6 +1146,21 @@ void stepGame(float elapsed, bool isLastStep) {
 				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 				line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
 				drawLine(line, 4, 0xFFFF0000);
+			} else if (actor->type == ACTOR_MANA_SIPHON) {
+				drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
+
+				int count = 0;
+				Circle range = makeCircle(actor->position, TILE_SIZE);
+				int actorsInRangeNum = 0;
+				Actor **actorsInRange = getActorsInRange(range, &actorsInRangeNum, false);
+				for (int i = 0; i < actorsInRangeNum; i++) {
+					Actor *other = actorsInRange[i];
+					if (other->type == ACTOR_MANA_CRYSTAL) count++;
+				}
+
+				if (game->playingWave) game->mana += (float)count * elapsed;
+			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+				if (shouldDraw) drawRect(rect, 0xFFA4B0CC);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -1244,7 +1275,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					actor->markedForDeletion = true;
 
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
 						dealDamage(actor, enemy);
@@ -1259,7 +1290,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				Circle range = makeCircle(getCenter(rect), rect.width/2);
 
 				int enemiesInRangeNum = 0;
-				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum);
+				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum, true);
 				for (int i = 0; i < enemiesInRangeNum; i++) {
 					Actor *enemy = enemiesInRange[i];
 					if (overlaps(getRect(enemy), rect)) {
@@ -1327,7 +1358,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					Circle circle = makeCircle(saw->position, sawSize);
 
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum);
+					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
 
@@ -1416,7 +1447,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
 			ActorType typesCanBuy[] = {
-				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER
+				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_MANA_SIPHON
 			};
 			int typesCanBuyNum = ArrayLength(typesCanBuy);
 
@@ -2014,7 +2045,7 @@ Vec2 getFlowDirForRect(Rect rect) {
 	return dir;
 }
 
-Actor **getActorsInRange(Circle range, int *outNum) {
+Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 	World *world = game->world;
 
 	*outNum = 0;
@@ -2024,7 +2055,7 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
 		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
-		if (!otherInfo->isEnemy) continue;
+		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
 		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
 		if (contains(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
@@ -2034,7 +2065,7 @@ Actor **getActorsInRange(Circle range, int *outNum) {
 	return enemiesInRange;
 }
 
-Actor **getActorsInRange(Tri2 range, int *outNum) {
+Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly) {
 	World *world = game->world;
 
 	*outNum = 0;
@@ -2044,7 +2075,7 @@ Actor **getActorsInRange(Tri2 range, int *outNum) {
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
 		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
-		if (!otherInfo->isEnemy) continue;
+		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
 		if (overlaps(getRect(actor), range)) {
 			enemiesInRange[enemiesInRangeNum++] = actor;
