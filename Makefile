@@ -11,8 +11,8 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
-GAME_NAME=horseGame
-# GAME_NAME=tower2Game
+# GAME_NAME=horseGame
+GAME_NAME=tower2Game
 # GAME_NAME=gladiators2Game
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
@@ -38,11 +38,8 @@ endif
 RAW_ASSETS_DIR=raw
 WIN_LIBS=lib/win64
 WIN_INCS=include/win64
-PARAPHORE_COM_PATH := /d/paraphore.com
-HORSE_GAME_EARLY_DIR := horse_34228
-HORSE_GAME_DEV_DIR := horse_dev_23489
-HORSE_GAME_PUBLIC_DIR := HoracesHoarseHorseWhores
-BUTT_2_GO_PUBLIC_DIR := Butt2Go
+
+-include ../multiGamePrivate/Makefile.in.start
 
 SEVEN_ZIP="/c/Program Files/7-Zip/7z.exe"
 
@@ -52,14 +49,6 @@ EMSCRIPTEN_BUILD_BAT=buildEmscriptenRay
 else
 WIN_BUILD_BAT=buildWin32
 EMSCRIPTEN_BUILD_BAT=buildEmscripten
-endif
-
-ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
-	PARAPHORE_COM_PATH := /d/paraphore.com
-endif
-
-ifeq ($(shell echo $$USERNAME), Nanachi)
-	PARAPHORE_COM_PATH := /c/paraphore.com
 endif
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
@@ -247,7 +236,7 @@ bwrel:
 		"
 
 rw:
-	clear; cd C:/bin/webgl; $(PYTHON3) -m http.server
+	cmd /c "D:/_tools/chromium/chrome.exe 127.0.0.1/game"
 
 debugVs:
 	# $(MAKE) debugC
@@ -256,28 +245,6 @@ debugVs:
 debugC:
 	-cmd /c "D:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
 	-cmd /c "C:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
-
-resetSite:
-	# if [[ ! -d "$(PARAPHORE_COM_PATH)" ]]; then \
-	# 	git clone git@github.com:FallowWing/paraphore.com.git $(PARAPHORE_COM_PATH) --depth=1 --recurse; \
-	# 	fi
-	
-	# cd $(PARAPHORE_COM_PATH) && \
-	# 	git fetch origin && \
-	# 	git reset --hard origin/master && \
-	# 	git pull
-
-shipDir:
-	cd $(SHIP_DIR); \
-		newPrefix=`pwd | grep -o "paraphore.com.*"`; \
-		newPrefix=$${newPrefix:14}; \
-		s3cmd sync --delete-removed --acl-public --exclude '.git/*' . s3://paraphore.com/$$newPrefix/;
-
-shipAll:
-	cd $(PARAPHORE_COM_PATH); \
-		newPrefix=`pwd | grep -o "paraphore.com.*"`; \
-		newPrefix=$${newPrefix:14}; \
-		s3cmd sync --delete-removed --acl-public --exclude '.git/*' . s3://paraphore.com
 endif # ------------------------------------------------------------------------------------------ End Windows
 
 ifneq (, $(findstring Linux, $(shell uname))) # -------------------------------------------------- Linux
@@ -455,133 +422,6 @@ pack: #@todo remove
 		cd /c/bin; \
 			$(SEVEN_ZIP) a -tzip selfShip.zip selfShip
 
-shipHorseGameToRc:
-	-$(MAKE) clean
-	cmd /c "\
-		set GAME_NAME=horseGame&& \
-		set FAST_CLANG_MODE=1&& \
-		set DEBUG_MODE=1&& \
-		set INTERNAL_MODE=1&& \
-		set OPTIMIZED_MODE=1&& \
-		buildSystem\$(WIN_BUILD_BAT).bat\
-		"
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-		cp -r /c/bin/pack/* "/c/Dropbox/FallowCandy/HorseProjects/game"
-	magick convert /c/Dropbox/FallowCandy/HorseProjects/raw/icon.png /c/bin/icon.ico
-	while ! cmd /c "rcedit c:/Dropbox/FallowCandy/HorseProjects/game/horseGame.exe --set-icon C:/bin/icon.ico"; \
-	do \
-	sleep 1; \
-	done;
-
-shipHorseGamePublicToSite:
-	$(MAKE) clean
-	make bwrel GAME_NAME=horseGame
-	cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/index.html /c/bin/webgl
-	-rm -rf $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_PUBLIC_DIR)
-	mkdir $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_PUBLIC_DIR)
-	cp -r /c/bin/webgl/* $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_PUBLIC_DIR)
-	
-	$(MAKE) clean
-	make brel GAME_NAME=horseGame
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-	magick convert /c/Dropbox/FallowCandy/HorseProjects/raw/icon.png /c/bin/icon.ico
-	while ! cmd /c "rcedit c:/bin/pack/horseGame.exe --set-icon C:/bin/icon.ico"; \
-		do \
-		sleep 1; \
-		done;
-	mv /c/bin/pack /c/bin/HoracesHoarseHorseWhores
-	cd /c/bin/HoracesHoarseHorseWhores; \
-		mv horseGame.exe HoracesHoarseHorseWhores.exe; \
-		cp -r /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets .; \
-		$(SEVEN_ZIP) a -tzip HoracesHoarseHorseWhores.zip ../HoracesHoarseHorseWhores; \
-		cp HoracesHoarseHorseWhores.zip $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_PUBLIC_DIR);
-	
-	$(MAKE) shipPlay
-
-genHorseGameZips:
-	-rm -rf /c/temp/dupZips
-	mkdir /c/temp/dupZips
-	cd /c/temp/dupZips; \
-		cp -r $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_PUBLIC_DIR)/* .; \
-		cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/rcIndex.html index.html; \
-		cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/rcMovie.html movie.html; \
-		rm -f ../rcHtml.zip; \
-		$(SEVEN_ZIP) a -tzip ../rcHtml.zip .; \
-		cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/ngIndex.html index.html; \
-		rm -f HoracesHoarseHorseWhores.zip; \
-		rm -f movie.html; \
-		rm -f ../ngHtml.zip; \
-		$(SEVEN_ZIP) a -tzip ../ngHtml.zip .
-	
-
-shipHorseGameEarlyToSite:
-	$(MAKE) clean
-	make bwrel GAME_NAME=horseGame
-	cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/index.html /c/bin/webgl
-	-rm -rf $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_EARLY_DIR)
-	mkdir $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_EARLY_DIR)
-	cp -r /c/bin/webgl/* $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_EARLY_DIR)
-	
-	$(MAKE) clean
-	make brel GAME_NAME=horseGame
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-	magick convert /c/Dropbox/FallowCandy/HorseProjects/raw/icon.png /c/bin/icon.ico
-	while ! cmd /c "rcedit c:/bin/pack/horseGame.exe --set-icon C:/bin/icon.ico"; \
-		do \
-		sleep 1; \
-		done;
-	mv /c/bin/pack /c/bin/HoracesHoarseHorseWhores
-	cd /c/bin/HoracesHoarseHorseWhores; \
-		mv horseGame.exe HoracesHoarseHorseWhores.exe; \
-		cp -r /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets .; \
-		$(SEVEN_ZIP) a -tzip HoracesHoarseHorseWhores.zip ../HoracesHoarseHorseWhores; \
-		cp HoracesHoarseHorseWhores.zip $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_EARLY_DIR);
-	$(MAKE) shipPlay
-
-shipHorseGameDevToSite:
-	$(MAKE) clean
-	make bwdebugrel GAME_NAME=horseGame
-	cp /c/Dropbox/FallowCandy/HorseProjects/raw/html/index.html /c/bin/webgl
-	-rm -rf $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_DEV_DIR)
-	mkdir $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_DEV_DIR)
-	cp -r /c/bin/webgl/* $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_DEV_DIR)
-	
-	$(MAKE) clean
-	make bdebugrel GAME_NAME=horseGame
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-	magick convert /c/Dropbox/FallowCandy/HorseProjects/raw/icon.png /c/bin/icon.ico
-	while ! cmd /c "rcedit c:/bin/pack/horseGame.exe --set-icon C:/bin/icon.ico"; \
-		do \
-		sleep 1; \
-		done;
-	mv /c/bin/pack /c/bin/HoracesHoarseHorseWhores
-	cd /c/bin/HoracesHoarseHorseWhores; \
-		mv horseGame.exe HoracesHoarseHorseWhores.exe; \
-		cp -r /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets .; \
-		$(SEVEN_ZIP) a -tzip HoracesHoarseHorseWhores.zip ../HoracesHoarseHorseWhores; \
-		cp HoracesHoarseHorseWhores.zip $(PARAPHORE_COM_PATH)/play/$(HORSE_GAME_DEV_DIR);
-	$(MAKE) shipPlay
-
 shipZooBoundToDropbox:
 	-$(MAKE) clean
 	cmd /c "\
@@ -653,15 +493,6 @@ encodeHorseGameAudio:
 	done; \
 	wait
 	find /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio -type f -name "*.wav" -delete
-
-encodeButt2GoGameAudio:
-	rm -rf /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets/audio
-	cp -r /c/Dropbox/FallowCandy/Butt2Go/raw/audio /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets/audio
-	for file in `find /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets/audio -type f -name "*.wav"`; do \
-		ffmpeg -i $$file -ar 44100 $${file%.*}.ogg & \
-	done; \
-	wait
-	find /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets/audio -type f -name "*.wav" -delete
 
 encodeConcreteJungleGameAudio:
 	rm -rf /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio
@@ -924,82 +755,6 @@ devShipTower2GameToSelf:
 
 optimizeConcreteJunglePng:
 	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets -iname *.png -print0 | xargs -0 -P 8 -n 4 optipng -o1
-
-shipButt2GoToRc:
-	-$(MAKE) clean
-	cmd /c "\
-		set GAME_NAME=butt2GoGame&& \
-		set FAST_CLANG_MODE=1&& \
-		set DEBUG_MODE=1&& \
-		set INTERNAL_MODE=1&& \
-		set OPTIMIZED_MODE=1&& \
-		buildSystem\$(WIN_BUILD_BAT).bat\
-		"
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-		cp -r /c/bin/pack/* "/c/Dropbox/FallowCandy/Butt2Go/game"
-
-shipButt2GoPublicToSite:
-	$(MAKE) clean
-	make bwrel GAME_NAME=butt2GoGame
-	cp /c/Dropbox/FallowCandy/Butt2Go/raw/html/index.html /c/bin/webgl
-	-rm -rf $(PARAPHORE_COM_PATH)/play/$(BUTT_2_GO_PUBLIC_DIR)
-	mkdir $(PARAPHORE_COM_PATH)/play/$(BUTT_2_GO_PUBLIC_DIR)
-	cp -r /c/bin/webgl/* $(PARAPHORE_COM_PATH)/play/$(BUTT_2_GO_PUBLIC_DIR)
-	
-	$(MAKE) clean
-	rsync -at "/c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets" "/c/Dropbox/MultiGame/multiGame/butt2GoGameAssets"
-	cmd /c "\
-		set GAME_NAME=butt2GoGame&& \
-		set DEBUG_MODE=0&& \
-		set INTERNAL_MODE=0&& \
-		set FAST_CLANG_MODE=1&& \
-		set OPTIMIZED_MODE=1&& \
-		buildSystem\$(WIN_BUILD_BAT).bat\
-		"
-	while ! rm -rf "/c/Dropbox/MultiGame/multiGame/butt2GoGameAssets"; \
-	do \
-	sleep 1; \
-	done;
-	
-	cd /c/bin; \
-		rm -rf pack; \
-		mkdir pack; \
-		cd pack; \
-		cp /c/bin/*.exe .; \
-		cp /c/bin/*.dll .; \
-	magick convert /c/Dropbox/FallowCandy/Butt2Go/raw/icon.png /c/bin/icon.ico
-	while ! cmd /c "rcedit c:/bin/pack/butt2GoGame.exe --set-icon C:/bin/icon.ico"; \
-		do \
-		sleep 1; \
-		done;
-	mv /c/bin/pack /c/bin/Butt2Go
-	cd /c/bin/Butt2Go; \
-		mv butt2GoGame.exe Butt2Go.exe; \
-		cp -r /c/Dropbox/FallowCandy/Butt2Go/butt2GoGameAssets/assets .; \
-		$(SEVEN_ZIP) a -tzip Butt2Go.zip ../Butt2Go; \
-		cp Butt2Go.zip $(PARAPHORE_COM_PATH)/play/$(BUTT_2_GO_PUBLIC_DIR);
-	
-	$(MAKE) shipPlay
-
-genButt2GoZips:
-	-rm -rf /c/temp/dupZips
-	mkdir /c/temp/dupZips
-	cd /c/temp/dupZips; \
-		cp -r $(PARAPHORE_COM_PATH)/play/$(BUTT_2_GO_PUBLIC_DIR)/* .; \
-		cp /c/Dropbox/FallowCandy/Butt2Go/raw/html/rcIndex.html index.html; \
-		cp /c/Dropbox/FallowCandy/Butt2Go/raw/html/rcMovie.html movie.html; \
-		rm -f ../rcHtml.zip; \
-		$(SEVEN_ZIP) a -tzip ../rcHtml.zip .; \
-		cp /c/Dropbox/FallowCandy/Butt2Go/raw/html/ngIndex.html index.html; \
-		rm -f Butt2Go.zip; \
-		rm -f movie.html; \
-		rm -f ../ngHtml.zip; \
-		$(SEVEN_ZIP) a -tzip ../ngHtml.zip .
 
 exportConcreteJungleBlenderAssets:
 	cp buildSystem/tools/mintPawPlugin.py "/c/Users/MintPaw/AppData/Roaming/Blender Foundation/Blender/3.0/scripts/addons"

@@ -8,9 +8,7 @@
 #ifndef SkImageSampling_DEFINED
 #define SkImageSampling_DEFINED
 
-#include "include/core/SkTypes.h"
-
-#include <algorithm>
+#include "include/core/SkFilterQuality.h"
 #include <new>
 
 enum class SkFilterMode {
@@ -54,7 +52,6 @@ struct SkCubicResampler {
 };
 
 struct SK_API SkSamplingOptions {
-    const int              maxAniso = 0;
     const bool             useCubic = false;
     const SkCubicResampler cubic    = {0, 0};
     const SkFilterMode     filter   = SkFilterMode::kNearest;
@@ -69,35 +66,35 @@ struct SK_API SkSamplingOptions {
     }
 
     SkSamplingOptions(SkFilterMode fm, SkMipmapMode mm)
-        : filter(fm)
+        : useCubic(false)
+        , filter(fm)
         , mipmap(mm) {}
 
     explicit SkSamplingOptions(SkFilterMode fm)
-        : filter(fm)
+        : useCubic(false)
+        , filter(fm)
         , mipmap(SkMipmapMode::kNone) {}
 
     explicit SkSamplingOptions(const SkCubicResampler& c)
         : useCubic(true)
         , cubic(c) {}
 
-    static SkSamplingOptions Aniso(int maxAniso) {
-        return SkSamplingOptions{std::max(maxAniso, 1)};
-    }
+#ifdef SK_SUPPORT_LEGACY_FILTERQUALITY
+    enum MediumBehavior {
+        kMedium_asMipmapNearest,    // historic cpu behavior
+        kMedium_asMipmapLinear,     // historic gpu behavior
+    };
+    explicit SkSamplingOptions(SkFilterQuality, MediumBehavior = kMedium_asMipmapNearest);
+#endif
 
     bool operator==(const SkSamplingOptions& other) const {
-        return maxAniso == other.maxAniso
-            && useCubic == other.useCubic
+        return useCubic == other.useCubic
             && cubic.B  == other.cubic.B
             && cubic.C  == other.cubic.C
             && filter   == other.filter
             && mipmap   == other.mipmap;
     }
     bool operator!=(const SkSamplingOptions& other) const { return !(*this == other); }
-
-    bool isAniso() const { return maxAniso != 0; }
-
-private:
-    SkSamplingOptions(int maxAniso) : maxAniso(maxAniso) {}
 };
 
 #endif

@@ -27,6 +27,7 @@ public:
         kExpression,
         kFor,
         kIf,
+        kInlineMarker,
         kNop,
         kReturn,
         kSwitch,
@@ -37,8 +38,8 @@ public:
         kLast = kVarDeclaration,
     };
 
-    Statement(Position pos, Kind kind)
-    : INHERITED(pos, (int) kind) {
+    Statement(int offset, Kind kind)
+    : INHERITED(offset, (int) kind) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 

@@ -32,8 +32,8 @@ public:
         kLast = kStructDefinition
     };
 
-    ProgramElement(Position pos, Kind kind)
-        : INHERITED(pos, (int) kind) {
+    ProgramElement(int offset, Kind kind)
+        : INHERITED(offset, (int) kind) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 

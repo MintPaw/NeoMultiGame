@@ -18,8 +18,6 @@
 
 #include "include/core/SkTypes.h"
 
-#include <cstdint>
-
 class SK_API SkEventTracer {
 public:
 
@@ -29,14 +27,8 @@ public:
      * If this is the first call to SetInstance or GetInstance then the passed instance is
      * installed and true is returned. Otherwise, false is returned. In either case ownership of the
      * tracer is transferred and it will be deleted when no longer needed.
-     *
-     * Not deleting the tracer on process exit should not cause problems as
-     * the whole heap is about to go away with the process. This can also
-     * improve performance by reducing the amount of work needed.
-     *
-     * @param leakTracer Do not delete tracer on process exit.
      */
-    static bool SetInstance(SkEventTracer*, bool leakTracer = false);
+    static bool SetInstance(SkEventTracer*);
 
     /**
      * Gets the event tracer. If this is the first call to SetInstance or GetIntance then a default
@@ -77,9 +69,6 @@ public:
         updateTraceEventDuration(const uint8_t* categoryEnabledFlag,
                                  const char* name,
                                  SkEventTracer::Handle handle) = 0;
-
-    // Optional method that can be implemented to allow splitting up traces into different sections.
-    virtual void newTracingSection(const char*) {}
 
 protected:
     SkEventTracer() = default;

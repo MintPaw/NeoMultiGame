@@ -13,7 +13,6 @@
 class SkBitmap;
 class SkCanvas;
 class SkMatrix;
-class SkSurfaceProps;
 
 /**
  *  If a client wants to control the allocation of raster layers in a canvas, it should subclass
@@ -77,8 +76,7 @@ public:
      *  If rec is null, then the allocator will be called for the base-layer as well.
      */
     static std::unique_ptr<SkCanvas> MakeCanvas(std::unique_ptr<SkRasterHandleAllocator>,
-                                                const SkImageInfo&, const Rec* rec = nullptr,
-                                                const SkSurfaceProps* props = nullptr);
+                                                const SkImageInfo&, const Rec* rec = nullptr);
 
 protected:
     SkRasterHandleAllocator() = default;

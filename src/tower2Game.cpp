@@ -16,7 +16,7 @@ struct ActorTypeInfo {
 	float hpDamageMulti;
 	float armorDamageMulti;
 	float shieldDamageMulti;
-	float range;
+	float baseRange;
 	float rpm;
 	float mana;
 	int price;
@@ -242,6 +242,8 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 void dealDamage(Actor *bullet, Actor *dest);
 Rect getRect(Actor *actor);
 Vec2 getFlowDirForRect(Rect rect);
+float getRange(ActorType actorType, Vec2i tilePos);
+float getRange(Actor *actor, Vec2i tilePos);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
@@ -338,7 +340,7 @@ void updateGame() {
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 5;
 			info->shieldDamageMulti = 5;
-			info->range = 5 * TILE_SIZE;
+			info->baseRange = 5 * TILE_SIZE;
 			info->rpm = 20;
 			info->mana = 0;
 			info->price = 10;
@@ -350,7 +352,7 @@ void updateGame() {
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 15;
 			info->shieldDamageMulti = 5;
-			info->range = 10 * TILE_SIZE;
+			info->baseRange = 10 * TILE_SIZE;
 			info->rpm = 10;
 			info->mana = 0;
 			info->price = 200;
@@ -362,7 +364,7 @@ void updateGame() {
 			info->hpDamageMulti = 6;
 			info->armorDamageMulti = 3;
 			info->shieldDamageMulti = 9;
-			info->range = 1.5 * TILE_SIZE;
+			info->baseRange = 1.5 * TILE_SIZE;
 			info->rpm = 30;
 			info->mana = 5;
 			info->price = 200;
@@ -374,7 +376,7 @@ void updateGame() {
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 5;
 			info->shieldDamageMulti = 5;
-			info->range = 2 * TILE_SIZE;
+			info->baseRange = 2 * TILE_SIZE;
 			info->rpm = 180;
 			info->mana = 0.3;
 			info->price = 250;
@@ -386,7 +388,7 @@ void updateGame() {
 			info->hpDamageMulti = 6;
 			info->armorDamageMulti = 9;
 			info->shieldDamageMulti = 3;
-			info->range = 4 * TILE_SIZE;
+			info->baseRange = 4 * TILE_SIZE;
 			info->rpm = 60;
 			info->mana = 1;
 			info->price = 300;
@@ -398,7 +400,7 @@ void updateGame() {
 			info->hpDamageMulti = 6;
 			info->armorDamageMulti = 3;
 			info->shieldDamageMulti = 9;
-			info->range = 4 * TILE_SIZE;
+			info->baseRange = 4 * TILE_SIZE;
 			info->rpm = 60;
 			info->mana = 1;
 			info->price = 300;
@@ -410,7 +412,7 @@ void updateGame() {
 			info->hpDamageMulti = 20;
 			info->armorDamageMulti = 10;
 			info->shieldDamageMulti = 10;
-			info->range = 5 * TILE_SIZE;
+			info->baseRange = 5 * TILE_SIZE;
 			info->rpm = 5;
 			info->price = 500;
 			info->priceMulti = 100;
@@ -421,7 +423,7 @@ void updateGame() {
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 15;
 			info->shieldDamageMulti = 5;
-			info->range = 2 * TILE_SIZE;
+			info->baseRange = 2 * TILE_SIZE;
 			info->rpm = 5;
 			info->price = 500;
 			info->priceMulti = 100;
@@ -432,7 +434,7 @@ void updateGame() {
 			info->hpDamageMulti = 2;
 			info->armorDamageMulti = 1;
 			info->shieldDamageMulti = 3;
-			info->range = 8 * TILE_SIZE;
+			info->baseRange = 8 * TILE_SIZE;
 			info->rpm = 0;
 			info->price = 500;
 			info->priceMulti = 100;
@@ -443,7 +445,7 @@ void updateGame() {
 			info->hpDamageMulti = 20;
 			info->armorDamageMulti = 10;
 			info->shieldDamageMulti = 10;
-			info->range = 30 * TILE_SIZE;
+			info->baseRange = 30 * TILE_SIZE;
 			info->rpm = 700;
 			info->price = 1000;
 			info->priceMulti = 250;
@@ -454,7 +456,7 @@ void updateGame() {
 			info->hpDamageMulti = 5;
 			info->armorDamageMulti = 10;
 			info->shieldDamageMulti = 2;
-			info->range = 5 * TILE_SIZE;
+			info->baseRange = 5 * TILE_SIZE;
 			info->rpm = 360;
 			info->mana = 2;
 			info->price = 1000;
@@ -466,7 +468,7 @@ void updateGame() {
 			info->hpDamageMulti = 15;
 			info->armorDamageMulti = 10;
 			info->shieldDamageMulti = 20;
-			info->range = 20 * TILE_SIZE;
+			info->baseRange = 20 * TILE_SIZE;
 			info->rpm = 360;
 			info->mana = 12;
 			info->price = 1000;
@@ -940,7 +942,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			Actor *target = NULL;
 			if (info->isTower) {
 				if (towerCaresAboutTargets) {
-					Circle range = makeCircle(actor->position, info->range);
+					Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum, true);
@@ -1024,7 +1026,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawRect(rect, 0xFF525252);
 			} else if (actor->type == ACTOR_TESLA_COIL) {
 				if (towerShouldFire) {
-					Circle circle = makeCircle(actor->position, info->range);
+					Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 					drawCircle(circle, 0xFFB8FFFA);
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
@@ -1037,14 +1039,15 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
 			} else if (actor->type == ACTOR_FROST_KEEP) {
 				if (towerShouldFire) {
+					float range = getRange(actor, worldToTile(actor->position));
 					Vec2i towerTilePos = worldToTile(actor->position);
 					Vec2i min = towerTilePos;
-					min.x -= (info->range / TILE_SIZE);
-					min.y -= (info->range / TILE_SIZE);
+					min.x -= (range / TILE_SIZE);
+					min.y -= (range / TILE_SIZE);
 
 					Vec2i max = towerTilePos;
-					max.x += (info->range / TILE_SIZE);
-					max.y += (info->range / TILE_SIZE);
+					max.x += (range / TILE_SIZE);
+					max.y += (range / TILE_SIZE);
 
 					Vec2i *possibleTiles = (Vec2i *)frameMalloc(sizeof(Vec2i) * ((max.x - min.x) + (max.y - min.y) + 1));
 					int possibleTilesNum = 0;
@@ -1077,10 +1080,12 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
 
 				if (towerShouldFire) {
+					float range = getRange(actor, worldToTile(actor->position));
+
 					Vec2 start = actor->position;
 					float angle = toRad(15);
-					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * info->range;
-					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * info->range;
+					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
+					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
 
 					Tri2 tri = makeTri2(start, end0, end1);
 					drawLine(tri.verts[0], tri.verts[1], 5, BURN_COLOR);
@@ -1108,10 +1113,12 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
 
 				if (towerShouldFire) {
+					float range = getRange(actor, worldToTile(actor->position));
+
 					Vec2 start = actor->position;
 					float angle = toRad(15);
-					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * info->range;
-					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * info->range;
+					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
+					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
 
 					Tri2 tri = makeTri2(start, end0, end1);
 					drawLine(tri.verts[0], tri.verts[1], 5, POISON_COLOR);
@@ -1478,7 +1485,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			Vec2 center = getCenter(tileRect);
 
-			Circle range = makeCircle(getCenter(tileRect), info->range);
+			Circle range = makeCircle(getCenter(tileRect), getRange(game->actorToBuild, tilePosition));
 			drawCircle(range, 0x80FF0000);
 
 			Tile *tile = getTileAt(tilePosition);
@@ -1553,7 +1560,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
 			if (info->isTower) {
-				Circle range = makeCircle(actor->position, info->range);
+				Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 				drawCircle(range, 0x80FF0000);
 			}
 		}
@@ -2043,6 +2050,21 @@ Vec2 getFlowDirForRect(Rect rect) {
 	}
 	dir = normalize(dir);
 	return dir;
+}
+
+float getRange(ActorType actorType, Vec2i tilePos) {
+	ActorTypeInfo *info = &game->actorTypeInfos[actorType];
+	float range = info->baseRange;
+
+	Tile *tile = getTileAt(tilePos);
+	if (tile) range += tile->height * TILE_SIZE;
+
+	return range;
+}
+
+float getRange(Actor *actor, Vec2i tilePos) {
+	float range = getRange(actor->type, tilePos);
+	return range;
 }
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {

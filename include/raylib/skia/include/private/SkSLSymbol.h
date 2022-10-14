@@ -22,15 +22,17 @@ public:
         kExternal = (int) ProgramElement::Kind::kLast + 1,
         kField,
         kFunctionDeclaration,
+        kSymbolAlias,
         kType,
+        kUnresolvedFunction,
         kVariable,
 
         kFirst = kExternal,
         kLast = kVariable
     };
 
-    Symbol(Position pos, Kind kind, std::string_view name, const Type* type = nullptr)
-        : INHERITED(pos, (int) kind)
+    Symbol(int offset, Kind kind, skstd::string_view name, const Type* type = nullptr)
+        : INHERITED(offset, (int) kind)
         , fName(name)
         , fType(type) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
@@ -47,7 +49,7 @@ public:
         return (Kind) fKind;
     }
 
-    std::string_view name() const {
+    skstd::string_view name() const {
         return fName;
     }
 
@@ -76,7 +78,7 @@ public:
     }
 
 private:
-    std::string_view fName;
+    skstd::string_view fName;
     const Type* fType;
 
     using INHERITED = IRNode;

@@ -168,8 +168,13 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 
 	// if (platform->isInternalVersion) logf("Starting raylib engine\n");
 
-	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
+#ifdef __EMSCRIPTEN__
+	// Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE | Raylib::FLAG_WINDOW_HIGHDPI);
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
+#else
+	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
+#endif
+	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
 
 	platform->windowScaling = Raylib::GetWindowScaleDPI().x;
 

@@ -10,8 +10,6 @@
 
 #include "include/core/SkTypes.h"
 
-#include <cstddef>
-
 struct SkBase64 {
 public:
     enum Error {

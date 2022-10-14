@@ -8,11 +8,7 @@
 #ifndef SKSL_DSL
 #define SKSL_DSL
 
-#include "include/sksl/DSLBlock.h"
 #include "include/sksl/DSLCore.h"
-#include "include/sksl/DSLExpression.h"
-#include "include/sksl/DSLFunction.h"
-#include "include/sksl/DSLType.h"
 
 namespace SkSL {
 
@@ -29,6 +25,7 @@ using Modifiers = DSLModifiers;
 using Parameter = DSLParameter;
 using Statement = DSLStatement;
 using Var = DSLVar;
+template<typename T> using Wrapper = DSLWrapper<T>;
 
 } // namespace dsl
 

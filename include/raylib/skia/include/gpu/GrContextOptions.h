@@ -13,8 +13,7 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrDriverBugWorkarounds.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ShaderErrorHandler.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "include/private/GrTypesPriv.h"
 
 #include <vector>
 
@@ -71,7 +70,22 @@ struct SK_API GrContextOptions {
         PersistentCache& operator=(const PersistentCache&) = delete;
     };
 
-    using ShaderErrorHandler = skgpu::ShaderErrorHandler;
+    /**
+     * Abstract class to report errors when compiling shaders. If fShaderErrorHandler is present,
+     * it will be called to report any compilation failures. Otherwise, failures will be reported
+     * via SkDebugf and asserts.
+     */
+    class SK_API ShaderErrorHandler {
+    public:
+        virtual ~ShaderErrorHandler() = default;
+
+        virtual void compileError(const char* shader, const char* errors) = 0;
+
+    protected:
+        ShaderErrorHandler() = default;
+        ShaderErrorHandler(const ShaderErrorHandler&) = delete;
+        ShaderErrorHandler& operator=(const ShaderErrorHandler&) = delete;
+    };
 
     GrContextOptions() {}
 
@@ -170,6 +184,13 @@ struct SK_API GrContextOptions {
     bool fAvoidStencilBuffers = false;
 
     /**
+     * If true, texture fetches from mip-mapped textures will be biased to read larger MIP levels.
+     * This has the effect of sharpening those textures, at the cost of some aliasing, and possible
+     * performance impact.
+     */
+    bool fSharpenMipmappedTextures = false;
+
+    /**
      * Enables driver workaround to use draws instead of HW clears, e.g. glClear on the GL backend.
      */
     Enable fUseDrawInsteadOfClear = Enable::kDefault;
@@ -246,21 +267,8 @@ struct SK_API GrContextOptions {
 
     /**
      * If true, and if supported, enables hardware tessellation in the caps.
-     * DEPRECATED: This value is ignored; experimental hardware tessellation is always disabled.
      */
     bool fEnableExperimentalHardwareTessellation = false;
-
-    /**
-     * If true, then add 1 pixel padding to all glyph masks in the atlas to support bi-lerp
-     * rendering of all glyphs. This must be set to true to use Slugs.
-     */
-    #if defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG) || \
-        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_SERIALIZE) || \
-        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_STRIKE_SERIALIZE)
-    bool fSupportBilerpFromGlyphAtlas = true;
-    #else
-    bool fSupportBilerpFromGlyphAtlas = false;
-    #endif
 
     /**
      * Uses a reduced variety of shaders. May perform less optimally in steady state but can reduce
@@ -268,21 +276,15 @@ struct SK_API GrContextOptions {
      */
     bool fReducedShaderVariations = false;
 
-    /**
-     * If true, then allow to enable MSAA on new Intel GPUs.
-     */
-    bool fAllowMSAAOnNewIntel = false;
-
 #if GR_TEST_UTILS
     /**
      * Private options that are only meant for testing within Skia's tools.
      */
 
     /**
-     * Testing-only mode to exercise allocation failures in the flush-time callback objects.
-     * For now it only simulates allocation failure during the preFlush callback.
+     * Experimental: Should the new version of the GPU backend be used?
      */
-    bool fFailFlushTimeCallbacks = false;
+    Enable fUseSkGpuV2 = Enable::kDefault;
 
     /**
      * Prevents use of dual source blending, to test that all xfer modes work correctly without it.
@@ -299,6 +301,17 @@ struct SK_API GrContextOptions {
      * Prevents the use of framebuffer fetches, for testing dst reads and texture barriers.
      */
     bool fSuppressFramebufferFetch = false;
+
+    /**
+     * If true, the caps will never support geometry shaders.
+     */
+    bool fSuppressGeometryShaders = false;
+
+    /**
+     * If greater than zero and less than the actual hardware limit, overrides the maximum number of
+     * tessellation segments supported by the caps.
+     */
+    int  fMaxTessellationSegmentsOverride = 0;
 
     /**
      * If true, then all paths are processed as if "setIsVolatile" had been called.
@@ -337,6 +350,11 @@ struct SK_API GrContextOptions {
      * A value of -1 means use the default limit value.
      */
     int fResourceCacheLimitOverride = -1;
+
+    /**
+     * If true, then always try to use hardware tessellation, regardless of how small a path may be.
+     */
+    bool fAlwaysPreferHardwareTessellation = false;
 
     /**
      * Maximum width and height of internal texture atlases.

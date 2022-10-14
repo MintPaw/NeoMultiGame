@@ -10,10 +10,10 @@
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkRefCnt.h"
+#include "include/private/SkTOptional.h"
 #include "include/private/SkTo.h"
-
-#include <optional>
 
 class SkBlender;
 class SkColorFilter;
@@ -176,6 +176,18 @@ public:
     */
     void setDither(bool dither) { fBitfields.fDither = static_cast<unsigned>(dither); }
 
+#ifdef SK_SUPPORT_LEGACY_SETFILTERQUALITY
+    // DEPRECATED -- this field is unused.
+    SkFilterQuality getFilterQuality() const {
+        return (SkFilterQuality)fBitfields.fFilterQuality;
+    }
+
+    // DEPRECATED -- this field is unused.
+    void setFilterQuality(SkFilterQuality fq) {
+        fBitfields.fFilterQuality = fq;
+    }
+#endif
+
     /** \enum SkPaint::Style
         Set Style to fill, stroke, or both fill and stroke geometry.
         The stroke and fill
@@ -256,9 +268,7 @@ public:
     float getAlphaf() const { return fColor4f.fA; }
 
     // Helper that scales the alpha by 255.
-    uint8_t getAlpha() const {
-        return static_cast<uint8_t>(sk_float_round2int(this->getAlphaf() * 255));
-    }
+    uint8_t getAlpha() const { return sk_float_round2int(this->getAlphaf() * 255); }
 
     /** Replaces alpha, leaving RGB
         unchanged. An out of range value triggers an assert in the debug
@@ -473,13 +483,24 @@ public:
      *  enum in the optional's value(). If it cannot, then the returned optional does not
      *  contain a value.
      */
-    std::optional<SkBlendMode> asBlendMode() const;
+    skstd::optional<SkBlendMode> asBlendMode() const;
 
     /**
      *  Queries the blender, and if it can be represented as a SkBlendMode, return that mode,
      *  else return the defaultMode provided.
      */
     SkBlendMode getBlendMode_or(SkBlendMode defaultMode) const;
+
+#ifdef SK_SUPPORT_LEGACY_GETBLENDMODE
+    /** DEPRECATED
+     *  Use asBlendMode() or getBlendMode_or() instead.
+     *
+     *  This attempts to inspect the current blender, and if it claims to be equivalent to
+     *  one of the predefiend SkBlendMode enums, returns that mode. If the blender does not,
+     *  this returns kSrcOver.
+     */
+    SkBlendMode getBlendMode() const { return this->getBlendMode_or(SkBlendMode::kSrcOver); }
+#endif
 
     /** Returns true iff the current blender claims to be equivalent to SkBlendMode::kSrcOver.
      *
@@ -652,7 +673,23 @@ public:
         @param storage  computed bounds of geometry; may not be nullptr
         @return         fast computed bounds
     */
-    const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const;
+    const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const {
+        // Things like stroking, etc... will do math on the bounds rect, assuming that it's sorted.
+        SkASSERT(orig.isSorted());
+        SkPaint::Style style = this->getStyle();
+        // ultra fast-case: filling with no effects that affect geometry
+        if (kFill_Style == style) {
+            uintptr_t effects = 0;
+            effects |= reinterpret_cast<uintptr_t>(this->getMaskFilter());
+            effects |= reinterpret_cast<uintptr_t>(this->getPathEffect());
+            effects |= reinterpret_cast<uintptr_t>(this->getImageFilter());
+            if (!effects) {
+                return orig;
+            }
+        }
+
+        return this->doComputeFastBounds(orig, storage, style);
+    }
 
     /**     (to be made private)
 
@@ -696,7 +733,12 @@ private:
             unsigned    fCapType : 2;
             unsigned    fJoinType : 2;
             unsigned    fStyle : 2;
+#ifdef SK_SUPPORT_LEGACY_FILTERQUALITY
+            unsigned    fFilterQuality : 2;
+            unsigned    fPadding : 22;  // 22 == 32 -1-1-2-2-2-2
+#else
             unsigned    fPadding : 24;  // 24 == 32 -1-1-2-2-2
+#endif
         } fBitfields;
         uint32_t fBitfieldsUInt;
     };

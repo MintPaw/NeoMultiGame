@@ -22,7 +22,7 @@ struct Layout {
         kOriginUpperLeft_Flag            = 1 <<  0,
         kPushConstant_Flag               = 1 <<  1,
         kBlendSupportAllEquations_Flag   = 1 <<  2,
-        kColor_Flag                      = 1 <<  3,
+        kSRGBUnpremul_Flag               = 1 <<  3,
 
         // These flags indicate if the qualifier appeared, regardless of the accompanying value.
         kLocation_Flag                   = 1 <<  4,
@@ -32,10 +32,24 @@ struct Layout {
         kSet_Flag                        = 1 <<  8,
         kBuiltin_Flag                    = 1 <<  9,
         kInputAttachmentIndex_Flag       = 1 << 10,
+        kPrimitive_Flag                  = 1 << 11,
+        kMaxVertices_Flag                = 1 << 12,
+        kInvocations_Flag                = 1 << 13,
+    };
+
+    enum Primitive {
+        kUnspecified_Primitive = -1,
+        kPoints_Primitive,
+        kLines_Primitive,
+        kLineStrip_Primitive,
+        kLinesAdjacency_Primitive,
+        kTriangles_Primitive,
+        kTriangleStrip_Primitive,
+        kTrianglesAdjacency_Primitive
     };
 
     Layout(int flags, int location, int offset, int binding, int index, int set, int builtin,
-           int inputAttachmentIndex)
+           int inputAttachmentIndex, Primitive primitive, int maxVertices, int invocations)
     : fFlags(flags)
     , fLocation(location)
     , fOffset(offset)
@@ -43,7 +57,10 @@ struct Layout {
     , fIndex(index)
     , fSet(set)
     , fBuiltin(builtin)
-    , fInputAttachmentIndex(inputAttachmentIndex) {}
+    , fInputAttachmentIndex(inputAttachmentIndex)
+    , fPrimitive(primitive)
+    , fMaxVertices(maxVertices)
+    , fInvocations(invocations) {}
 
     Layout()
     : fFlags(0)
@@ -53,7 +70,10 @@ struct Layout {
     , fIndex(-1)
     , fSet(-1)
     , fBuiltin(-1)
-    , fInputAttachmentIndex(-1) {}
+    , fInputAttachmentIndex(-1)
+    , fPrimitive(kUnspecified_Primitive)
+    , fMaxVertices(-1)
+    , fInvocations(-1) {}
 
     static Layout builtin(int builtin) {
         Layout result;
@@ -61,9 +81,9 @@ struct Layout {
         return result;
     }
 
-    std::string description() const {
-        std::string result;
-        auto separator = [firstSeparator = true]() mutable -> std::string {
+    String description() const {
+        String result;
+        auto separator = [firstSeparator = true]() mutable -> String {
             if (firstSeparator) {
                 firstSeparator = false;
                 return "";
@@ -71,26 +91,25 @@ struct Layout {
                 return ", ";
             }};
         if (fLocation >= 0) {
-            result += separator() + "location = " + std::to_string(fLocation);
+            result += separator() + "location = " + to_string(fLocation);
         }
         if (fOffset >= 0) {
-            result += separator() + "offset = " + std::to_string(fOffset);
+            result += separator() + "offset = " + to_string(fOffset);
         }
         if (fBinding >= 0) {
-            result += separator() + "binding = " + std::to_string(fBinding);
+            result += separator() + "binding = " + to_string(fBinding);
         }
         if (fIndex >= 0) {
-            result += separator() + "index = " + std::to_string(fIndex);
+            result += separator() + "index = " + to_string(fIndex);
         }
         if (fSet >= 0) {
-            result += separator() + "set = " + std::to_string(fSet);
+            result += separator() + "set = " + to_string(fSet);
         }
         if (fBuiltin >= 0) {
-            result += separator() + "builtin = " + std::to_string(fBuiltin);
+            result += separator() + "builtin = " + to_string(fBuiltin);
         }
         if (fInputAttachmentIndex >= 0) {
-            result += separator() + "input_attachment_index = " +
-                      std::to_string(fInputAttachmentIndex);
+            result += separator() + "input_attachment_index = " + to_string(fInputAttachmentIndex);
         }
         if (fFlags & kOriginUpperLeft_Flag) {
             result += separator() + "origin_upper_left";
@@ -101,8 +120,39 @@ struct Layout {
         if (fFlags & kPushConstant_Flag) {
             result += separator() + "push_constant";
         }
-        if (fFlags & kColor_Flag) {
-            result += separator() + "color";
+        if (fFlags & kSRGBUnpremul_Flag) {
+            result += separator() + "srgb_unpremul";
+        }
+        switch (fPrimitive) {
+            case kPoints_Primitive:
+                result += separator() + "points";
+                break;
+            case kLines_Primitive:
+                result += separator() + "lines";
+                break;
+            case kLineStrip_Primitive:
+                result += separator() + "line_strip";
+                break;
+            case kLinesAdjacency_Primitive:
+                result += separator() + "lines_adjacency";
+                break;
+            case kTriangles_Primitive:
+                result += separator() + "triangles";
+                break;
+            case kTriangleStrip_Primitive:
+                result += separator() + "triangle_strip";
+                break;
+            case kTrianglesAdjacency_Primitive:
+                result += separator() + "triangles_adjacency";
+                break;
+            case kUnspecified_Primitive:
+                break;
+        }
+        if (fMaxVertices >= 0) {
+            result += separator() + "max_vertices = " + to_string(fMaxVertices);
+        }
+        if (fInvocations >= 0) {
+            result += separator() + "invocations = " + to_string(fInvocations);
         }
         if (result.size() > 0) {
             result = "layout (" + result + ")";
@@ -118,7 +168,10 @@ struct Layout {
                fIndex                == other.fIndex &&
                fSet                  == other.fSet &&
                fBuiltin              == other.fBuiltin &&
-               fInputAttachmentIndex == other.fInputAttachmentIndex;
+               fInputAttachmentIndex == other.fInputAttachmentIndex &&
+               fPrimitive            == other.fPrimitive &&
+               fMaxVertices          == other.fMaxVertices &&
+               fInvocations          == other.fInvocations;
     }
 
     bool operator!=(const Layout& other) const {
@@ -137,6 +190,9 @@ struct Layout {
     // input_attachment_index comes from Vulkan/SPIR-V to connect a shader variable to the a
     // corresponding attachment on the subpass in which the shader is being used.
     int fInputAttachmentIndex;
+    Primitive fPrimitive;
+    int fMaxVertices;
+    int fInvocations;
 };
 
 }  // namespace SkSL

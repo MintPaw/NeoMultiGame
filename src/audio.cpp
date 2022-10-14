@@ -5,7 +5,7 @@
 #include <AL/alext.h>
 
 #ifdef __EMSCRIPTEN__
-# define SAMPLE_BUFFER_LIMIT (4096)
+# define SAMPLE_BUFFER_LIMIT (8192)
 #else
 # define SAMPLE_BUFFER_LIMIT (4096)
 #endif
