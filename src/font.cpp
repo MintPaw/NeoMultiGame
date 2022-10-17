@@ -388,7 +388,7 @@ void drawOnScreenLog() {
 				drawRect(rect, color); 
 			}
 
-			drawText(fontSys->logFont, logBuffer->buffer, position, color, renderer->width);
+			drawText(fontSys->logFont, logBuffer->buffer, position, color, platform->windowWidth);
 		}
 
 		if (shouldDestroy) logBuffer->buffer[0] = 0;

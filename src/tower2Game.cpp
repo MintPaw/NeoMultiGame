@@ -1,3 +1,6 @@
+// Selectable mana things
+// dps stats
+
 #define FROST_FALL_DISTANCE 64
 #define POISON_COLOR (0xFF6B4876)
 #define BURN_COLOR (0xFFDCAB2C)
@@ -158,6 +161,35 @@ enum Tool {
 	TOOL_NONE,
 	TOOL_BUILDING,
 	TOOL_SELECTED,
+	TOOL_UPGRADING,
+};
+
+enum UpgradeEffectType {
+	UPGRADE_EFFECT_UNLOCK,
+	UPGRADE_EFFECT_DAMAGE_MULTI,
+	UPGRADE_EFFECT_RANGE_MULTI,
+	UPGRADE_EFFECT_TYPES_MAX,
+};
+char *upgradeEffectTypeStrings[] = {
+	"Unlock",
+	"Damage",
+	"Range",
+};
+
+struct UpgradeEffect {
+	UpgradeEffectType type;
+	ActorType actorType;
+	float value;
+};
+struct Upgrade {
+	int id;
+#define UPGRADE_EFFECTS_MAX 8
+	UpgradeEffect effects[UPGRADE_EFFECTS_MAX];
+	int effectsNum;
+
+#define UPGRADE_PREREQS_MAX 8
+	int prereqs[UPGRADE_PREREQS_MAX];
+	int prereqsNum;
 };
 
 struct Game {
@@ -169,10 +201,18 @@ struct Game {
 	Vec2 size;
 	Vec2 mouse;
 
+	bool shouldReset;
+
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 	int actorTypeCounts[ACTOR_TYPES_MAX];
 
-	bool shouldReset;
+#define UPGRADES_MAX 256
+	Upgrade upgrades[UPGRADES_MAX];
+	int upgradesNum;
+	int nextUpgradeId;
+
+	int presentedUpgrades[UPGRADES_MAX];
+	int presentedUpgradesNum;
 
 	/// Serialized
 	World *world;
@@ -202,6 +242,9 @@ struct Game {
 #define SELECTED_ACTORS_MAX 2048
 	int selectedActors[SELECTED_ACTORS_MAX];
 	int selectedActorsNum;
+
+	int ownedUpgrades[UPGRADES_MAX];
+	int ownedUpgradesNum;
 
 	/// Editor/debug
 	bool debugShowFrameTimes;
@@ -244,6 +287,8 @@ Rect getRect(Actor *actor);
 Vec2 getFlowDirForRect(Rect rect);
 float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
+Upgrade *getUpgrade(int id);
+bool hasUpgrade(int id);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
@@ -295,6 +340,8 @@ void updateGame() {
 		game = (Game *)zalloc(sizeof(Game));
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
 
+		if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
+
 		game->timeScale = 1;
 
 		maximizeWindow();
@@ -316,7 +363,7 @@ void updateGame() {
 		game->world = (World *)zalloc(sizeof(World));
 		World *world = game->world;
 
-		{ /// Setup actors
+		{ /// Setup actor type infos
 			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
 				ActorTypeInfo *info = &game->actorTypeInfos[i];
 				sprintf(info->name, "Actor %d", i);
@@ -525,6 +572,61 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_ARROW];
 			info->bulletSpeed = 20;
+		} ///
+
+		{ /// Setup upgrades
+			auto createUpgrade = []() {
+				if (game->upgradesNum > UPGRADES_MAX-1) Panic("Too many upgrades");
+
+				Upgrade *upgrade = &game->upgrades[game->upgradesNum++];
+				memset(upgrade, 0, sizeof(Upgrade));
+				upgrade->id = ++game->nextUpgradeId;
+				return upgrade;
+			};
+
+			Upgrade *upgrade = NULL;
+
+			ActorType actorsCouldUpgrade[] = {
+				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
+				ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
+			};
+
+			for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
+				ActorType actorType = actorsCouldUpgrade[i];
+
+				Upgrade *unlockUpgrade = NULL;
+				if (actorType != ACTOR_BALLISTA) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_UNLOCK;
+					effect->actorType = actorType;
+					unlockUpgrade = upgrade;
+				}
+
+				Upgrade *prevUpgrade = NULL;
+
+				prevUpgrade = unlockUpgrade;
+				for (int i = 0; i < 3; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
+					effect->actorType = actorType;
+					effect->value = 1 + (0.1 * (i+1));
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
+
+				prevUpgrade = unlockUpgrade;
+				for (int i = 0; i < 3; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_RANGE_MULTI;
+					effect->actorType = actorType;
+					effect->value = 1 + (0.1 * (i+1));
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
+			}
 		} ///
 
 		{ /// Generate map
@@ -1413,13 +1515,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
 			game->playingWave = false;
-			if (game->hp > 0) {
-				if (fileExists("assets/states/autosave.save_state")) {
-					if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
-					copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
-				}
-				saveState("assets/states/autosave.save_state");
-			}
+			game->tool = TOOL_UPGRADING;
 		}
 	} ///
 
@@ -1472,9 +1568,7 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
-		}
-
-		if (game->tool == TOOL_BUILDING) {
+		} else if (game->tool == TOOL_BUILDING) {
 			if (platform->rightMouseDown) game->tool = TOOL_NONE;
 
 			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
@@ -1513,9 +1607,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					infof("Not enough money\n");
 				}
 			}
-		}
-
-		if (game->tool == TOOL_SELECTED) {
+		} else if (game->tool == TOOL_SELECTED) {
 			nguiStartWindow("Selected window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
@@ -1551,6 +1643,68 @@ void stepGame(float elapsed, bool isLastStep) {
 			if (isMouseClicked()) game->selectedActorsNum = 0;
 
 			if (game->selectedActorsNum == 0) game->tool = TOOL_NONE;
+		} else if (game->tool == TOOL_UPGRADING) {
+			if (game->toolTime == 0) {
+				int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
+				int possibleNum = 0;
+				for (int i = 0; i < game->upgradesNum; i++) {
+					Upgrade *upgrade = &game->upgrades[i];
+					if (hasUpgrade(upgrade->id)) continue;
+
+					bool hasPrereqs = true;
+					for (int i = 0; i < upgrade->prereqsNum; i++) {
+						if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+					}
+					if (!hasPrereqs) continue;
+
+					possible[possibleNum++] = upgrade->id;
+				}
+
+				game->presentedUpgradesNum = 0;
+				for (int i = 0; i < 3; i++) {
+					if (possibleNum == 0) continue;
+					int chosenIndex = rndInt(0, possibleNum-1);
+					game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
+					arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
+					possibleNum--;
+				}
+			}
+
+			nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
+			for (int i = 0; i < game->presentedUpgradesNum; i++) {
+				Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
+				char *label = "";
+				for (int i = 0; i < upgrade->effectsNum; i++) {
+					UpgradeEffect *effect = &upgrade->effects[i];
+					ActorTypeInfo *info = &game->actorTypeInfos[effect->actorType];
+
+					char *line = "";
+					if (effect->type == UPGRADE_EFFECT_UNLOCK) {
+						line = frameSprintf("Unlock %s", info->name);
+					} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
+						line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
+					} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
+						line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
+					} else {
+						line = frameSprintf("Unlabeled effect %d", effect->type);
+					}
+					if (i != 0) label = frameSprintf("%s\n", label);
+					label = frameSprintf("%s%s", label, line);
+				}
+				if (nguiButton(label)) {
+					game->ownedUpgrades[game->ownedUpgradesNum++] = upgrade->id;
+					game->tool = TOOL_NONE;
+
+					if (game->hp > 0) {
+						if (fileExists("assets/states/autosave.save_state")) {
+							if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
+							copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
+						}
+						saveState("assets/states/autosave.save_state");
+					}
+				}
+			}
+			nguiEndWindow();
 		}
 
 		game->toolTime += elapsed;
@@ -2067,6 +2221,24 @@ float getRange(Actor *actor, Vec2i tilePos) {
 	return range;
 }
 
+Upgrade *getUpgrade(int id) {
+	for (int i = 0; i < game->upgradesNum; i++) {
+		Upgrade *upgrade = &game->upgrades[i];
+		if (upgrade->id == id) return upgrade;
+	}
+
+	logf("No upgrade with id %d\n", id);
+	return NULL;
+}
+
+bool hasUpgrade(int id) {
+	for (int i = 0; i < game->ownedUpgradesNum; i++) {
+		if (game->ownedUpgrades[i] == id) return true;
+	}
+
+	return false;
+}
+
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 	World *world = game->world;
 
@@ -2140,7 +2312,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 8); // version
+	writeU32(stream, 9); // version
 	writeFloat(stream, lcgSeed);
 	writeFloat(stream, game->time);
 	writeVec2(stream, game->cameraPosition);
@@ -2165,6 +2337,9 @@ void saveState(char *path) {
 
 	writeU32(stream, game->selectedActorsNum);
 	for (int i = 0; i < game->selectedActorsNum; i++) writeU32(stream, game->selectedActors[i]);
+
+	writeU32(stream, game->ownedUpgradesNum);
+	for (int i = 0; i < game->ownedUpgradesNum; i++) writeU32(stream, game->ownedUpgrades[i]);
 
 	writeDataStream(path, stream);
 	destroyDataStream(stream);
@@ -2260,6 +2435,11 @@ void loadState(char *path) {
 	if (version >= 5) {
 		game->selectedActorsNum = readU32(stream);
 		for (int i = 0; i < game->selectedActorsNum; i++) game->selectedActors[i] = readU32(stream);
+	}
+
+	if (version >= 9) {
+		game->ownedUpgradesNum = readU32(stream);
+		for (int i = 0; i < game->ownedUpgradesNum; i++) game->ownedUpgrades[i] = readU32(stream);
 	}
 
 	destroyDataStream(stream);

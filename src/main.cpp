@@ -9,7 +9,6 @@
 #define STRINGIFYX(val) #val
 #define STRINGIFY(val) STRINGIFYX(val)
 
-
 #if (FALLOW_COMMAND_LINE_ONLY || __LINUX__)
 # ifndef NO_SKIA
 #  define NO_SKIA

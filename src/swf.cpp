@@ -1,4 +1,5 @@
 bool swfLogShapeInfo = false;
+int boundsMem = 0;
 
 struct SwfDataStream {
 	u8 *data;
@@ -2056,46 +2057,41 @@ Swf *loadSwf(char *path) {
 
 			{ /// Setup frames
 				int frameCount = 0;
+				int totalFrameLabelCount = 0;
 				for (int i = 0; i < sprite->controlTagsNum; i++) {
 					ControlTag *tag = &sprite->controlTags[i];
 					if (tag->type == SWF_TAG_SHOW_FRAME) frameCount++;
+					if (tag->type == SWF_TAG_FRAME_LABEL && tag->frameLabel.name[0] != '/') totalFrameLabelCount++;
 				}
 				sprite->frames = (SwfFrame *)zalloc(sizeof(SwfFrame) * frameCount);
 				sprite->framesNum = frameCount;
-
-				const int TEMP_FRAME_LABELS_MAX = 4096;
-				char **tempFrameLabels = (char **)frameMalloc(sizeof(char *) * TEMP_FRAME_LABELS_MAX);
-				int tempFrameLabelsNum = 0;
+				sprite->labelsInOrder = (char **)zalloc(sizeof(char *) * totalFrameLabelCount);
 
 				int currentFrameIndex = 0;
 				SwfFrame *currentFrame = &sprite->frames[currentFrameIndex];
 				for (int i = 0; i < sprite->controlTagsNum; i++) {
 					ControlTag *tag = &sprite->controlTags[i];
-					if (tag->type == SWF_TAG_END) {
-						break;
-					}
+					if (tag->type == SWF_TAG_END) break;
 
 					if (!currentFrame->depths) {
-
 						currentFrame->depths = (SwfDrawable *)makeDrawables((sprite->highestDepth+1));
 						if (currentFrameIndex > 0) {
 							for (int i = 0; i < sprite->highestDepth+1; i++) {
 								currentFrame->depths[i] = sprite->frames[currentFrameIndex-1].depths[i];
 							}
 							currentFrame->depthsNum = sprite->highestDepth+1;
-							// currentFrame->depthsNum = sprite->frames[currentFrameIndex-1].depthsNum;
 						}
+
+						int frameLabelCount = 0;
+						for (int j = i; j < sprite->controlTagsNum; j++) {
+							ControlTag *otherTag = &sprite->controlTags[j];
+							if (otherTag->type == SWF_TAG_FRAME_LABEL && otherTag->frameLabel.name[0] != '/') frameLabelCount++;
+							if (otherTag->type == SWF_TAG_SHOW_FRAME) break;
+						}
+						currentFrame->labels = (char **)malloc(sizeof(char *) * frameLabelCount);
 					}
 
 					if (tag->type == SWF_TAG_SHOW_FRAME) {
-						if (tempFrameLabelsNum > 0) {
-							currentFrame->labels = (char **)malloc(sizeof(char *) * tempFrameLabelsNum);
-							for (int i = 0; i < tempFrameLabelsNum; i++) {
-								currentFrame->labels[i] = tempFrameLabels[i];
-							}
-							currentFrame->labelsNum = tempFrameLabelsNum;
-							tempFrameLabelsNum = 0;
-						}
 						currentFrameIndex++;
 						currentFrame = &sprite->frames[currentFrameIndex];
 					} else if (tag->type == SWF_TAG_PLACE_OBJECT) {
@@ -2135,27 +2131,12 @@ Swf *loadSwf(char *path) {
 						memset(&currentFrame->depths[depth], 0, sizeof(SwfDrawable));
 						currentFrame->depths[depth].type = SWF_DRAWABLE_NONE;
 					} else if (tag->type == SWF_TAG_FRAME_LABEL) {
-						if (tempFrameLabelsNum < TEMP_FRAME_LABELS_MAX) {
-							if (tag->frameLabel.name[0] != '/') {
-								char *label = stringClone(tag->frameLabel.name);
-								free(tag->frameLabel.name);
-								tempFrameLabels[tempFrameLabelsNum++] = label;
-
-								if (sprite->labelsInOrderMax == 0) {
-									sprite->labelsInOrderMax = 8;
-									sprite->labelsInOrder = (char **)malloc(sizeof(char *) * sprite->labelsInOrderMax);
-								}
-								if (sprite->labelsInOrderNum > sprite->labelsInOrderMax-1) {
-									sprite->labelsInOrder = (char **)resizeArray(sprite->labelsInOrder, sizeof(char *), sprite->labelsInOrderMax, sprite->labelsInOrderMax * 1.5);
-									sprite->labelsInOrderMax *= 1.5;
-								}
-
-								sprite->labelsInOrder[sprite->labelsInOrderNum++] = label;
-							}
-						} else {
-							logf("Too many frames labels\n");
+						if (tag->frameLabel.name[0] != '/') {
+							char *label = stringClone(tag->frameLabel.name);
+							free(tag->frameLabel.name);
+							currentFrame->labels[currentFrame->labelsNum++] = label;
+							sprite->labelsInOrder[sprite->labelsInOrderNum++] = label;
 						}
-						// Should remove these...
 					} else {
 						logf("Bad frame tag\n");
 					}
@@ -2167,8 +2148,8 @@ Swf *loadSwf(char *path) {
 		/// Bounds and aliasing
 		for (int i = 0; i < swf->allSpritesNum; i++) {
 			SwfSprite *sprite = swf->allSprites[i];
-
 			sprite->frameBounds = (Rect *)zalloc(sizeof(Rect) * sprite->framesNum);
+			boundsMem += sizeof(Rect) * sprite->framesNum;
 			for (int i = 0; i < sprite->framesNum; i++) {
 				SwfFrame *frame = &sprite->frames[i];
 				int frameIndex = i;
@@ -2205,6 +2186,7 @@ Swf *loadSwf(char *path) {
 
 	float ms = getMsPassed(startTime);
 	if (ms > 1000) logf("Took %.1fsec to load %s\n", ms/1000, path);
+	logf("Current bounds mem: %d\n", boundsMem);
 	return swf;
 }
 

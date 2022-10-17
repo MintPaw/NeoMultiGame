@@ -126,6 +126,7 @@ bool joyButtonJustPressed(int controllerId, int button);
 Vec2 joyLeftStick(int controllerId);
 Vec2 joyRightStick(int controllerId);
 void setClipboard(char *str);
+void resizeWindow(int width, int height);
 void platformSleep(int ms);
 NanoTime getNanoTime();
 float getMsPassed(NanoTime startTime);
@@ -142,6 +143,13 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform = (Platform *)zalloc(sizeof(Platform));
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
+
+#ifdef __EMSCRIPTEN__
+	float html5ExtraScaling = emscripten_get_device_pixel_ratio();
+	platform->windowWidth *= html5ExtraScaling;
+	platform->windowHeight *= html5ExtraScaling;
+#endif
+
 	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
 #ifdef _WIN32
@@ -168,13 +176,18 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 
 	// if (platform->isInternalVersion) logf("Starting raylib engine\n");
 
-#ifdef __EMSCRIPTEN__
-	// Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE | Raylib::FLAG_WINDOW_HIGHDPI);
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
-#else
-	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
-#endif
 	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
+
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		let newWidth = $0;
+		let newHeight = $1;
+		let canvasElement = document.getElementById("canvas");
+		canvasElement.style.width = newWidth+"px";
+		canvasElement.style.height = newHeight+"px";
+	}, windowWidth, windowHeight);
+#endif
 
 	platform->windowScaling = Raylib::GetWindowScaleDPI().x;
 
@@ -313,6 +326,10 @@ void maximizeWindow() {
 
 void setClipboard(char *str) {
 	Raylib::SetClipboardText(str);
+}
+
+void resizeWindow(int width, int height) {
+	Raylib::SetWindowSize(width, height);
 }
 
 bool keyPressed(int key) {
@@ -550,9 +567,6 @@ struct Renderer {
 	int outlineShaderOutlineFadeOuterLoc;
 	int outlineShaderOutlineFadeInnerLoc;
 
-	int width;
-	int height;
-
 #define TARGET_TEXTURE_LIMIT 16
 	RenderTexture *targetTextureStack[TARGET_TEXTURE_LIMIT];
 	int targetTextureStackNum;
@@ -677,8 +691,6 @@ bool usesAlphaDiscard = false;
 
 void initRenderer(int width, int height) {
 	renderer = (Renderer *)zalloc(sizeof(Renderer));
-	renderer->width = width;
-	renderer->height = height;
 	renderer->maxDrawCallsPerBatch = 20000;
 
 	pushCamera2d(mat3());
