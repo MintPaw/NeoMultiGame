@@ -624,6 +624,9 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					currentLayerName = NULL;
 				}
 
+				if (drawable->type == SWF_DRAWABLE_NONE) continue;
+				if (drawable->type == SWF_DRAWABLE_SPRITE && drawable->sprite->name && stringStartsWith(drawable->sprite->name, "Invis_")) continue; //@incomplete @speed
+
 				bool nextUseClip = recurse.useClip;
 
 				if (drawable->clipDepth != 0) {

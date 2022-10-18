@@ -2172,7 +2172,9 @@ Swf *loadSwf(char *path) {
 				int oldDepthsNum = frame->depthsNum;
 				for (int i = 0; i < frame->depthsNum; i++) {
 					SwfDrawable *drawable = &frame->depths[i];
-					if (drawable->type == SWF_DRAWABLE_NONE) {
+					bool shouldPrune = false;
+					if (drawable->type == SWF_DRAWABLE_NONE) shouldPrune = true;
+					if (shouldPrune) {
 						arraySpliceIndex(frame->depths, frame->depthsNum, sizeof(SwfDrawable), i);
 						frame->depthsNum--;
 						i--;
@@ -2281,10 +2283,10 @@ SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject) {
 			drawable.type = SWF_DRAWABLE_SPRITE;
 			drawable.sprite = (SwfSprite *)characterPtr;
 			if (drawable.sprite->name) drawable.sprite = getAliasedSprite(drawable.sprite, swf);
-			if (drawable.sprite->name && stringStartsWith(drawable.sprite->name, "Invis_")) {
-				drawable.type = SWF_DRAWABLE_NONE;
-				drawable.sprite = NULL;
-			}
+			// if (drawable.sprite->name && stringStartsWith(drawable.sprite->name, "Invis_")) {
+			// 	drawable.type = SWF_DRAWABLE_NONE;
+			// 	drawable.sprite = NULL;
+			// }
 			return drawable;
 		} else if (tagType == SWF_TAG_DEFINE_EDIT_TEXT) {
 			drawable.type = SWF_DRAWABLE_SPRITE;
