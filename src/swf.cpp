@@ -2060,6 +2060,17 @@ Swf *loadSwf(char *path) {
 					if (tag->type == SWF_TAG_END) break;
 
 					if (!currentFrame->depths) {
+						int frameLabelCount = 0;
+						int newDrawables = 0;
+						int prevDrawables = currentFrameIndex == 0 ? 0 : sprite->frames[currentFrameIndex-1].depthsNum;
+						for (int j = i; j < sprite->controlTagsNum; j++) {
+							ControlTag *otherTag = &sprite->controlTags[j];
+							if (otherTag->type == SWF_TAG_FRAME_LABEL && otherTag->frameLabel.name[0] != '/') frameLabelCount++;
+							if (otherTag->type == SWF_TAG_PLACE_OBJECT) newDrawables++;
+							if (otherTag->type == SWF_TAG_SHOW_FRAME) break;
+						}
+						currentFrame->labels = (char **)malloc(sizeof(char *) * frameLabelCount);
+
 						currentFrame->depths = (SwfDrawable *)zalloc(sizeof(SwfDrawable) * (sprite->highestDepth+1));
 						if (currentFrameIndex > 0) {
 							for (int i = 0; i < sprite->highestDepth+1; i++) {
@@ -2067,14 +2078,6 @@ Swf *loadSwf(char *path) {
 							}
 							currentFrame->depthsNum = sprite->highestDepth+1;
 						}
-
-						int frameLabelCount = 0;
-						for (int j = i; j < sprite->controlTagsNum; j++) {
-							ControlTag *otherTag = &sprite->controlTags[j];
-							if (otherTag->type == SWF_TAG_FRAME_LABEL && otherTag->frameLabel.name[0] != '/') frameLabelCount++;
-							if (otherTag->type == SWF_TAG_SHOW_FRAME) break;
-						}
-						currentFrame->labels = (char **)malloc(sizeof(char *) * frameLabelCount);
 					}
 
 					if (tag->type == SWF_TAG_SHOW_FRAME) {
@@ -2086,7 +2089,6 @@ Swf *loadSwf(char *path) {
 							SwfDrawable drawable = makeDrawableById(swf, placeObject);
 							drawable.depth = placeObject->depth;
 
-							// logf("Placing on to depth %d\n", placeObject->depth);
 							currentFrame->depths[placeObject->depth] = drawable;
 							if (currentFrame->depthsNum < placeObject->depth + 1) currentFrame->depthsNum = placeObject->depth + 1;
 						}
@@ -2163,30 +2165,30 @@ Swf *loadSwf(char *path) {
 		}
 
 		/// Prune dead SwfDrawables
-		for (int i = 0; i < swf->allSpritesNum; i++) {
-			SwfSprite *sprite = swf->allSprites[i];
-			for (int i = 0; i < sprite->framesNum; i++) {
-				SwfFrame *frame = &sprite->frames[i];
-				int oldDepthsNum = frame->depthsNum;
-				for (int i = 0; i < frame->depthsNum; i++) {
-					SwfDrawable *drawable = &frame->depths[i];
-					bool shouldPrune = false;
-					if (drawable->type == SWF_DRAWABLE_NONE) shouldPrune = true;
-					if (shouldPrune) {
-						arraySpliceIndex(frame->depths, frame->depthsNum, sizeof(SwfDrawable), i);
-						frame->depthsNum--;
-						i--;
-						continue;
-					}
-				}
-				if (frame->depthsNum == 0) {
-					if (frame->depths) free(frame->depths);
-					frame->depths = NULL;
-				} else {
-					frame->depths = (SwfDrawable *)resizeArray(frame->depths, sizeof(SwfDrawable), oldDepthsNum, frame->depthsNum);
-				}
-			}
-		}
+		// for (int i = 0; i < swf->allSpritesNum; i++) {
+		// 	SwfSprite *sprite = swf->allSprites[i];
+		// 	for (int i = 0; i < sprite->framesNum; i++) {
+		// 		SwfFrame *frame = &sprite->frames[i];
+		// 		int oldDepthsNum = frame->depthsNum;
+		// 		for (int i = 0; i < frame->depthsNum; i++) {
+		// 			SwfDrawable *drawable = &frame->depths[i];
+		// 			bool shouldPrune = false;
+		// 			if (drawable->type == SWF_DRAWABLE_NONE) shouldPrune = true;
+		// 			if (shouldPrune) {
+		// 				arraySpliceIndex(frame->depths, frame->depthsNum, sizeof(SwfDrawable), i);
+		// 				frame->depthsNum--;
+		// 				i--;
+		// 				continue;
+		// 			}
+		// 		}
+		// 		if (frame->depthsNum == 0) {
+		// 			if (frame->depths) free(frame->depths);
+		// 			frame->depths = NULL;
+		// 		} else {
+		// 			frame->depths = (SwfDrawable *)resizeArray(frame->depths, sizeof(SwfDrawable), oldDepthsNum, frame->depthsNum);
+		// 		}
+		// 	}
+		// }
 	}
 
 	// logf("%d sprites * %d bytes = %.1fmb\n", swf->allSpritesNum, sizeof(SwfShape), (swf->allSpritesNum*sizeof(SwfSprite))/(float)(Megabytes(1)));
