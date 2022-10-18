@@ -1,5 +1,4 @@
 bool swfLogShapeInfo = false;
-int boundsMem = 0;
 
 struct SwfDataStream {
 	u8 *data;
@@ -829,7 +828,6 @@ struct SwfSprite {
 	char **labelsInOrder;
 	int labelsInOrderNum;
 
-	Rect *frameBounds;
 	Rect bounds;
 	bool isTextField;
 	SwfTextAlign textAlign;
@@ -877,9 +875,9 @@ struct SwfDrawable {
 	SwfFilter *filters; // 8
 	Matrix2x3 matrix; // 24
 	u16 clipDepth; // 2
-	u8 filtersNum; // 2
+	u16 depth; // 2
+	u8 filtersNum; // 1
 	/*SwfBlendMode*/u8 spriteBlendMode; // 1
-	int depth;
 
 	/*SwfDrawableType*/u8 type; // 1
 	union {
@@ -932,6 +930,7 @@ bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
+Rect getFrameBounds(SwfSprite *sprite, int frameIndex);
 /// FUNCTIONS ^
 
 Swf *loadSwf(char *path) {
@@ -2132,8 +2131,6 @@ Swf *loadSwf(char *path) {
 		/// Bounds and aliasing
 		for (int i = 0; i < swf->allSpritesNum; i++) {
 			SwfSprite *sprite = swf->allSprites[i];
-			sprite->frameBounds = (Rect *)zalloc(sizeof(Rect) * sprite->framesNum);
-			boundsMem += sizeof(Rect) * sprite->framesNum;
 			for (int i = 0; i < sprite->framesNum; i++) {
 				SwfFrame *frame = &sprite->frames[i];
 				int frameIndex = i;
@@ -2151,7 +2148,6 @@ Swf *loadSwf(char *path) {
 					if (!isZero(newBounds)) {
 						newBounds = toMatrix3(drawable->matrix) * newBounds;
 						sprite->bounds = insert(sprite->bounds, newBounds);
-						sprite->frameBounds[frameIndex] = insert(sprite->frameBounds[frameIndex], newBounds);
 					}
 				}
 			}
@@ -2162,6 +2158,7 @@ Swf *loadSwf(char *path) {
 			}
 		}
 
+		/// Prune dead SwfDrawables
 		for (int i = 0; i < swf->allSpritesNum; i++) {
 			SwfSprite *sprite = swf->allSprites[i];
 			for (int i = 0; i < sprite->framesNum; i++) {
@@ -2196,7 +2193,6 @@ Swf *loadSwf(char *path) {
 
 	float ms = getMsPassed(startTime);
 	if (ms > 1000) logf("Took %.1fsec to load %s\n", ms/1000, path);
-	// logf("Current bounds mem: %d\n", boundsMem);
 	return swf;
 }
 
@@ -2431,7 +2427,6 @@ void destroySwf(Swf *swf) {
 				if (frame->labels) free(frame->labels);
 			}
 			free(sprite->frames);
-			free(sprite->frameBounds);
 			if (sprite->labelsInOrder) free(sprite->labelsInOrder);
 		} else if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS) {
 			SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
@@ -2452,4 +2447,29 @@ void destroySwf(Swf *swf) {
 
 	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
 	free(swf);
+}
+
+Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
+	if (frameIndex < 0 || frameIndex > sprite->framesNum-1) return makeRect();
+	SwfFrame *frame = &sprite->frames[frameIndex];
+
+	Rect bounds = makeRect();
+	for (int i = 0; i < frame->depthsNum; i++) {
+		SwfDrawable *drawable = &frame->depths[i];
+		drawable->depth = i;
+
+		Rect newBounds = {};
+		if (drawable->type == SWF_DRAWABLE_SHAPE) {
+			newBounds = toRect(drawable->shape->shapeBounds);
+		} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
+			newBounds = drawable->sprite->bounds;
+		}
+
+		if (!isZero(newBounds)) {
+			newBounds = toMatrix3(drawable->matrix) * newBounds;
+			bounds = insert(bounds, newBounds);
+		}
+	}
+
+	return bounds;
 }

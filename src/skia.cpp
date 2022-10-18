@@ -321,8 +321,11 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 	}
 	skiaSys->canvas = skiaSys->mainCanvas;
 
-	if (skiaSys->cpuFramePixels) free(skiaSys->cpuFramePixels);
-	skiaSys->cpuFramePixels = (u8 *)malloc(skiaSys->width * skiaSys->height * 4);
+	if (skiaSys->cpuFramePixels) {
+		free(skiaSys->cpuFramePixels);
+		skiaSys->cpuFramePixels = NULL;
+	}
+	if (!skiaSys->useGpu) skiaSys->cpuFramePixels = (u8 *)malloc(skiaSys->width * skiaSys->height * 4);
 }
 
 void drawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse) {
@@ -1148,7 +1151,7 @@ void drawSwfAnalyzer() {
 
 
 		int frame = aSys->selectedSpriteFrame;
-		Rect rect = sprite->frameBounds[frame];
+		Rect rect = getFrameBounds(sprite, frame);
 		Vec2 oldScale = skiaSys->scale;
 		skiaSys->scale = v2(1, 1);
 		startSkiaFrame();
@@ -1195,13 +1198,14 @@ void drawSwfAnalyzer() {
 			size.x,
 			size.y
 		);
-		size = getSize(sprite->frameBounds[frame]);
+		Rect frameBounds = getFrameBounds(sprite, frame);
+		size = getSize(frameBounds);
 		ImGui::Text(
 			"FrameBounds: %.1f %.1f %.1f %.1f (%.1fx%.1f)",
-			sprite->frameBounds[frame].x,
-			sprite->frameBounds[frame].y,
-			sprite->frameBounds[frame].width,
-			sprite->frameBounds[frame].height,
+			frameBounds.x,
+			frameBounds.y,
+			frameBounds.width,
+			frameBounds.height,
 			size.x,
 			size.y
 		);
@@ -1218,7 +1222,7 @@ void drawSwfAnalyzer() {
 			if (!createDirectory("c:/bin/dump")) logf("Failed to create dump dir\n");
 
 			for (int i = 0; i < sprite->framesNum; i++) {
-				Rect rect = sprite->frameBounds[i];
+				Rect rect = getFrameBounds(sprite, i);
 
 				startSkiaFrame();
 
