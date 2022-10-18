@@ -320,14 +320,12 @@ enum FillStyleType {
 	FILL_STYLE_NON_SMOOTHED_CLIPPED_BITMAP=0x43,
 };
 struct FillStyle {
-	int globalId;
 	FillStyleType fillStyleType;
 	int color;
-	Matrix3 gradientMatrix;
+	Matrix3 matrix;
 	Gradient gradient;
 	u16 bitmapId;
 	SwfBitmap *bitmap;
-	Matrix3 bitmapMatrix; //@todo Why isn't this effectively a union with gradientMatrix?
 };
 FillStyle readFillStyle(SwfDataStream *stream, int shapeNum) {
 	FillStyle ret;
@@ -343,7 +341,7 @@ FillStyle readFillStyle(SwfDataStream *stream, int shapeNum) {
 		ret.fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT
 	) {
 		bool isFocal = ret.fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT;
-		ret.gradientMatrix = readMatrix(stream);
+		ret.matrix = readMatrix(stream);
 		ret.gradient = readGradient(stream, shapeNum, isFocal);
 	} else if (
 		ret.fillStyleType == FILL_STYLE_REPEATING_BITMAP ||
@@ -352,7 +350,7 @@ FillStyle readFillStyle(SwfDataStream *stream, int shapeNum) {
 		ret.fillStyleType == FILL_STYLE_NON_SMOOTHED_CLIPPED_BITMAP
 	) {
 		ret.bitmapId = readU16(stream);
-		ret.bitmapMatrix = readMatrix(stream);
+		ret.matrix = readMatrix(stream);
 	}
 
 	return ret;
@@ -369,46 +367,38 @@ enum JoinStyle {
 	JOIN_STYLE_MITER=2,
 };
 struct LineStyle {
-	int globalId;
-	int version;
 	float width;
 	int color;
-	CapStyle startCapStyle;
-	JoinStyle joinStyle;
-	bool hasFillFlag;
-	bool noHScaleFlag;
-	bool noVScaleFlag;
-	bool pixelHintingFlag;
-	bool noClose;
-	CapStyle endCapStyle;
 	float miterLimitFactor;
-	FillStyle fillStyle;
+	u8 startCapStyle;
+	u8 joinStyle;
 };
 LineStyle readLineStyle(SwfDataStream *stream, int shapeNum) {
 	LineStyle ret = {};
 	ret.width = (float)readU16(stream) / 20.0;
 
+	bool hasFillFlag = false;
 	if (shapeNum == 1 || shapeNum == 2) {
 		ret.color = readRgb(stream);
 	} else if (shapeNum == 3) {
 		ret.color = readRgba(stream);
 	} else {
-		ret.startCapStyle = (CapStyle)readUB(stream, 2);
-		ret.joinStyle = (JoinStyle)readUB(stream, 2);
-		ret.hasFillFlag = readUB(stream, 1);
-		ret.noHScaleFlag = readUB(stream, 1);
-		ret.noVScaleFlag = readUB(stream, 1);
-		ret.pixelHintingFlag = readUB(stream, 1);
+		ret.startCapStyle = readUB(stream, 2);
+		ret.joinStyle = readUB(stream, 2);
+		hasFillFlag = readUB(stream, 1);
+		readUB(stream, 1); // noHScaleFlag 
+		readUB(stream, 1); // noVScaleFlag
+		readUB(stream, 1); // pixelHintingFlag 
 		readUB(stream, 5); // reserved
-		ret.noClose = readUB(stream, 1);
-		ret.endCapStyle = (CapStyle)readUB(stream, 2);
+		readUB(stream, 1); // noClose
+		readUB(stream, 2); // endCapStyle 
 
 		if (ret.joinStyle == JOIN_STYLE_MITER) {
 			ret.miterLimitFactor = readFixed8(stream);
 		}
 
-		if (ret.hasFillFlag) {
-			ret.fillStyle = readFillStyle(stream, shapeNum);
+		if (hasFillFlag) {
+			// fillStyle = readFillStyle(stream, shapeNum); //@incomplete I don't use this fill style?
 		} else {
 			ret.color = readRgba(stream);
 		}
@@ -889,6 +879,7 @@ struct SwfDrawable {
 	u16 clipDepth; // 2
 	u8 filtersNum; // 2
 	/*SwfBlendMode*/u8 spriteBlendMode; // 1
+	int depth;
 
 	/*SwfDrawableType*/u8 type; // 1
 	union {
@@ -929,7 +920,7 @@ struct Swf {
 	DefineFontName defineFontNames[SWF_FONT_NAMES_MAX];
 	int defineFontNamesNum;
 
-	Allocator characterMapAllocator;
+	Allocator characterMapAllocator; // I'm not sure why these are part of this struct
 	HashMap *characterMap;
 };
 
@@ -942,13 +933,6 @@ char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 /// FUNCTIONS ^
-
-u32 totalDrawables = 0;
-void *makeDrawables(int drawablesNum) {
-	totalDrawables += drawablesNum;
-	// if (totalDrawables % 1000 == 0) logf("%d drawables\n", totalDrawables);
-	return zalloc(sizeof(SwfDrawable) * drawablesNum);
-}
 
 Swf *loadSwf(char *path) {
 	NanoTime startTime = getNanoTime();
@@ -2074,7 +2058,7 @@ Swf *loadSwf(char *path) {
 					if (tag->type == SWF_TAG_END) break;
 
 					if (!currentFrame->depths) {
-						currentFrame->depths = (SwfDrawable *)makeDrawables((sprite->highestDepth+1));
+						currentFrame->depths = (SwfDrawable *)zalloc(sizeof(SwfDrawable) * (sprite->highestDepth+1));
 						if (currentFrameIndex > 0) {
 							for (int i = 0; i < sprite->highestDepth+1; i++) {
 								currentFrame->depths[i] = sprite->frames[currentFrameIndex-1].depths[i];
@@ -2155,6 +2139,7 @@ Swf *loadSwf(char *path) {
 				int frameIndex = i;
 				for (int i = 0; i < frame->depthsNum; i++) {
 					SwfDrawable *drawable = &frame->depths[i];
+					drawable->depth = i;
 
 					Rect newBounds = {};
 					if (drawable->type == SWF_DRAWABLE_SHAPE) {
@@ -2176,6 +2161,31 @@ Swf *loadSwf(char *path) {
 				if (sprite != newSprite) swf->allSprites[i] = newSprite;
 			}
 		}
+
+		for (int i = 0; i < swf->allSpritesNum; i++) {
+			SwfSprite *sprite = swf->allSprites[i];
+			for (int i = 0; i < sprite->framesNum; i++) {
+				SwfFrame *frame = &sprite->frames[i];
+				int oldDepthsNum = frame->depthsNum;
+				for (int i = 0; i < frame->depthsNum; i++) {
+					SwfDrawable *drawable = &frame->depths[i];
+					if (drawable->type == SWF_DRAWABLE_NONE) {
+						arraySpliceIndex(frame->depths, frame->depthsNum, sizeof(SwfDrawable), i);
+						frame->depthsNum--;
+						i--;
+						continue;
+					}
+				}
+				if (frame->depthsNum == 0) {
+					if (frame->depths) free(frame->depths);
+					frame->depths = NULL;
+				} else {
+					frame->depths = (SwfDrawable *)resizeArray(frame->depths, sizeof(SwfDrawable), oldDepthsNum, frame->depthsNum);
+				}
+			}
+		}
+
+
 	}
 
 	// logf("%d sprites * %d bytes = %.1fmb\n", swf->allSpritesNum, sizeof(SwfShape), (swf->allSpritesNum*sizeof(SwfSprite))/(float)(Megabytes(1)));
@@ -2186,7 +2196,7 @@ Swf *loadSwf(char *path) {
 
 	float ms = getMsPassed(startTime);
 	if (ms > 1000) logf("Took %.1fsec to load %s\n", ms/1000, path);
-	logf("Current bounds mem: %d\n", boundsMem);
+	// logf("Current bounds mem: %d\n", boundsMem);
 	return swf;
 }
 
@@ -2416,7 +2426,7 @@ void destroySwf(Swf *swf) {
 			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
 			for (int i = 0; i < sprite->framesNum; i++) {
 				SwfFrame *frame = &sprite->frames[i];
-				free(frame->depths);
+				if (frame->depths) free(frame->depths);
 				for (int i = 0; i < frame->labelsNum; i++) free(frame->labels[i]);
 				if (frame->labels) free(frame->labels);
 			}

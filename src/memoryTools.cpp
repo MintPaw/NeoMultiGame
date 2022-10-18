@@ -25,6 +25,15 @@ struct StringBuilder {
 	int maxLen;
 };
 
+struct MemoryArena {
+	u8 **blocks;
+	int blocksNum;
+	int blocksMax;
+
+	int blockPosition;
+	int blockSize;
+};
+
 void *zalloc(u32 size);
 char *stringClone(const char *str);
 bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
@@ -63,6 +72,10 @@ void *convertFromHexString(char *hex, int *outputSize=NULL);
 
 int indexOfU32(u32 *haystack, int needle);
 
+MemoryArena *createMemoryArena(int blockSize=Kilobytes(16), int blocksMax=8192);
+void *allocateMemory(MemoryArena *arena, int size);
+void destroyMemoryArena(MemoryArena *arena);
+
 struct MemoryChunk {
 	u8 *data;
 	int size;
@@ -91,15 +104,9 @@ struct MemorySystem {
 	long allTime;
 	long total;
 
-	MemoryChunk **activeChunks;
-	int activeChunksNum;
-	int activeChunksMax;
-
-	MemoryChunk **emptyChunks;
-	int emptyChunksNum;
-	int emptyChunksMax;
-
-	unsigned long currentChunkId;
+#define FRAME_CHUNKS_MAX (4096*100)
+	MemoryChunk frameChunks[FRAME_CHUNKS_MAX];
+	int frameChunksNum = 0;
 
 	void *frameMemory;
 	int frameMemoryCurrentIndex;
@@ -112,19 +119,9 @@ struct MemorySystem {
 int startingFrameMemory = Megabytes(1);
 MemorySystem *memSys = NULL;
 
-#define FRAME_CHUNKS_MAX (4096*100)
-MemoryChunk frameChunks[FRAME_CHUNKS_MAX];
-int frameChunksNum = 0;
-
 void initMemory() {
 	memSys = (MemorySystem *)(malloc)(sizeof(MemorySystem));
 	memset(memSys, 0, sizeof(MemorySystem));
-
-	memSys->activeChunksMax = 1;
-	memSys->activeChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memSys->activeChunksMax);
-
-	memSys->emptyChunksMax = 1;
-	memSys->emptyChunks = (MemoryChunk **)(malloc)(sizeof(MemoryChunk *) * memSys->emptyChunksMax);
 
 	memSys->frameMemoryMax = startingFrameMemory;
 	memSys->frameMemory = (malloc)(memSys->frameMemoryMax);
@@ -162,14 +159,14 @@ char *frameMalloc(int size) {
 #endif
 
 	if (shouldUseChunk) {
-		if (frameChunksNum >= FRAME_CHUNKS_MAX) {
+		if (memSys->frameChunksNum >= FRAME_CHUNKS_MAX) {
 			printf("No more frame memory\n");
 
 			DecMutex(&memSys->_frameMemoryMutex);
 			return NULL;
 		}
 
-		MemoryChunk *chunk = &frameChunks[frameChunksNum++];
+		MemoryChunk *chunk = &memSys->frameChunks[memSys->frameChunksNum++];
 		chunk->size = size;
 
 		chunk->data = (unsigned char *)zalloc(chunk->size);
@@ -225,20 +222,18 @@ void freeFrameMemory() {
 
 	memSys->frameMemoryCurrentIndex = 0;
 
+	if (memSys->frameChunksNum > 0) printf("Overflowed frame %d extra allocation\n", memSys->frameChunksNum);
+
 	int extraMemoryNeeded = 0;
-	for (int i = 0; i < frameChunksNum; i++) {
-		extraMemoryNeeded += frameChunks[i].size;
-		free(frameChunks[i].data);
+	for (int i = 0; i < memSys->frameChunksNum; i++) {
+		extraMemoryNeeded += memSys->frameChunks[i].size;
+		free(memSys->frameChunks[i].data);
 	}
-	frameChunksNum = 0;
+	memSys->frameChunksNum = 0;
 
 #if defined(COMPRESS_FRAME_MEMORY)
 	if (extraMemoryNeeded > 0) {
 		memSys->frameMemoryMax += extraMemoryNeeded;
-		if (memSys->frameMemoryMax > startingFrameMemory * 2) {
-			printf("Overflowed frame mem *2 (%.1fmb now)\n", (float)memSys->frameMemoryMax/Megabytes(1));
-			// memSys->frameMemoryMax = startingFrameMemory * 2;
-		}
 		free(memSys->frameMemory);
 		memSys->frameMemory = malloc(memSys->frameMemoryMax);
 	}
@@ -739,6 +734,47 @@ int indexOfU32(u32 *haystack, int haystackNum, u32 needle) {
 
 	return -1;
 }
+
+MemoryArena *createMemoryArena(int blockSize, int blocksMax) {
+	MemoryArena *arena = (MemoryArena *)zalloc(sizeof(MemoryArena));
+	arena->blockSize = blockSize;
+	arena->blocksMax = blocksMax;
+	arena->blocks = (u8 **)zalloc(sizeof(u8 *) * blocksMax);
+	arena->blocks[arena->blocksNum++] = (u8 *)zalloc(arena->blockSize);
+	return arena;
+}
+
+void *allocateMemory(MemoryArena *arena, int size) {
+	if (size > arena->blockSize) {
+		logf("Request allocation is too large for arena, it will leak!!! (%d/%d)\n", size, arena->blockSize);
+		return zalloc(size);
+	}
+
+	int bytesLeftInBlock = arena->blockSize - arena->blockPosition;
+	if (size > bytesLeftInBlock) {
+		if (arena->blocksNum > arena->blocksMax-1) {
+			logf("Too many allocation in arena, it will leak!!! (>%d)\n", arena->blocksMax);
+			return zalloc(size);
+		}
+
+		arena->blocks[arena->blocksNum++] = (u8 *)zalloc(arena->blockSize);
+		arena->blockPosition = 0;
+	}
+
+	u8 *currentBlock = arena->blocks[arena->blocksNum-1];
+	void *mem = currentBlock + arena->blockPosition;
+	arena->blockPosition += size;
+	return mem;
+}
+
+void destroyMemoryArena(MemoryArena *arena) {
+	for (int i = 0; i < arena->blocksNum; i++) {
+		free(arena->blocks[i]);
+	}
+	free(arena->blocks);
+	free(arena);
+}
+
 
 /// Dynamic array
 

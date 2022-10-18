@@ -421,7 +421,7 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 						paintCmd = createCommand(cmdList, VDRAW_SET_FOCAL_GRADIENT_FILL);
 						paintCmd->position.x = newFillStyle->gradient.focalPoint;
 					}
-					paintCmd->matrix = newFillStyle->gradientMatrix;
+					paintCmd->matrix = newFillStyle->matrix;
 
 					float lastRatio = -1;
 					for (int i = 0; i < newFillStyle->gradient.coordsNum; i++) {
@@ -445,7 +445,7 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 					}
 
 					paintCmd->swfBitmap = newFillStyle->bitmap;
-					paintCmd->matrix = newFillStyle->bitmapMatrix;
+					paintCmd->matrix = newFillStyle->matrix;
 					paintCmd->matrix.SCALE(1/20.0, 1/20.0);
 				} else {
 					Panic("Bad fill");
@@ -461,8 +461,8 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 				paintCmd->colors[0] = color;
 				paintCmd->width = newLineStyle->width;
 
-				paintCmd->startCapStyle = newLineStyle->startCapStyle;
-				paintCmd->joinStyle = newLineStyle->joinStyle;
+				paintCmd->startCapStyle = (CapStyle)newLineStyle->startCapStyle;
+				paintCmd->joinStyle = (JoinStyle)newLineStyle->joinStyle;
 				paintCmd->miterLimitFactor = newLineStyle->miterLimitFactor;
 			}
 
@@ -536,9 +536,9 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 		hashMapGet(recurse.nameTransformMap, &recurse.path, (int)stringHash32(recurse.path), &matchingTransform);
 	}
 
-	int frame = 0;
+	int frameIndex = 0;
 	if (matchingTransform) {
-		frame = matchingTransform->frame;
+		frameIndex = matchingTransform->frame;
 		localMatrix = localMatrix * matchingTransform->matrix;
 		recurse.font = matchingTransform->font;
 		recurse.text = matchingTransform->text;
@@ -556,8 +556,8 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 
 	bool canDraw = true;
 	if (!sprite->isTextField) {
-		if (frame > sprite->framesNum-1) frame = sprite->framesNum-1;
-		if (frame < 0) frame = 0;
+		if (frameIndex > sprite->framesNum-1) frameIndex = sprite->framesNum-1;
+		if (frameIndex < 0) frameIndex = 0;
 	}
 
 	pushSpriteMatrix(cmdList, localMatrix);
@@ -589,15 +589,16 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				}
 			}
 		} else {
-			SwfDrawable *depths = sprite->frames[frame].depths;
-			int depthsNum = sprite->frames[frame].depthsNum;
+			SwfFrame *frame = &sprite->frames[frameIndex];
 			int clippingTill = 0;
 			char *currentLayerName = NULL;
-			for (int i = 0; i < depthsNum; i++) {
-				bool canSubDraw = true;
+			for (int i = 0; i < frame->depthsNum; i++) {
+				SwfDrawable *drawable = &frame->depths[i];
 
-				SwfDrawable *drawable = &depths[i];
-				if (drawable->type == SWF_DRAWABLE_NONE) canSubDraw = false;
+				if (clippingTill != 0 && drawable->depth >= clippingTill) {
+					clippingTill = 0;
+					createCommand(cmdList, VDRAW_RESTORE);
+				}
 
 				float alphaMultiplier = 1;
 				if (currentLayerName && matchingTransform) {
@@ -620,71 +621,67 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					currentLayerName = NULL;
 				}
 
-				if (canSubDraw) {
-					bool nextUseClip = recurse.useClip;
+				bool nextUseClip = recurse.useClip;
 
-					if (drawable->clipDepth != 0) {
-						if (clippingTill > 0) logf("Trying to clip, but already clipping %d\n", clippingTill);
-						clippingTill = drawable->clipDepth;
-						nextUseClip = true;
-						createCommand(cmdList, VDRAW_SAVE);
+				if (drawable->clipDepth != 0) {
+					if (clippingTill > 0) {
+						logf("Trying to clip, but already clipping %d\n", clippingTill);
+						createCommand(cmdList, VDRAW_RESTORE);
 					}
+					clippingTill = drawable->clipDepth;
+					nextUseClip = true;
+					createCommand(cmdList, VDRAW_SAVE);
+				}
 
-					pushSpriteMatrix(cmdList, toMatrix3(drawable->matrix));
-					if (drawable->type == SWF_DRAWABLE_SHAPE) {
-						DrawShapeProps props = {};
-						props.useClip = nextUseClip;
-						props.alpha = recurse.alpha * alphaMultiplier;
-						props.tint = recurse.tint;
-						props.colorTransform = recurse.colorTransform;
+				pushSpriteMatrix(cmdList, toMatrix3(drawable->matrix));
+				if (drawable->type == SWF_DRAWABLE_SHAPE) {
+					DrawShapeProps props = {};
+					props.useClip = nextUseClip;
+					props.alpha = recurse.alpha * alphaMultiplier;
+					props.tint = recurse.tint;
+					props.colorTransform = recurse.colorTransform;
 
-						if (props.alpha > 0) genDrawShape(drawable->shape, props, cmdList);
-					} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
-						DrawSpriteRecurseData newRecurse = recurse;
-						newRecurse.useClip = nextUseClip;
-						newRecurse.altName = drawable->name;
-						newRecurse.alpha *= alphaMultiplier;
-						if (drawable->colorTransform) newRecurse.colorTransform = applyColorTransform(newRecurse.colorTransform, *drawable->colorTransform);
+					if (props.alpha > 0) genDrawShape(drawable->shape, props, cmdList);
+				} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
+					DrawSpriteRecurseData newRecurse = recurse;
+					newRecurse.useClip = nextUseClip;
+					newRecurse.altName = drawable->name;
+					newRecurse.alpha *= alphaMultiplier;
+					if (drawable->colorTransform) newRecurse.colorTransform = applyColorTransform(newRecurse.colorTransform, *drawable->colorTransform);
 
-						bool shouldStopBlur = false;
-						bool shouldStopColorMatrix = false;
-						for (int i = 0; i < drawable->filtersNum; i++) {
-							SwfFilter *filter = &drawable->filters[i];
-							if (filter->type == SWF_FILTER_BLUR) {
-								if (skiaSys->blurEnabled) {
-									VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_BLUR);
-									cmd->position = v2(filter->blurFilter.blurX, filter->blurFilter.blurY);
-									shouldStopBlur = true;
-								}
-							} else if (filter->type == SWF_FILTER_COLOR_MATRIX) {
-								VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_COLOR_MATRIX);
-								memcpy(cmd->colors, filter->colorMatrixFilter.matrix, sizeof(float) * 20);
-								shouldStopColorMatrix = true;
+					bool shouldStopBlur = false;
+					bool shouldStopColorMatrix = false;
+					for (int i = 0; i < drawable->filtersNum; i++) {
+						SwfFilter *filter = &drawable->filters[i];
+						if (filter->type == SWF_FILTER_BLUR) {
+							if (skiaSys->blurEnabled) {
+								VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_BLUR);
+								cmd->position = v2(filter->blurFilter.blurX, filter->blurFilter.blurY);
+								shouldStopBlur = true;
 							}
+						} else if (filter->type == SWF_FILTER_COLOR_MATRIX) {
+							VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_COLOR_MATRIX);
+							memcpy(cmd->colors, filter->colorMatrixFilter.matrix, sizeof(float) * 20);
+							shouldStopColorMatrix = true;
 						}
-
-						bool shouldEndBlendMode = false;
-						if (drawable->spriteBlendMode != SWF_BLEND_NONE && !nextUseClip) {
-							VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE);
-							cmd->blendMode = (SwfBlendMode)drawable->spriteBlendMode;
-							shouldEndBlendMode = true;
-						}
-
-						genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
-
-						if (shouldEndBlendMode) createCommand(cmdList, VDRAW_END_BLEND_MODE);
-						if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
-						if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
-					} else {
-						logf("Bad place object character\n");
 					}
-					popSpriteMatrix(cmdList);
-				}
 
-				if (clippingTill != 0 && i >= clippingTill-1) {
-					clippingTill = 0;
-					createCommand(cmdList, VDRAW_RESTORE);
+					bool shouldEndBlendMode = false;
+					if (drawable->spriteBlendMode != SWF_BLEND_NONE && !nextUseClip) {
+						VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_BLEND_MODE);
+						cmd->blendMode = (SwfBlendMode)drawable->spriteBlendMode;
+						shouldEndBlendMode = true;
+					}
+
+					genDrawSprite(drawable->sprite, transforms, transformsNum, newRecurse, cmdList);
+
+					if (shouldEndBlendMode) createCommand(cmdList, VDRAW_END_BLEND_MODE);
+					if (shouldStopBlur) createCommand(cmdList, VDRAW_END_BLUR);
+					if (shouldStopColorMatrix) createCommand(cmdList, VDRAW_END_COLOR_MATRIX);
+				} else {
+					logf("Bad place object character\n");
 				}
+				popSpriteMatrix(cmdList);
 			}
 
 			if (clippingTill != 0) {
