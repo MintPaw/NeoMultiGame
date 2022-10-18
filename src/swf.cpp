@@ -2088,10 +2088,7 @@ Swf *loadSwf(char *path) {
 
 							// logf("Placing on to depth %d\n", placeObject->depth);
 							currentFrame->depths[placeObject->depth] = drawable;
-							if (currentFrame->depthsNum < placeObject->depth + 1) {
-								currentFrame->depthsNum = placeObject->depth + 1;
-								for (int i = 0 ; i < 20; i++) if (currentFrameIndex != 0) logf("It happened!\n");
-							}
+							if (currentFrame->depthsNum < placeObject->depth + 1) currentFrame->depthsNum = placeObject->depth + 1;
 						}
 
 						SwfDrawable *drawable = getDrawableByDepth(currentFrame, placeObject->depth);
@@ -2119,6 +2116,7 @@ Swf *loadSwf(char *path) {
 						drawable->filtersNum = placeObject->filtersNum;
 					} else if (tag->type == SWF_TAG_REMOVE_OBJECT) {
 						SwfDrawable *drawable = getDrawableByDepth(currentFrame, tag->removeObject.depth);
+						memset(drawable, 0, sizeof(SwfDrawable));
 						drawable->type = SWF_DRAWABLE_NONE;
 					} else if (tag->type == SWF_TAG_FRAME_LABEL) {
 						if (tag->frameLabel.name[0] != '/') {
@@ -2471,7 +2469,6 @@ Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
 	Rect bounds = makeRect();
 	for (int i = 0; i < frame->depthsNum; i++) {
 		SwfDrawable *drawable = &frame->depths[i];
-		drawable->depth = i;
 
 		Rect newBounds = {};
 		if (drawable->type == SWF_DRAWABLE_SHAPE) {
