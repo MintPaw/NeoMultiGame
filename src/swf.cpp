@@ -926,11 +926,14 @@ Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
+SwfDrawable *getDrawableByDepth(SwfFrame *frame, int depth);
+
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 Rect getFrameBounds(SwfSprite *sprite, int frameIndex);
+void destroySwf(Swf *swf);
 /// FUNCTIONS ^
 
 Swf *loadSwf(char *path) {
@@ -2081,12 +2084,18 @@ Swf *loadSwf(char *path) {
 						PlaceObject *placeObject = &tag->placeObject;
 						if (placeObject->pfHasCharacter || placeObject->pfHasClassName) {
 							SwfDrawable drawable = makeDrawableById(swf, placeObject);
+							drawable.depth = placeObject->depth;
+
 							// logf("Placing on to depth %d\n", placeObject->depth);
 							currentFrame->depths[placeObject->depth] = drawable;
-							if (currentFrame->depthsNum < placeObject->depth + 1) currentFrame->depthsNum = placeObject->depth + 1;
+							if (currentFrame->depthsNum < placeObject->depth + 1) {
+								currentFrame->depthsNum = placeObject->depth + 1;
+								for (int i = 0 ; i < 20; i++) if (currentFrameIndex != 0) logf("It happened!\n");
+							}
 						}
 
-						SwfDrawable *drawable = &currentFrame->depths[placeObject->depth];
+						SwfDrawable *drawable = getDrawableByDepth(currentFrame, placeObject->depth);
+
 						if (placeObject->pfHasMatrix) {
 							drawable->matrix = toMatrix2x3(placeObject->matrix);
 						} else if (placeObject->pfHasCharacter || placeObject->pfHasClassName) {
@@ -2109,10 +2118,8 @@ Swf *loadSwf(char *path) {
 						drawable->filters = placeObject->filters;
 						drawable->filtersNum = placeObject->filtersNum;
 					} else if (tag->type == SWF_TAG_REMOVE_OBJECT) {
-						int depth = tag->removeObject.depth;
-						Assert(depth < currentFrame->depthsNum);
-						memset(&currentFrame->depths[depth], 0, sizeof(SwfDrawable));
-						currentFrame->depths[depth].type = SWF_DRAWABLE_NONE;
+						SwfDrawable *drawable = getDrawableByDepth(currentFrame, tag->removeObject.depth);
+						drawable->type = SWF_DRAWABLE_NONE;
 					} else if (tag->type == SWF_TAG_FRAME_LABEL) {
 						if (tag->frameLabel.name[0] != '/') {
 							char *label = stringClone(tag->frameLabel.name);
@@ -2136,7 +2143,6 @@ Swf *loadSwf(char *path) {
 				int frameIndex = i;
 				for (int i = 0; i < frame->depthsNum; i++) {
 					SwfDrawable *drawable = &frame->depths[i];
-					drawable->depth = i;
 
 					Rect newBounds = {};
 					if (drawable->type == SWF_DRAWABLE_SHAPE) {
@@ -2181,8 +2187,6 @@ Swf *loadSwf(char *path) {
 				}
 			}
 		}
-
-
 	}
 
 	// logf("%d sprites * %d bytes = %.1fmb\n", swf->allSpritesNum, sizeof(SwfShape), (swf->allSpritesNum*sizeof(SwfSprite))/(float)(Megabytes(1)));
@@ -2324,20 +2328,6 @@ SwfSprite *getSpriteByName(Swf *swf, char *spriteName) {
 	return NULL;
 }
 
-int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
-	for (int i = afterFrame; i < sprite->framesNum; i++) {
-		int frameIndex = i;
-		SwfFrame *frame = &sprite->frames[frameIndex]; 
-		for (int i = 0; i < frame->labelsNum; i++) {
-			if (streq(frame->labels[i], label)) {
-				return frameIndex;
-			}
-		}
-	}
-
-	return -1;
-}
-
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf) {
 	for (int i = swf->loadedSwfsNum-1; i >= 0; i--) {
 		Swf *nextSwf = swf->loadedSwfs[i];
@@ -2352,6 +2342,15 @@ SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf) {
 		}
 	}
 
+	return NULL;
+}
+
+SwfDrawable *getDrawableByDepth(SwfFrame *frame, int depth) {
+	for (int i = 0; i < frame->depthsNum; i++) {
+		SwfDrawable *drawable = &frame->depths[i];
+		if (drawable->depth == depth) return drawable;
+	}
+	logf("Couldn't find drawable at depth %d\n", depth);
 	return NULL;
 }
 
@@ -2447,6 +2446,20 @@ void destroySwf(Swf *swf) {
 
 	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
 	free(swf);
+}
+
+int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
+	for (int i = afterFrame; i < sprite->framesNum; i++) {
+		int frameIndex = i;
+		SwfFrame *frame = &sprite->frames[frameIndex]; 
+		for (int i = 0; i < frame->labelsNum; i++) {
+			if (streq(frame->labels[i], label)) {
+				return frameIndex;
+			}
+		}
+	}
+
+	return -1;
 }
 
 Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
