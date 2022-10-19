@@ -161,20 +161,26 @@ enum Tool {
 	TOOL_NONE,
 	TOOL_BUILDING,
 	TOOL_SELECTED,
-	TOOL_UPGRADING,
 };
 
 enum UpgradeEffectType {
 	UPGRADE_EFFECT_UNLOCK,
 	UPGRADE_EFFECT_DAMAGE_MULTI,
 	UPGRADE_EFFECT_RANGE_MULTI,
+	UPGRADE_EFFECT_RPM_MULTI,
+	UPGRADE_EFFECT_EXTRA_CARDS,
+	UPGRADE_EFFECT_EXTRA_MONEY,
+	UPGRADE_EFFECT_MANA_GAIN_MULTI,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
-char *upgradeEffectTypeStrings[] = {
-	"Unlock",
-	"Damage",
-	"Range",
-};
+// char *upgradeEffectTypeStrings[] = {
+// 	"Unlock",
+// 	"Damage",
+// 	"Range",
+// 	"Rpm",
+// 	"Upgrade card",
+// 	"Mana",
+// };
 
 struct UpgradeEffect {
 	UpgradeEffectType type;
@@ -287,6 +293,8 @@ Rect getRect(Actor *actor);
 Vec2 getFlowDirForRect(Rect rect);
 float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
+float getDamage(Actor *actor);
+float getRpm(Actor *actor);
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
 bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType);
@@ -341,28 +349,7 @@ void updateGame() {
 		game = (Game *)zalloc(sizeof(Game));
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
 
-		if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
-
-		game->timeScale = 1;
-
-		maximizeWindow();
-
-		rndInt(0, 3); // Burn an rnd seed???
-		isFirstStart = true;
-	}
-
-	if (game->shouldReset) {
-		game->shouldReset = false;
-
-		World *world = game->world;
-		for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
-		free(world);
-		game->world = NULL;
-	}
-
-	if (!game->world) {
-		game->world = (World *)zalloc(sizeof(World));
-		World *world = game->world;
+		// if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
 
 		{ /// Setup actor type infos
 			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
@@ -588,10 +575,12 @@ void updateGame() {
 			Upgrade *upgrade = NULL;
 
 			ActorType actorsCouldUpgrade[] = {
-				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
-				ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
+				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
+				ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 			};
 
+			game->upgradesNum = 0;
+			game->nextUpgradeId = 0;
 			for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
 				ActorType actorType = actorsCouldUpgrade[i];
 
@@ -627,8 +616,77 @@ void updateGame() {
 					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 					prevUpgrade = upgrade;
 				}
+
+				prevUpgrade = unlockUpgrade;
+				for (int i = 0; i < 3; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_RPM_MULTI;
+					effect->actorType = actorType;
+					effect->value = 1 + (0.1 * (i+1));
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
+			}
+
+			{
+				Upgrade *prevUpgrade = NULL;
+				for (int i = 0; i < 3; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_EXTRA_CARDS;
+					effect->value = 1;
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
+			}
+
+			{
+				Upgrade *prevUpgrade = NULL;
+				for (int i = 0; i < 5; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_EXTRA_MONEY;
+					effect->value = i+1;
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
+			}
+
+			{
+				Upgrade *prevUpgrade = NULL;
+				for (int i = 0; i < 3; i++) {
+					Upgrade *upgrade = createUpgrade();
+					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+					effect->type = UPGRADE_EFFECT_MANA_GAIN_MULTI;
+					effect->value = 1.1;
+					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+					prevUpgrade = upgrade;
+				}
 			}
 		} ///
+
+
+		game->timeScale = 1;
+
+		maximizeWindow();
+
+		rndInt(0, 3); // Burn an rnd seed???
+		isFirstStart = true;
+	}
+
+	if (game->shouldReset) {
+		game->shouldReset = false;
+
+		World *world = game->world;
+		for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
+		free(world);
+		game->world = NULL;
+	}
+
+	if (!game->world) {
+		game->world = (World *)zalloc(sizeof(World));
+		World *world = game->world;
 
 		{ /// Generate map
 			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk) * CHUNKS_MAX);
@@ -750,6 +808,8 @@ void updateGame() {
 		game->playingWave = false;
 		game->actorsToSpawnNum = 0;
 		game->timeTillNextSpawn = 0;
+
+		game->ownedUpgradesNum = 0;
 
 		if (isFirstStart) loadState("assets/states/autosave.save_state");
 	}
@@ -981,6 +1041,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 	} ///
 
+	float manaToGain = 1 * elapsed;
 	{ /// Update and draw actors
 		int enemiesAlive = 0;
 
@@ -1086,7 +1147,8 @@ void stepGame(float elapsed, bool isLastStep) {
 				actor->timeTillNextShot -= elapsed;
 				if (isActive) {
 					if (actor->timeTillNextShot < 0) {
-						actor->timeTillNextShot = 1.0/(info->rpm/60.0);
+						float rpm = getRpm(actor);
+						actor->timeTillNextShot = 1.0/(rpm/60.0);
 
 						float manaCost = info->mana;
 						if (game->mana > manaCost) {
@@ -1269,7 +1331,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					if (other->type == ACTOR_MANA_CRYSTAL) count++;
 				}
 
-				if (game->playingWave) game->mana += (float)count * elapsed;
+				manaToGain += (float)count * elapsed;
 			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
 				if (shouldDraw) drawRect(rect, 0xFFA4B0CC);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
@@ -1516,7 +1578,39 @@ void stepGame(float elapsed, bool isLastStep) {
 
 		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
 			game->playingWave = false;
-			game->tool = TOOL_UPGRADING;
+
+			int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
+			int possibleNum = 0;
+			for (int i = 0; i < game->upgradesNum; i++) {
+				Upgrade *upgrade = &game->upgrades[i];
+				if (hasUpgrade(upgrade->id)) continue;
+
+				bool hasPrereqs = true;
+				for (int i = 0; i < upgrade->prereqsNum; i++) {
+					if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+				}
+				if (!hasPrereqs) continue;
+
+				possible[possibleNum++] = upgrade->id;
+			}
+
+			int maxUpgradeCards = 3;
+			for (int i = 0; i < game->ownedUpgradesNum; i++) {
+				Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+				for (int i = 0; i < upgrade->effectsNum; i++) {
+					UpgradeEffect *effect = &upgrade->effects[i];
+					if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
+				}
+			}
+
+			game->presentedUpgradesNum = 0;
+			for (int i = 0; i < maxUpgradeCards; i++) {
+				if (possibleNum == 0) continue;
+				int chosenIndex = rndInt(0, possibleNum-1);
+				game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
+				arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
+				possibleNum--;
+			}
 		}
 	} ///
 
@@ -1526,11 +1620,22 @@ void stepGame(float elapsed, bool isLastStep) {
 		if (actor->markedForDeletion) {
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 			if (info->isEnemy) {
+				int moneyToGain = 0;
 				if (actor->type == ACTOR_ENEMY1) {
-					game->money += 4; 
+					moneyToGain += 4; 
 				} else {
-					game->money += info->enemySpawnStartingWave;
+					moneyToGain += info->enemySpawnStartingWave;
 				}
+
+				for (int i = 0; i < game->ownedUpgradesNum; i++) {
+					Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+					for (int i = 0; i < upgrade->effectsNum; i++) {
+						UpgradeEffect *effect = &upgrade->effects[i];
+						if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
+					}
+				}
+
+				game->money += moneyToGain;
 			}
 
 			deinitActor(actor);
@@ -1539,6 +1644,19 @@ void stepGame(float elapsed, bool isLastStep) {
 			i--;
 			continue;
 		}
+	}
+
+	{
+		for (int i = 0; i < game->ownedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+			for (int i = 0; i < upgrade->effectsNum; i++) {
+				UpgradeEffect *effect = &upgrade->effects[i];
+				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) manaToGain *= effect->value;
+			}
+		}
+
+		if (game->playingWave) game->mana += manaToGain;
+		if (game->mana > game->maxMana) game->mana = game->maxMana;
 	}
 
 	{ /// Update hud and tool
@@ -1650,33 +1768,9 @@ void stepGame(float elapsed, bool isLastStep) {
 			if (isMouseClicked()) game->selectedActorsNum = 0;
 
 			if (game->selectedActorsNum == 0) game->tool = TOOL_NONE;
-		} else if (game->tool == TOOL_UPGRADING) {
-			if (game->toolTime == 0) {
-				int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
-				int possibleNum = 0;
-				for (int i = 0; i < game->upgradesNum; i++) {
-					Upgrade *upgrade = &game->upgrades[i];
-					if (hasUpgrade(upgrade->id)) continue;
+		}
 
-					bool hasPrereqs = true;
-					for (int i = 0; i < upgrade->prereqsNum; i++) {
-						if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
-					}
-					if (!hasPrereqs) continue;
-
-					possible[possibleNum++] = upgrade->id;
-				}
-
-				game->presentedUpgradesNum = 0;
-				for (int i = 0; i < 3; i++) {
-					if (possibleNum == 0) continue;
-					int chosenIndex = rndInt(0, possibleNum-1);
-					game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
-					arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
-					possibleNum--;
-				}
-			}
-
+		if (game->presentedUpgradesNum > 0) {
 			nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
 			for (int i = 0; i < game->presentedUpgradesNum; i++) {
 				Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
@@ -1692,6 +1786,14 @@ void stepGame(float elapsed, bool isLastStep) {
 						line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
 					} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
 						line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
+					} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
+						line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
+					} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
+						line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
+					} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
+						line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
+					} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
+						line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
 					} else {
 						line = frameSprintf("Unlabeled effect %d", effect->type);
 					}
@@ -1700,7 +1802,7 @@ void stepGame(float elapsed, bool isLastStep) {
 				}
 				if (nguiButton(label)) {
 					game->ownedUpgrades[game->ownedUpgradesNum++] = upgrade->id;
-					game->tool = TOOL_NONE;
+					game->presentedUpgradesNum = 0;
 
 					if (game->hp > 0) {
 						if (fileExists("assets/states/autosave.save_state")) {
@@ -1765,14 +1867,10 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (game->actorsToSpawnNum == 0) break;
 			}
 		}
-
-		float manaRegenPerSec = 1;
-		game->mana += manaRegenPerSec * elapsed;
-		if (game->mana > game->maxMana) game->mana = game->maxMana;
 	}
 
 	{ /// Show explore buttons
-		if (!game->playingWave && game->tool == TOOL_NONE) {
+		if (!game->playingWave && !game->presentedUpgradesNum && game->tool == TOOL_NONE ) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
@@ -1818,12 +1916,12 @@ void stepGame(float elapsed, bool isLastStep) {
 		Rect rect = makeRect(0, 0, 350, 100);
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 		drawTextInRect(frameSprintf(
-			"Hp: %d\nMoney $%d\nMana: %.1f/%.1f (+%.1f/s(fake))",
+			"Hp: %d\nMoney $%d\nMana: %.1f/%.1f (+%.1f/s)",
 			game->hp,
 			game->money,
 			game->mana,
 			game->maxMana,
-			1
+			manaToGain/elapsed
 		), props, rect);
 	}
 
@@ -2164,9 +2262,9 @@ void dealDamage(Actor *src, Actor *dest) {
 		return;
 	}
 
-	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
+	float damage = getDamage(tower);
 
-	float damage = towerInfo->damage;
+	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
 	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
 }
 
@@ -2220,12 +2318,50 @@ float getRange(ActorType actorType, Vec2i tilePos) {
 	Tile *tile = getTileAt(tilePos);
 	if (tile) range += tile->height * TILE_SIZE;
 
+	for (int i = 0; i < game->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) range *= effect->value;
+		}
+	}
+
 	return range;
 }
 
 float getRange(Actor *actor, Vec2i tilePos) {
 	float range = getRange(actor->type, tilePos);
 	return range;
+}
+
+float getDamage(Actor *actor) {
+	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	float damage = info->damage;
+
+	for (int i = 0; i < game->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) damage *= effect->value;
+		}
+	}
+
+	return damage;
+}
+
+float getRpm(Actor *actor) {
+	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	float rpm = info->rpm;
+
+	for (int i = 0; i < game->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_RPM_MULTI) rpm *= effect->value;
+		}
+	}
+
+	return rpm;
 }
 
 Upgrade *getUpgrade(int id) {
