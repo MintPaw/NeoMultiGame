@@ -4225,6 +4225,7 @@ bool isZero(Line2 line) {
 
 bool overlaps(Line2 line1, Line2 line2);
 bool overlaps(Line2 line1, Line2 line2) {
+#if 1
 	// https://stackoverflow.com/questions/9043805
 	float a = line1.start.x;
 	float b = line1.start.y;
@@ -4243,7 +4244,7 @@ bool overlaps(Line2 line1, Line2 line2) {
 		gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
 		return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
 	}
-#if 0 // Wrong somehow???
+#else // Wrong somehow???
 	float uA = ((line2.end.x-line2.start.x)*(line1.start.y-line2.start.y) - (line2.end.y-line2.start.y)*(line1.start.x-line2.start.x)) /
 		((line2.end.y-line2.start.y)*(line1.end.x-line1.start.x) - (line2.end.x-line2.start.x)*(line1.end.y-line1.start.y));
 	float uB = ((line1.end.x-line1.start.x)*(line1.start.y-line2.start.y) - (line1.end.y-line1.start.y)*(line1.start.x-line2.start.x)) /
@@ -4566,6 +4567,20 @@ bool overlaps(Tri2 tri0, Tri2 tri1) {
 
 bool overlaps(Rect rect, Tri2 tri);
 bool overlaps(Rect rect, Tri2 tri) {
+#if 1
+	Tri2 rectTri1;
+	rectTri1.verts[0] = v2(rect.x, rect.y);
+	rectTri1.verts[1] = v2(rect.x + rect.width, rect.y);
+	rectTri1.verts[2] = v2(rect.x + rect.width, rect.y + rect.height);
+
+	Tri2 rectTri2;
+	rectTri2.verts[0] = v2(rect.x, rect.y);
+	rectTri2.verts[1] = v2(rect.x, rect.y + rect.height);
+	rectTri2.verts[2] = v2(rect.x + rect.width, rect.y + rect.height);
+	if (overlaps(tri, rectTri1)) return true;
+	if (overlaps(tri, rectTri2)) return true;
+	return false;
+#else // Wrong somehow? Maybe because of line overlap??
 	if (contains(rect, tri.verts[0])) return true;
 	if (overlaps(tri, getCenter(rect))) return true;
 
@@ -4583,6 +4598,7 @@ bool overlaps(Rect rect, Tri2 tri) {
 		}
 	}
 	return false;
+#endif
 }
 /// / Tri2
 

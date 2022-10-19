@@ -318,6 +318,7 @@ bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType);
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
+Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -1240,12 +1241,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			} else if (actor->type == ACTOR_FLAME_THROWER) {
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
-
-					Vec2 start = actor->position;
-					float angle = toRad(15);
-					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
-					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
-					Tri2 tri = makeTri2(start, end0, end1);
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
@@ -1262,12 +1258,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
-
-					Vec2 start = actor->position;
-					float angle = toRad(15);
-					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
-					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
-					Tri2 tri = makeTri2(start, end0, end1);
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
@@ -1505,20 +1496,29 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawLine(line, 12, 0xFF000000);
 
 				float range = getRange(actor, worldToTile(actor->position));
+				Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
 
-				Vec2 start = actor->position;
-				float angle = toRad(15);
-				Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
-				Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
-
-				Tri2 tri = makeTri2(start, end0, end1);
 				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
 				int color = setAofArgb(BURN_COLOR, perc*255.0);
 				drawLine(tri.verts[0], tri.verts[1], 5, color);
 				drawLine(tri.verts[1], tri.verts[2], 5, color);
 				drawLine(tri.verts[2], tri.verts[0], 5, color);
-
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
+				drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 12, 0xFF000000);
+
+				float range = getRange(actor, worldToTile(actor->position));
+				Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+
+				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+				int color = setAofArgb(POISON_COLOR, perc*255.0);
+				drawLine(tri.verts[0], tri.verts[1], 5, color);
+				drawLine(tri.verts[1], tri.verts[2], 5, color);
+				drawLine(tri.verts[2], tri.verts[0], 5, color);
 			} else if (actor->type == ACTOR_SHREDDER) {
 				drawRect(rect, 0xFF800000);
 
@@ -2471,8 +2471,6 @@ bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 	World *world = game->world;
 
-	*outNum = 0;
-
 	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
 	int enemiesInRangeNum = 0;
 	for (int i = 0; i < world->actorsNum; i++) {
@@ -2490,8 +2488,6 @@ Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly) {
 	World *world = game->world;
-
-	*outNum = 0;
 
 	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
 	int enemiesInRangeNum = 0;
@@ -2535,6 +2531,13 @@ void startNextWave() {
 		int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
 		game->actorsToSpawn[game->actorsToSpawnNum++] = possibleActors[index];
 	}
+}
+
+Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
+	Vec2 end0 = start + radToVec2(angle - deviation) * range;
+	Vec2 end1 = start + radToVec2(angle + deviation) * range;
+	Tri2 tri = makeTri2(start, end0, end1);
+	return tri;
 }
 
 void saveState(char *path) {
