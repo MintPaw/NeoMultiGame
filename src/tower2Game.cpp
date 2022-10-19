@@ -5,6 +5,16 @@
 #define POISON_COLOR (0xFF6B4876)
 #define BURN_COLOR (0xFFDCAB2C)
 #define BLEED_COLOR (0xFF770000)
+#define XP_PER_SEC 10
+
+float maxXpPerLevels[] = {
+	100,
+	300,
+	1000,
+	5000,
+	50000,
+	300000,
+};
 
 struct Globals {
 };
@@ -115,6 +125,9 @@ struct Actor {
 	int sawHitListNum;
 
 	int amountPaid;
+
+	int level;
+	float xp;
 
 	float time;
 };
@@ -296,6 +309,8 @@ float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
 float getDamage(Actor *actor);
 float getRpm(Actor *actor);
+int getMaxLevel(ActorType actorType);
+
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
 bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType);
@@ -1147,6 +1162,14 @@ void stepGame(float elapsed, bool isLastStep) {
 							actor->timeSinceLastShot = 0;
 						}
 					}
+
+					if (actor->level < getMaxLevel(actor->type)) {
+						actor->xp += XP_PER_SEC * elapsed;
+						if (actor->xp > maxXpPerLevels[actor->level]) {
+							actor->level++;
+							actor->xp = 0;
+						}
+					}
 				}
 
 				if (game->tool == TOOL_NONE || game->tool == TOOL_SELECTED) {
@@ -1418,7 +1441,6 @@ void stepGame(float elapsed, bool isLastStep) {
 						dealDamage(saw, enemy);
 					}
 				}
-			} else {
 			}
 
 			Vec2 damping = v2(0.1, 0.1);
@@ -1590,6 +1612,26 @@ void stepGame(float elapsed, bool isLastStep) {
 				drawRect(bulletRect, 0xFFFF0000);
 			} else {
 				drawRect(rect, 0xFFFF00FF);
+			}
+
+			if (info->isTower) {
+				Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
+				levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
+				levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
+
+				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+				drawTextInRect(frameSprintf("%d", actor->level), props, levelNumberRect);
+
+				if (actor->level < getMaxLevel(actor->type)) {
+					Rect xpRect = rect;
+					xpRect.height = game->size.y*0.005;
+					xpRect.y -= xpRect.height + game->size.y*0.005;
+					drawRect(xpRect, 0x80FFEF94);
+
+					float maxXp = maxXpPerLevels[actor->level];
+					xpRect.width *= actor->xp / maxXp;
+					drawRect(xpRect, 0xFFFFEF94);
+				}
 			}
 
 			if (game->debugShowActorVelo) {
@@ -2390,6 +2432,10 @@ float getRpm(Actor *actor) {
 	}
 
 	return rpm;
+}
+
+int getMaxLevel(ActorType actorType) {
+	return 3;
 }
 
 Upgrade *getUpgrade(int id) {
