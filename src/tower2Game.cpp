@@ -95,6 +95,7 @@ struct Actor {
 	float shield;
 
 	float timeTillNextShot;
+	float timeSinceLastShot;
 	bool markedForDeletion;
 
 	float slow;
@@ -560,6 +561,10 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_ARROW];
 			info->bulletSpeed = 20;
+
+			info = &game->actorTypeInfos[ACTOR_MORTAR];
+			info->bulletSpeed = 0.5;
+			info->baseRange = 2 * TILE_SIZE;
 		} ///
 
 		{ /// Setup upgrades
@@ -576,8 +581,8 @@ void updateGame() {
 
 			ActorType actorsCouldUpgrade[] = {
 				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
-				ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 			};
+			// ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 
 			game->upgradesNum = 0;
 			game->nextUpgradeId = 0;
@@ -1042,26 +1047,11 @@ void stepGame(float elapsed, bool isLastStep) {
 	} ///
 
 	float manaToGain = 1 * elapsed;
-	{ /// Update and draw actors
-		int enemiesAlive = 0;
-
+	int enemiesAlive = 0;
+	{ /// Update actors
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-
-			bool shouldDraw = true;
-			{
-				Chunk *chunk = worldToChunk(actor->position);
-				if (chunk && !chunk->visible) shouldDraw = false;
-			}
-
-			bool isSelected = false;
-			for (int i = 0; i < game->selectedActorsNum; i++) {
-				if (game->selectedActors[i] == actor->id) {
-					isSelected = true;
-					break;
-				}
-			}
 
 			Rect rect = getRect(actor);
 
@@ -1154,6 +1144,7 @@ void stepGame(float elapsed, bool isLastStep) {
 						if (game->mana > manaCost) {
 							game->mana -= manaCost;
 							towerShouldFire = true;
+							actor->timeSinceLastShot = 0;
 						}
 					}
 				}
@@ -1166,33 +1157,19 @@ void stepGame(float elapsed, bool isLastStep) {
 						game->selectedActors[game->selectedActorsNum++] = actor->id;
 					}
 				}
-
-				if (isSelected) {
-					drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
-				}
 			}
 
 			if (actor->type == ACTOR_BALLISTA) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
-
-				drawRect(rect, 0xFF800000);
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 4, 0xFFFF0000);
 			} else if (actor->type == ACTOR_MORTAR_TOWER) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
-
-				drawRect(rect, 0xFF525252);
 			} else if (actor->type == ACTOR_TESLA_COIL) {
 				if (towerShouldFire) {
 					Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-					drawCircle(circle, 0xFFB8FFFA);
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
@@ -1200,8 +1177,6 @@ void stepGame(float elapsed, bool isLastStep) {
 						dealDamage(actor, enemy);
 					}
 				}
-
-				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
 			} else if (actor->type == ACTOR_FROST_KEEP) {
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
@@ -1239,11 +1214,7 @@ void stepGame(float elapsed, bool isLastStep) {
 						bullet->position.y += TILE_SIZE/2;
 					}
 				}
-
-				drawRect(rect, 0xFFE3F0F5);
 			} else if (actor->type == ACTOR_FLAME_THROWER) {
-				drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
-
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
 
@@ -1251,11 +1222,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					float angle = toRad(15);
 					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
 					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
-
 					Tri2 tri = makeTri2(start, end0, end1);
-					drawLine(tri.verts[0], tri.verts[1], 5, BURN_COLOR);
-					drawLine(tri.verts[1], tri.verts[2], 5, BURN_COLOR);
-					drawLine(tri.verts[2], tri.verts[0], 5, BURN_COLOR);
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
@@ -1269,14 +1236,7 @@ void stepGame(float elapsed, bool isLastStep) {
 						enemy->burn += amount;
 					}
 				}
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 12, 0xFF000000);
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
-				drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
-
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
 
@@ -1284,11 +1244,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					float angle = toRad(15);
 					Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
 					Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
-
 					Tri2 tri = makeTri2(start, end0, end1);
-					drawLine(tri.verts[0], tri.verts[1], 5, POISON_COLOR);
-					drawLine(tri.verts[1], tri.verts[2], 5, POISON_COLOR);
-					drawLine(tri.verts[2], tri.verts[0], 5, POISON_COLOR);
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
@@ -1302,26 +1258,11 @@ void stepGame(float elapsed, bool isLastStep) {
 						enemy->poison += amount;
 					}
 				}
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 12, 0xFF000000);
 			} else if (actor->type == ACTOR_SHREDDER) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
 				}
-
-				drawRect(rect, 0xFF800000);
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
-				drawLine(line, 4, 0xFFFF0000);
 			} else if (actor->type == ACTOR_MANA_SIPHON) {
-				drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
-
 				int count = 0;
 				Circle range = makeCircle(actor->position, TILE_SIZE);
 				int actorsInRangeNum = 0;
@@ -1333,7 +1274,6 @@ void stepGame(float elapsed, bool isLastStep) {
 
 				manaToGain += (float)count * elapsed;
 			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
-				if (shouldDraw) drawRect(rect, 0xFFA4B0CC);
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
@@ -1346,65 +1286,6 @@ void stepGame(float elapsed, bool isLastStep) {
 				if (overlaps(rect, goalRect)) {
 					game->hp--;
 					actor->markedForDeletion = true;
-				}
-
-				drawRect(rect, 0xFF008000);
-
-				Rect vitalityRect = rect;
-				{
-					vitalityRect.height = 4;
-					vitalityRect.y = rect.y - vitalityRect.height - 4;
-					float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
-
-					float maxHpPerc = info->maxHp / totalPoints;
-					Rect hpRect = vitalityRect;
-					hpRect.width *= maxHpPerc;
-					hpRect.width *= actor->hp / info->maxHp;
-					drawRect(hpRect, 0xFF00FF00);
-
-					float maxArmorPerc = info->maxArmor / totalPoints;
-					Rect armorRect = vitalityRect;
-					armorRect.x += maxHpPerc * vitalityRect.width;
-					armorRect.width *= maxArmorPerc;
-					armorRect.width *= actor->armor / info->maxArmor;
-					drawRect(armorRect, 0xFFFFD66E);
-
-					float maxShieldPerc = info->maxShield / totalPoints;
-					Rect shieldRect = vitalityRect;
-					shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
-					shieldRect.width *= maxShieldPerc;
-					shieldRect.width *= actor->shield / info->maxShield;
-					drawRect(shieldRect, 0xFF718691);
-				}
-
-				if (actor->slow > 0) {
-					Rect slowRect = vitalityRect;
-					slowRect.y -= slowRect.height + 4;
-					slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
-					drawRect(slowRect, 0xFF01335C);
-				}
-
-				if (actor->poison) {
-					Rect textRect = getRect(actor);
-					textRect.x -= textRect.width;
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
-				}
-
-				if (actor->burn) {
-					Rect textRect = getRect(actor);
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
-				}
-
-				if (actor->bleed) {
-					Rect textRect = getRect(actor);
-					textRect.x += textRect.width;
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
 				}
 
 				if (!actor->bleed) actor->hp += info->hpGainPerSec * elapsed;
@@ -1424,35 +1305,23 @@ void stepGame(float elapsed, bool isLastStep) {
 				} else {
 					actor->markedForDeletion = true;
 				}
-
-				Rect bulletRect = makeCenteredSquare(actor->position, 8);
-				drawRect(bulletRect, 0xFFFF0000);
 			} else if (actor->type == ACTOR_MORTAR) {
 				if (actor->time == 0) {
 					Actor *target = getActor(actor->bulletTarget);
-					if (target) {
-						actor->position = target->position;
-					}
+					if (target) actor->position = target->position;
 				}
 
-				float delayTime = 0.5;
-				float explodeRange = 2 * TILE_SIZE;
-				if (actor->time < delayTime) {
-					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
-					drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
-				}
-
+				float delayTime = info->bulletSpeed;
+				float explodeRange = info->baseRange;
 				if (actor->time >= delayTime) {
-					Circle circle = makeCircle(actor->position, explodeRange);
-					drawCircle(circle, 0xFFFFFFFF);
-					actor->markedForDeletion = true;
-
 					int enemiesInRangeNum = 0;
-					Actor **enemiesInRange = getActorsInRange(circle, &enemiesInRangeNum, true);
+					Actor **enemiesInRange = getActorsInRange(makeCircle(actor->position, explodeRange), &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
 						dealDamage(actor, enemy);
 					}
+
+					actor->markedForDeletion = true;
 				}
 			} else if (actor->type == ACTOR_FROST) {
 				int maxTime = 10;
@@ -1472,7 +1341,6 @@ void stepGame(float elapsed, bool isLastStep) {
 					}
 				}
 
-				drawRect(rect, 0x80FFFFFF);
 				if (actor->time > maxTime) actor->markedForDeletion = true;
 			} else if (actor->type == ACTOR_SAW) {
 				float bulletSpeed = 5;
@@ -1550,11 +1418,7 @@ void stepGame(float elapsed, bool isLastStep) {
 						dealDamage(saw, enemy);
 					}
 				}
-
-				Rect bulletRect = makeCenteredSquare(actor->position, 8);
-				drawRect(bulletRect, 0xFFFF0000);
 			} else {
-				drawRect(rect, 0xFFFF00FF);
 			}
 
 			Vec2 damping = v2(0.1, 0.1);
@@ -1565,6 +1429,169 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			if (actor->hp <= 0 && info->maxHp > 0) actor->markedForDeletion = true;
 
+			actor->time += elapsed;
+		}
+	} ///
+
+	{ /// Draw actors
+		for (int i = 0; i < world->actorsNum; i++) {
+			Actor *actor = &world->actors[i];
+			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+
+			Chunk *chunk = worldToChunk(actor->position);
+			if (chunk && !chunk->visible) continue;
+
+			bool isSelected = false;
+			for (int i = 0; i < game->selectedActorsNum; i++) {
+				if (game->selectedActors[i] == actor->id) {
+					isSelected = true;
+					break;
+				}
+			}
+
+			if (info->isTower && isSelected) {
+				drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
+			}
+
+			Rect rect = getRect(actor);
+
+			if (actor->type == ACTOR_BALLISTA) {
+				drawRect(rect, 0xFF800000);
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 4, 0xFFFF0000);
+			} else if (actor->type == ACTOR_MORTAR_TOWER) {
+				drawRect(rect, 0xFF525252);
+			} else if (actor->type == ACTOR_TESLA_COIL) {
+				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+				int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
+
+				Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+				drawCircle(circle, sparkColor);
+
+				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
+			} else if (actor->type == ACTOR_FROST_KEEP) {
+				drawRect(rect, 0xFFE3F0F5);
+			} else if (actor->type == ACTOR_FLAME_THROWER) {
+				drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				drawLine(line, 12, 0xFF000000);
+
+				float range = getRange(actor, worldToTile(actor->position));
+
+				Vec2 start = actor->position;
+				float angle = toRad(15);
+				Vec2 end0 = start + radToVec2(actor->aimRads - angle) * range;
+				Vec2 end1 = start + radToVec2(actor->aimRads + angle) * range;
+
+				Tri2 tri = makeTri2(start, end0, end1);
+				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+				int color = setAofArgb(BURN_COLOR, perc*255.0);
+				drawLine(tri.verts[0], tri.verts[1], 5, color);
+				drawLine(tri.verts[1], tri.verts[2], 5, color);
+				drawLine(tri.verts[2], tri.verts[0], 5, color);
+
+			} else if (actor->type == ACTOR_POISON_SPRAYER) {
+			} else if (actor->type == ACTOR_SHREDDER) {
+				drawRect(rect, 0xFF800000);
+
+				Line2 line;
+				line.start = getCenter(rect);
+				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+				line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
+				drawLine(line, 4, 0xFFFF0000);
+			} else if (actor->type == ACTOR_MANA_SIPHON) {
+				drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
+			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+				drawRect(rect, 0xFFA4B0CC);
+			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
+				drawRect(rect, 0xFF008000);
+
+				Rect vitalityRect = rect;
+				{
+					vitalityRect.height = 4;
+					vitalityRect.y = rect.y - vitalityRect.height - 4;
+					float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
+
+					float maxHpPerc = info->maxHp / totalPoints;
+					Rect hpRect = vitalityRect;
+					hpRect.width *= maxHpPerc;
+					hpRect.width *= actor->hp / info->maxHp;
+					drawRect(hpRect, 0xFF00FF00);
+
+					float maxArmorPerc = info->maxArmor / totalPoints;
+					Rect armorRect = vitalityRect;
+					armorRect.x += maxHpPerc * vitalityRect.width;
+					armorRect.width *= maxArmorPerc;
+					armorRect.width *= actor->armor / info->maxArmor;
+					drawRect(armorRect, 0xFFFFD66E);
+
+					float maxShieldPerc = info->maxShield / totalPoints;
+					Rect shieldRect = vitalityRect;
+					shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
+					shieldRect.width *= maxShieldPerc;
+					shieldRect.width *= actor->shield / info->maxShield;
+					drawRect(shieldRect, 0xFF718691);
+				}
+
+				if (actor->slow > 0) {
+					Rect slowRect = vitalityRect;
+					slowRect.y -= slowRect.height + 4;
+					slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
+					drawRect(slowRect, 0xFF01335C);
+				}
+
+				if (actor->poison) {
+					Rect textRect = getRect(actor);
+					textRect.x -= textRect.width;
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+				}
+
+				if (actor->burn) {
+					Rect textRect = getRect(actor);
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+				}
+
+				if (actor->bleed) {
+					Rect textRect = getRect(actor);
+					textRect.x += textRect.width;
+					textRect.y -= textRect.height;
+					DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
+					drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+				}
+			} else if (actor->type == ACTOR_ARROW) {
+				Rect bulletRect = makeCenteredSquare(actor->position, 8);
+				drawRect(bulletRect, 0xFFFF0000);
+			} else if (actor->type == ACTOR_MORTAR) {
+				float delayTime = info->bulletSpeed;
+				float explodeRange = info->baseRange;
+				if (actor->time < delayTime) {
+					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
+					drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
+				}
+
+				if (actor->time >= delayTime) {
+					Circle circle = makeCircle(actor->position, explodeRange);
+					drawCircle(circle, 0xFFFFFFFF);
+				}
+			} else if (actor->type == ACTOR_FROST) {
+				drawRect(rect, 0x80FFFFFF);
+			} else if (actor->type == ACTOR_SAW) {
+				Rect bulletRect = makeCenteredSquare(actor->position, 8);
+				drawRect(bulletRect, 0xFFFF0000);
+			} else {
+				drawRect(rect, 0xFFFF00FF);
+			}
+
 			if (game->debugShowActorVelo) {
 				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 				drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
@@ -1572,77 +1599,78 @@ void stepGame(float elapsed, bool isLastStep) {
 				// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
 				// drawLine(start, end, 5, 0xFFFF0000);
 			}
-
-			actor->time += elapsed;
 		}
+	} ///
 
-		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
-			game->playingWave = false;
+	{ /// Post update actors
+		for (int i = 0; i < world->actorsNum; i++) {
+			Actor *actor = &world->actors[i];
+			actor->timeSinceLastShot += elapsed;
 
-			int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
-			int possibleNum = 0;
-			for (int i = 0; i < game->upgradesNum; i++) {
-				Upgrade *upgrade = &game->upgrades[i];
-				if (hasUpgrade(upgrade->id)) continue;
+			if (actor->markedForDeletion) {
+				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+				if (info->isEnemy) {
+					int moneyToGain = 0;
+					if (actor->type == ACTOR_ENEMY1) {
+						moneyToGain += 4; 
+					} else {
+						moneyToGain += info->enemySpawnStartingWave;
+					}
 
-				bool hasPrereqs = true;
-				for (int i = 0; i < upgrade->prereqsNum; i++) {
-					if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+					for (int i = 0; i < game->ownedUpgradesNum; i++) {
+						Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+						for (int i = 0; i < upgrade->effectsNum; i++) {
+							UpgradeEffect *effect = &upgrade->effects[i];
+							if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
+						}
+					}
+
+					game->money += moneyToGain;
 				}
-				if (!hasPrereqs) continue;
 
-				possible[possibleNum++] = upgrade->id;
-			}
-
-			int maxUpgradeCards = 3;
-			for (int i = 0; i < game->ownedUpgradesNum; i++) {
-				Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
-				for (int i = 0; i < upgrade->effectsNum; i++) {
-					UpgradeEffect *effect = &upgrade->effects[i];
-					if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
-				}
-			}
-
-			game->presentedUpgradesNum = 0;
-			for (int i = 0; i < maxUpgradeCards; i++) {
-				if (possibleNum == 0) continue;
-				int chosenIndex = rndInt(0, possibleNum-1);
-				game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
-				arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
-				possibleNum--;
+				deinitActor(actor);
+				arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
+				world->actorsNum--;
+				i--;
+				continue;
 			}
 		}
 	} ///
 
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
+	if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
+		game->playingWave = false;
 
-		if (actor->markedForDeletion) {
-			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-			if (info->isEnemy) {
-				int moneyToGain = 0;
-				if (actor->type == ACTOR_ENEMY1) {
-					moneyToGain += 4; 
-				} else {
-					moneyToGain += info->enemySpawnStartingWave;
-				}
+		int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
+		int possibleNum = 0;
+		for (int i = 0; i < game->upgradesNum; i++) {
+			Upgrade *upgrade = &game->upgrades[i];
+			if (hasUpgrade(upgrade->id)) continue;
 
-				for (int i = 0; i < game->ownedUpgradesNum; i++) {
-					Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
-					for (int i = 0; i < upgrade->effectsNum; i++) {
-						UpgradeEffect *effect = &upgrade->effects[i];
-						if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
-					}
-				}
-
-				game->money += moneyToGain;
+			bool hasPrereqs = true;
+			for (int i = 0; i < upgrade->prereqsNum; i++) {
+				if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
 			}
+			if (!hasPrereqs) continue;
 
-			deinitActor(actor);
-			arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
-			world->actorsNum--;
-			i--;
-			continue;
+			possible[possibleNum++] = upgrade->id;
+		}
+
+		int maxUpgradeCards = 3;
+		for (int i = 0; i < game->ownedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+			for (int i = 0; i < upgrade->effectsNum; i++) {
+				UpgradeEffect *effect = &upgrade->effects[i];
+				if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
+			}
+		}
+
+		game->presentedUpgradesNum = 0;
+		for (int i = 0; i < maxUpgradeCards; i++) {
+			if (possibleNum == 0) continue;
+			int chosenIndex = rndInt(0, possibleNum-1);
+			game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
+			arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
+			possibleNum--;
 		}
 	}
 
