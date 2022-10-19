@@ -289,6 +289,7 @@ float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
+bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
@@ -1550,10 +1551,16 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
-			ActorType typesCanBuy[] = {
-				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_MANA_SIPHON
-			};
-			int typesCanBuyNum = ArrayLength(typesCanBuy);
+			ActorType *typesCanBuy = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
+			int typesCanBuyNum = 0;
+			typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FLAME_THROWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_FLAME_THROWER;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_POISON_SPRAYER)) typesCanBuy[typesCanBuyNum++] = ACTOR_POISON_SPRAYER;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_SHREDDER)) typesCanBuy[typesCanBuyNum++] = ACTOR_SHREDDER;
+			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MANA_SIPHON)) typesCanBuy[typesCanBuyNum++] = ACTOR_MANA_SIPHON;
 
 			for (int i = 0; i < typesCanBuyNum; i++) {
 				ActorType actorType = typesCanBuy[i];
@@ -2234,6 +2241,18 @@ Upgrade *getUpgrade(int id) {
 bool hasUpgrade(int id) {
 	for (int i = 0; i < game->ownedUpgradesNum; i++) {
 		if (game->ownedUpgrades[i] == id) return true;
+	}
+
+	return false;
+}
+
+bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
+	for (int i = 0; i < game->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == effectType && effect->actorType == actorType) return true;
+		}
 	}
 
 	return false;
