@@ -393,7 +393,7 @@ DrawShapeProps newDrawShapeProps() {
 void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdList) {
 	for (int i = 0; i < shape->subShapesNum; i++) {
 		SwfSubShape *subShape = &shape->subShapes[i];
-		if (subShape->drawEdgesNum == 0) continue;
+		// if (subShape->drawEdgesNum == 0) continue;
 		createCommand(cmdList, VDRAW_START_SHAPE);
 
 		{ /// Set line/fill style
@@ -1324,7 +1324,7 @@ void drawSwfAnalyzer() {
 				SwfSubShape *subShape = &shape->subShapes[i];
 				ImGui::Text("Fill style index: %d", subShape->fillStyleIndex);
 				ImGui::Text("Line style index: %d", subShape->lineStyleIndex);
-				ImGui::Text("Edges: %d", subShape->drawEdgesNum);
+				// ImGui::Text("Edges: %d", subShape->drawEdgesNum);
 				ImGui::Separator();
 			}
 #else

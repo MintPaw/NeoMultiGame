@@ -656,8 +656,6 @@ struct DrawEdgeRecord {
 struct SwfSubShape {
 	int fillStyleIndex;
 	int lineStyleIndex;
-	DrawEdgeRecord *drawEdges;
-	int drawEdgesNum;
 
 	void *runtimeCachedPath;
 };
@@ -920,13 +918,14 @@ struct Swf {
 
 	Allocator characterMapAllocator; // I'm not sure why these are part of this struct
 	HashMap *characterMap;
+
+	MemoryArena *drawablesArena;
 };
 
 Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
-SwfDrawable *getDrawableByDepth(SwfFrame *frame, int depth);
 
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
@@ -950,6 +949,7 @@ Swf *loadSwf(char *path) {
 
 	Swf *swf = (Swf *)zalloc(sizeof(Swf));
 	strcpy(swf->path, path);
+	swf->drawablesArena = createMemoryArena();
 
 	swf->header.sig[0] = read(&stream);
 	swf->header.sig[1] = read(&stream);
@@ -1323,7 +1323,6 @@ Swf *loadSwf(char *path) {
 
 						for (;;) {
 							edgesOut[edgesOutNum++] = pathStart;
-							// tag->drawEdges[tag->drawEdgesNum++] = pathStart;
 							bool foundNext = false;
 							for (int i = 0; i < edgesLeftNum; i++) {
 								DrawEdgeRecord *possibleNext = edgesLeft[i];
@@ -1387,9 +1386,10 @@ Swf *loadSwf(char *path) {
 
 					}
 				}
-				free(subPath);
-			}
 
+				free(subPath);
+				free(drawEdges);
+			}
 			free(shapeRecords);
 
 			{ /// Build sub shapes
@@ -1406,7 +1406,6 @@ Swf *loadSwf(char *path) {
 
 				tag->subShapes = (SwfSubShape *)zalloc(sizeof(SwfSubShape) * tag->subShapesNum);
 				int subShapeIndex = -1;
-				int subShapeDrawEdgeIndex = 0;
 				SwfSubShape *subShape = NULL;
 				lineStyleIndex = 0;
 				fillStyleIndex = 0;
@@ -1416,7 +1415,6 @@ Swf *loadSwf(char *path) {
 				for (int i = 0; i < tag->drawEdgesNum; i++) {
 					DrawEdgeRecord *edge = &tag->drawEdges[i];
 					if (edge->fillStyleIndex != fillStyleIndex || edge->lineStyleIndex != lineStyleIndex) {
-						if (subShapeIndex != -1 && subShapeDrawEdgeIndex != subShape->drawEdgesNum) logf("Sub shape draw edges underflow\n");
 						subShapeIndex++;
 						cursor = v2();
 						if (subShapeIndex > tag->subShapesNum-1) logf("Sub shape overflow\n");
@@ -1428,23 +1426,13 @@ Swf *loadSwf(char *path) {
 						for (int i = currentDrawEdgeIndex; i < tag->drawEdgesNum; i++) {
 							DrawEdgeRecord *otherEdge = &tag->drawEdges[i];
 							if (otherEdge->fillStyleIndex != fillStyleIndex || otherEdge->lineStyleIndex != lineStyleIndex) break;
-							subShape->drawEdgesNum++;
 						}
 
-						subShape->drawEdges = (DrawEdgeRecord *)zalloc(sizeof(DrawEdgeRecord) * subShape->drawEdgesNum);
 						subShape->lineStyleIndex = lineStyleIndex;
 						subShape->fillStyleIndex = fillStyleIndex;
-						subShapeDrawEdgeIndex = 0;
 						subShape->runtimeCachedPath = new SkPath();
 						currentPath = (SkPath *)subShape->runtimeCachedPath;
 					}
-
-					if (subShapeDrawEdgeIndex > subShape->drawEdgesNum-1) logf("Sub shape draw edges overflow\n");
-					DrawEdgeRecord *subShapeEdge = &subShape->drawEdges[subShapeDrawEdgeIndex++];
-					subShapeEdge->type = edge->type;
-					subShapeEdge->start = edge->start;
-					subShapeEdge->control = edge->control;
-					subShapeEdge->anchor = edge->anchor;
 
 					if (!cursor.equal(edge->start)) {
 						cursor = edge->start;
@@ -2024,9 +2012,18 @@ Swf *loadSwf(char *path) {
 	}
 	// logf("%d shapes * %d bytes = %.1fmb\n", swf->allShapesNum, sizeof(SwfShape), (swf->allShapesNum*sizeof(SwfShape))/(float)(Megabytes(1)));
 
-	SwfDrawable *tempDepths = NULL;
-	int tempDepthsNum = 0;
-	int tempDepthsMax = 0;
+	int swfHighestDepth = 0;
+	for (int i = 0; i < swf->tagsNum; i++) {
+		SwfTagPointer *tagPointer = &swf->tags[i];
+		SwfTagType tagType = tagPointer->header.type;
+		if (tagType != SWF_TAG_DEFINE_SPRITE) continue;
+		SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
+		if (swfHighestDepth < sprite->highestDepth+1) swfHighestDepth = sprite->highestDepth+1;
+	}
+
+	int tempDepthsMax = swfHighestDepth+1;
+	SwfDrawable *tempDepths = (SwfDrawable *)malloc(sizeof(SwfDrawable) * tempDepthsMax);
+
 	{ /// Collect sprites
 		int spriteCount = 0;
 		for (int i = 0; i < swf->tagsNum; i++) {
@@ -2045,12 +2042,7 @@ Swf *loadSwf(char *path) {
 			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
 			swf->allSprites[swf->allSpritesNum++] = sprite;
 
-			if (sprite->highestDepth+1 > tempDepthsMax - 1) {
-				tempDepths = (SwfDrawable *)resizeArray(tempDepths, sizeof(SwfDrawable), tempDepthsMax, sprite->highestDepth+1);
-				tempDepthsMax = sprite->highestDepth+1;
-			}
 			memset(tempDepths, 0, sizeof(SwfDrawable) * tempDepthsMax);
-			tempDepthsNum = sprite->highestDepth+1;
 
 			{ /// Setup frames
 				int frameCount = 0;
@@ -2063,15 +2055,6 @@ Swf *loadSwf(char *path) {
 				sprite->frames = (SwfFrame *)zalloc(sizeof(SwfFrame) * frameCount);
 				sprite->framesNum = frameCount;
 				sprite->labelsInOrder = (char **)zalloc(sizeof(char *) * totalFrameLabelCount);
-
-				auto getTempDrawableByDepth = [tempDepths, tempDepthsNum](int depth)->SwfDrawable * {
-					for (int i = 0; i < tempDepthsNum; i++) {
-						SwfDrawable *drawable = &tempDepths[i];
-						if (drawable->depth == depth) return drawable;
-					}
-					logf("Couldn't find drawable at depth %d\n", depth);
-					return NULL;
-				};
 
 				int currentFrameIndex = 0;
 				bool firstTagOfFrame = true;
@@ -2092,11 +2075,14 @@ Swf *loadSwf(char *path) {
 					}
 
 					if (tag->type == SWF_TAG_SHOW_FRAME) {
-						currentFrame->depths = (SwfDrawable *)zalloc(sizeof(SwfDrawable) * tempDepthsNum);
-						currentFrame->depthsNum = tempDepthsNum;
-						memcpy(currentFrame->depths, tempDepths, sizeof(SwfDrawable) * tempDepthsNum);
-						// for (int i = 0; i < tempDepthsNum; i++) {
-						// }
+						int realDepths = 0;
+						for (int i = 0; i < tempDepthsMax; i++) {
+							if (tempDepths[i].type != SWF_DRAWABLE_NONE) realDepths++;
+						}
+						currentFrame->depths = (SwfDrawable *)allocateMemory(swf->drawablesArena, sizeof(SwfDrawable) * realDepths);
+						for (int i = 0; i < tempDepthsMax; i++) {
+							if (tempDepths[i].type != SWF_DRAWABLE_NONE) currentFrame->depths[currentFrame->depthsNum++] = tempDepths[i];
+						}
 						currentFrameIndex++;
 						currentFrame = &sprite->frames[currentFrameIndex];
 						firstTagOfFrame = true;
@@ -2105,12 +2091,10 @@ Swf *loadSwf(char *path) {
 						if (placeObject->pfHasCharacter || placeObject->pfHasClassName) {
 							SwfDrawable drawable = makeDrawableById(swf, placeObject);
 							drawable.depth = placeObject->depth;
-
 							tempDepths[placeObject->depth] = drawable;
-							if (currentFrame->depthsNum < placeObject->depth + 1) currentFrame->depthsNum = placeObject->depth + 1;
 						}
 
-						SwfDrawable *drawable = getTempDrawableByDepth(placeObject->depth);
+						SwfDrawable *drawable = &tempDepths[placeObject->depth];
 
 						if (placeObject->pfHasMatrix) {
 							drawable->matrix = toMatrix2x3(placeObject->matrix);
@@ -2134,7 +2118,7 @@ Swf *loadSwf(char *path) {
 						drawable->filters = placeObject->filters;
 						drawable->filtersNum = placeObject->filtersNum;
 					} else if (tag->type == SWF_TAG_REMOVE_OBJECT) {
-						SwfDrawable *drawable = getTempDrawableByDepth(tag->removeObject.depth);
+						SwfDrawable *drawable = &tempDepths[tag->removeObject.depth];
 						memset(drawable, 0, sizeof(SwfDrawable));
 						drawable->type = SWF_DRAWABLE_NONE;
 					} else if (tag->type == SWF_TAG_FRAME_LABEL) {
@@ -2149,29 +2133,6 @@ Swf *loadSwf(char *path) {
 					}
 				}
 				free(sprite->controlTags);
-			}
-
-			/// Prune dead SwfDrawables
-			for (int i = 0; i < sprite->framesNum; i++) {
-				SwfFrame *frame = &sprite->frames[i];
-				int oldDepthsNum = frame->depthsNum;
-				for (int i = 0; i < frame->depthsNum; i++) {
-					SwfDrawable *drawable = &frame->depths[i];
-					bool shouldPrune = false;
-					if (drawable->type == SWF_DRAWABLE_NONE) shouldPrune = true;
-					if (shouldPrune) {
-						arraySpliceIndex(frame->depths, frame->depthsNum, sizeof(SwfDrawable), i);
-						frame->depthsNum--;
-						i--;
-						continue;
-					}
-				}
-				if (frame->depthsNum == 0) {
-					if (frame->depths) free(frame->depths);
-					frame->depths = NULL;
-				} else {
-					frame->depths = (SwfDrawable *)resizeArray(frame->depths, sizeof(SwfDrawable), oldDepthsNum, frame->depthsNum);
-				}
 			}
 		}
 
@@ -2203,7 +2164,8 @@ Swf *loadSwf(char *path) {
 				if (sprite != newSprite) swf->allSprites[i] = newSprite;
 			}
 		}
-	}
+	} ///
+	free(tempDepths);
 
 	// logf("%d sprites * %d bytes = %.1fmb\n", swf->allSpritesNum, sizeof(SwfShape), (swf->allSpritesNum*sizeof(SwfSprite))/(float)(Megabytes(1)));
 
@@ -2361,15 +2323,6 @@ SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf) {
 	return NULL;
 }
 
-SwfDrawable *getDrawableByDepth(SwfFrame *frame, int depth) {
-	for (int i = 0; i < frame->depthsNum; i++) {
-		SwfDrawable *drawable = &frame->depths[i];
-		if (drawable->depth == depth) return drawable;
-	}
-	logf("Couldn't find drawable at depth %d\n", depth);
-	return NULL;
-}
-
 bool hasLabel(SwfSprite *sprite, char *label) {
 	for (int i = 0; i < sprite->labelsInOrderNum; i++) {
 		if (streq(sprite->labelsInOrder[i], label)) return true;
@@ -2459,6 +2412,7 @@ void destroySwf(Swf *swf) {
 	free(swf->allShapes);
 	free(swf->allSprites);
 	free(swf->tags);
+	destroyMemoryArena(swf->drawablesArena);
 
 	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
 	free(swf);
