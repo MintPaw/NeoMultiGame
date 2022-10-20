@@ -187,11 +187,10 @@ void reconnectAudioDevice() {
 	alSourcef(audio->source, AL_GAIN, 1);
 	alSourcei(audio->source, AL_LOOPING, AL_FALSE);
 
-	s16 *startingBuffer = (s16 *)frameMalloc(sizeof(s16) * SAMPLE_BUFFER_LIMIT);
-
 	alGenBuffers(2, audio->buffers);
-	alBufferData(audio->buffers[0], AL_FORMAT_STEREO16, startingBuffer, SAMPLE_BUFFER_LIMIT * sizeof(s16), SAMPLE_RATE);
-	alBufferData(audio->buffers[1], AL_FORMAT_STEREO16, startingBuffer, SAMPLE_BUFFER_LIMIT * sizeof(s16), SAMPLE_RATE);
+	s16 *startingBuffer = (s16 *)frameMalloc(sizeof(s16) * 32); //@hack I'm not sure what the minimum is here, but it used to be SAMPLE_BUFFER_LIMIT
+	alBufferData(audio->buffers[0], AL_FORMAT_STEREO16, startingBuffer, sizeof(s16) * 32, SAMPLE_RATE);
+	alBufferData(audio->buffers[1], AL_FORMAT_STEREO16, startingBuffer, sizeof(s16) * 32, SAMPLE_RATE);
 	CheckAudioError();
 
 	alSourceQueueBuffers(audio->source, 2, audio->buffers);

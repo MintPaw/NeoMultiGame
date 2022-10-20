@@ -1,5 +1,6 @@
 // Selectable mana things
 // dps stats
+// Gaining the ability to slow down time more
 
 #define FROST_FALL_DISTANCE 64
 #define POISON_COLOR (0xFF6B4876)
@@ -2416,6 +2417,7 @@ float getDamage(Actor *actor) {
 		}
 	}
 
+	damage *= (1 + actor->level);
 	return damage;
 }
 

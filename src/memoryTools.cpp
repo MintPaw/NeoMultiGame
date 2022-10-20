@@ -420,7 +420,7 @@ int getIntAtEndOfString(char *str) {
 
 
 StringBuilder createStringBuilder(int startingMaxLen) {
-	StringBuilder builder = {}; //createStringBuilder
+	StringBuilder builder = {};
 	builder.maxLen = startingMaxLen;
 	builder.string = (char *)zalloc(builder.maxLen);
 	return builder;
@@ -443,6 +443,10 @@ void addText(StringBuilder *builder, char *string, int count) {
 
 	strncat(builder->string, string, count);
 	builder->count += count;
+}
+
+void destroy(StringBuilder builder) {
+	free(builder.string);
 }
 
 char **frameSplitString(char *str, char *delim, int *outStringsNum) {
