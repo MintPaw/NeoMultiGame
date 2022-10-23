@@ -235,6 +235,8 @@ struct Game {
 	int presentedUpgrades[UPGRADES_MAX];
 	int presentedUpgradesNum;
 
+	float manaToGain;
+
 	/// Serialized
 	World *world;
 
@@ -282,7 +284,8 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
-void stepGame(float elapsed, bool isLastStep);
+void stepGame(float elapsed);
+void drawGame(float elapsed);
 
 bool isMouseClicked();
 
@@ -851,129 +854,19 @@ void updateGame() {
 	}
 
 	for (int i = 0; i < stepsToTake; i++) {
-		bool isLastStep = i == stepsToTake-1;
-		renderer->disabled = !isLastStep;
-		stepGame(elapsed, isLastStep);
+		stepGame(elapsed);
 	}
+
+	drawGame(elapsed*stepsToTake);
 
 	guiDraw();
 }
 
-void stepGame(float elapsed, bool isLastStep) {
+void stepGame(float elapsed) {
 	float timeScale = elapsed / (1/60.0);
 
 	Globals *globals = &game->globals;
 	World *world = game->world;
-
-	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
-	if (game->inEditor && isLastStep) {
-		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
-		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
-		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
-		ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
-		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
-		ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
-		ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
-		if (ImGui::Button("Explore all")) {
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-				chunk->visible = true;
-			}
-		}
-		ImGui::InputInt("Money", &game->money);
-		ImGui::InputFloat("Mana", &game->mana);
-		ImGui::InputFloat("MaxMana", &game->mana);
-		ImGui::InputInt("Wave", &game->wave);
-		ImGui::SameLine();
-		if (ImGui::Button("Next wave")) startNextWave();
-
-		if (ImGui::Button("Add 1000 random ballistas")) {
-			int added = 0;
-			int iters = 0;
-			for (;;) {
-				if (added > 1000) break;
-				if (iters >= 10000) {
-					logf("Failed after 10000...\n");
-					break;
-				}
-
-				Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
-				if (!chunk->visible) continue;
-				Vec2i chunkTilePos;
-				chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
-				chunkTilePos.y = rndInt(0, CHUNK_SIZE-1);
-				Tile *tile = &chunk->tiles[chunkTilePos.y * CHUNK_SIZE + chunkTilePos.x];
-				Vec2i tilePos = chunkTileToWorldTile(chunk, chunkTilePos);
-
-				bool canBuild = true;
-				if (tile->type != TILE_GROUND) canBuild = false;
-
-				for (int i = 0; i < world->actorsNum; i++) {
-					Actor *other = &world->actors[i];
-					if (equal(worldToTile(other->position), tilePos)) canBuild = false;
-				}
-
-				if (canBuild) {
-					Actor *newTower = createActor(ACTOR_BALLISTA);
-					newTower->position = tileToWorld(tilePos);
-					added++;
-				}
-
-				iters++;
-			}
-		}
-
-		ImGui::Separator();
-
-		ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
-		ImGui::SameLine();
-		if (ImGui::Button("Save")) {
-			saveState(frameSprintf("assets/states/%s.save_state", game->debugNewSaveStateName));
-			game->debugNewSaveStateName[0] = 0;
-			refreshAssetPaths();
-		}
-
-		int pathCount = 0;
-		for (int i = 0; i < assetPathsNum; i++) {
-			char *path = assetPaths[i];
-			if (strstr(path, "assets/states/")) {
-				char *name = frameStringClone(path) + strlen("assets/states/");
-				char *dotPos = strchr(name, '.');
-				if (dotPos) *dotPos = 0;
-				if (ImGui::Button(name)) {
-					loadState(path);
-				}
-				if ((pathCount+1) % 5 != 0) ImGui::SameLine();
-				pathCount++;
-			}
-		}
-
-		ImGui::NewLine();
-		ImGui::Separator();
-		if (ImGui::Button("Reset game")) game->shouldReset = true;
-
-		ImGui::End();
-	}
-
-	clearRenderer();
-
-	Matrix3 cameraMatrix = mat3();
-	Rect screenRect = {};
-	{
-		cameraMatrix.TRANSLATE(game->size/2);
-		cameraMatrix.SCALE(game->cameraZoom);
-		cameraMatrix.TRANSLATE(-game->cameraPosition);
-
-		game->mouse = cameraMatrix.invert() * platform->mouse;
-
-		screenRect.width = game->size.x / game->cameraZoom;
-		screenRect.height = game->size.y / game->cameraZoom;
-		screenRect.x = game->cameraPosition.x - screenRect.width/2;
-		screenRect.y = game->cameraPosition.y - screenRect.height/2;
-	}
-
-	pushCamera2d(cameraMatrix);
 
 	memset(game->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
 	for (int i = 0; i < world->actorsNum; i++) {
@@ -981,89 +874,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		game->actorTypeCounts[actor->type]++;
 	}
 
-	if (isLastStep) {
-		Vec2 moveDir = v2();
-		if (keyPressed('W')) moveDir.y--;
-		if (keyPressed('S')) moveDir.y++;
-		if (keyPressed('A')) moveDir.x--;
-		if (keyPressed('D')) moveDir.x++;
-
-		game->cameraZoom += platform->mouseWheel * 0.1;
-		game->cameraZoom = mathClamp(game->cameraZoom, 0.1, 20);
-
-		game->cameraPosition += normalize(moveDir) * 20 / game->cameraZoom;
-
-		for (int i = 1; i <= 9; i++) {
-			if (keyPressed(KEY_ALT) && keyJustReleased('0' + i)) {
-				loadState(frameSprintf("assets/states/%d.save_state", i));
-			}
-		}
-
-		if (keyJustPressed('-')) {
-			game->timeScale *= 0.5;
-			logf("Time scale: %.3f\n", game->timeScale);
-		}
-		if (keyJustPressed('=')) {
-			game->timeScale *= 2;
-			logf("Time scale: %.3f\n", game->timeScale);
-		}
-	}
-
-	{ /// Draw map
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
-			if (!overlaps(screenRect, chunk->rect)) continue;
-			if (!chunk->visible) continue;
-
-			for (int y = 0; y < CHUNK_SIZE; y++) {
-				for (int x = 0; x < CHUNK_SIZE; x++) {
-					int tileIndex = y*CHUNK_SIZE + x;
-					Rect rect = {};
-					rect.x = x*TILE_SIZE + chunk->rect.x;
-					rect.y = y*TILE_SIZE + chunk->rect.y;
-					rect.width = TILE_SIZE;
-					rect.height = TILE_SIZE;
-					Tile *tile = &chunk->tiles[tileIndex];
-
-					int color = 0x00000000;
-
-					if (tile->type == TILE_HOME) color = 0xFFFFF333;
-					if (tile->type == TILE_GROUND) color = 0xFF017301;
-					if (tile->type == TILE_ROAD) color = 0xFF966F02;
-
-					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
-					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
-					color = lerpColor(color, 0xFF000000, heightShadePerc);
-
-					drawRect(rect, color);
-
-					if (game->debugShowDijkstraValues) {
-						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-						drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
-					}
-
-					if (game->debugShowFlowFieldValues) {
-						if (!isZero(tile->flow)) {
-							Vec2 start = getCenter(rect);
-							Vec2 end = start + tile->flow*TILE_SIZE/2;
-							drawLine(start, end, 4, 0xFFFF0000);
-						}
-					}
-
-					if (game->debugShowPerlinValues) {
-						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-						drawTextInRect(frameSprintf("%.02f", tile->perlinValue), props, rect);
-					}
-
-					if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
-				}
-			}
-
-			if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
-		}
-	} ///
-
-	float manaToGain = 1 * elapsed;
+	game->manaToGain = 1 * elapsed;
 	int enemiesAlive = 0;
 	{ /// Update actors
 		for (int i = 0; i < world->actorsNum; i++) {
@@ -1287,7 +1098,7 @@ void stepGame(float elapsed, bool isLastStep) {
 					if (other->type == ACTOR_MANA_CRYSTAL) count++;
 				}
 
-				manaToGain += (float)count * elapsed;
+				game->manaToGain += (float)count * elapsed;
 			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
@@ -1447,6 +1258,381 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 	} ///
 
+	{ /// Post update actors
+		for (int i = 0; i < world->actorsNum; i++) {
+			Actor *actor = &world->actors[i];
+			actor->timeSinceLastShot += elapsed;
+
+			if (actor->markedForDeletion) {
+				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+				if (info->isEnemy) {
+					int moneyToGain = 0;
+					if (actor->type == ACTOR_ENEMY1) {
+						moneyToGain += 4; 
+					} else {
+						moneyToGain += info->enemySpawnStartingWave;
+					}
+
+					for (int i = 0; i < game->ownedUpgradesNum; i++) {
+						Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+						for (int i = 0; i < upgrade->effectsNum; i++) {
+							UpgradeEffect *effect = &upgrade->effects[i];
+							if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
+						}
+					}
+
+					game->money += moneyToGain;
+				}
+
+				deinitActor(actor);
+				arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
+				world->actorsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
+
+	{ /// Spawn enemies
+		if (game->playingWave) {
+			if (game->actorsToSpawnNum > 0) game->timeTillNextSpawn -= elapsed;
+			if (game->timeTillNextSpawn <= 0) {
+				game->timeTillNextSpawn += 1;
+
+				Vec2 *spawnPoints = (Vec2 *)frameMalloc(sizeof(Vec2) * CHUNKS_MAX);
+				int spawnPointsNum = 0;
+				for (int i = 0; i < world->chunksNum; i++) {
+					Chunk *chunk = &world->chunks[i];
+
+					bool isPortal = false; //@copyPastedIsPortal
+					if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
+
+					if (!chunk->visible) continue;
+					if (isPortal) {
+						spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
+					}
+					for (int i = 0; i < chunk->connectionsNum; i++) {
+						Chunk *newChunk = getChunkAt(chunk->connections[i]);
+						Assert(newChunk);
+						if (newChunk->visible) continue;
+
+						Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
+						spawnPoints[spawnPointsNum++] = middle;
+					}
+				}
+
+				for (int i = 0; i < spawnPointsNum; i++) {
+					ActorType toSpawn = game->actorsToSpawn[0];
+					Actor *actor = createActor(toSpawn);
+					actor->position = spawnPoints[i];
+
+					memmove(&game->actorsToSpawn[0], &game->actorsToSpawn[1], sizeof(ActorType) * (game->actorsToSpawnNum-1));
+					game->actorsToSpawnNum--;
+					if (game->actorsToSpawnNum == 0) break;
+				}
+			}
+		}
+	} ///
+
+	{ /// End wave
+		if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
+			game->playingWave = false;
+
+			int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
+			int possibleNum = 0;
+			for (int i = 0; i < game->upgradesNum; i++) {
+				Upgrade *upgrade = &game->upgrades[i];
+				if (hasUpgrade(upgrade->id)) continue;
+
+				bool hasPrereqs = true;
+				for (int i = 0; i < upgrade->prereqsNum; i++) {
+					if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+				}
+				if (!hasPrereqs) continue;
+
+				possible[possibleNum++] = upgrade->id;
+			}
+
+			int maxUpgradeCards = 3;
+			for (int i = 0; i < game->ownedUpgradesNum; i++) {
+				Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+				for (int i = 0; i < upgrade->effectsNum; i++) {
+					UpgradeEffect *effect = &upgrade->effects[i];
+					if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
+				}
+			}
+
+			game->presentedUpgradesNum = 0;
+			for (int i = 0; i < maxUpgradeCards; i++) {
+				if (possibleNum == 0) continue;
+				int chosenIndex = rndInt(0, possibleNum-1);
+				game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
+				arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
+				possibleNum--;
+			}
+		}
+	} ///
+
+	{ /// Gain mana
+		for (int i = 0; i < game->ownedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
+			for (int i = 0; i < upgrade->effectsNum; i++) {
+				UpgradeEffect *effect = &upgrade->effects[i];
+				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) game->manaToGain *= effect->value;
+			}
+		}
+
+		if (game->playingWave) game->mana += game->manaToGain;
+		if (game->mana > game->maxMana) game->mana = game->maxMana;
+	} ///
+
+	{ /// Update tool
+		if (game->prevTool != game->tool) {
+			game->prevTool = game->tool;
+			game->toolTime = 0;
+		}
+
+		if (game->tool == TOOL_NONE) {
+			/// Nothing...
+		} else if (game->tool == TOOL_BUILDING) {
+			if (platform->rightMouseDown) game->tool = TOOL_NONE;
+
+			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
+
+			Vec2i tilePosition = worldToTile(game->mouse);
+			Vec2 center = getCenter(tileToWorldRect(tilePosition));
+
+			Tile *tile = getTileAt(tilePosition);
+
+			bool canBuild = true;
+			Chunk *chunk = worldToChunk(center);
+			if (!chunk) canBuild = false;
+			if (canBuild && !chunk->visible) canBuild = false;
+			if (canBuild && !tile) canBuild = false;
+			if (canBuild && tile->type != TILE_GROUND) canBuild = false;
+
+			for (int i = 0; i < world->actorsNum; i++) {
+				Actor *other = &world->actors[i];
+				if (equal(worldToTile(other->position), tilePosition)) canBuild = false;
+			}
+
+			if (canBuild && isMouseClicked()) {
+				float price = info->price + info->priceMulti*game->actorTypeCounts[game->actorToBuild];
+				if (game->money >= price) {
+					game->money -= price;
+					Actor *newTower = createActor(game->actorToBuild);
+					newTower->position = center;
+					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
+				} else {
+					infof("Not enough money\n");
+				}
+			}
+		} else if (game->tool == TOOL_SELECTED) {
+			if (isMouseClicked()) game->selectedActorsNum = 0;
+			if (game->selectedActorsNum == 0) game->tool = TOOL_NONE;
+		}
+
+		game->toolTime += elapsed;
+	} ///
+
+	game->time += elapsed;
+}
+
+void drawGame(float elapsed) {
+	World *world = game->world;
+
+	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
+	if (game->inEditor) {
+		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
+		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
+		ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
+		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
+		ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
+		ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
+		if (ImGui::Button("Explore all")) {
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				chunk->visible = true;
+			}
+		}
+		ImGui::InputInt("Money", &game->money);
+		ImGui::InputFloat("Mana", &game->mana);
+		ImGui::InputFloat("MaxMana", &game->mana);
+		ImGui::InputInt("Wave", &game->wave);
+		ImGui::SameLine();
+		if (ImGui::Button("Next wave")) startNextWave();
+
+		if (ImGui::Button("Add 1000 random ballistas")) {
+			int added = 0;
+			int iters = 0;
+			for (;;) {
+				if (added > 1000) break;
+				if (iters >= 10000) {
+					logf("Failed after 10000...\n");
+					break;
+				}
+
+				Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+				if (!chunk->visible) continue;
+				Vec2i chunkTilePos;
+				chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
+				chunkTilePos.y = rndInt(0, CHUNK_SIZE-1);
+				Tile *tile = &chunk->tiles[chunkTilePos.y * CHUNK_SIZE + chunkTilePos.x];
+				Vec2i tilePos = chunkTileToWorldTile(chunk, chunkTilePos);
+
+				bool canBuild = true;
+				if (tile->type != TILE_GROUND) canBuild = false;
+
+				for (int i = 0; i < world->actorsNum; i++) {
+					Actor *other = &world->actors[i];
+					if (equal(worldToTile(other->position), tilePos)) canBuild = false;
+				}
+
+				if (canBuild) {
+					Actor *newTower = createActor(ACTOR_BALLISTA);
+					newTower->position = tileToWorld(tilePos);
+					added++;
+				}
+
+				iters++;
+			}
+		}
+
+		ImGui::Separator();
+
+		ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
+		ImGui::SameLine();
+		if (ImGui::Button("Save")) {
+			saveState(frameSprintf("assets/states/%s.save_state", game->debugNewSaveStateName));
+			game->debugNewSaveStateName[0] = 0;
+			refreshAssetPaths();
+		}
+
+		int pathCount = 0;
+		for (int i = 0; i < assetPathsNum; i++) {
+			char *path = assetPaths[i];
+			if (strstr(path, "assets/states/")) {
+				char *name = frameStringClone(path) + strlen("assets/states/");
+				char *dotPos = strchr(name, '.');
+				if (dotPos) *dotPos = 0;
+				if (ImGui::Button(name)) {
+					loadState(path);
+				}
+				if ((pathCount+1) % 5 != 0) ImGui::SameLine();
+				pathCount++;
+			}
+		}
+
+		ImGui::NewLine();
+		ImGui::Separator();
+		if (ImGui::Button("Reset game")) game->shouldReset = true;
+
+		ImGui::End();
+	}
+
+	{ /// Get input and move camera
+		Vec2 moveDir = v2();
+		if (keyPressed('W')) moveDir.y--;
+		if (keyPressed('S')) moveDir.y++;
+		if (keyPressed('A')) moveDir.x--;
+		if (keyPressed('D')) moveDir.x++;
+
+		game->cameraZoom += platform->mouseWheel * 0.1;
+		game->cameraZoom = mathClamp(game->cameraZoom, 0.1, 20);
+
+		game->cameraPosition += normalize(moveDir) * 20 / game->cameraZoom;
+
+		for (int i = 1; i <= 9; i++) {
+			if (keyPressed(KEY_ALT) && keyJustReleased('0' + i)) {
+				loadState(frameSprintf("assets/states/%d.save_state", i));
+			}
+		}
+
+		if (keyJustPressed('-')) {
+			game->timeScale *= 0.5;
+			logf("Time scale: %.3f\n", game->timeScale);
+		}
+		if (keyJustPressed('=')) {
+			game->timeScale *= 2;
+			logf("Time scale: %.3f\n", game->timeScale);
+		}
+	} ///
+
+
+	Matrix3 cameraMatrix = mat3();
+	Rect screenRect = {};
+	{
+		cameraMatrix.TRANSLATE(game->size/2);
+		cameraMatrix.SCALE(game->cameraZoom);
+		cameraMatrix.TRANSLATE(-game->cameraPosition);
+
+		game->mouse = cameraMatrix.invert() * platform->mouse;
+
+		screenRect.width = game->size.x / game->cameraZoom;
+		screenRect.height = game->size.y / game->cameraZoom;
+		screenRect.x = game->cameraPosition.x - screenRect.width/2;
+		screenRect.y = game->cameraPosition.y - screenRect.height/2;
+	}
+
+	clearRenderer();
+	pushCamera2d(cameraMatrix);
+
+	{ /// Draw map
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (!overlaps(screenRect, chunk->rect)) continue;
+			if (!chunk->visible) continue;
+
+			for (int y = 0; y < CHUNK_SIZE; y++) {
+				for (int x = 0; x < CHUNK_SIZE; x++) {
+					int tileIndex = y*CHUNK_SIZE + x;
+					Rect rect = {};
+					rect.x = x*TILE_SIZE + chunk->rect.x;
+					rect.y = y*TILE_SIZE + chunk->rect.y;
+					rect.width = TILE_SIZE;
+					rect.height = TILE_SIZE;
+					Tile *tile = &chunk->tiles[tileIndex];
+
+					int color = 0x00000000;
+
+					if (tile->type == TILE_HOME) color = 0xFFFFF333;
+					if (tile->type == TILE_GROUND) color = 0xFF017301;
+					if (tile->type == TILE_ROAD) color = 0xFF966F02;
+
+					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
+					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
+					color = lerpColor(color, 0xFF000000, heightShadePerc);
+
+					drawRect(rect, color);
+
+					if (game->debugShowDijkstraValues) {
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
+					}
+
+					if (game->debugShowFlowFieldValues) {
+						if (!isZero(tile->flow)) {
+							Vec2 start = getCenter(rect);
+							Vec2 end = start + tile->flow*TILE_SIZE/2;
+							drawLine(start, end, 4, 0xFFFF0000);
+						}
+					}
+
+					if (game->debugShowPerlinValues) {
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect(frameSprintf("%.02f", tile->perlinValue), props, rect);
+					}
+
+					if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
+				}
+			}
+
+			if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
+		}
+	} ///
+
 	{ /// Draw actors
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
@@ -1465,6 +1651,9 @@ void stepGame(float elapsed, bool isLastStep) {
 
 			if (info->isTower && isSelected) {
 				drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
+
+				Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+				drawCircle(range, 0x80FF0000);
 			}
 
 			Rect rect = getRect(actor);
@@ -1645,97 +1834,7 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 	} ///
 
-	{ /// Post update actors
-		for (int i = 0; i < world->actorsNum; i++) {
-			Actor *actor = &world->actors[i];
-			actor->timeSinceLastShot += elapsed;
-
-			if (actor->markedForDeletion) {
-				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-				if (info->isEnemy) {
-					int moneyToGain = 0;
-					if (actor->type == ACTOR_ENEMY1) {
-						moneyToGain += 4; 
-					} else {
-						moneyToGain += info->enemySpawnStartingWave;
-					}
-
-					for (int i = 0; i < game->ownedUpgradesNum; i++) {
-						Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
-						for (int i = 0; i < upgrade->effectsNum; i++) {
-							UpgradeEffect *effect = &upgrade->effects[i];
-							if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
-						}
-					}
-
-					game->money += moneyToGain;
-				}
-
-				deinitActor(actor);
-				arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
-				world->actorsNum--;
-				i--;
-				continue;
-			}
-		}
-	} ///
-
-	if (game->playingWave && enemiesAlive == 0 && game->actorsToSpawnNum == 0) {
-		game->playingWave = false;
-
-		int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
-		int possibleNum = 0;
-		for (int i = 0; i < game->upgradesNum; i++) {
-			Upgrade *upgrade = &game->upgrades[i];
-			if (hasUpgrade(upgrade->id)) continue;
-
-			bool hasPrereqs = true;
-			for (int i = 0; i < upgrade->prereqsNum; i++) {
-				if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
-			}
-			if (!hasPrereqs) continue;
-
-			possible[possibleNum++] = upgrade->id;
-		}
-
-		int maxUpgradeCards = 3;
-		for (int i = 0; i < game->ownedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
-			for (int i = 0; i < upgrade->effectsNum; i++) {
-				UpgradeEffect *effect = &upgrade->effects[i];
-				if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
-			}
-		}
-
-		game->presentedUpgradesNum = 0;
-		for (int i = 0; i < maxUpgradeCards; i++) {
-			if (possibleNum == 0) continue;
-			int chosenIndex = rndInt(0, possibleNum-1);
-			game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
-			arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
-			possibleNum--;
-		}
-	}
-
-	{
-		for (int i = 0; i < game->ownedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(game->ownedUpgrades[i]);
-			for (int i = 0; i < upgrade->effectsNum; i++) {
-				UpgradeEffect *effect = &upgrade->effects[i];
-				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) manaToGain *= effect->value;
-			}
-		}
-
-		if (game->playingWave) game->mana += manaToGain;
-		if (game->mana > game->maxMana) game->mana = game->maxMana;
-	}
-
-	{ /// Update hud and tool
-		if (game->prevTool != game->tool) {
-			game->prevTool = game->tool;
-			game->toolTime = 0;
-		}
-
+	{ /// Draw hud and tool
 		if (game->tool == TOOL_NONE) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -1765,44 +1864,14 @@ void stepGame(float elapsed, bool isLastStep) {
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
 		} else if (game->tool == TOOL_BUILDING) {
-			if (platform->rightMouseDown) game->tool = TOOL_NONE;
-
 			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
 
 			Vec2i tilePosition = worldToTile(game->mouse);
 			Rect tileRect = tileToWorldRect(tilePosition);
 			drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(game->time*2)));
 
-			Vec2 center = getCenter(tileRect);
-
 			Circle range = makeCircle(getCenter(tileRect), getRange(game->actorToBuild, tilePosition));
 			drawCircle(range, 0x80FF0000);
-
-			Tile *tile = getTileAt(tilePosition);
-
-			bool canBuild = true;
-			Chunk *chunk = worldToChunk(center);
-			if (!chunk) canBuild = false;
-			if (canBuild && !chunk->visible) canBuild = false;
-			if (canBuild && !tile) canBuild = false;
-			if (canBuild && tile->type != TILE_GROUND) canBuild = false;
-
-			for (int i = 0; i < world->actorsNum; i++) {
-				Actor *other = &world->actors[i];
-				if (equal(worldToTile(other->position), tilePosition)) canBuild = false;
-			}
-
-			if (canBuild && isMouseClicked()) {
-				float price = info->price + info->priceMulti*game->actorTypeCounts[game->actorToBuild];
-				if (game->money >= price) {
-					game->money -= price;
-					Actor *newTower = createActor(game->actorToBuild);
-					newTower->position = center;
-					if (!keyPressed(KEY_SHIFT)) game->tool = TOOL_NONE;
-				} else {
-					infof("Not enough money\n");
-				}
-			}
 		} else if (game->tool == TOOL_SELECTED) {
 			nguiStartWindow("Selected window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -1886,62 +1955,10 @@ void stepGame(float elapsed, bool isLastStep) {
 			}
 			nguiEndWindow();
 		}
-
-		game->toolTime += elapsed;
-
-		for (int i = 0; i < game->selectedActorsNum; i++) {
-			Actor *actor = getActor(game->selectedActors[i]);
-			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-
-			if (info->isTower) {
-				Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-				drawCircle(range, 0x80FF0000);
-			}
-		}
 	} ///
 
-	if (game->playingWave) {
-		if (game->actorsToSpawnNum > 0) game->timeTillNextSpawn -= elapsed;
-		if (game->timeTillNextSpawn <= 0) {
-			game->timeTillNextSpawn += 1;
-
-			Vec2 *spawnPoints = (Vec2 *)frameMalloc(sizeof(Vec2) * CHUNKS_MAX);
-			int spawnPointsNum = 0;
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-
-				bool isPortal = false; //@copyPastedIsPortal
-				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
-
-				if (!chunk->visible) continue;
-				if (isPortal) {
-					spawnPoints[spawnPointsNum++] = tileToWorld(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
-					drawCircle(spawnPoints[spawnPointsNum-1], 32, 0xFF0000FF);
-				}
-				for (int i = 0; i < chunk->connectionsNum; i++) {
-					Chunk *newChunk = getChunkAt(chunk->connections[i]);
-					Assert(newChunk);
-					if (newChunk->visible) continue;
-
-					Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
-					spawnPoints[spawnPointsNum++] = middle;
-				}
-			}
-
-			for (int i = 0; i < spawnPointsNum; i++) {
-				ActorType toSpawn = game->actorsToSpawn[0];
-				Actor *actor = createActor(toSpawn);
-				actor->position = spawnPoints[i];
-
-				memmove(&game->actorsToSpawn[0], &game->actorsToSpawn[1], sizeof(ActorType) * (game->actorsToSpawnNum-1));
-				game->actorsToSpawnNum--;
-				if (game->actorsToSpawnNum == 0) break;
-			}
-		}
-	}
-
 	{ /// Show explore buttons
-		if (!game->playingWave && !game->presentedUpgradesNum && game->tool == TOOL_NONE ) {
+		if (!game->playingWave && !game->presentedUpgradesNum && game->tool == TOOL_NONE) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
@@ -1979,8 +1996,6 @@ void stepGame(float elapsed, bool isLastStep) {
 		}
 	} ///
 
-	// drawCircle(game->mouse, 10, 0xFFFF0000);
-
 	popCamera2d();
 
 	{
@@ -1992,7 +2007,7 @@ void stepGame(float elapsed, bool isLastStep) {
 			game->money,
 			game->mana,
 			game->maxMana,
-			manaToGain/elapsed
+			game->manaToGain/elapsed
 		), props, rect);
 	}
 
@@ -2002,8 +2017,6 @@ void stepGame(float elapsed, bool isLastStep) {
 	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
 	drawOnScreenLog();
-
-	game->time += elapsed;
 }
 
 bool isMouseClicked() {
