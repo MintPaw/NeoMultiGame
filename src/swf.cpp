@@ -2390,7 +2390,6 @@ void destroySwf(Swf *swf) {
 			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
 			for (int i = 0; i < sprite->framesNum; i++) {
 				SwfFrame *frame = &sprite->frames[i];
-				if (frame->depths) free(frame->depths);
 				for (int i = 0; i < frame->labelsNum; i++) free(frame->labels[i]);
 				if (frame->labels) free(frame->labels);
 			}

@@ -144,11 +144,11 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
 
-#ifdef __EMSCRIPTEN__
-	float html5ExtraScaling = emscripten_get_device_pixel_ratio();
-	platform->windowWidth *= html5ExtraScaling;
-	platform->windowHeight *= html5ExtraScaling;
-#endif
+// #ifdef __EMSCRIPTEN__
+// 	float html5ExtraScaling = emscripten_get_device_pixel_ratio();
+// 	platform->windowWidth *= html5ExtraScaling;
+// 	platform->windowHeight *= html5ExtraScaling;
+// #endif
 
 	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
@@ -179,15 +179,15 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
 	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
 
-#ifdef __EMSCRIPTEN__
-	EM_ASM({
-		let newWidth = $0;
-		let newHeight = $1;
-		let canvasElement = document.getElementById("canvas");
-		canvasElement.style.width = newWidth+"px";
-		canvasElement.style.height = newHeight+"px";
-	}, windowWidth, windowHeight);
-#endif
+// #ifdef __EMSCRIPTEN__
+// 	EM_ASM({
+// 		let newWidth = $0;
+// 		let newHeight = $1;
+// 		let canvasElement = document.getElementById("canvas");
+// 		canvasElement.style.width = newWidth+"px";
+// 		canvasElement.style.height = newHeight+"px";
+// 	}, windowWidth, windowHeight);
+// #endif
 
 	platform->windowScaling = Raylib::GetWindowScaleDPI().x;
 
