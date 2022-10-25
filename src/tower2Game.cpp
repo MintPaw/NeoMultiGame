@@ -288,6 +288,8 @@ void stepGame(float elapsed);
 void drawGame(float elapsed);
 
 bool isMouseClicked();
+Vec2i getTileHovering();
+bool isHoveringActor(Actor *actor);
 
 void generateMapFields();
 Chunk *createChunk(Vec2i position);
@@ -986,7 +988,7 @@ void stepGame(float elapsed) {
 				}
 
 				if (game->tool == TOOL_NONE || game->tool == TOOL_SELECTED) {
-					if (isMouseClicked() && contains(getRect(actor), game->mouse)) {
+					if (isMouseClicked() && isHoveringActor(actor)) {
 						game->prevTool = TOOL_NONE;
 						game->tool = TOOL_SELECTED;
 						game->selectedActorsNum = 0;
@@ -1399,7 +1401,7 @@ void stepGame(float elapsed) {
 
 			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
 
-			Vec2i tilePosition = worldToTile(game->mouse);
+			Vec2i tilePosition = getTileHovering();
 			Vec2 center = getCenter(tileToWorldRect(tilePosition));
 
 			Tile *tile = getTileAt(tilePosition);
@@ -1866,7 +1868,7 @@ void drawGame(float elapsed) {
 		} else if (game->tool == TOOL_BUILDING) {
 			ActorTypeInfo *info = &game->actorTypeInfos[game->actorToBuild];
 
-			Vec2i tilePosition = worldToTile(game->mouse);
+			Vec2i tilePosition = getTileHovering();
 			Rect tileRect = tileToWorldRect(tilePosition);
 			drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(game->time*2)));
 
@@ -2027,6 +2029,14 @@ bool isMouseClicked() {
 	if (game->prevTool != game->tool) ret = false;
 	if (game->toolTime < 0.05) ret = false;
 	return ret;
+}
+
+Vec2i getTileHovering() {
+	return worldToTile(game->mouse);
+}
+
+bool isHoveringActor(Actor *actor) {
+	return contains(getRect(actor), game->mouse);
 }
 
 void generateMapFields() {
