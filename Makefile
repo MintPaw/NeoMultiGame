@@ -17,8 +17,8 @@ GAME_NAME=tower2Game
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=butt2GoGame
-# GAME_NAME=rssGame
 # GAME_NAME=pkGame
+# GAME_NAME=deskGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)

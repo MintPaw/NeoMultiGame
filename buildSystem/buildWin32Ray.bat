@@ -21,6 +21,13 @@ where cl
 if %errorlevel% neq 0 (
 	call %VS_CMD_PATH% -arch=amd64 -host_arch=amd64 -vcvars_ver=14.2
 )
+
+if "%GAME_NAME%"=="deskGame" (
+	set USES_CURL=1
+) else (
+	set USES_CURL=
+)
+
 cls
 
 pushd .
@@ -32,6 +39,13 @@ set INCLUDE_DIR=%PROJECT_DIR%\include
 set LIB_DIR=%PROJECT_DIR%\lib
 set SRC_DIR=%PROJECT_DIR%\src
 set ASSETS_DIR=%PROJECT_DIR%\%GAME_NAME%Assets
+
+if [%USES_CURL%]==[1] (
+	set CURL_ARGS=-I%INCLUDE_DIR%\curl %LIB_DIR%\curl\*.a
+) else (
+	set CURL_ARGS=
+)
+
 
 robocopy commonAssets\assets\common %ASSETS_DIR%\assets\common /MIR /W:5 /njh /njs /ndl /nc /ns /XO
 
@@ -95,7 +109,7 @@ if not exist winRayObj\stb_sprintf.obj (
 
 %COMPILER% /std:c++17 %DEBUG_ARGS% %OPT_ARGS% -EHsc -nologo ^
 	-I%INCLUDE_DIR%\raylib -I%INCLUDE_DIR%\raylib\skia %LIB_DIR%\raylib\win64\*.obj %LIB_DIR%\raylib\win64\*.lib %LIBS% winRayObj\*.obj %SRC_DIR%\main.cpp ^
-	%DEFINES% %ALT_CORE_PATH_DEFINES% -DRAYLIB_MODE /D STB_SPRINTF_OBJ /D STB_IMAGE_WRITE_OBJ /D STB_IMAGE_OBJ /D STB_TRUETYPE_OBJ /D STB_RECTPACK_OBJ /D IMGUI_OBJ ^
+	%DEFINES% %ALT_CORE_PATH_DEFINES% %CURL_ARGS% -DRAYLIB_MODE /D STB_SPRINTF_OBJ /D STB_IMAGE_WRITE_OBJ /D STB_IMAGE_OBJ /D STB_TRUETYPE_OBJ /D STB_RECTPACK_OBJ /D IMGUI_OBJ ^
 	-link /DEBUG -out:%GAME_NAME%.exe > %PROJECT_DIR%\errors.err
 
 if ERRORLEVEL 1 (
@@ -107,5 +121,9 @@ type %PROJECT_DIR%\errors.err
 
 @copy %LIB_DIR%\win64\*.dll . 1>nul 2>nul
 @copy %LIB_DIR%\win64\*.pdb . 1>nul 2>nul
+
+if [%USES_CURL%]==[1] (
+@copy %LIB_DIR%\curl\*.dll . 1>nul 2>nul
+)
 
 popd

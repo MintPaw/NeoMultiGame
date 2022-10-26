@@ -449,6 +449,10 @@ NanoTime mainNano;
 # include "tower2Game.cpp"
 #endif
 
+#if defined(PLAYING_deskGame)
+# include "../../multiGamePrivate/src/deskGame.cpp"
+#endif
+
 #ifdef _WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else

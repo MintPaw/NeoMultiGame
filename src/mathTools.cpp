@@ -4313,7 +4313,25 @@ bool contains(Capsule2 capsule, Vec2 point) {
 	return false;
 }
 
+void secsToMDHMS(int *outMonths, int *outDays, int *outHours, int *outMins, int *outSecs, float secs);
 void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs);
+char *secsToHMSFrameString(float timeLeft);
+char *secsToMDHMSFrameString(float timeLeft);
+void secsToMDHMS(int *outMonths, int *outDays, int *outHours, int *outMins, int *outSecs, float secs) {
+	*outMonths = 0;
+	*outDays = 0;
+	while (secs > 60*60*24*30) {
+		*outMonths = *outMonths + 1;
+		secs -= 60*60*24*30;
+	}
+	while (secs > 60*60*24) {
+		*outDays = *outDays + 1;
+		secs -= 60*60*24;
+	}
+
+	secsToHMS(outHours, outMins, outSecs, secs);
+}
+
 void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs) {
 	secs = fabs(secs);
 	*outHours = 0;
@@ -4330,18 +4348,47 @@ void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs) {
 	*outSecs = (int)secs;
 };
 
-char *secsToHMSFrameString(float timeLeft);
 char *secsToHMSFrameString(float timeLeft) {
+	bool isNeg = false;
+	if (timeLeft < 0) {
+		isNeg = true;
+		timeLeft *= -1;
+	}
 	int hours, mins, secs;
 	secsToHMS(&hours, &mins, &secs, timeLeft);
 
 	char *str = NULL;
 	if (hours > 0) {
-		str = frameSprintf("%dh %dm %ds", hours, mins, secs);
+		str = frameSprintf("%s%dh %dm %ds", isNeg?"-":"", hours, mins, secs);
 	} else if (mins > 0) {
-		str = frameSprintf("%dm %ds", mins, secs);
+		str = frameSprintf("%s%dm %ds", isNeg?"-":"", mins, secs);
 	} else {
-		str = frameSprintf("%ds", secs);
+		str = frameSprintf("%s%ds", isNeg?"-":"", secs);
+	}
+
+	return str;
+}
+
+char *secsToMDHMSFrameString(float timeLeft) {
+	bool isNeg = false;
+	if (timeLeft < 0) {
+		isNeg = true;
+		timeLeft *= -1;
+	}
+	int months, days, hours, mins, secs;
+	secsToMDHMS(&months, &days, &hours, &mins, &secs, timeLeft);
+
+	char *str = NULL;
+	if (months > 0) {
+		str = frameSprintf("%s%dmo %dd %dh %dm %ds", isNeg?"-":"", months, days, hours, mins, secs);
+	} else if (days > 0) {
+		str = frameSprintf("%s %dd %dh %dm %ds", isNeg?"-":"", days, hours, mins, secs);
+	} else if (hours > 0) {
+		str = frameSprintf("%s%dh %dm %ds", isNeg?"-":"", hours, mins, secs);
+	} else if (mins > 0) {
+		str = frameSprintf("%s%dm %ds", isNeg?"-":"", mins, secs);
+	} else {
+		str = frameSprintf("%s%ds", isNeg?"-":"", secs);
 	}
 
 	return str;
