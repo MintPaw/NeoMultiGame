@@ -37,8 +37,9 @@ Pass *createPass();
 void destroyPass(Pass *pass);
 void pushPass(Pass *pass);
 void popPass();
-PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), int tint=0xFFFFFFFF);
-PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int tint=0xFFFFFFFF);
+PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), int color=0xFFFFFFFF);
+PassCmd *passTri(Tri tri, int color=0xFFFFFFFF);
+PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int color=0xFFFFFFFF);
 
 Pass *getCurrentPass();
 PassCmd *createPassCmd(Pass *pass);
@@ -79,11 +80,11 @@ void popPass() {
 	passSys->passStackNum--;
 }
 
-PassCmd *passTexture(Texture *texture, Matrix3 matrix, int tint) {
+PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color) {
 	logf("Not finished\n");
 	// alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
 	// if (renderer->disabled) return;
-	if (getAofArgb(tint) == 0) return NULL;
+	if (getAofArgb(color) == 0) return NULL;
 	PassCmd *cmd = createPassCmd(getCurrentPass());
 	if (!cmd) return NULL;
 
@@ -112,21 +113,35 @@ PassCmd *passTexture(Texture *texture, Matrix3 matrix, int tint) {
 	// 	cmd->uvs[i] = flipMatrix * cmd->uvs[i];
 	// }
 
-	cmd->colors[0] = tint;
-	cmd->colors[1] = tint;
-	cmd->colors[2] = tint;
-	cmd->colors[3] = tint;
+	cmd->colors[0] = color;
+	cmd->colors[1] = color;
+	cmd->colors[2] = color;
+	cmd->colors[3] = color;
 
 	return cmd;
 }
 
-PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int tint) {
-	if (getAofArgb(tint) == 0) return NULL;
+PassCmd *passTri(Tri tri, int color) {
+	PassCmd *cmd = createPassCmd(getCurrentPass());
+	cmd->type = PASS_CMD_TRI;
+
+	cmd->verts[0] = tri.verts[0];
+	cmd->verts[1] = tri.verts[1];
+	cmd->verts[2] = tri.verts[2];
+
+	cmd->colors[0] = color;
+	cmd->colors[1] = color;
+	cmd->colors[2] = color;
+	return cmd;
+}
+
+PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int color) {
+	if (getAofArgb(color) == 0) return NULL;
 	PassCmd *cmd = createPassCmd(getCurrentPass());
 	cmd->type = PASS_CMD_MESH;
 	cmd->mesh = mesh;
 	cmd->meshMatrix = matrix;
-	cmd->meshTint = tint;
+	cmd->meshTint = color;
 	return cmd;
 }
 

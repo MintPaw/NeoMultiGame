@@ -497,6 +497,10 @@ struct Camera {
 	float fovy;
 	bool isOrtho;
 	float orthoScale;
+
+	Vec2 size;
+	float nearCull;
+	float farCull;
 };
 
 enum ShaderUniformType {
@@ -678,7 +682,7 @@ void resetRenderContext();
 
 void startRenderingFrame();
 void endRenderingFrame();
-void start3d(Camera camera, Vec2 size, float nearCull, float farCull);
+void start3d(Camera camera);
 void end3d();
 void startShader(Raylib::Shader shader);
 void startShader(Shader *shader);
@@ -1516,7 +1520,7 @@ void startRenderingFrame() {
 void endRenderingFrame() {
 }
 
-void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
+void start3d(Camera camera) {
 	renderer->in3dPass = true;
 
 	processBatchDraws();
@@ -1525,19 +1529,22 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::rlPushMatrix();
 	Raylib::rlLoadIdentity();
 
+	if (isZero(camera.size)) logf("camera.size is 0,0\n");
+	if (camera.nearCull == 0) logf("camera.nearCull is 0\n");
+	if (camera.farCull == 0) logf("camera.far is 0\n");
 	if (!camera.isOrtho) {
 		if (camera.fovy == 0) logf("fovy is 0\n");
-		float aspect = size.x/size.y;
-		double top = nearCull*tan(toRad(camera.fovy*0.5));
+		float aspect = camera.size.x/camera.size.y;
+		double top = camera.nearCull*tan(toRad(camera.fovy*0.5));
 		double right = top*aspect;
-		Raylib::rlFrustum(-right, right, -top, top, nearCull, farCull);
+		Raylib::rlFrustum(-right, right, -top, top, camera.nearCull, camera.farCull);
 	} else {
-		double top = size.y/2 / camera.orthoScale;
-		double right = size.x/2 / camera.orthoScale;
+		double top = camera.size.y/2 / camera.orthoScale;
+		double right = camera.size.x/2 / camera.orthoScale;
 		if (camera.fovy != 0) logf("fovy does nothing currently\n");
 		if (camera.orthoScale == 0) logf("Camera has an orthoScale of 0\n");
 
-		Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
+		Raylib::rlOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
 	}
 
 	Raylib::rlMatrixMode(RL_MODELVIEW);
@@ -1573,7 +1580,13 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 
 	Raylib::Vector3 deviceCoords = { x, y, z };
 
-	Raylib::Matrix matProj = Raylib::rlGetMatrixProjection();
+	Raylib::Matrix matProj;
+	if (!camera.isOrtho) {
+		float aspect = camera.size.x / camera.size.y;
+		matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+	} else {
+		matProj = Raylib::rlGetMatrixProjection();
+	}
 	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
 	Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
@@ -1584,10 +1597,12 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 	Raylib::Vector3 direction = Raylib::Vector3Normalize(Raylib::Vector3Subtract(farPoint, nearPoint));
 
 	Raylib::Ray raylibScreenRay = {};
-	raylibScreenRay.position = cameraPlanePointerPos;
+	Vec3 rayPos;
+	if (!camera.isOrtho) rayPos = camera.position;
+	else rayPos = v3(cameraPlanePointerPos);
 	raylibScreenRay.direction = direction;
 
-	*outPos = v3(raylibScreenRay.position.x, raylibScreenRay.position.y, raylibScreenRay.position.z);
+	*outPos = rayPos;
 	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
 }
 

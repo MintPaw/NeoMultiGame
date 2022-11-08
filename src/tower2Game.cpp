@@ -155,6 +155,7 @@ struct Tile {
 	float perlinValue;
 };
 
+#define SCALE_3D (1.0/64.0)
 #define TILE_SIZE 64
 struct Chunk {
 	Vec2i position;
@@ -293,6 +294,9 @@ struct Game {
 	Vec2 size;
 	Vec2 mouse;
 
+	Vec3 mouseRayPos;
+	Vec3 mouseRayDir;
+
 	bool shouldReset;
 
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
@@ -319,8 +323,6 @@ struct Game {
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
 
-	Matrix3 cameraMatrix;
-
 	/// Editor/debug
 	bool debugShowFrameTimes;
 	bool debugShowDijkstraValues;
@@ -345,6 +347,8 @@ bool isHoveringActor(Actor *actor);
 #include "tower2GameCore.cpp"
 void drawGame(float elapsed);
 Effect *createEffect(EffectType type);
+
+Matrix4 get3dTileMatrix(Vec2i tilePos);
 
 void updateAndDrawOverlay(float elapsed);
 
@@ -887,11 +891,29 @@ bool isMouseClicked() {
 }
 
 Vec2i getTileHovering() {
-	return worldToTile(game->mouse);
+	if (game->is2d) {
+		return worldToTile(game->mouse);
+	} else {
+		return v2i();
+		// for (int i = 0; i < world->chunksNum; i++) {
+		// 	Chunk *chunk = &world->chunks[i];
+		// 	if (!chunk->visible) continue;
+
+		// 	for (int y = 0; y < CHUNK_SIZE; y++) {
+		// 		for (int x = 0; x < CHUNK_SIZE; x++) {
+		// 			int tileIndex = y*CHUNK_SIZE + x;
+		// 		}
+		// 	}
+		// }
+	}
 }
 
 bool isHoveringActor(Actor *actor) {
-	return contains(getRect(actor), game->mouse);
+	if (game->is2d) {
+		return contains(getRect(actor), game->mouse);
+	} else {
+		return false;
+	}
 }
 
 void drawGame(float elapsed) {
@@ -910,13 +932,14 @@ void drawGame(float elapsed) {
 
 	if (game->is2d) {
 		Rect screenRect = {};
+		Matrix3 cameraMatrix = mat3();
 		{ /// Setup camera
-			game->cameraMatrix = mat3();
-			game->cameraMatrix.TRANSLATE(game->size/2);
-			game->cameraMatrix.SCALE(data->cameraZoom);
-			game->cameraMatrix.TRANSLATE(-data->cameraPosition);
+			cameraMatrix = mat3();
+			cameraMatrix.TRANSLATE(game->size/2);
+			cameraMatrix.SCALE(data->cameraZoom);
+			cameraMatrix.TRANSLATE(-data->cameraPosition);
 
-			game->mouse = game->cameraMatrix.invert() * platform->mouse;
+			game->mouse = cameraMatrix.invert() * platform->mouse;
 
 			screenRect.width = game->size.x / data->cameraZoom;
 			screenRect.height = game->size.y / data->cameraZoom;
@@ -924,7 +947,7 @@ void drawGame(float elapsed) {
 			screenRect.y = data->cameraPosition.y - screenRect.height/2;
 		} ///
 
-		pushCamera2d(game->cameraMatrix);
+		pushCamera2d(cameraMatrix);
 
 		{ /// Draw map
 			for (int i = 0; i < world->chunksNum; i++) {
@@ -1300,42 +1323,74 @@ void drawGame(float elapsed) {
 		Pass *pass = createPass();
 		pushPass(pass);
 
-		pass->camera.position = v3(0, 0, 10);
-		pass->camera.target = v3(0, 0, 0);
+		Vec3 cameraOffset = v3();
+		cameraOffset.x = data->cameraPosition.x * SCALE_3D;
+		cameraOffset.y = -data->cameraPosition.y * SCALE_3D;
+		cameraOffset.z = -data->cameraZoom * 64;
+
+		pass->camera.position = v3(0, 0, 200) + cameraOffset;
+		pass->camera.target = v3(0, 0, 0) + cameraOffset;
+
 		pass->camera.up = v3(0, 1, 0);
 		pass->camera.fovy = 59;
 		pass->camera.isOrtho = false;
+		pass->camera.size = game->size;
+		pass->camera.nearCull = 0.01;
+		pass->camera.farCull = 1000;
 		// pass->camera.orthoScale = 10;
 
-		{
-			Vec3 offset = v3();
+		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 
-			Tri tri = {};
-			tri.verts[0] = v3(0, 0, 0) + offset;
-			tri.verts[1] = v3(0, 1, 0) + offset;
-			tri.verts[2] = v3(1, 1, 0) + offset;
+		float closestTileDist = 0;
+		Vec2i closestTilePos = v2i();
 
-			PassCmd *cmd = createPassCmd(pass);
-			cmd->type = PASS_CMD_TRI;
-			cmd->verts[0] = tri.verts[0];
-			cmd->verts[1] = tri.verts[1];
-			cmd->verts[2] = tri.verts[2];
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (!chunk->visible) continue;
 
-			cmd->colors[0] = 0xFFFF0000;
-			cmd->colors[1] = 0xFFFF0000;
-			cmd->colors[2] = 0xFFFF0000;
+			for (int y = 0; y < CHUNK_SIZE; y++) {
+				for (int x = 0; x < CHUNK_SIZE; x++) {
+					Vec2i tilePos = chunkTileToWorldTile(chunk, v2i(x, y));
+
+					int tileIndex = y*CHUNK_SIZE + x;
+					Tile *tile = &chunk->tiles[tileIndex];
+
+					Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+					int color = 0x00000000;
+					if (tile->type == TILE_HOME) color = 0xFFFFF333;
+					if (tile->type == TILE_GROUND) color = 0xFF017301;
+					if (tile->type == TILE_ROAD) color = 0xFF966F02;
+
+					Matrix4 matrix = get3dTileMatrix(tilePos);
+					passMesh(cubeMesh, matrix, color);
+
+					for (int i = 0; i < cubeMesh->indsNum/3; i++) {
+						Tri tri = {};
+						tri.verts[0] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 0]].position;
+						tri.verts[1] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 1]].position;
+						tri.verts[2] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 2]].position;
+
+						float dist;
+						Vec2 uv;
+						if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
+							if (isZero(closestTilePos) || closestTileDist > dist) {
+								closestTileDist = dist;
+								closestTilePos = tilePos;
+							}
+						}
+					}
+				}
+			}
 		}
 
-		{
-			Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
-			Matrix4 matrix = mat4();
-			matrix.ROTATE_EULER(0, platform->time, 0);
-			passMesh(cubeMesh, matrix, 0xFFFF0000);
+		if (!isZero(closestTilePos)) {
+			Matrix4 matrix = get3dTileMatrix(closestTilePos);
+			passMesh(getMesh("assets/common/models/Cube.Cube.mesh"), matrix, 0xFFFF0000);
 		}
 
 		popPass();
 
-		start3d(pass->camera, game->size, 0.01, 1000);
+		start3d(pass->camera);
 		Raylib::rlDisableBackfaceCulling();
 
 		for (int i = 0; i < pass->cmdsNum; i++) {
@@ -1379,6 +1434,18 @@ Effect *createEffect(EffectType type) {
 	effect->type = type;
 	return effect;
 }
+
+Matrix4 get3dTileMatrix(Vec2i tilePos) {
+	Vec3 translation = v3();
+	translation.x = tilePos.x * TILE_SIZE * SCALE_3D;
+	translation.y = -tilePos.y * TILE_SIZE * SCALE_3D;
+
+	Matrix4 matrix = mat4();
+	matrix.TRANSLATE(translation);
+	matrix.SCALE(TILE_SIZE * SCALE_3D * 0.5);
+	return matrix;
+}
+
 
 void updateAndDrawOverlay(float elapsed) {
 	World *world = data->world;
@@ -1488,7 +1555,7 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyPressed('D')) moveDir.x++;
 
 		data->cameraZoom += platform->mouseWheel * 0.1;
-		data->cameraZoom = mathClamp(data->cameraZoom, 0.1, 20);
+		data->cameraZoom = mathClamp(data->cameraZoom, 0.1, 3);
 
 		data->cameraPosition += normalize(moveDir) * 20 / data->cameraZoom;
 

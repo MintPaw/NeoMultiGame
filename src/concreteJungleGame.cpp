@@ -1278,7 +1278,10 @@ void updateGame() {
 		{ /// Draw 3d
 			if (game->lastStepOfFrame) {
 				clearRenderer();
-				start3d(game->camera3d, game->size, -10000, 10000);
+				game->camera3d.size = game->size;
+				game->camera3d.nearCull = -10000;
+				game->camera3d.farCull = 10000;
+				start3d(game->camera3d);
 
 				Vec3 sunPosition = v3(104.000, -134.000, 66.000);
 
