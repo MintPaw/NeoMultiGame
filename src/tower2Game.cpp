@@ -1,13 +1,21 @@
-// Allow mana things to be unlocked...
-// Selectable mana things
-// dps stats
+// Add a way to see your upgrades
+// dps stats: per tower, per tower type (per wave/per game)
+// Tower building ghost should be a CoreEvent
+// GameData should contain presentedUpgrades
+
+// Upgrade ideas:
+// Saws go through X extra enemies
 // Gaining the ability to slow down time more
-// Damage numbers
 
 #define FROST_FALL_DISTANCE 64
+
 #define POISON_COLOR 0xFF6B4876
 #define BURN_COLOR 0xFFDCAB2C
 #define BLEED_COLOR 0xFF770000
+#define SHIELD_COLOR 0xFF718691
+#define HP_COLOR 0xFF00FF00
+#define ARMOR_COLOR 0xFFFFD66E
+
 #define XP_PER_SEC 10
 
 float maxXpPerLevels[] = {
@@ -17,9 +25,6 @@ float maxXpPerLevels[] = {
 	5000,
 	50000,
 	300000,
-};
-
-struct Globals {
 };
 
 struct ActorTypeInfo {
@@ -215,6 +220,34 @@ struct Upgrade {
 	int prereqsNum;
 };
 
+enum CoreEventType {
+	CORE_EVENT_DAMAGE,
+	CORE_EVENT_SHOW_GHOST,
+};
+struct CoreEvent {
+	CoreEventType type;
+	Vec2 position;
+	float floatValue;
+
+	float shieldValue;
+	float armorValue;
+	float hpValue;
+
+	ActorType actorType;
+};
+
+enum EffectType {
+	EFFECT_DEFAULT_CORE_EVENT,
+};
+struct Effect {
+	EffectType type;
+	Vec2 position;
+	float time;
+	float floatValue;
+
+	CoreEvent coreEvent;
+};
+
 struct GameData {
 	World *world;
 #define CAMPAIGN_NAME_MAX_LEN 64
@@ -255,7 +288,6 @@ struct GameData {
 struct Game {
 	Font *defaultFont;
 
-	Globals globals;
 	bool inEditor;
 	float timeScale;
 	Vec2 size;
@@ -270,13 +302,24 @@ struct Game {
 	int upgradesNum;
 	int nextUpgradeId;
 
-	int presentedUpgrades[UPGRADES_MAX];
-	int presentedUpgradesNum;
-
 	float manaToGain;
 
 	GameData data;
+
 	bool is2d;
+
+	int presentedUpgrades[UPGRADES_MAX];
+	int presentedUpgradesNum;
+
+#define CORE_EVENTS_MAX 1024
+	CoreEvent coreEvents[CORE_EVENTS_MAX];
+	int coreEventsNum;
+
+#define EFFECTS_MAX 1024
+	Effect effects[EFFECTS_MAX];
+	int effectsNum;
+
+	Matrix3 cameraMatrix;
 
 	/// Editor/debug
 	bool debugShowFrameTimes;
@@ -301,6 +344,9 @@ Vec2i getTileHovering();
 bool isHoveringActor(Actor *actor);
 #include "tower2GameCore.cpp"
 void drawGame(float elapsed);
+Effect *createEffect(EffectType type);
+
+void updateAndDrawOverlay(float elapsed);
 
 /// FUNCTIONS ^
 
@@ -360,7 +406,7 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_BALLISTA];
 			strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 10;
+			info->damage = 5;
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 5;
 			info->shieldDamageMulti = 5;
@@ -372,7 +418,7 @@ void updateGame() {
 
 			info = &game->actorTypeInfos[ACTOR_MORTAR_TOWER];
 			strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 20;
+			info->damage = 10;
 			info->hpDamageMulti = 10;
 			info->armorDamageMulti = 15;
 			info->shieldDamageMulti = 5;
@@ -657,10 +703,17 @@ void updateGame() {
 					prevUpgrade = upgrade;
 				}
 			}
+
+			{
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_UNLOCK;
+				effect->actorType = ACTOR_MANA_SIPHON;
+			}
 		} ///
 
 		game->timeScale = 1;
-		game->is2d = true;
+		game->is2d = false;
 
 		maximizeWindow();
 
@@ -793,17 +846,6 @@ void updateGame() {
 		generateMapFields();
 
 		data->cameraZoom = 1;
-		data->cameraPosition = v2();
-
-		data->time = 0;
-		data->tool = TOOL_NONE;
-		data->toolTime = 0;
-		data->wave = 0;
-		data->playingWave = false;
-		data->actorsToSpawnNum = 0;
-		data->timeTillNextSpawn = 0;
-
-		data->ownedUpgradesNum = 0;
 
 		if (isFirstStart) loadState("assets/states/autosave.save_state");
 	}
@@ -822,11 +864,14 @@ void updateGame() {
 		elapsed *= game->timeScale;
 	}
 
+	clearRenderer();
+
 	for (int i = 0; i < stepsToTake; i++) {
 		stepGame(elapsed);
+		drawGame(elapsed);
 	}
 
-	drawGame(elapsed*stepsToTake);
+	updateAndDrawOverlay(elapsed*stepsToTake);
 
 	guiDraw();
 }
@@ -849,102 +894,591 @@ bool isHoveringActor(Actor *actor) {
 	return contains(getRect(actor), game->mouse);
 }
 
-
 void drawGame(float elapsed) {
 	World *world = data->world;
 
-	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
-	if (game->inEditor) {
-		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+	{ /// Iterate CoreEvents
+		for (int i = 0; i < game->coreEventsNum; i++) {
+			CoreEvent *event = &game->coreEvents[i];
+			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST) {
+				Effect *effect = createEffect(EFFECT_DEFAULT_CORE_EVENT);
+				effect->coreEvent = *event;
+				effect->position = event->position;
+			}
+		}
+	} ///
 
-		ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
-		ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
-		ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
-		ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
-		ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
-		ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
-		ImGui::Checkbox("Is 2d", &game->is2d);
-		if (ImGui::Button("Explore all")) {
+	if (game->is2d) {
+		Rect screenRect = {};
+		{ /// Setup camera
+			game->cameraMatrix = mat3();
+			game->cameraMatrix.TRANSLATE(game->size/2);
+			game->cameraMatrix.SCALE(data->cameraZoom);
+			game->cameraMatrix.TRANSLATE(-data->cameraPosition);
+
+			game->mouse = game->cameraMatrix.invert() * platform->mouse;
+
+			screenRect.width = game->size.x / data->cameraZoom;
+			screenRect.height = game->size.y / data->cameraZoom;
+			screenRect.x = data->cameraPosition.x - screenRect.width/2;
+			screenRect.y = data->cameraPosition.y - screenRect.height/2;
+		} ///
+
+		pushCamera2d(game->cameraMatrix);
+
+		{ /// Draw map
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
-				chunk->visible = true;
-			}
-		}
-		ImGui::InputInt("Money", &data->money);
-		ImGui::InputFloat("Mana", &data->mana);
-		ImGui::InputFloat("MaxMana", &data->maxMana);
-		ImGui::InputInt("Wave", &data->wave);
-		ImGui::SameLine();
-		if (ImGui::Button("Next wave")) startNextWave();
-
-		if (ImGui::Button("Add 1000 random ballistas")) {
-			int added = 0;
-			int iters = 0;
-			for (;;) {
-				if (added > 1000) break;
-				if (iters >= 10000) {
-					logf("Failed after 10000...\n");
-					break;
-				}
-
-				Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+				if (!overlaps(screenRect, chunk->rect)) continue;
 				if (!chunk->visible) continue;
-				Vec2i chunkTilePos;
-				chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
-				chunkTilePos.y = rndInt(0, CHUNK_SIZE-1);
-				Tile *tile = &chunk->tiles[chunkTilePos.y * CHUNK_SIZE + chunkTilePos.x];
-				Vec2i tilePos = chunkTileToWorldTile(chunk, chunkTilePos);
 
-				bool canBuild = true;
-				if (tile->type != TILE_GROUND) canBuild = false;
+				for (int y = 0; y < CHUNK_SIZE; y++) {
+					for (int x = 0; x < CHUNK_SIZE; x++) {
+						int tileIndex = y*CHUNK_SIZE + x;
+						Rect rect = {};
+						rect.x = x*TILE_SIZE + chunk->rect.x;
+						rect.y = y*TILE_SIZE + chunk->rect.y;
+						rect.width = TILE_SIZE;
+						rect.height = TILE_SIZE;
+						Tile *tile = &chunk->tiles[tileIndex];
 
-				for (int i = 0; i < world->actorsNum; i++) {
-					Actor *other = &world->actors[i];
-					if (equal(worldToTile(other->position), tilePos)) canBuild = false;
+						int color = 0x00000000;
+
+						if (tile->type == TILE_HOME) color = 0xFFFFF333;
+						if (tile->type == TILE_GROUND) color = 0xFF017301;
+						if (tile->type == TILE_ROAD) color = 0xFF966F02;
+
+						float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
+						// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
+						color = lerpColor(color, 0xFF000000, heightShadePerc);
+
+						drawRect(rect, color);
+
+						if (game->debugShowDijkstraValues) {
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+							drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
+						}
+
+						if (game->debugShowFlowFieldValues) {
+							if (!isZero(tile->flow)) {
+								Vec2 start = getCenter(rect);
+								Vec2 end = start + tile->flow*TILE_SIZE/2;
+								drawLine(start, end, 4, 0xFFFF0000);
+							}
+						}
+
+						if (game->debugShowPerlinValues) {
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+							drawTextInRect(frameSprintf("%.02f", tile->perlinValue), props, rect);
+						}
+
+						if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
+					}
 				}
 
-				if (canBuild) {
-					Actor *newTower = createActor(ACTOR_BALLISTA);
-					newTower->position = tileToWorld(tilePos);
-					added++;
+				if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
+			}
+		} ///
+
+		{ /// Draw actors
+			for (int i = 0; i < world->actorsNum; i++) {
+				Actor *actor = &world->actors[i];
+				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+
+				Chunk *chunk = worldToChunk(actor->position);
+				if (chunk && !chunk->visible) continue;
+
+				bool isSelected = false;
+				for (int i = 0; i < data->selectedActorsNum; i++) {
+					if (data->selectedActors[i] == actor->id) {
+						isSelected = true;
+						break;
+					}
 				}
 
-				iters++;
+				if (isSelected) {
+					drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
+
+					if (info->isTower) {
+						Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+						drawCircle(range, 0x80FF0000);
+					}
+				}
+
+				Rect rect = getRect(actor);
+
+				if (actor->type == ACTOR_BALLISTA) {
+					drawRect(rect, 0xFF800000);
+
+					Line2 line;
+					line.start = getCenter(rect);
+					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					drawLine(line, 4, 0xFFFF0000);
+				} else if (actor->type == ACTOR_MORTAR_TOWER) {
+					drawRect(rect, 0xFF525252);
+				} else if (actor->type == ACTOR_TESLA_COIL) {
+					float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
+
+					Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+					drawCircle(circle, sparkColor);
+
+					drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
+				} else if (actor->type == ACTOR_FROST_KEEP) {
+					drawRect(rect, 0xFFE3F0F5);
+				} else if (actor->type == ACTOR_FLAME_THROWER) {
+					drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
+
+					Line2 line;
+					line.start = getCenter(rect);
+					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					drawLine(line, 12, 0xFF000000);
+
+					float range = getRange(actor, worldToTile(actor->position));
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+
+					float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					int color = setAofArgb(BURN_COLOR, perc*255.0);
+					drawLine(tri.verts[0], tri.verts[1], 5, color);
+					drawLine(tri.verts[1], tri.verts[2], 5, color);
+					drawLine(tri.verts[2], tri.verts[0], 5, color);
+				} else if (actor->type == ACTOR_POISON_SPRAYER) {
+					drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
+
+					Line2 line;
+					line.start = getCenter(rect);
+					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					drawLine(line, 12, 0xFF000000);
+
+					float range = getRange(actor, worldToTile(actor->position));
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+
+					float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					int color = setAofArgb(POISON_COLOR, perc*255.0);
+					drawLine(tri.verts[0], tri.verts[1], 5, color);
+					drawLine(tri.verts[1], tri.verts[2], 5, color);
+					drawLine(tri.verts[2], tri.verts[0], 5, color);
+				} else if (actor->type == ACTOR_SHREDDER) {
+					drawRect(rect, 0xFF800000);
+
+					Line2 line;
+					line.start = getCenter(rect);
+					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
+					drawLine(line, 4, 0xFFFF0000);
+				} else if (actor->type == ACTOR_MANA_SIPHON) {
+					drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
+				} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+					drawRect(rect, 0xFFA4B0CC);
+				} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
+					drawRect(rect, 0xFF008000);
+
+					Rect vitalityRect = rect;
+					{
+						vitalityRect.height = 4;
+						vitalityRect.y = rect.y - vitalityRect.height - 4;
+						float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
+
+						float maxHpPerc = info->maxHp / totalPoints;
+						Rect hpRect = vitalityRect;
+						hpRect.width *= maxHpPerc;
+						hpRect.width *= actor->hp / info->maxHp;
+						drawRect(hpRect, 0xFF00FF00);
+
+						float maxArmorPerc = info->maxArmor / totalPoints;
+						Rect armorRect = vitalityRect;
+						armorRect.x += maxHpPerc * vitalityRect.width;
+						armorRect.width *= maxArmorPerc;
+						armorRect.width *= actor->armor / info->maxArmor;
+						drawRect(armorRect, 0xFFFFD66E);
+
+						float maxShieldPerc = info->maxShield / totalPoints;
+						Rect shieldRect = vitalityRect;
+						shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
+						shieldRect.width *= maxShieldPerc;
+						shieldRect.width *= actor->shield / info->maxShield;
+						drawRect(shieldRect, 0xFF718691);
+					}
+
+					if (actor->slow > 0) {
+						Rect slowRect = vitalityRect;
+						slowRect.y -= slowRect.height + 4;
+						slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
+						drawRect(slowRect, 0xFF01335C);
+					}
+
+					if (actor->poison) {
+						Rect textRect = getRect(actor);
+						textRect.x -= textRect.width;
+						textRect.y -= textRect.height;
+						DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
+						drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+					}
+
+					if (actor->burn) {
+						Rect textRect = getRect(actor);
+						textRect.y -= textRect.height;
+						DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
+						drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+					}
+
+					if (actor->bleed) {
+						Rect textRect = getRect(actor);
+						textRect.x += textRect.width;
+						textRect.y -= textRect.height;
+						DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
+						drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+					}
+				} else if (actor->type == ACTOR_ARROW) {
+					Rect bulletRect = makeCenteredSquare(actor->position, 8);
+					drawRect(bulletRect, 0xFFFF0000);
+				} else if (actor->type == ACTOR_MORTAR) {
+					float delayTime = info->bulletSpeed;
+					float explodeRange = info->baseRange;
+					if (actor->time < delayTime) {
+						float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
+						drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
+					}
+
+					if (actor->time >= delayTime) {
+						Circle circle = makeCircle(actor->position, explodeRange);
+						drawCircle(circle, 0xFFFFFFFF);
+					}
+				} else if (actor->type == ACTOR_FROST) {
+					drawRect(rect, 0x80FFFFFF);
+				} else if (actor->type == ACTOR_SAW) {
+					Rect bulletRect = makeCenteredSquare(actor->position, 8);
+					drawRect(bulletRect, 0xFFFF0000);
+				} else {
+					drawRect(rect, 0xFFFF00FF);
+				}
+
+				if (info->isTower) {
+					Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
+					levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
+					levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
+
+					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					drawTextInRect(frameSprintf("%d", actor->level), props, levelNumberRect);
+
+					if (actor->level < getMaxLevel(actor->type)) {
+						Rect xpRect = rect;
+						xpRect.height = game->size.y*0.005;
+						xpRect.y -= xpRect.height + game->size.y*0.005;
+						drawRect(xpRect, 0x80FFEF94);
+
+						float maxXp = maxXpPerLevels[actor->level];
+						xpRect.width *= actor->xp / maxXp;
+						drawRect(xpRect, 0xFFFFEF94);
+					}
+				}
+
+				if (getInfo(actor)->isEnemy) {
+					if (isHoveringActor(actor)) {
+						Rect textRect = makeCenteredRect(actor->position, game->size*v2(0.02, 0.02));
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect(frameSprintf(
+								"%s\n%.0f/%.0f\n%.0f/%.0f\n%.0f/%.0f\n",
+								getInfo(actor)->name,
+								actor->shield,
+								getInfo(actor)->maxShield,
+								actor->armor,
+								getInfo(actor)->maxArmor,
+								actor->hp,
+								getInfo(actor)->maxHp
+						), props, textRect);
+					}
+				}
+
+				if (game->debugShowActorVelo) {
+					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
+					// Vec2 start = actor->position;
+					// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
+					// drawLine(start, end, 5, 0xFFFF0000);
+				}
+			}
+		} ///
+
+		{ /// Update effects
+			for (int i = 0; i < game->effectsNum; i++) {
+				Effect *effect = &game->effects[i];
+
+				bool complete = false;
+				float maxTime = 1;
+
+				if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
+					CoreEvent *event = &effect->coreEvent;
+					if (event->type == CORE_EVENT_DAMAGE) {
+						float perc = effect->time / maxTime;
+
+						Rect textRect = makeCenteredRect(effect->position, game->size*v2(0.01, 0.01));
+
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+
+						if (effect->coreEvent.shieldValue != 0) {
+							props.color = SHIELD_COLOR;
+							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.shieldValue), props, textRect);
+							textRect.y += textRect.height;
+						}
+
+						if (effect->coreEvent.armorValue != 0) {
+							props.color = ARMOR_COLOR;
+							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.armorValue), props, textRect);
+							textRect.y += textRect.height;
+						}
+
+						if (effect->coreEvent.hpValue != 0) {
+							props.color = HP_COLOR;
+							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.hpValue), props, textRect);
+							textRect.y += textRect.height;
+						}
+					} else if (event->type == CORE_EVENT_SHOW_GHOST) {
+						complete = true;
+						Vec2i tilePosition = worldToTile(event->position);
+						Rect tileRect = tileToWorldRect(tilePosition);
+						drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
+
+						Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePosition));
+						drawCircle(range, 0x80FF0000);
+					}
+				}
+
+				effect->time += elapsed;
+				if (effect->time > maxTime) complete = true;
+
+				if (complete) {
+					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+					game->effectsNum--;
+					i--;
+					continue;
+				}
+			}
+		} ///
+
+		{ /// Show explore buttons
+			if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE) {
+				for (int i = 0; i < world->chunksNum; i++) {
+					Chunk *chunk = &world->chunks[i];
+					if (!chunk->visible) continue;
+
+					for (int i = 0; i < chunk->connectionsNum; i++) {
+						Chunk *newChunk = getChunkAt(chunk->connections[i]);
+						Assert(newChunk);
+
+						if (newChunk->visible) continue;
+
+						Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
+						Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
+
+						if (contains(exploreRect, game->mouse)) {
+							exploreRect = inflatePerc(exploreRect, 0.1);
+							if (isMouseClicked()) {
+								newChunk->visible = true;
+								startNextWave();
+							}
+						}
+
+						drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
+
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
+					}
+
+					bool isPortal = false; //@copyPastedIsPortal
+					if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
+					if (isPortal) {
+						Rect portalTileRect = tileToWorldRect(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
+						drawRect(portalTileRect, 0x80FF0000);
+					}
+				}
+			}
+		} ///
+
+		popCamera2d();
+	} else {
+		Pass *pass = createPass();
+		pushPass(pass);
+
+		pass->camera.position = v3(0, 0, 10);
+		pass->camera.target = v3(0, 0, 0);
+		pass->camera.up = v3(0, 1, 0);
+		pass->camera.fovy = 59;
+		pass->camera.isOrtho = false;
+		// pass->camera.orthoScale = 10;
+
+		{
+			Vec3 offset = v3();
+
+			Tri tri = {};
+			tri.verts[0] = v3(0, 0, 0) + offset;
+			tri.verts[1] = v3(0, 1, 0) + offset;
+			tri.verts[2] = v3(1, 1, 0) + offset;
+
+			PassCmd *cmd = createPassCmd(pass);
+			cmd->type = PASS_CMD_TRI;
+			cmd->verts[0] = tri.verts[0];
+			cmd->verts[1] = tri.verts[1];
+			cmd->verts[2] = tri.verts[2];
+
+			cmd->colors[0] = 0xFFFF0000;
+			cmd->colors[1] = 0xFFFF0000;
+			cmd->colors[2] = 0xFFFF0000;
+		}
+
+		{
+			Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+			Matrix4 matrix = mat4();
+			matrix.ROTATE_EULER(0, platform->time, 0);
+			passMesh(cubeMesh, matrix, 0xFFFF0000);
+		}
+
+		popPass();
+
+		start3d(pass->camera, game->size, 0.01, 1000);
+		Raylib::rlDisableBackfaceCulling();
+
+		for (int i = 0; i < pass->cmdsNum; i++) {
+			PassCmd *cmd = &pass->cmds[i];
+			if (cmd->type == PASS_CMD_TRI) {
+				Raylib::rlCheckRenderBatchLimit(3);
+
+				// Raylib::rlSetTexture(textureId);
+				Raylib::rlBegin(RL_TRIANGLES);
+
+				for (int i = 0; i < 3; i++) {
+					int a, r, g, b;
+					hexToArgb(cmd->colors[i], &a, &r, &g, &b);
+
+					Raylib::rlColor4ub(r, g, b, a);
+					Raylib::rlTexCoord2f(cmd->uvs[i].x, cmd->uvs[i].y);
+					Raylib::rlVertex3f(cmd->verts[i].x, cmd->verts[i].y, cmd->verts[i].z);
+				}
+
+				Raylib::rlEnd();
+			} else if (cmd->type == PASS_CMD_MESH) {
+				Material material = createMaterial();
+				material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
+				drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
 			}
 		}
+		end3d();
 
-		ImGui::Separator();
-
-		ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
-		ImGui::SameLine();
-		if (ImGui::Button("Save")) {
-			saveState(frameSprintf("assets/states/%s.save_state", game->debugNewSaveStateName));
-			game->debugNewSaveStateName[0] = 0;
-			refreshAssetPaths();
-		}
-
-		int pathCount = 0;
-		for (int i = 0; i < assetPathsNum; i++) {
-			char *path = assetPaths[i];
-			if (strstr(path, "assets/states/")) {
-				char *name = frameStringClone(path) + strlen("assets/states/");
-				char *dotPos = strchr(name, '.');
-				if (dotPos) *dotPos = 0;
-				if (ImGui::Button(name)) {
-					loadState(path);
-				}
-				if ((pathCount+1) % 5 != 0) ImGui::SameLine();
-				pathCount++;
-			}
-		}
-
-		ImGui::NewLine();
-		ImGui::Separator();
-		if (ImGui::Button("Reset game")) game->shouldReset = true;
-		ImGui::InputText("Campaign name", data->campaignName, CAMPAIGN_NAME_MAX_LEN);
-
-		ImGui::End();
+		destroyPass(pass);
 	}
+}
+
+Effect *createEffect(EffectType type) {
+	if (game->effectsNum > EFFECTS_MAX-1) {
+		logf("Too many effects!\n");
+		game->effectsNum--;
+	}
+
+	Effect *effect = &game->effects[game->effectsNum++];
+	memset(effect, 0, sizeof(Effect));
+	effect->type = type;
+	return effect;
+}
+
+void updateAndDrawOverlay(float elapsed) {
+	World *world = data->world;
+
+	{ /// Editor
+		if (keyPressed(KEY_CTRL) && keyJustPressed('R')) game->is2d = !game->is2d;
+
+		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
+		if (game->inEditor) {
+			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+			ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
+			ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
+			ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
+			ImGui::Checkbox("Draw chunk lines", &game->debugDrawChunkLines);
+			ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
+			ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
+			ImGui::Checkbox("Is 2d", &game->is2d);
+			if (ImGui::Button("Explore all")) {
+				for (int i = 0; i < world->chunksNum; i++) {
+					Chunk *chunk = &world->chunks[i];
+					chunk->visible = true;
+				}
+			}
+			ImGui::InputInt("Money", &data->money);
+			ImGui::InputFloat("Mana", &data->mana);
+			ImGui::InputFloat("MaxMana", &data->maxMana);
+			ImGui::InputInt("Wave", &data->wave);
+			ImGui::SameLine();
+			if (ImGui::Button("Next wave")) startNextWave();
+
+			if (ImGui::Button("Add 1000 random ballistas")) {
+				int added = 0;
+				int iters = 0;
+				for (;;) {
+					if (added > 1000) break;
+					if (iters >= 10000) {
+						logf("Failed after 10000...\n");
+						break;
+					}
+
+					Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+					if (!chunk->visible) continue;
+					Vec2i chunkTilePos;
+					chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
+					chunkTilePos.y = rndInt(0, CHUNK_SIZE-1);
+					Tile *tile = &chunk->tiles[chunkTilePos.y * CHUNK_SIZE + chunkTilePos.x];
+					Vec2i tilePos = chunkTileToWorldTile(chunk, chunkTilePos);
+
+					bool canBuild = true;
+					if (tile->type != TILE_GROUND) canBuild = false;
+
+					for (int i = 0; i < world->actorsNum; i++) {
+						Actor *other = &world->actors[i];
+						if (equal(worldToTile(other->position), tilePos)) canBuild = false;
+					}
+
+					if (canBuild) {
+						Actor *newTower = createActor(ACTOR_BALLISTA);
+						newTower->position = tileToWorld(tilePos);
+						added++;
+					}
+
+					iters++;
+				}
+			}
+
+			ImGui::Separator();
+
+			ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
+			ImGui::SameLine();
+			if (ImGui::Button("Save")) {
+				saveState(frameSprintf("assets/states/%s.save_state", game->debugNewSaveStateName));
+				game->debugNewSaveStateName[0] = 0;
+				refreshAssetPaths();
+			}
+
+			int pathCount = 0;
+			for (int i = 0; i < assetPathsNum; i++) {
+				char *path = assetPaths[i];
+				if (strstr(path, "assets/states/")) {
+					char *name = frameStringClone(path) + strlen("assets/states/");
+					char *dotPos = strchr(name, '.');
+					if (dotPos) *dotPos = 0;
+					if (ImGui::Button(name)) {
+						loadState(path);
+					}
+					if ((pathCount+1) % 5 != 0) ImGui::SameLine();
+					pathCount++;
+				}
+			}
+
+			ImGui::NewLine();
+			ImGui::Separator();
+			if (ImGui::Button("Reset game")) game->shouldReset = true;
+			ImGui::InputText("Campaign name", data->campaignName, CAMPAIGN_NAME_MAX_LEN);
+
+			ImGui::End();
+		}
+	} ///
 
 	{ /// Get input and move camera
 		Vec2 moveDir = v2();
@@ -974,281 +1508,7 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
-
-	Matrix3 cameraMatrix = mat3();
-	Rect screenRect = {};
-	{
-		cameraMatrix.TRANSLATE(game->size/2);
-		cameraMatrix.SCALE(data->cameraZoom);
-		cameraMatrix.TRANSLATE(-data->cameraPosition);
-
-		game->mouse = cameraMatrix.invert() * platform->mouse;
-
-		screenRect.width = game->size.x / data->cameraZoom;
-		screenRect.height = game->size.y / data->cameraZoom;
-		screenRect.x = data->cameraPosition.x - screenRect.width/2;
-		screenRect.y = data->cameraPosition.y - screenRect.height/2;
-	}
-
-	clearRenderer();
-	pushCamera2d(cameraMatrix);
-
-	{ /// Draw map
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
-			if (!overlaps(screenRect, chunk->rect)) continue;
-			if (!chunk->visible) continue;
-
-			for (int y = 0; y < CHUNK_SIZE; y++) {
-				for (int x = 0; x < CHUNK_SIZE; x++) {
-					int tileIndex = y*CHUNK_SIZE + x;
-					Rect rect = {};
-					rect.x = x*TILE_SIZE + chunk->rect.x;
-					rect.y = y*TILE_SIZE + chunk->rect.y;
-					rect.width = TILE_SIZE;
-					rect.height = TILE_SIZE;
-					Tile *tile = &chunk->tiles[tileIndex];
-
-					int color = 0x00000000;
-
-					if (tile->type == TILE_HOME) color = 0xFFFFF333;
-					if (tile->type == TILE_GROUND) color = 0xFF017301;
-					if (tile->type == TILE_ROAD) color = 0xFF966F02;
-
-					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
-					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
-					color = lerpColor(color, 0xFF000000, heightShadePerc);
-
-					drawRect(rect, color);
-
-					if (game->debugShowDijkstraValues) {
-						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-						drawTextInRect(frameSprintf("%d", tile->dijkstraValue), props, rect);
-					}
-
-					if (game->debugShowFlowFieldValues) {
-						if (!isZero(tile->flow)) {
-							Vec2 start = getCenter(rect);
-							Vec2 end = start + tile->flow*TILE_SIZE/2;
-							drawLine(start, end, 4, 0xFFFF0000);
-						}
-					}
-
-					if (game->debugShowPerlinValues) {
-						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-						drawTextInRect(frameSprintf("%.02f", tile->perlinValue), props, rect);
-					}
-
-					if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
-				}
-			}
-
-			if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
-		}
-	} ///
-
-	{ /// Draw actors
-		for (int i = 0; i < world->actorsNum; i++) {
-			Actor *actor = &world->actors[i];
-			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-
-			Chunk *chunk = worldToChunk(actor->position);
-			if (chunk && !chunk->visible) continue;
-
-			bool isSelected = false;
-			for (int i = 0; i < data->selectedActorsNum; i++) {
-				if (data->selectedActors[i] == actor->id) {
-					isSelected = true;
-					break;
-				}
-			}
-
-			if (info->isTower && isSelected) {
-				drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
-
-				Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-				drawCircle(range, 0x80FF0000);
-			}
-
-			Rect rect = getRect(actor);
-
-			if (actor->type == ACTOR_BALLISTA) {
-				drawRect(rect, 0xFF800000);
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 4, 0xFFFF0000);
-			} else if (actor->type == ACTOR_MORTAR_TOWER) {
-				drawRect(rect, 0xFF525252);
-			} else if (actor->type == ACTOR_TESLA_COIL) {
-				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-				int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
-
-				Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-				drawCircle(circle, sparkColor);
-
-				drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
-			} else if (actor->type == ACTOR_FROST_KEEP) {
-				drawRect(rect, 0xFFE3F0F5);
-			} else if (actor->type == ACTOR_FLAME_THROWER) {
-				drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 12, 0xFF000000);
-
-				float range = getRange(actor, worldToTile(actor->position));
-				Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
-
-				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-				int color = setAofArgb(BURN_COLOR, perc*255.0);
-				drawLine(tri.verts[0], tri.verts[1], 5, color);
-				drawLine(tri.verts[1], tri.verts[2], 5, color);
-				drawLine(tri.verts[2], tri.verts[0], 5, color);
-			} else if (actor->type == ACTOR_POISON_SPRAYER) {
-				drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				drawLine(line, 12, 0xFF000000);
-
-				float range = getRange(actor, worldToTile(actor->position));
-				Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
-
-				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-				int color = setAofArgb(POISON_COLOR, perc*255.0);
-				drawLine(tri.verts[0], tri.verts[1], 5, color);
-				drawLine(tri.verts[1], tri.verts[2], 5, color);
-				drawLine(tri.verts[2], tri.verts[0], 5, color);
-			} else if (actor->type == ACTOR_SHREDDER) {
-				drawRect(rect, 0xFF800000);
-
-				Line2 line;
-				line.start = getCenter(rect);
-				line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-				line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
-				drawLine(line, 4, 0xFFFF0000);
-			} else if (actor->type == ACTOR_MANA_SIPHON) {
-				drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
-			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
-				drawRect(rect, 0xFFA4B0CC);
-			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
-				drawRect(rect, 0xFF008000);
-
-				Rect vitalityRect = rect;
-				{
-					vitalityRect.height = 4;
-					vitalityRect.y = rect.y - vitalityRect.height - 4;
-					float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
-
-					float maxHpPerc = info->maxHp / totalPoints;
-					Rect hpRect = vitalityRect;
-					hpRect.width *= maxHpPerc;
-					hpRect.width *= actor->hp / info->maxHp;
-					drawRect(hpRect, 0xFF00FF00);
-
-					float maxArmorPerc = info->maxArmor / totalPoints;
-					Rect armorRect = vitalityRect;
-					armorRect.x += maxHpPerc * vitalityRect.width;
-					armorRect.width *= maxArmorPerc;
-					armorRect.width *= actor->armor / info->maxArmor;
-					drawRect(armorRect, 0xFFFFD66E);
-
-					float maxShieldPerc = info->maxShield / totalPoints;
-					Rect shieldRect = vitalityRect;
-					shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
-					shieldRect.width *= maxShieldPerc;
-					shieldRect.width *= actor->shield / info->maxShield;
-					drawRect(shieldRect, 0xFF718691);
-				}
-
-				if (actor->slow > 0) {
-					Rect slowRect = vitalityRect;
-					slowRect.y -= slowRect.height + 4;
-					slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
-					drawRect(slowRect, 0xFF01335C);
-				}
-
-				if (actor->poison) {
-					Rect textRect = getRect(actor);
-					textRect.x -= textRect.width;
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
-				}
-
-				if (actor->burn) {
-					Rect textRect = getRect(actor);
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
-				}
-
-				if (actor->bleed) {
-					Rect textRect = getRect(actor);
-					textRect.x += textRect.width;
-					textRect.y -= textRect.height;
-					DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
-					drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
-				}
-			} else if (actor->type == ACTOR_ARROW) {
-				Rect bulletRect = makeCenteredSquare(actor->position, 8);
-				drawRect(bulletRect, 0xFFFF0000);
-			} else if (actor->type == ACTOR_MORTAR) {
-				float delayTime = info->bulletSpeed;
-				float explodeRange = info->baseRange;
-				if (actor->time < delayTime) {
-					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
-					drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
-				}
-
-				if (actor->time >= delayTime) {
-					Circle circle = makeCircle(actor->position, explodeRange);
-					drawCircle(circle, 0xFFFFFFFF);
-				}
-			} else if (actor->type == ACTOR_FROST) {
-				drawRect(rect, 0x80FFFFFF);
-			} else if (actor->type == ACTOR_SAW) {
-				Rect bulletRect = makeCenteredSquare(actor->position, 8);
-				drawRect(bulletRect, 0xFFFF0000);
-			} else {
-				drawRect(rect, 0xFFFF00FF);
-			}
-
-			if (info->isTower) {
-				Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
-				levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
-				levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
-
-				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-				drawTextInRect(frameSprintf("%d", actor->level), props, levelNumberRect);
-
-				if (actor->level < getMaxLevel(actor->type)) {
-					Rect xpRect = rect;
-					xpRect.height = game->size.y*0.005;
-					xpRect.y -= xpRect.height + game->size.y*0.005;
-					drawRect(xpRect, 0x80FFEF94);
-
-					float maxXp = maxXpPerLevels[actor->level];
-					xpRect.width *= actor->xp / maxXp;
-					drawRect(xpRect, 0xFFFFEF94);
-				}
-			}
-
-			if (game->debugShowActorVelo) {
-				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-				drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
-				// Vec2 start = actor->position;
-				// Vec2 end = actor->position + normalize(actor->velo)*(TILE_SIZE/2);
-				// drawLine(start, end, 5, 0xFFFF0000);
-			}
-		}
-	} ///
-
-	{ /// Draw hud and tool
+	{ /// Update tool related ui
 		if (data->tool == TOOL_NONE) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -1278,14 +1538,7 @@ void drawGame(float elapsed) {
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
 		} else if (data->tool == TOOL_BUILDING) {
-			ActorTypeInfo *info = &game->actorTypeInfos[data->actorToBuild];
-
-			Vec2i tilePosition = getTileHovering();
-			Rect tileRect = tileToWorldRect(tilePosition);
-			drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
-
-			Circle range = makeCircle(getCenter(tileRect), getRange(data->actorToBuild, tilePosition));
-			drawCircle(range, 0x80FF0000);
+			// Nothing...
 		} else if (data->tool == TOOL_SELECTED) {
 			nguiStartWindow("Selected window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -1323,95 +1576,54 @@ void drawGame(float elapsed) {
 
 			if (data->selectedActorsNum == 0) data->tool = TOOL_NONE;
 		}
-
-		if (game->presentedUpgradesNum > 0) {
-			nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
-			for (int i = 0; i < game->presentedUpgradesNum; i++) {
-				Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
-				char *label = "";
-				for (int i = 0; i < upgrade->effectsNum; i++) {
-					UpgradeEffect *effect = &upgrade->effects[i];
-					ActorTypeInfo *info = &game->actorTypeInfos[effect->actorType];
-
-					char *line = "";
-					if (effect->type == UPGRADE_EFFECT_UNLOCK) {
-						line = frameSprintf("Unlock %s", info->name);
-					} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
-						line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
-					} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
-						line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
-					} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
-						line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
-					} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
-						line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
-					} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
-						line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
-					} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
-						line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
-					} else {
-						line = frameSprintf("Unlabeled effect %d", effect->type);
-					}
-					if (i != 0) label = frameSprintf("%s\n", label);
-					label = frameSprintf("%s%s", label, line);
-				}
-				if (nguiButton(label)) {
-					data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
-					game->presentedUpgradesNum = 0;
-
-					if (data->hp > 0) {
-						// if (fileExists("assets/states/autosave.save_state")) {
-						// 	if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
-						// 	copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
-						// }
-						saveState("assets/states/autosave.save_state");
-						copyFile("assets/states/autosave.save_state", frameSprintf("assets/states/%s_autosave_%d.save_state", data->campaignName, data->wave));
-					}
-				}
-			}
-			nguiEndWindow();
-		}
 	} ///
 
-	{ /// Show explore buttons
-		if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE) {
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-				if (!chunk->visible) continue;
+	if (game->presentedUpgradesNum > 0) {
+		nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
+		for (int i = 0; i < game->presentedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
+			char *label = "";
+			for (int i = 0; i < upgrade->effectsNum; i++) {
+				UpgradeEffect *effect = &upgrade->effects[i];
+				ActorTypeInfo *info = &game->actorTypeInfos[effect->actorType];
 
-				for (int i = 0; i < chunk->connectionsNum; i++) {
-					Chunk *newChunk = getChunkAt(chunk->connections[i]);
-					Assert(newChunk);
-
-					if (newChunk->visible) continue;
-
-					Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
-					Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
-
-					if (contains(exploreRect, game->mouse)) {
-						exploreRect = inflatePerc(exploreRect, 0.1);
-						if (isMouseClicked()) {
-							newChunk->visible = true;
-							startNextWave();
-						}
-					}
-
-					drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
-
-					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-					drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
+				char *line = "";
+				if (effect->type == UPGRADE_EFFECT_UNLOCK) {
+					line = frameSprintf("Unlock %s", info->name);
+				} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
+					line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
+				} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
+					line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
+				} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
+					line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
+				} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
+					line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
+				} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
+					line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
+				} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
+					line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
+				} else {
+					line = frameSprintf("Unlabeled effect %d", effect->type);
 				}
+				if (i != 0) label = frameSprintf("%s\n", label);
+				label = frameSprintf("%s%s", label, line);
+			}
+			if (nguiButton(label)) {
+				data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+				game->presentedUpgradesNum = 0;
 
-				bool isPortal = false; //@copyPastedIsPortal
-				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
-				if (isPortal) {
-					Rect portalTileRect = tileToWorldRect(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
-					drawRect(portalTileRect, 0x80FF0000);
+				if (data->hp > 0) {
+					// if (fileExists("assets/states/autosave.save_state")) {
+					// 	if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
+					// 	copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
+					// }
+					saveState("assets/states/autosave.save_state");
+					copyFile("assets/states/autosave.save_state", frameSprintf("assets/states/%s_autosave_%d.save_state", data->campaignName, data->wave));
 				}
 			}
 		}
-	} ///
-
-	popCamera2d();
+		nguiEndWindow();
+	}
 
 	{
 		Rect rect = makeRect(0, 0, 350, 100);

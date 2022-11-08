@@ -1525,13 +1525,20 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 	Raylib::rlPushMatrix();
 	Raylib::rlLoadIdentity();
 
-	if (!camera.isOrtho) logf("No perspective camera allowed\n");
-	double top = size.y/2 / camera.orthoScale;
-	double right = size.x/2 / camera.orthoScale;
-	if (camera.fovy != 0) logf("fovy does nothing currently\n");
-	if (camera.orthoScale == 0) logf("Camera has an orthoScale of 0\n");
+	if (!camera.isOrtho) {
+		if (camera.fovy == 0) logf("fovy is 0\n");
+		float aspect = size.x/size.y;
+		double top = nearCull*tan(toRad(camera.fovy*0.5));
+		double right = top*aspect;
+		Raylib::rlFrustum(-right, right, -top, top, nearCull, farCull);
+	} else {
+		double top = size.y/2 / camera.orthoScale;
+		double right = size.x/2 / camera.orthoScale;
+		if (camera.fovy != 0) logf("fovy does nothing currently\n");
+		if (camera.orthoScale == 0) logf("Camera has an orthoScale of 0\n");
 
-	Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
+		Raylib::rlOrtho(-right, right, -top, top, nearCull, farCull);
+	}
 
 	Raylib::rlMatrixMode(RL_MODELVIEW);
 	Raylib::rlLoadIdentity();
@@ -1544,6 +1551,7 @@ void start3d(Camera camera, Vec2 size, float nearCull, float farCull) {
 
 void end3d() {
 	renderer->in3dPass = false;
+	processBatchDraws();
 	Raylib::EndMode3D();
 }
 

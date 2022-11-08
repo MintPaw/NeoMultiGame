@@ -1,3 +1,4 @@
+#define HAS_GAME_LIB_MEMORY_TOOLS
 #define Gigabytes(x) (Megabytes(x)*1024ll)
 #define Megabytes(x) (Kilobytes(x)*1024ll)
 #define Kilobytes(x) ((x)*1024ll)
@@ -43,6 +44,7 @@ int countChar(const char *src, char value);
 int countString(char *src, char *value);
 bool stringStartsWith(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
+void toLowerCase(char *str);
 int toLowerCase(int letter);
 int toUpperCase(int letter);
 bool isNumber(char ch) { return (ch <= '9' && ch >= '0'); }
@@ -364,6 +366,14 @@ bool stringEndsWith(char *hayStack, char *needle) {
 	char *shouldBeAt = hayStack + strlen(hayStack) - strlen(needle);
 	return streq(shouldBeAt, needle);
 }
+
+void toLowerCase(char *str) {
+	int len = strlen(str);
+	for (int i = 0; i < len; i++) {
+		str[i] = toLowerCase(str[i]);
+	}
+}
+
 
 int toLowerCase(int letter) {
 	if (letter >= 'A' && letter <= 'Z') return letter + ('a'-'A');

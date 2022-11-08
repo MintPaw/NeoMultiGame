@@ -109,12 +109,9 @@ int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); 
 
 #define STB_VORBIS_HEADER_ONLY // This matters later for audio.cpp
 
-//@hack
-void logf(const char *msg, ...);
-void loggerAssert(bool expr, const char *fileName, int lineNum);
-void loggerPanic(const char *msg, const char *fileName, int lineNum);
-#define Assert(expr) loggerAssert(expr, __FILE__, __LINE__)
-#define Panic(msg) loggerPanic(msg, __FILE__, __LINE__)
+#define LOGGING_HEADER
+#include "logging.cpp"
+
 #define PATH_MAX_LEN 256
 char projectAssetDir[PATH_MAX_LEN] = {};
 char filePathPrefix[PATH_MAX_LEN] = {};
@@ -433,10 +430,6 @@ NanoTime mainNano;
 # include "../../multiGamePrivate/src/butt2GoGame.cpp"
 #endif
 
-#if defined(PLAYING_rssGame)
-# include "../../multiGamePrivate/src/rssGame.cpp"
-#endif
-
 #if defined(PLAYING_pkGame)
 # include "../../multiGamePrivate/src/pkGame.cpp"
 #endif
@@ -451,6 +444,10 @@ NanoTime mainNano;
 
 #if defined(PLAYING_deskGame)
 # include "../../multiGamePrivate/src/deskGame.cpp"
+#endif
+
+#if defined(PLAYING_remoteGame)
+# include "../../multiGamePrivate/src/remoteGame.cpp"
 #endif
 
 #ifdef _WIN32

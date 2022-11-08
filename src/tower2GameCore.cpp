@@ -16,7 +16,7 @@ void initActor(Actor *actor);
 void deinitActor(Actor *actor);
 Actor *getActor(int id);
 Actor *createBullet(Actor *src, Actor *target);
-void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti);
+void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent=false);
 void dealDamage(Actor *bullet, Actor *dest);
 Rect getRect(Actor *actor);
 Vec2 getFlowDirForRect(Rect rect);
@@ -25,6 +25,7 @@ float getRange(Actor *actor, Vec2i tilePos);
 float getDamage(Actor *actor);
 float getRpm(Actor *actor);
 int getMaxLevel(ActorType actorType);
+ActorTypeInfo *getInfo(Actor *actor);
 
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
@@ -34,6 +35,8 @@ Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
+
+CoreEvent *createCoreEvent(CoreEventType type);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -50,8 +53,8 @@ Tile readTile(DataStream *stream, int version);
 
 void stepGame(float elapsed) {
 	float timeScale = elapsed / (1/60.0);
+	game->coreEventsNum = 0;
 
-	Globals *globals = &game->globals;
 	World *world = data->world;
 
 	memset(game->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
@@ -79,7 +82,7 @@ void stepGame(float elapsed) {
 				actor->poison -= toInflict;
 				if (actor->poison < 0) actor->poison = 0;
 
-				dealDamage(actor, toInflict, 1, 0.5, 0.5);
+				dealDamage(actor, toInflict, 2, 0.5, 0.5, true);
 			}
 
 			if (actor->burn) {
@@ -87,7 +90,7 @@ void stepGame(float elapsed) {
 				actor->burn -= toInflict;
 				if (actor->burn < 0) actor->burn = 0;
 
-				dealDamage(actor, toInflict, 0.5, 1, 0.5);
+				dealDamage(actor, toInflict, 0.5, 2, 0.5, true);
 			}
 
 			if (actor->bleed) {
@@ -95,12 +98,11 @@ void stepGame(float elapsed) {
 				actor->bleed -= toInflict;
 				if (actor->bleed < 0) actor->bleed = 0;
 
-				dealDamage(actor, toInflict, 0.5, 0.5, 1);
+				dealDamage(actor, toInflict, 0.5, 0.5, 2, true);
 			}
 
 			bool towerCaresAboutTargets = true;
 			bool towerIsActiveBetweenWaves = true;
-
 			if (actor->type == ACTOR_FROST_KEEP) {
 				towerCaresAboutTargets = false;
 				towerIsActiveBetweenWaves = false;
@@ -170,7 +172,9 @@ void stepGame(float elapsed) {
 						}
 					}
 				}
+			}
 
+			if (info->isTower || actor->type == ACTOR_MANA_SIPHON) {
 				if (data->tool == TOOL_NONE || data->tool == TOOL_SELECTED) {
 					if (isMouseClicked() && isHoveringActor(actor)) {
 						data->prevTool = TOOL_NONE;
@@ -244,13 +248,8 @@ void stepGame(float elapsed) {
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
-						int amount = info->damage;
 						Actor *enemy = enemiesInRange[i];
-						if (enemy->shield > 0) amount *= info->shieldDamageMulti;
-						else if (enemy->armor > 0) amount *= info->armorDamageMulti;
-						else amount *= info->hpDamageMulti;
-
-						enemy->burn += amount;
+						enemy->burn += getDamage(actor);
 					}
 				}
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
@@ -261,13 +260,8 @@ void stepGame(float elapsed) {
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
-						int amount = info->damage;
 						Actor *enemy = enemiesInRange[i];
-						if (enemy->shield > 0) amount *= info->shieldDamageMulti;
-						else if (enemy->armor > 0) amount *= info->armorDamageMulti;
-						else amount *= info->hpDamageMulti;
-
-						enemy->poison += amount;
+						enemy->poison += getDamage(actor);
 					}
 				}
 			} else if (actor->type == ACTOR_SHREDDER) {
@@ -587,6 +581,12 @@ void stepGame(float elapsed) {
 
 			Vec2i tilePosition = getTileHovering();
 			Vec2 center = getCenter(tileToWorldRect(tilePosition));
+
+			{
+				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST);
+				event->actorType = data->actorToBuild;
+				event->position = center;
+			}
 
 			Tile *tile = getTileAt(tilePosition);
 
@@ -947,18 +947,31 @@ void dealDamage(Actor *src, Actor *dest) {
 	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
 }
 
-void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti) {
+void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent) {
 	float damageLeft = amount;
 
-	float shieldDamage = MinNum(damageLeft, dest->shield);
+	float toBreakShield = dest->shield / shieldDamageMulti;
+	float shieldDamage = MinNum(damageLeft, toBreakShield*1.01);
 	damageLeft -= shieldDamage;
-	dest->shield -= shieldDamage * shieldDamageMulti;
+	float shieldRealDamage = shieldDamage * shieldDamageMulti;
+	dest->shield -= shieldRealDamage;
 
-	float armorDamage = MinNum(damageLeft, dest->armor);
+	float toBreakArmor = dest->armor / armorDamageMulti;
+	float armorDamage = MinNum(damageLeft, toBreakArmor*1.01);
 	damageLeft -= armorDamage;
-	dest->armor -= armorDamage * armorDamageMulti;
+	float armorRealDamage = armorDamage * armorDamageMulti;
+	dest->armor -= armorRealDamage;
 
-	dest->hp -= damageLeft * hpDamageMulti;
+	float hpRealDamage = damageLeft * hpDamageMulti;
+	dest->hp -= hpRealDamage;
+
+	if (!noCoreEvent) {
+		CoreEvent *event = createCoreEvent(CORE_EVENT_DAMAGE);
+		event->position = dest->position;
+		event->armorValue = armorRealDamage;
+		event->shieldValue = shieldRealDamage;
+		event->hpValue = hpRealDamage;
+	}
 }
 
 Rect getRect(Actor *actor) {
@@ -1025,7 +1038,7 @@ float getDamage(Actor *actor) {
 		}
 	}
 
-	damage *= (1 + actor->level);
+	damage *= 1 + actor->level*0.1;
 	return damage;
 }
 
@@ -1046,6 +1059,10 @@ float getRpm(Actor *actor) {
 
 int getMaxLevel(ActorType actorType) {
 	return 3;
+}
+
+ActorTypeInfo *getInfo(Actor *actor) {
+	return &game->actorTypeInfos[actor->type];
 }
 
 Upgrade *getUpgrade(int id) {
@@ -1151,11 +1168,22 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
 	return tri;
 }
 
+CoreEvent *createCoreEvent(CoreEventType type) {
+	if (game->coreEventsNum > CORE_EVENTS_MAX-1) {
+		logf("Too many core events!!!\n");
+		game->coreEventsNum--;
+	}
+	CoreEvent *event = &game->coreEvents[game->coreEventsNum++];
+	memset(event, 0, sizeof(CoreEvent));
+	event->type = type;
+	return event;
+}
+
 void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 11); // version
+	writeU32(stream, 12); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -1226,6 +1254,9 @@ void writeActor(DataStream *stream, Actor *actor) {
 	for (int i = 0; i < actor->sawHitListNum; i++) writeU32(stream, actor->sawHitList[i]);
 
 	writeU32(stream, actor->amountPaid);
+
+	writeU32(stream, actor->level);
+	writeFloat(stream, actor->xp);
 
 	writeFloat(stream, actor->time);
 }
@@ -1331,6 +1362,9 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 		for (int i = 0; i < actor->sawHitListNum; i++) actor->sawHitList[i] = readU32(stream);
 
 		actor->amountPaid = readU32(stream);
+
+		if (version >= 12) actor->level = readU32(stream);
+		if (version >= 12) actor->xp = readFloat(stream);
 
 		actor->time = readFloat(stream);
 	}

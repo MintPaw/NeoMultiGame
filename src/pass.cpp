@@ -1,27 +1,30 @@
 enum PassCmdType {
 	PASS_CMD_CLEAR,
+	PASS_CMD_QUAD,
+	PASS_CMD_TRI,
+	PASS_CMD_MESH,
 };
 
 struct PassCmd {
 	PassCmdType type;
-	Vec2 quadVerts[4];
-	Vec2 quadUvs[4];
-	int quadColors[4];
-	int passCmdColor;
+	Vec3 verts[4];
+	Vec2 uvs[4];
+	int colors[4];
+
+	Mesh *mesh;
+	Matrix4 meshMatrix;
+	int meshTint;
 };
 
 struct Pass {
-	int passOrder;
+	Camera camera;
+
 	PassCmd *cmds;
 	int cmdsNum;
 	int cmdsMax;
 };
 
 struct PassSystem {
-#define PASSES_MAX 32
-	Pass passes[PASSES_MAX];
-	int passesNum;
-
 #define PASS_STACK_MAX 32
 	Pass *passStack[PASS_STACK_MAX];
 	int passStackNum;
@@ -30,10 +33,12 @@ struct PassSystem {
 PassSystem *passSys = NULL;
 
 void initPassSystem();
-Pass *passCreate();
-void passPush(Pass *pass);
-void passPop();
-PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), float alpha=1, int tint=0xFFFFFFFF);
+Pass *createPass();
+void destroyPass(Pass *pass);
+void pushPass(Pass *pass);
+void popPass();
+PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), int tint=0xFFFFFFFF);
+PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int tint=0xFFFFFFFF);
 
 Pass *getCurrentPass();
 PassCmd *createPassCmd(Pass *pass);
@@ -44,20 +49,19 @@ void initPassSystem() {
 	logf("PassSystem is %.1fmb\n", (float)sizeof(PassSystem) / (float)sizeof(Megabytes(1)));
 }
 
-Pass *passCreate() {
+Pass *createPass() {
 	if (!passSys) initPassSystem();
 
-	if (passSys->passesNum > PASSES_MAX-1) {
-		logf("Too many passes!\n");
-		passSys->passesNum--;
-	}
-
-	Pass *pass = &passSys->passes[passSys->passesNum++];
-	memset(pass, 0, sizeof(Pass));
+	Pass *pass = (Pass *)zalloc(sizeof(Pass));
 	return pass;
 }
 
-void passPush(Pass *pass) {
+void destroyPass(Pass *pass) {
+	if (pass->cmds) free(pass->cmds);
+	free(pass);
+}
+
+void pushPass(Pass *pass) {
 	if (passSys->passStackNum > PASS_STACK_MAX-1) {
 		logf("Pass stack overflow!\n");
 		passSys->passStackNum--;
@@ -66,7 +70,7 @@ void passPush(Pass *pass) {
 	passSys->passStack[passSys->passStackNum++] = pass;
 }
 
-void passPop() {
+void popPass() {
 	if (passSys->passStackNum <= 0) {
 		logf("Pass stack underflow!\n");
 		return;
@@ -75,44 +79,54 @@ void passPop() {
 	passSys->passStackNum--;
 }
 
-PassCmd *passTexture(Texture *texture, Matrix3 matrix, float alpha, int tint) {
+PassCmd *passTexture(Texture *texture, Matrix3 matrix, int tint) {
+	logf("Not finished\n");
 	// alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
 	// if (renderer->disabled) return;
-	if (alpha == 0) return NULL;
+	if (getAofArgb(tint) == 0) return NULL;
 	PassCmd *cmd = createPassCmd(getCurrentPass());
 	if (!cmd) return NULL;
 
-	cmd->quadVerts[0] = v2(0, 0);
-	cmd->quadVerts[1] = v2(0, 1);
-	cmd->quadVerts[2] = v2(1, 1);
-	cmd->quadVerts[3] = v2(1, 0);
+	cmd->verts[0] = v3(0, 0, 0);
+	cmd->verts[1] = v3(0, 1, 0);
+	cmd->verts[2] = v3(1, 1, 0);
+	cmd->verts[3] = v3(1, 0, 0);
 
-	// matrix = renderer->baseMatrix2d * matrix;
+	matrix = renderer->baseMatrix2d * matrix; // Should passes manage their own camera?
 
 	for (int i = 0; i < 4; i++) {
-		cmd->quadVerts[i] = matrix * cmd->quadVerts[i];
+		cmd->verts[i] = matrix * cmd->verts[i];
 	}
 
-	cmd->quadUvs[0] = v2(0, 0);
-	cmd->quadUvs[0] = v2(0, 1);
-	cmd->quadUvs[0] = v2(1, 1);
-	cmd->quadUvs[0] = v2(1, 0);
+	cmd->uvs[0] = v2(0, 0);
+	cmd->uvs[0] = v2(0, 1);
+	cmd->uvs[0] = v2(1, 1);
+	cmd->uvs[0] = v2(1, 0);
 
-	Matrix3 flipMatrix = {
-		1,  0,  0,
-		0, -1,  0,
-		0,  1,  1
-	};
-	for (int i = 0; i < 4; i++) {
-		cmd->quadUvs[i] = flipMatrix * cmd->quadUvs[i];
-	}
+	// Matrix3 flipMatrix = {
+	// 	1,  0,  0,
+	// 	0, -1,  0,
+	// 	0,  1,  1
+	// };
+	// for (int i = 0; i < 4; i++) {
+	// 	cmd->uvs[i] = flipMatrix * cmd->uvs[i];
+	// }
 
-	setAofArgb(tint, getAofArgb(tint) * alpha);
-	cmd->quadColors[0] = tint;
-	cmd->quadColors[1] = tint;
-	cmd->quadColors[2] = tint;
-	cmd->quadColors[3] = tint;
+	cmd->colors[0] = tint;
+	cmd->colors[1] = tint;
+	cmd->colors[2] = tint;
+	cmd->colors[3] = tint;
 
+	return cmd;
+}
+
+PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int tint) {
+	if (getAofArgb(tint) == 0) return NULL;
+	PassCmd *cmd = createPassCmd(getCurrentPass());
+	cmd->type = PASS_CMD_MESH;
+	cmd->mesh = mesh;
+	cmd->meshMatrix = matrix;
+	cmd->meshTint = tint;
 	return cmd;
 }
 

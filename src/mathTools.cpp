@@ -4320,11 +4320,11 @@ char *secsToMDHMSFrameString(float timeLeft);
 void secsToMDHMS(int *outMonths, int *outDays, int *outHours, int *outMins, int *outSecs, float secs) {
 	*outMonths = 0;
 	*outDays = 0;
-	while (secs > 60*60*24*30) {
+	while (secs >= 60*60*24*30) {
 		*outMonths = *outMonths + 1;
 		secs -= 60*60*24*30;
 	}
-	while (secs > 60*60*24) {
+	while (secs >= 60*60*24) {
 		*outDays = *outDays + 1;
 		secs -= 60*60*24;
 	}
@@ -4337,11 +4337,11 @@ void secsToHMS(int *outHours, int *outMins, int *outSecs, float secs) {
 	*outHours = 0;
 	*outMins = 0;
 	*outSecs = 0;
-	while (secs > 60*60) {
+	while (secs >= 60*60) {
 		*outHours = *outHours + 1;
 		secs -= 60*60;
 	}
-	while (secs > 60) {
+	while (secs >= 60) {
 		*outMins = *outMins + 1;
 		secs -= 60;
 	}
@@ -4382,7 +4382,7 @@ char *secsToMDHMSFrameString(float timeLeft) {
 	if (months > 0) {
 		str = frameSprintf("%s%dmo %dd %dh %dm %ds", isNeg?"-":"", months, days, hours, mins, secs);
 	} else if (days > 0) {
-		str = frameSprintf("%s %dd %dh %dm %ds", isNeg?"-":"", days, hours, mins, secs);
+		str = frameSprintf("%s%dd %dh %dm %ds", isNeg?"-":"", days, hours, mins, secs);
 	} else if (hours > 0) {
 		str = frameSprintf("%s%dh %dm %ds", isNeg?"-":"", hours, mins, secs);
 	} else if (mins > 0) {

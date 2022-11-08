@@ -26,9 +26,9 @@ GAME_NAME=horseGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
-# GAME_NAME=concreteJungleGame
+GAME_NAME=concreteJungleGame
 # GAME_NAME=butt2GoGame
-GAME_NAME=tower2Game
+# GAME_NAME=tower2Game
 # GAME_NAME=horseGame
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
@@ -61,6 +61,8 @@ PYTHON3=/c/Users/MintPaw/AppData/Local/Programs/Python/Python37-32/python.exe
 BLENDER="/c/Program Files/Blender Foundation/Blender 3.0/blender.exe"
 
 all:
+	@-rm -rf horseGameAssets gladiators2GameAssets interrogationGameAssets butt2GoGameAssets catsFirstGameAssets &
+	@-rm -rf pkGameAssets deskGameAssets zooBoundGameAssets remoteGameAssets &
 	$(MAKE) b
 	$(MAKE) r
 

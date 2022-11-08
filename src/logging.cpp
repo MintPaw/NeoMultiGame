@@ -1,9 +1,27 @@
+#ifdef LOGGING_HEADER
+#undef LOGGING_HEADER
+
 struct LogfBuffer {
 	char *buffer;
 	int size;
 	float logTime;
 	bool isInfo;
 };
+
+LogfBuffer *loggerLogString(char *msg);
+char *getLogfBufferString();
+void showLogfBufferErrorWindow();
+void writeCrashLog();
+void logf(const char *msg, ...);
+void loggerAssert(bool expr, const char *fileName, int lineNum);
+void loggerPanic(const char *msg, const char *fileName, int lineNum);
+bool logfToFile(const char *msg, ...);
+#define Assert(expr) loggerAssert(expr, __FILE__, __LINE__)
+#define Panic(msg) loggerPanic(msg, __FILE__, __LINE__)
+/// FUNCTIONS ^
+
+
+#else
 
 struct LoggingSystem {
 #define LOGF_BUFFERS_MAX 1024
@@ -14,13 +32,8 @@ struct LoggingSystem {
 	float time;
 };
 
-LogfBuffer *loggerLogString(char *msg);
-char *getLogfBufferString();
-void showLogfBufferErrorWindow();
-void writeCrashLog();
-/// FUNCTIONS ^
-
 LoggingSystem *logSys = NULL;
+
 
 void initLoggingSystem() {
 	logSys = (LoggingSystem *)zalloc(sizeof(LoggingSystem));
@@ -61,9 +74,6 @@ void logf(const char *msg, ...) {
 	va_start(args, msg);
 	stbsp_vsnprintf(str, size+1, msg, args);
 	va_end(args);
-
-	// void appendFile(const char *fileName, void *data, int length); //@hack
-	// appendFile("assets/stdout.txt", str, strlen(str));
 
 	{
 		char *logStr = frameSprintf("[log] %.1f: %s", logSys->time, str);
@@ -106,9 +116,9 @@ LogfBuffer *loggerLogString(char *msg) {
 #if defined(__EMSCRIPTEN__)
 		printf("%s", msg);
 #else
-		printf("\x1B[33m");
+		// printf("\x1B[33m");
 		printf("%s", msg);
-		printf("\x1B[37m");
+		// printf("\x1B[37m");
 #endif
 	fflush(stdout);
 
@@ -141,6 +151,28 @@ void loggerPanic(const char *msg, const char *fileName, int lineNum) {
 #else
 	*(volatile char *)0 = 0;
 #endif
+}
+
+void logfToFile(char *fileName, char *msg, ...) {
+	if (!logSys) initLoggingSystem();
+	IncMutex(&logSys->logfMutex);
+
+	va_list args;
+
+	va_start(args, msg);
+	int size = stbsp_vsnprintf(NULL, 0, msg, args);
+	va_end(args);
+
+	char *str = frameMalloc(size+1);
+
+	va_start(args, msg);
+	stbsp_vsnprintf(str, size+1, msg, args);
+	va_end(args);
+
+	void appendFile(const char *fileName, void *data, int length); //@hack
+	appendFile(fileName, str, strlen(str));
+
+	DecMutex(&logSys->logfMutex);
 }
 
 char *getLogfBufferString() {
@@ -199,3 +231,4 @@ void writeCrashLog() {
 	writeFile(logPath, buf, strlen(buf));
 }
 
+#endif
