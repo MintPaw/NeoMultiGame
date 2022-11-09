@@ -358,10 +358,13 @@ bool isHoveringActor(Actor *actor);
 void drawGame(float elapsed);
 Effect *createEffect(EffectType type);
 
+float getTile3dHeight(Vec2i tilePos);
 AABB tileToAABB(Vec2i tilePos);
-Matrix4 toMatrix(AABB aabb);
 AABB getAABB(Actor *actor);
+
+Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
+
 void updateAndDrawOverlay(float elapsed);
 void saveGlobals();
 void loadGlobals();
@@ -1075,7 +1078,7 @@ void drawGame(float elapsed) {
 			}
 		}
 
-		{ /// Draw actors
+		{ /// Draw actors 3d
 			for (int i = 0; i < world->actorsNum; i++) {
 				Actor *actor = &world->actors[i];
 				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
@@ -1100,12 +1103,7 @@ void drawGame(float elapsed) {
 				// 	}
 				// }
 
-				AABB tileAABB = tileToAABB(worldToTile(actor->position));
-
 				AABB aabb = getAABB(actor);
-				float height = tileAABB.max.z - tileAABB.min.z;
-				aabb.min.z += height;
-				aabb.max.z += height;
 
 				if (actor->type == ACTOR_BALLISTA) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
@@ -1115,7 +1113,7 @@ void drawGame(float elapsed) {
 						Vec3 dir = v3(1, 0, 0);
 						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
 						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
-						passMesh(cubeMesh, matrix, 0xFFFF0000);
+						passMesh(cubeMesh, matrix, 0xFF202020);
 					}
 				} else if (actor->type == ACTOR_MORTAR_TOWER) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
@@ -1299,6 +1297,42 @@ void drawGame(float elapsed) {
 			}
 		} ///
 
+		{ /// Update effects 3d
+			for (int i = 0; i < game->effectsNum; i++) {
+				Effect *effect = &game->effects[i];
+
+				bool complete = false;
+				float maxTime = 1;
+
+				if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
+					CoreEvent *event = &effect->coreEvent;
+					if (event->type == CORE_EVENT_DAMAGE) {
+					} else if (event->type == CORE_EVENT_SHOW_GHOST) {
+						complete = true;
+						float height = getTile3dHeight(worldToTile(event->position));
+						AABB aabb = tileToAABB(worldToTile(event->position));
+						aabb.min.z += height;
+						aabb.max.z += height;
+						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
+						passMesh(cubeMesh, toMatrix(aabb), color);
+
+						// Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePosition));
+						// drawCircle(range, 0x80FF0000);
+					}
+				}
+
+				effect->time += elapsed;
+				if (effect->time > maxTime) complete = true;
+
+				if (complete) {
+					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+					game->effectsNum--;
+					i--;
+					continue;
+				}
+			}
+		} ///
+
 		game->hovered3dTilePos = closestHoveredTilePos;
 
 		popPass();
@@ -1348,30 +1382,45 @@ Effect *createEffect(EffectType type) {
 	return effect;
 }
 
+float getTile3dHeight(Vec2i tilePos) {
+	float height = TILE_SIZE * SCALE_3D;
+
+	Tile *tile = getTileAt(tilePos);
+	if (tile) {
+		if (tile->type == TILE_ROAD) height *= 0.1;
+	}
+	return height;
+}
+
 AABB tileToAABB(Vec2i tilePos) {
 	AABB aabb = {};
 	aabb.min = v3(tilePos.x, tilePos.y, 0) * TILE_SIZE * SCALE_3D;
 	aabb.max = aabb.min + TILE_SIZE*SCALE_3D;
+	aabb.max.z = aabb.min.z + getTile3dHeight(tilePos);
 	aabb.min.y *= -1;
 	aabb.max.y *= -1;
+	return aabb;
+}
+
+AABB getAABB(Actor *actor) {
+	Vec3 position = v3(actor->position.x, actor->position.y, getInfo(actor)->size.z/2);
+	position *= SCALE_3D;
+	position.y *= -1;
+
+	Vec3 scale = getInfo(actor)->size*SCALE_3D;
+	AABB aabb = makeCenteredAABB(position, scale);
+
+	float tileHeight = getTile3dHeight(worldToTile(actor->position));
+	aabb.min.z += tileHeight;
+	aabb.max.z += tileHeight;
 	return aabb;
 }
 
 Matrix4 toMatrix(AABB aabb) {
 	Matrix4 matrix = mat4();
 	matrix.TRANSLATE(getCenter(aabb));
-	matrix.SCALE(getSize(aabb)/2);
+	matrix.SCALE(getSize(aabb));
 	return matrix;
-}
-
-AABB getAABB(Actor *actor) {
-	Vec3 position = v3(actor->position.x, actor->position.y, 0);
-	position *= SCALE_3D;
-	position.y *= -1;
-
-	Vec3 scale = getInfo(actor)->size*SCALE_3D;
-	AABB aabb = makeCenteredAABB(position, scale);
-	return aabb;
 }
 
 void updateAndDrawOverlay(float elapsed) {
