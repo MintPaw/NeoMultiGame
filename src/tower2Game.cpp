@@ -994,47 +994,23 @@ void drawGame(float elapsed) {
 		Pass *pass = createPass();
 		pushPass(pass);
 
-#if 1
-			Vec3 cameraTarget = v3();
-			cameraTarget.x = data->cameraPosition.x * SCALE_3D;
-			cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
-			cameraTarget.z = 0;
+		Vec3 cameraTarget = v3();
+		cameraTarget.x = data->cameraPosition.x * SCALE_3D;
+		cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
+		cameraTarget.z = 0;
 
-			float dist = 64;
-			static Vec3 rot = v3();
-			ImGui::SliderFloat3("rot", &rot.x, -M_PI/2, M_PI/2);
-			Vec3 cameraSrc = v3();
-			cameraSrc.z = sinf(rot.x)*dist*cosf(rot.y) + cameraTarget.z;
-			cameraSrc.y = ((rot.y <= 0.0f)? 1 : -1)*sinf(rot.y)*dist*sinf(rot.y) + cameraTarget.y;
-			cameraSrc.x = cosf(rot.x)*dist*cosf(rot.y) + cameraTarget.x;
+		static float rot = 0;
+		ImGui::SliderFloat("rot", &rot, -90 + 0.01, 90 - 0.01);
 
-			// Matrix4 srcMatrix = mat4();
-			// srcMatrix.ROTATE_EULER(rot.x, 0, 0);
-			// srcMatrix.ROTATE_EULER(0, rot.y, 0);
-			// srcMatrix.ROTATE_EULER(0, 0, rot.z);
-			// srcMatrix.TRANSLATE(0, 0, 200);
-			// srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
-			// srcMatrix.TRANSLATE(cameraTarget);
-			// Vec3 cameraSrc = srcMatrix * v3();
-			// cameraTarget.print("target");
-			// cameraSrc.print("src");
+		Matrix4 srcMatrix = mat4();
+		srcMatrix.TRANSLATE(cameraTarget);
+		srcMatrix.ROTATE_EULER(toRad(rot), 0, 0);
+		srcMatrix.TRANSLATE(0, 0, 200);
+		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
+		Vec3 cameraSrc = srcMatrix * v3();
 
-			pass->camera.position = cameraSrc;
-			pass->camera.target = cameraTarget;
-#else
-			static Vec2 xyOff = v2();
-			ImGui::SliderFloat2("xyOff", &xyOff.x, -100, 100);
-
-			Vec3 cameraOffset = v3();
-			cameraOffset.x = data->cameraPosition.x * SCALE_3D;
-			cameraOffset.y = -data->cameraPosition.y * SCALE_3D;
-			cameraOffset.z = -data->cameraZoom * 64;
-
-			pass->camera.position = v3(0, 0, 200) + cameraOffset;
-			pass->camera.position.x += xyOff.x;
-			pass->camera.position.y += xyOff.y;
-			pass->camera.target = v3(cameraOffset.x, cameraOffset.y, 0);
-#endif
+		pass->camera.position = cameraSrc;
+		pass->camera.target = cameraTarget;
 
 		pass->camera.up = v3(0, 1, 0);
 		pass->camera.fovy = 59;
