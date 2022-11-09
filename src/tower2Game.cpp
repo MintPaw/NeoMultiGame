@@ -54,6 +54,9 @@ struct ActorTypeInfo {
 	float bulletSpeed;
 
 	int enemySpawnStartingWave;
+
+	int primaryColor;
+	Vec3 size;
 };
 
 enum Priority {
@@ -296,6 +299,7 @@ struct Game {
 
 	Vec3 mouseRayPos;
 	Vec3 mouseRayDir;
+	Vec2i hovered3dTilePos;
 
 	bool shouldReset;
 
@@ -348,7 +352,9 @@ bool isHoveringActor(Actor *actor);
 void drawGame(float elapsed);
 Effect *createEffect(EffectType type);
 
-Matrix4 get3dTileMatrix(Vec2i tilePos);
+AABB tileToAABB(Vec2i tilePos);
+Matrix4 toMatrix(AABB aabb);
+AABB getAABB(Actor *actor);
 
 void updateAndDrawOverlay(float elapsed);
 
@@ -390,332 +396,7 @@ void updateGame() {
 
 		// if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
 
-		{ /// Setup actor type infos
-			for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
-				ActorTypeInfo *info = &game->actorTypeInfos[i];
-				sprintf(info->name, "Actor %d", i);
-			}
-
-			for (int i = ACTOR_BALLISTA; i <= ACTOR_PARTICLE_CANNON; i++) {
-				ActorTypeInfo *info = &game->actorTypeInfos[i];
-				info->isTower = true;
-			}
-
-			for (int i = ACTOR_ENEMY1; i <= ACTOR_ENEMY64; i++) {
-				ActorTypeInfo *info = &game->actorTypeInfos[i];
-				info->isEnemy = true;
-			}
-
-			ActorTypeInfo *info = NULL;
-
-			info = &game->actorTypeInfos[ACTOR_BALLISTA];
-			strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 5;
-			info->hpDamageMulti = 10;
-			info->armorDamageMulti = 5;
-			info->shieldDamageMulti = 5;
-			info->baseRange = 5 * TILE_SIZE;
-			info->rpm = 20;
-			info->mana = 0;
-			info->price = 10;
-			info->priceMulti = 15;
-
-			info = &game->actorTypeInfos[ACTOR_MORTAR_TOWER];
-			strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 10;
-			info->hpDamageMulti = 10;
-			info->armorDamageMulti = 15;
-			info->shieldDamageMulti = 5;
-			info->baseRange = 10 * TILE_SIZE;
-			info->rpm = 10;
-			info->mana = 0;
-			info->price = 200;
-			info->priceMulti = 75;
-
-			info = &game->actorTypeInfos[ACTOR_TESLA_COIL];
-			strncpy(info->name, "Tesla Coil", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 10;
-			info->hpDamageMulti = 6;
-			info->armorDamageMulti = 3;
-			info->shieldDamageMulti = 9;
-			info->baseRange = 1.5 * TILE_SIZE;
-			info->rpm = 30;
-			info->mana = 5;
-			info->price = 200;
-			info->priceMulti = 75;
-
-			info = &game->actorTypeInfos[ACTOR_FROST_KEEP];
-			strncpy(info->name, "Frost Keep", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 5;
-			info->hpDamageMulti = 10;
-			info->armorDamageMulti = 5;
-			info->shieldDamageMulti = 5;
-			info->baseRange = 2 * TILE_SIZE;
-			info->rpm = 180;
-			info->mana = 0.3;
-			info->price = 250;
-			info->priceMulti = 100;
-
-			info = &game->actorTypeInfos[ACTOR_FLAME_THROWER];
-			strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 5;
-			info->hpDamageMulti = 6;
-			info->armorDamageMulti = 9;
-			info->shieldDamageMulti = 3;
-			info->baseRange = 4 * TILE_SIZE;
-			info->rpm = 60;
-			info->mana = 1;
-			info->price = 300;
-			info->priceMulti = 75;
-
-			info = &game->actorTypeInfos[ACTOR_POISON_SPRAYER];
-			strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 5;
-			info->hpDamageMulti = 6;
-			info->armorDamageMulti = 3;
-			info->shieldDamageMulti = 9;
-			info->baseRange = 4 * TILE_SIZE;
-			info->rpm = 60;
-			info->mana = 1;
-			info->price = 300;
-			info->priceMulti = 75;
-
-			info = &game->actorTypeInfos[ACTOR_SHREDDER];
-			strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 10;
-			info->hpDamageMulti = 20;
-			info->armorDamageMulti = 10;
-			info->shieldDamageMulti = 10;
-			info->baseRange = 5 * TILE_SIZE;
-			info->rpm = 5;
-			info->price = 500;
-			info->priceMulti = 100;
-
-			info = &game->actorTypeInfos[ACTOR_ENCAMPENT];
-			strncpy(info->name, "Encampent", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 20;
-			info->hpDamageMulti = 10;
-			info->armorDamageMulti = 15;
-			info->shieldDamageMulti = 5;
-			info->baseRange = 2 * TILE_SIZE;
-			info->rpm = 5;
-			info->price = 500;
-			info->priceMulti = 100;
-
-			info = &game->actorTypeInfos[ACTOR_LOOKOUT];
-			strncpy(info->name, "Lookout", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 1;
-			info->hpDamageMulti = 2;
-			info->armorDamageMulti = 1;
-			info->shieldDamageMulti = 3;
-			info->baseRange = 8 * TILE_SIZE;
-			info->rpm = 0;
-			info->price = 500;
-			info->priceMulti = 100;
-
-			info = &game->actorTypeInfos[ACTOR_RADAR];
-			strncpy(info->name, "Radar", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 20;
-			info->hpDamageMulti = 20;
-			info->armorDamageMulti = 10;
-			info->shieldDamageMulti = 10;
-			info->baseRange = 30 * TILE_SIZE;
-			info->rpm = 700;
-			info->price = 1000;
-			info->priceMulti = 250;
-
-			info = &game->actorTypeInfos[ACTOR_OBELISK];
-			strncpy(info->name, "Obelisk", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 8;
-			info->hpDamageMulti = 5;
-			info->armorDamageMulti = 10;
-			info->shieldDamageMulti = 2;
-			info->baseRange = 5 * TILE_SIZE;
-			info->rpm = 360;
-			info->mana = 2;
-			info->price = 1000;
-			info->priceMulti = 250;
-
-			info = &game->actorTypeInfos[ACTOR_PARTICLE_CANNON];
-			strncpy(info->name, "Particle Cannon", ACTOR_TYPE_NAME_MAX_LEN);
-			info->damage = 50;
-			info->hpDamageMulti = 15;
-			info->armorDamageMulti = 10;
-			info->shieldDamageMulti = 20;
-			info->baseRange = 20 * TILE_SIZE;
-			info->rpm = 360;
-			info->mana = 12;
-			info->price = 1000;
-			info->priceMulti = 250;
-
-			info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
-			strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
-			info->price = 100;
-			info->priceMulti = 10;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY1];
-			info->enemySpawnStartingWave = 1;
-			info->movementSpeed = 2;
-			info->maxHp = 100;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY2];
-			info->enemySpawnStartingWave = 3;
-			info->movementSpeed = 2;
-			info->maxHp = 300;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY3];
-			info->enemySpawnStartingWave = 5;
-			info->movementSpeed = 1.75;
-			info->maxHp = 400;
-			info->maxArmor = 200;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY4];
-			info->enemySpawnStartingWave = 7;
-			info->movementSpeed = 1.75;
-			info->maxHp = 800;
-			info->hpGainPerSec = 25;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY5];
-			info->enemySpawnStartingWave = 9;
-			info->movementSpeed = 1.75;
-			info->maxHp = 400;
-			info->maxArmor = 600;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY6];
-			info->enemySpawnStartingWave = 11;
-			info->movementSpeed = 1;
-			info->maxHp = 300;
-			info->maxArmor = 1500;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY7];
-			info->enemySpawnStartingWave = 13;
-			info->movementSpeed = 1.25;
-			info->maxHp = 2000;
-
-			info = &game->actorTypeInfos[ACTOR_ENEMY8];
-			info->enemySpawnStartingWave = 15;
-			info->movementSpeed = 1;
-			info->maxHp = 20000;
-
-			info = &game->actorTypeInfos[ACTOR_ARROW];
-			info->bulletSpeed = 20;
-
-			info = &game->actorTypeInfos[ACTOR_MORTAR];
-			info->bulletSpeed = 0.5;
-			info->baseRange = 2 * TILE_SIZE;
-		} ///
-
-		{ /// Setup upgrades
-			auto createUpgrade = []() {
-				if (game->upgradesNum > UPGRADES_MAX-1) Panic("Too many upgrades");
-
-				Upgrade *upgrade = &game->upgrades[game->upgradesNum++];
-				memset(upgrade, 0, sizeof(Upgrade));
-				upgrade->id = ++game->nextUpgradeId;
-				return upgrade;
-			};
-
-			Upgrade *upgrade = NULL;
-
-			ActorType actorsCouldUpgrade[] = {
-				ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
-			};
-			// ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
-
-			game->upgradesNum = 0;
-			game->nextUpgradeId = 0;
-			for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
-				ActorType actorType = actorsCouldUpgrade[i];
-
-				Upgrade *unlockUpgrade = NULL;
-				if (actorType != ACTOR_BALLISTA) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_UNLOCK;
-					effect->actorType = actorType;
-					unlockUpgrade = upgrade;
-				}
-
-				Upgrade *prevUpgrade = NULL;
-
-				prevUpgrade = unlockUpgrade;
-				for (int i = 0; i < 3; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
-					effect->actorType = actorType;
-					effect->value = 1 + (0.1 * (i+1));
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-
-				prevUpgrade = unlockUpgrade;
-				for (int i = 0; i < 3; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_RANGE_MULTI;
-					effect->actorType = actorType;
-					effect->value = 1 + (0.1 * (i+1));
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-
-				prevUpgrade = unlockUpgrade;
-				for (int i = 0; i < 3; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_RPM_MULTI;
-					effect->actorType = actorType;
-					effect->value = 1 + (0.1 * (i+1));
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-			}
-
-			{
-				Upgrade *prevUpgrade = NULL;
-				for (int i = 0; i < 3; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_EXTRA_CARDS;
-					effect->value = 1;
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-			}
-
-			{
-				Upgrade *prevUpgrade = NULL;
-				for (int i = 0; i < 5; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_EXTRA_MONEY;
-					effect->value = i+1;
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-			}
-
-			{
-				Upgrade *prevUpgrade = NULL;
-				for (int i = 0; i < 3; i++) {
-					Upgrade *upgrade = createUpgrade();
-					UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-					effect->type = UPGRADE_EFFECT_MANA_GAIN_MULTI;
-					effect->value = 1.1;
-					if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
-					prevUpgrade = upgrade;
-				}
-			}
-
-			{
-				Upgrade *upgrade = createUpgrade();
-				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-				effect->type = UPGRADE_EFFECT_UNLOCK;
-				effect->actorType = ACTOR_MANA_SIPHON;
-			}
-		} ///
-
+		initCore();
 		game->timeScale = 1;
 		game->is2d = false;
 
@@ -894,17 +575,7 @@ Vec2i getTileHovering() {
 	if (game->is2d) {
 		return worldToTile(game->mouse);
 	} else {
-		return v2i();
-		// for (int i = 0; i < world->chunksNum; i++) {
-		// 	Chunk *chunk = &world->chunks[i];
-		// 	if (!chunk->visible) continue;
-
-		// 	for (int y = 0; y < CHUNK_SIZE; y++) {
-		// 		for (int x = 0; x < CHUNK_SIZE; x++) {
-		// 			int tileIndex = y*CHUNK_SIZE + x;
-		// 		}
-		// 	}
-		// }
+		return game->hovered3dTilePos;
 	}
 }
 
@@ -1323,13 +994,47 @@ void drawGame(float elapsed) {
 		Pass *pass = createPass();
 		pushPass(pass);
 
-		Vec3 cameraOffset = v3();
-		cameraOffset.x = data->cameraPosition.x * SCALE_3D;
-		cameraOffset.y = -data->cameraPosition.y * SCALE_3D;
-		cameraOffset.z = -data->cameraZoom * 64;
+#if 1
+			Vec3 cameraTarget = v3();
+			cameraTarget.x = data->cameraPosition.x * SCALE_3D;
+			cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
+			cameraTarget.z = 0;
 
-		pass->camera.position = v3(0, 0, 200) + cameraOffset;
-		pass->camera.target = v3(0, 0, 0) + cameraOffset;
+			float dist = 64;
+			static Vec3 rot = v3();
+			ImGui::SliderFloat3("rot", &rot.x, -M_PI/2, M_PI/2);
+			Vec3 cameraSrc = v3();
+			cameraSrc.z = sinf(rot.x)*dist*cosf(rot.y) + cameraTarget.z;
+			cameraSrc.y = ((rot.y <= 0.0f)? 1 : -1)*sinf(rot.y)*dist*sinf(rot.y) + cameraTarget.y;
+			cameraSrc.x = cosf(rot.x)*dist*cosf(rot.y) + cameraTarget.x;
+
+			// Matrix4 srcMatrix = mat4();
+			// srcMatrix.ROTATE_EULER(rot.x, 0, 0);
+			// srcMatrix.ROTATE_EULER(0, rot.y, 0);
+			// srcMatrix.ROTATE_EULER(0, 0, rot.z);
+			// srcMatrix.TRANSLATE(0, 0, 200);
+			// srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
+			// srcMatrix.TRANSLATE(cameraTarget);
+			// Vec3 cameraSrc = srcMatrix * v3();
+			// cameraTarget.print("target");
+			// cameraSrc.print("src");
+
+			pass->camera.position = cameraSrc;
+			pass->camera.target = cameraTarget;
+#else
+			static Vec2 xyOff = v2();
+			ImGui::SliderFloat2("xyOff", &xyOff.x, -100, 100);
+
+			Vec3 cameraOffset = v3();
+			cameraOffset.x = data->cameraPosition.x * SCALE_3D;
+			cameraOffset.y = -data->cameraPosition.y * SCALE_3D;
+			cameraOffset.z = -data->cameraZoom * 64;
+
+			pass->camera.position = v3(0, 0, 200) + cameraOffset;
+			pass->camera.position.x += xyOff.x;
+			pass->camera.position.y += xyOff.y;
+			pass->camera.target = v3(cameraOffset.x, cameraOffset.y, 0);
+#endif
 
 		pass->camera.up = v3(0, 1, 0);
 		pass->camera.fovy = 59;
@@ -1341,8 +1046,10 @@ void drawGame(float elapsed) {
 
 		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 
-		float closestTileDist = 0;
-		Vec2i closestTilePos = v2i();
+		Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+
+		float closestHoveredTileDist = 0;
+		Vec2i closestHoveredTilePos = v2i();
 
 		for (int i = 0; i < world->chunksNum; i++) {
 			Chunk *chunk = &world->chunks[i];
@@ -1352,16 +1059,17 @@ void drawGame(float elapsed) {
 				for (int x = 0; x < CHUNK_SIZE; x++) {
 					Vec2i tilePos = chunkTileToWorldTile(chunk, v2i(x, y));
 
+					AABB aabb = tileToAABB(tilePos);
+					Matrix4 matrix = toMatrix(aabb);
+
 					int tileIndex = y*CHUNK_SIZE + x;
 					Tile *tile = &chunk->tiles[tileIndex];
 
-					Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
 					int color = 0x00000000;
 					if (tile->type == TILE_HOME) color = 0xFFFFF333;
 					if (tile->type == TILE_GROUND) color = 0xFF017301;
 					if (tile->type == TILE_ROAD) color = 0xFF966F02;
 
-					Matrix4 matrix = get3dTileMatrix(tilePos);
 					passMesh(cubeMesh, matrix, color);
 
 					for (int i = 0; i < cubeMesh->indsNum/3; i++) {
@@ -1373,9 +1081,9 @@ void drawGame(float elapsed) {
 						float dist;
 						Vec2 uv;
 						if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
-							if (isZero(closestTilePos) || closestTileDist > dist) {
-								closestTileDist = dist;
-								closestTilePos = tilePos;
+							if (isZero(closestHoveredTilePos) || closestHoveredTileDist > dist) {
+								closestHoveredTileDist = dist;
+								closestHoveredTilePos = tilePos;
 							}
 						}
 					}
@@ -1383,10 +1091,227 @@ void drawGame(float elapsed) {
 			}
 		}
 
-		if (!isZero(closestTilePos)) {
-			Matrix4 matrix = get3dTileMatrix(closestTilePos);
-			passMesh(getMesh("assets/common/models/Cube.Cube.mesh"), matrix, 0xFFFF0000);
-		}
+		{ /// Draw actors
+			for (int i = 0; i < world->actorsNum; i++) {
+				Actor *actor = &world->actors[i];
+				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+
+				Chunk *chunk = worldToChunk(actor->position);
+				if (chunk && !chunk->visible) continue;
+
+				// bool isSelected = false;
+				// for (int i = 0; i < data->selectedActorsNum; i++) {
+				// 	if (data->selectedActors[i] == actor->id) {
+				// 		isSelected = true;
+				// 		break;
+				// 	}
+				// }
+
+				// if (isSelected) {
+				// 	drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
+
+				// 	if (info->isTower) {
+				// 		Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+				// 		drawCircle(range, 0x80FF0000);
+				// 	}
+				// }
+
+				AABB tileAABB = tileToAABB(worldToTile(actor->position));
+
+				AABB aabb = getAABB(actor);
+				float height = tileAABB.max.z - tileAABB.min.z;
+				aabb.min.z += height;
+				aabb.max.z += height;
+
+				if (actor->type == ACTOR_BALLISTA) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+					// Line2 line;
+					// line.start = getCenter(rect);
+					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					// drawLine(line, 4, 0xFFFF0000);
+				} else if (actor->type == ACTOR_MORTAR_TOWER) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				} else if (actor->type == ACTOR_TESLA_COIL) {
+					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					// int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
+
+					// Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
+					// drawCircle(circle, sparkColor);
+
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				} else if (actor->type == ACTOR_FROST_KEEP) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				} else if (actor->type == ACTOR_FLAME_THROWER) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+
+					// Line2 line;
+					// line.start = getCenter(rect);
+					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					// drawLine(line, 12, 0xFF000000);
+
+					// float range = getRange(actor, worldToTile(actor->position));
+					// Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+
+					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					// int color = setAofArgb(BURN_COLOR, perc*255.0);
+					// drawLine(tri.verts[0], tri.verts[1], 5, color);
+					// drawLine(tri.verts[1], tri.verts[2], 5, color);
+					// drawLine(tri.verts[2], tri.verts[0], 5, color);
+				} else if (actor->type == ACTOR_POISON_SPRAYER) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+
+					// Line2 line;
+					// line.start = getCenter(rect);
+					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					// drawLine(line, 12, 0xFF000000);
+
+					// float range = getRange(actor, worldToTile(actor->position));
+					// Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+
+					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+					// int color = setAofArgb(POISON_COLOR, perc*255.0);
+					// drawLine(tri.verts[0], tri.verts[1], 5, color);
+					// drawLine(tri.verts[1], tri.verts[2], 5, color);
+					// drawLine(tri.verts[2], tri.verts[0], 5, color);
+				} else if (actor->type == ACTOR_SHREDDER) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+
+					// Line2 line;
+					// line.start = getCenter(rect);
+					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
+					// line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
+					// drawLine(line, 4, 0xFFFF0000);
+				} else if (actor->type == ACTOR_MANA_SIPHON) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
+					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
+
+					// Rect vitalityRect = rect;
+					// {
+					// 	vitalityRect.height = 4;
+					// 	vitalityRect.y = rect.y - vitalityRect.height - 4;
+					// 	float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
+
+					// 	float maxHpPerc = info->maxHp / totalPoints;
+					// 	Rect hpRect = vitalityRect;
+					// 	hpRect.width *= maxHpPerc;
+					// 	hpRect.width *= actor->hp / info->maxHp;
+					// 	drawRect(hpRect, 0xFF00FF00);
+
+					// 	float maxArmorPerc = info->maxArmor / totalPoints;
+					// 	Rect armorRect = vitalityRect;
+					// 	armorRect.x += maxHpPerc * vitalityRect.width;
+					// 	armorRect.width *= maxArmorPerc;
+					// 	armorRect.width *= actor->armor / info->maxArmor;
+					// 	drawRect(armorRect, 0xFFFFD66E);
+
+					// 	float maxShieldPerc = info->maxShield / totalPoints;
+					// 	Rect shieldRect = vitalityRect;
+					// 	shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
+					// 	shieldRect.width *= maxShieldPerc;
+					// 	shieldRect.width *= actor->shield / info->maxShield;
+					// 	drawRect(shieldRect, 0xFF718691);
+					// }
+
+					// if (actor->slow > 0) {
+					// 	Rect slowRect = vitalityRect;
+					// 	slowRect.y -= slowRect.height + 4;
+					// 	slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
+					// 	drawRect(slowRect, 0xFF01335C);
+					// }
+
+					// if (actor->poison) {
+					// 	Rect textRect = getRect(actor);
+					// 	textRect.x -= textRect.width;
+					// 	textRect.y -= textRect.height;
+					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
+					// 	drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+					// }
+
+					// if (actor->burn) {
+					// 	Rect textRect = getRect(actor);
+					// 	textRect.y -= textRect.height;
+					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
+					// 	drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+					// }
+
+					// if (actor->bleed) {
+					// 	Rect textRect = getRect(actor);
+					// 	textRect.x += textRect.width;
+					// 	textRect.y -= textRect.height;
+					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
+					// 	drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+					// }
+				} else if (actor->type == ACTOR_ARROW) {
+					// Rect bulletRect = makeCenteredSquare(actor->position, 8);
+				} else if (actor->type == ACTOR_MORTAR) {
+					// float delayTime = info->bulletSpeed;
+					// float explodeRange = info->baseRange;
+					// if (actor->time < delayTime) {
+					// 	float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
+					// 	drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
+					// }
+
+					// if (actor->time >= delayTime) {
+					// 	Circle circle = makeCircle(actor->position, explodeRange);
+					// 	drawCircle(circle, 0xFFFFFFFF);
+					// }
+				} else if (actor->type == ACTOR_FROST) {
+					// drawRect(rect, 0x80FFFFFF);
+				} else if (actor->type == ACTOR_SAW) {
+					// Rect bulletRect = makeCenteredSquare(actor->position, 8);
+					// drawRect(bulletRect, 0xFFFF0000);
+				} else {
+					// drawRect(rect, 0xFFFF00FF);
+				}
+
+				if (info->isTower) {
+					// Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
+					// levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
+					// levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
+
+					// DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					// drawTextInRect(frameSprintf("%d", actor->level), props, levelNumberRect);
+
+					// if (actor->level < getMaxLevel(actor->type)) {
+					// 	Rect xpRect = rect;
+					// 	xpRect.height = game->size.y*0.005;
+					// 	xpRect.y -= xpRect.height + game->size.y*0.005;
+					// 	drawRect(xpRect, 0x80FFEF94);
+
+					// 	float maxXp = maxXpPerLevels[actor->level];
+					// 	xpRect.width *= actor->xp / maxXp;
+					// 	drawRect(xpRect, 0xFFFFEF94);
+					// }
+				}
+
+				if (getInfo(actor)->isEnemy) {
+					// if (isHoveringActor(actor)) {
+					// 	Rect textRect = makeCenteredRect(actor->position, game->size*v2(0.02, 0.02));
+					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					// 	drawTextInRect(frameSprintf(
+					// 			"%s\n%.0f/%.0f\n%.0f/%.0f\n%.0f/%.0f\n",
+					// 			getInfo(actor)->name,
+					// 			actor->shield,
+					// 			getInfo(actor)->maxShield,
+					// 			actor->armor,
+					// 			getInfo(actor)->maxArmor,
+					// 			actor->hp,
+					// 			getInfo(actor)->maxHp
+					// 	), props, textRect);
+					// }
+				}
+
+				if (game->debugShowActorVelo) {
+					// DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+					// drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
+				}
+			}
+		} ///
+
+		game->hovered3dTilePos = closestHoveredTilePos;
 
 		popPass();
 
@@ -1435,17 +1360,31 @@ Effect *createEffect(EffectType type) {
 	return effect;
 }
 
-Matrix4 get3dTileMatrix(Vec2i tilePos) {
-	Vec3 translation = v3();
-	translation.x = tilePos.x * TILE_SIZE * SCALE_3D;
-	translation.y = -tilePos.y * TILE_SIZE * SCALE_3D;
+AABB tileToAABB(Vec2i tilePos) {
+	AABB aabb = {};
+	aabb.min = v3(tilePos.x, tilePos.y, 0) * TILE_SIZE * SCALE_3D;
+	aabb.max = aabb.min + TILE_SIZE*SCALE_3D;
+	aabb.min.y *= -1;
+	aabb.max.y *= -1;
+	return aabb;
+}
 
+Matrix4 toMatrix(AABB aabb) {
 	Matrix4 matrix = mat4();
-	matrix.TRANSLATE(translation);
-	matrix.SCALE(TILE_SIZE * SCALE_3D * 0.5);
+	matrix.TRANSLATE(getCenter(aabb));
+	matrix.SCALE(getSize(aabb)/2);
 	return matrix;
 }
 
+AABB getAABB(Actor *actor) {
+	Vec3 position = v3(actor->position.x, actor->position.y, 0);
+	position *= SCALE_3D;
+	position.y *= -1;
+
+	Vec3 scale = getInfo(actor)->size*SCALE_3D;
+	AABB aabb = makeCenteredAABB(position, scale);
+	return aabb;
+}
 
 void updateAndDrawOverlay(float elapsed) {
 	World *world = data->world;

@@ -1,3 +1,4 @@
+void initCore();
 void stepGame(float elapsed);
 
 void generateMapFields();
@@ -51,6 +52,349 @@ void readChunk(DataStream *stream, Chunk *chunk, int version);
 Tile readTile(DataStream *stream, int version);
 /// FUNCTIONS ^
 
+void initCore() {
+	{ /// Setup actor type infos
+		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			sprintf(info->name, "Actor %d", i);
+			info->size = v3(TILE_SIZE*0.5, TILE_SIZE*0.5, TILE_SIZE*0.5);
+		}
+
+		for (int i = ACTOR_BALLISTA; i <= ACTOR_PARTICLE_CANNON; i++) {
+			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			info->isTower = true;
+			info->size = v3(TILE_SIZE*0.75, TILE_SIZE*0.75, TILE_SIZE*0.75);
+		}
+
+		for (int i = ACTOR_ENEMY1; i <= ACTOR_ENEMY64; i++) {
+			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			info->isEnemy = true;
+			info->size = v3(TILE_SIZE*0.25, TILE_SIZE*0.25, TILE_SIZE*0.25);
+		}
+
+		ActorTypeInfo *info = NULL;
+
+		info = &game->actorTypeInfos[ACTOR_BALLISTA];
+		strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 5;
+		info->hpDamageMulti = 10;
+		info->armorDamageMulti = 5;
+		info->shieldDamageMulti = 5;
+		info->baseRange = 5 * TILE_SIZE;
+		info->rpm = 20;
+		info->mana = 0;
+		info->price = 10;
+		info->priceMulti = 15;
+		info->primaryColor = 0xFF800000;
+
+		info = &game->actorTypeInfos[ACTOR_MORTAR_TOWER];
+		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 10;
+		info->hpDamageMulti = 10;
+		info->armorDamageMulti = 15;
+		info->shieldDamageMulti = 5;
+		info->baseRange = 10 * TILE_SIZE;
+		info->rpm = 10;
+		info->mana = 0;
+		info->price = 200;
+		info->priceMulti = 75;
+		info->primaryColor = 0xFF525252;
+
+		info = &game->actorTypeInfos[ACTOR_TESLA_COIL];
+		strncpy(info->name, "Tesla Coil", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 10;
+		info->hpDamageMulti = 6;
+		info->armorDamageMulti = 3;
+		info->shieldDamageMulti = 9;
+		info->baseRange = 1.5 * TILE_SIZE;
+		info->rpm = 30;
+		info->mana = 5;
+		info->price = 200;
+		info->priceMulti = 75;
+		info->primaryColor = 0xFFA0A0F0;
+
+		info = &game->actorTypeInfos[ACTOR_FROST_KEEP];
+		strncpy(info->name, "Frost Keep", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 5;
+		info->hpDamageMulti = 10;
+		info->armorDamageMulti = 5;
+		info->shieldDamageMulti = 5;
+		info->baseRange = 2 * TILE_SIZE;
+		info->rpm = 180;
+		info->mana = 0.3;
+		info->price = 250;
+		info->priceMulti = 100;
+		info->primaryColor = 0xFFE3F0F5;
+
+		info = &game->actorTypeInfos[ACTOR_FLAME_THROWER];
+		strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 5;
+		info->hpDamageMulti = 6;
+		info->armorDamageMulti = 9;
+		info->shieldDamageMulti = 3;
+		info->baseRange = 4 * TILE_SIZE;
+		info->rpm = 60;
+		info->mana = 1;
+		info->price = 300;
+		info->priceMulti = 75;
+		info->primaryColor = lerpColor(BURN_COLOR, 0xFF000000, 0.75);
+
+		info = &game->actorTypeInfos[ACTOR_POISON_SPRAYER];
+		strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 5;
+		info->hpDamageMulti = 6;
+		info->armorDamageMulti = 3;
+		info->shieldDamageMulti = 9;
+		info->baseRange = 4 * TILE_SIZE;
+		info->rpm = 60;
+		info->mana = 1;
+		info->price = 300;
+		info->priceMulti = 75;
+		info->primaryColor = lerpColor(POISON_COLOR, 0xFF000000, 0.75);
+
+		info = &game->actorTypeInfos[ACTOR_SHREDDER];
+		strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 10;
+		info->hpDamageMulti = 20;
+		info->armorDamageMulti = 10;
+		info->shieldDamageMulti = 10;
+		info->baseRange = 5 * TILE_SIZE;
+		info->rpm = 5;
+		info->price = 500;
+		info->priceMulti = 100;
+		info->primaryColor = 0xFF800000;
+
+		info = &game->actorTypeInfos[ACTOR_ENCAMPENT];
+		strncpy(info->name, "Encampent", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 20;
+		info->hpDamageMulti = 10;
+		info->armorDamageMulti = 15;
+		info->shieldDamageMulti = 5;
+		info->baseRange = 2 * TILE_SIZE;
+		info->rpm = 5;
+		info->price = 500;
+		info->priceMulti = 100;
+
+		info = &game->actorTypeInfos[ACTOR_LOOKOUT];
+		strncpy(info->name, "Lookout", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 1;
+		info->hpDamageMulti = 2;
+		info->armorDamageMulti = 1;
+		info->shieldDamageMulti = 3;
+		info->baseRange = 8 * TILE_SIZE;
+		info->rpm = 0;
+		info->price = 500;
+		info->priceMulti = 100;
+
+		info = &game->actorTypeInfos[ACTOR_RADAR];
+		strncpy(info->name, "Radar", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 20;
+		info->hpDamageMulti = 20;
+		info->armorDamageMulti = 10;
+		info->shieldDamageMulti = 10;
+		info->baseRange = 30 * TILE_SIZE;
+		info->rpm = 700;
+		info->price = 1000;
+		info->priceMulti = 250;
+
+		info = &game->actorTypeInfos[ACTOR_OBELISK];
+		strncpy(info->name, "Obelisk", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 8;
+		info->hpDamageMulti = 5;
+		info->armorDamageMulti = 10;
+		info->shieldDamageMulti = 2;
+		info->baseRange = 5 * TILE_SIZE;
+		info->rpm = 360;
+		info->mana = 2;
+		info->price = 1000;
+		info->priceMulti = 250;
+
+		info = &game->actorTypeInfos[ACTOR_PARTICLE_CANNON];
+		strncpy(info->name, "Particle Cannon", ACTOR_TYPE_NAME_MAX_LEN);
+		info->damage = 50;
+		info->hpDamageMulti = 15;
+		info->armorDamageMulti = 10;
+		info->shieldDamageMulti = 20;
+		info->baseRange = 20 * TILE_SIZE;
+		info->rpm = 360;
+		info->mana = 12;
+		info->price = 1000;
+		info->priceMulti = 250;
+
+		info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
+		strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
+		info->price = 100;
+		info->priceMulti = 10;
+		info->primaryColor = 0xFFA4CCC8;
+
+		info = &game->actorTypeInfos[ACTOR_MANA_CRYSTAL];
+		strncpy(info->name, "Mana Crystal", ACTOR_TYPE_NAME_MAX_LEN);
+		info->primaryColor = 0xFFA4B0CC;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY1];
+		info->enemySpawnStartingWave = 1;
+		info->movementSpeed = 2;
+		info->maxHp = 100;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY2];
+		info->enemySpawnStartingWave = 3;
+		info->movementSpeed = 2;
+		info->maxHp = 300;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY3];
+		info->enemySpawnStartingWave = 5;
+		info->movementSpeed = 1.75;
+		info->maxHp = 400;
+		info->maxArmor = 200;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY4];
+		info->enemySpawnStartingWave = 7;
+		info->movementSpeed = 1.75;
+		info->maxHp = 800;
+		info->hpGainPerSec = 25;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY5];
+		info->enemySpawnStartingWave = 9;
+		info->movementSpeed = 1.75;
+		info->maxHp = 400;
+		info->maxArmor = 600;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY6];
+		info->enemySpawnStartingWave = 11;
+		info->movementSpeed = 1;
+		info->maxHp = 300;
+		info->maxArmor = 1500;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY7];
+		info->enemySpawnStartingWave = 13;
+		info->movementSpeed = 1.25;
+		info->maxHp = 2000;
+
+		info = &game->actorTypeInfos[ACTOR_ENEMY8];
+		info->enemySpawnStartingWave = 15;
+		info->movementSpeed = 1;
+		info->maxHp = 20000;
+
+		info = &game->actorTypeInfos[ACTOR_ARROW];
+		info->bulletSpeed = 20;
+
+		info = &game->actorTypeInfos[ACTOR_MORTAR];
+		info->bulletSpeed = 0.5;
+		info->baseRange = 2 * TILE_SIZE;
+	} ///
+
+	{ /// Setup upgrades
+		auto createUpgrade = []() {
+			if (game->upgradesNum > UPGRADES_MAX-1) Panic("Too many upgrades");
+
+			Upgrade *upgrade = &game->upgrades[game->upgradesNum++];
+			memset(upgrade, 0, sizeof(Upgrade));
+			upgrade->id = ++game->nextUpgradeId;
+			return upgrade;
+		};
+
+		Upgrade *upgrade = NULL;
+
+		ActorType actorsCouldUpgrade[] = {
+			ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
+		};
+		// ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
+
+		game->upgradesNum = 0;
+		game->nextUpgradeId = 0;
+		for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
+			ActorType actorType = actorsCouldUpgrade[i];
+
+			Upgrade *unlockUpgrade = NULL;
+			if (actorType != ACTOR_BALLISTA) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_UNLOCK;
+				effect->actorType = actorType;
+				unlockUpgrade = upgrade;
+			}
+
+			Upgrade *prevUpgrade = NULL;
+
+			prevUpgrade = unlockUpgrade;
+			for (int i = 0; i < 3; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
+				effect->actorType = actorType;
+				effect->value = 1 + (0.1 * (i+1));
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+
+			prevUpgrade = unlockUpgrade;
+			for (int i = 0; i < 3; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_RANGE_MULTI;
+				effect->actorType = actorType;
+				effect->value = 1 + (0.1 * (i+1));
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+
+			prevUpgrade = unlockUpgrade;
+			for (int i = 0; i < 3; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_RPM_MULTI;
+				effect->actorType = actorType;
+				effect->value = 1 + (0.1 * (i+1));
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+		}
+
+		{
+			Upgrade *prevUpgrade = NULL;
+			for (int i = 0; i < 3; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_EXTRA_CARDS;
+				effect->value = 1;
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+		}
+
+		{
+			Upgrade *prevUpgrade = NULL;
+			for (int i = 0; i < 5; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_EXTRA_MONEY;
+				effect->value = i+1;
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+		}
+
+		{
+			Upgrade *prevUpgrade = NULL;
+			for (int i = 0; i < 3; i++) {
+				Upgrade *upgrade = createUpgrade();
+				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = UPGRADE_EFFECT_MANA_GAIN_MULTI;
+				effect->value = 1.1;
+				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				prevUpgrade = upgrade;
+			}
+		}
+
+		{
+			Upgrade *upgrade = createUpgrade();
+			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_UNLOCK;
+			effect->actorType = ACTOR_MANA_SIPHON;
+		}
+	} ///
+}
+
 void stepGame(float elapsed) {
 	float timeScale = elapsed / (1/60.0);
 	game->coreEventsNum = 0;
@@ -69,8 +413,6 @@ void stepGame(float elapsed) {
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-
-			Rect rect = getRect(actor);
 
 			actor->movementSpeed = info->movementSpeed;
 			actor->movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
@@ -283,13 +625,13 @@ void stepGame(float elapsed) {
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
-				Vec2 dir = getFlowDirForRect(rect);
+				Vec2 dir = getFlowDirForRect(getRect(actor));
 
 				actor->accel = dir * (actor->movementSpeed * elapsed) * 5;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
-				if (overlaps(rect, goalRect)) {
+				if (overlaps(getRect(actor), goalRect)) {
 					data->hp--;
 					actor->markedForDeletion = true;
 				}
@@ -333,15 +675,14 @@ void stepGame(float elapsed) {
 				int maxTime = 10;
 				float fallSpeedPerSec = FROST_FALL_DISTANCE / (float)maxTime;
 				actor->position.y += fallSpeedPerSec * elapsed;
-				rect = makeCenteredSquare(getCenter(rect), 32);
 
-				Circle range = makeCircle(getCenter(rect), rect.width/2);
+				Circle range = makeCircle(actor->position, getRect(actor).width/2);
 
 				int enemiesInRangeNum = 0;
 				Actor **enemiesInRange = getActorsInRange(range, &enemiesInRangeNum, true);
 				for (int i = 0; i < enemiesInRangeNum; i++) {
 					Actor *enemy = enemiesInRange[i];
-					if (overlaps(getRect(enemy), rect)) {
+					if (overlaps(getRect(enemy), getRect(actor))) {
 						enemy->slow += 6;
 						actor->markedForDeletion = true;
 					}
@@ -975,11 +1316,7 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 }
 
 Rect getRect(Actor *actor) {
-	Rect rect = {};
-	rect.width = TILE_SIZE * 0.5;
-	rect.height = TILE_SIZE * 0.5;
-	rect.x = actor->position.x - rect.width/2;
-	rect.y = actor->position.y - rect.height/2;
+	Rect rect = makeCenteredRect(actor->position, v2(getInfo(actor)->size));
 	return rect;
 }
 
