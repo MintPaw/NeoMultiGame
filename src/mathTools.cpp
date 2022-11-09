@@ -818,6 +818,11 @@ struct Matrix4 {
 		}
 		return *this;
 	}
+
+	Matrix4 operator*= (Matrix4 b) { 
+		*this = this->multiply(b);
+		return *this;
+	}
 };
 
 struct Line3 {

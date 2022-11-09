@@ -361,6 +361,7 @@ Effect *createEffect(EffectType type);
 AABB tileToAABB(Vec2i tilePos);
 Matrix4 toMatrix(AABB aabb);
 AABB getAABB(Actor *actor);
+#define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
 void updateAndDrawOverlay(float elapsed);
 void saveGlobals();
 void loadGlobals();
@@ -1108,10 +1109,14 @@ void drawGame(float elapsed) {
 
 				if (actor->type == ACTOR_BALLISTA) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-					// Line2 line;
-					// line.start = getCenter(rect);
-					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-					// drawLine(line, 4, 0xFFFF0000);
+
+					{
+						Vec3 start = getCenter(aabb);
+						Vec3 dir = v3(1, 0, 0);
+						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
+						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
+						passMesh(cubeMesh, matrix, 0xFFFF0000);
+					}
 				} else if (actor->type == ACTOR_MORTAR_TOWER) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				} else if (actor->type == ACTOR_TESLA_COIL) {
