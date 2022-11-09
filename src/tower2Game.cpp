@@ -252,6 +252,10 @@ struct Effect {
 	CoreEvent coreEvent;
 };
 
+struct Globals {
+	float cameraAngleDeg;
+};
+
 struct GameData {
 	World *world;
 #define CAMPAIGN_NAME_MAX_LEN 64
@@ -291,6 +295,8 @@ struct GameData {
 
 struct Game {
 	Font *defaultFont;
+
+	Globals globals;
 
 	bool inEditor;
 	float timeScale;
@@ -355,8 +361,9 @@ Effect *createEffect(EffectType type);
 AABB tileToAABB(Vec2i tilePos);
 Matrix4 toMatrix(AABB aabb);
 AABB getAABB(Actor *actor);
-
 void updateAndDrawOverlay(float elapsed);
+void saveGlobals();
+void loadGlobals();
 
 /// FUNCTIONS ^
 
@@ -396,6 +403,7 @@ void updateGame() {
 
 		// if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
 
+		loadGlobals();
 		initCore();
 		game->timeScale = 1;
 		game->is2d = false;
@@ -542,6 +550,7 @@ void updateGame() {
 
 	int stepsToTake = 1;
 	float elapsed = platform->elapsed;
+	Globals *globals = &game->globals;
 
 	if (game->timeScale > 1) {
 		stepsToTake = game->timeScale;
@@ -588,6 +597,7 @@ bool isHoveringActor(Actor *actor) {
 }
 
 void drawGame(float elapsed) {
+	Globals *globals = &game->globals;
 	World *world = data->world;
 
 	{ /// Iterate CoreEvents
@@ -999,12 +1009,9 @@ void drawGame(float elapsed) {
 		cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
 		cameraTarget.z = 0;
 
-		static float rot = 0;
-		ImGui::SliderFloat("rot", &rot, -90 + 0.01, 90 - 0.01);
-
 		Matrix4 srcMatrix = mat4();
 		srcMatrix.TRANSLATE(cameraTarget);
-		srcMatrix.ROTATE_EULER(toRad(rot), 0, 0);
+		srcMatrix.ROTATE_EULER(toRad(globals->cameraAngleDeg), 0, 0);
 		srcMatrix.TRANSLATE(0, 0, 200);
 		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
 		Vec3 cameraSrc = srcMatrix * v3();
@@ -1364,6 +1371,7 @@ AABB getAABB(Actor *actor) {
 
 void updateAndDrawOverlay(float elapsed) {
 	World *world = data->world;
+	Globals *globals = &game->globals;
 
 	{ /// Editor
 		if (keyPressed(KEY_CTRL) && keyJustPressed('R')) game->is2d = !game->is2d;
@@ -1371,6 +1379,15 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 		if (game->inEditor) {
 			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+			if (ImGui::TreeNode("Globals")) {
+				if (ImGui::Button("Save")) saveGlobals();
+				ImGui::SameLine();
+				if (ImGui::Button("Load")) loadGlobals();
+
+				ImGui::SliderFloat("cameraAngleDeg", &globals->cameraAngleDeg, -90 + 0.01, 90 - 0.01);
+				ImGui::TreePop();
+			}
 
 			ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 			ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
@@ -1627,6 +1644,30 @@ void updateAndDrawOverlay(float elapsed) {
 	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
 	drawOnScreenLog();
+}
+
+void saveGlobals() {
+	Globals *globals = &game->globals;
+	DataStream *stream = newDataStream();
+
+	writeU32(stream, 0); // version
+
+	writeFloat(stream, globals->cameraAngleDeg);
+
+	writeDataStream("assets/globals.bin", stream);
+	destroyDataStream(stream);
+}
+
+void loadGlobals() {
+	Globals *globals = &game->globals;
+	DataStream *stream = loadDataStream("assets/globals.bin");
+	if (!stream) return;
+
+	int version = readU32(stream);
+
+	globals->cameraAngleDeg = readFloat(stream);
+
+	destroyDataStream(stream);
 }
 
 //@consider Frost keep has a square range
