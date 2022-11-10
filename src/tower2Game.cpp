@@ -604,6 +604,8 @@ void drawGame(float elapsed) {
 
 	clearRenderer();
 
+	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
 			CoreEvent *event = &game->coreEvents[i];
@@ -662,10 +664,8 @@ void drawGame(float elapsed) {
 		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
 
-	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
 	float closestHoveredTileDist = 0;
 	Vec2i closestHoveredTilePos = v2i();
-
 	{ /// Draw map
 		for (int i = 0; i < world->chunksNum; i++) {
 			Chunk *chunk = &world->chunks[i];
@@ -744,6 +744,7 @@ void drawGame(float elapsed) {
 			if (game->is2d && game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
 		}
 	} ///
+	game->hovered3dTilePos = closestHoveredTilePos;
 
 	{ /// Draw actors
 		for (int i = 0; i < world->actorsNum; i++) {
@@ -1162,7 +1163,6 @@ void drawGame(float elapsed) {
 	if (game->is2d) {
 		popCamera2d();
 	} else {
-		game->hovered3dTilePos = closestHoveredTilePos;
 
 		popPass();
 
