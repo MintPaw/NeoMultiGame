@@ -485,7 +485,10 @@ void stepGame(float elapsed) {
 					}
 					target = bestEnemy;
 					// if (enemiesInRangeNum > 0) target = enemiesInRange[enemiesInRangeNum-1];
-					if (target) actor->aimRads = radsBetween(actor->position, target->position);
+					if (target) {
+						actor->aimTarget = target->id;
+						actor->aimRads = radsBetween(actor->position, target->position);
+					}
 				}
 
 				bool isActive = true;
@@ -1112,7 +1115,7 @@ Chunk *createChunk(Vec2i position) {
 			Vec2 heightPerlinPos = baseHeightPerlinPos + (v2(x, y) / v2(CHUNK_SIZE, CHUNK_SIZE));
 			float perlinValue = perlin2d(heightPerlinPos.x, heightPerlinPos.y);
 			tile->perlinValue = perlinValue;
-			tile->height = clampMap(perlinValue, 0.5, 1, 0, 3);
+			tile->elevation = clampMap(perlinValue, 0.5, 1, 0, 3);
 		}
 	}
 
@@ -1345,7 +1348,7 @@ float getRange(ActorType actorType, Vec2i tilePos) {
 	float range = info->baseRange;
 
 	Tile *tile = getTileAt(tilePos);
-	if (tile) range += tile->height * TILE_SIZE;
+	if (tile) range += tile->elevation * TILE_SIZE;
 
 	for (int i = 0; i < data->ownedUpgradesNum; i++) {
 		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
@@ -1520,7 +1523,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 12); // version
+	writeU32(stream, 13); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -1571,6 +1574,7 @@ void writeActor(DataStream *stream, Actor *actor) {
 	writeVec2(stream, actor->velo);
 	writeVec2(stream, actor->accel);
 	writeFloat(stream, actor->aimRads);
+	writeU32(stream, actor->aimTarget);
 	writeFloat(stream, actor->hp);
 	writeFloat(stream, actor->armor);
 	writeFloat(stream, actor->shield);
@@ -1612,7 +1616,7 @@ void writeTile(DataStream *stream, Tile tile) {
 	writeVec2(stream, tile.flow);
 	writeU32(stream, tile.costSoFar);
 	writeU32(stream, tile.dijkstraValue);
-	writeU8(stream, tile.height);
+	writeU8(stream, tile.elevation);
 }
 
 void loadState(char *path) {
@@ -1678,6 +1682,7 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 	actor->velo = readVec2(stream);
 	actor->accel = version >= 8 ? readVec2(stream) : v2();
 	actor->aimRads = readFloat(stream);
+	if (version >= 13) actor->aimTarget = readU32(stream);
 	actor->hp = readFloat(stream);
 	if (version >= 2) actor->armor = readFloat(stream);
 	if (version >= 2) actor->shield = readFloat(stream);
@@ -1722,6 +1727,6 @@ Tile readTile(DataStream *stream, int version) {
 	tile.flow = readVec2(stream);
 	tile.costSoFar = readU32(stream);
 	tile.dijkstraValue = readU32(stream);
-	if (version >= 4) tile.height = readU8(stream);
+	if (version >= 4) tile.elevation = readU8(stream);
 	return tile;
 }

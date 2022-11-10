@@ -110,6 +110,7 @@ struct Actor {
 	Vec2 velo;
 	Vec2 accel;
 	float aimRads;
+	int aimTarget;
 
 	float hp;
 	float armor;
@@ -154,7 +155,7 @@ struct Tile {
 	Vec2 flow;
 	int costSoFar;
 	int dijkstraValue;
-	u8 height;
+	u8 elevation;
 	float perlinValue;
 };
 
@@ -364,6 +365,7 @@ AABB getAABB(Actor *actor);
 
 Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
+void draw3dRing(Vec3 center, float radius, int color, int points=24, float thickness=0.2);
 
 void updateAndDrawOverlay(float elapsed);
 void saveGlobals();
@@ -514,7 +516,7 @@ void updateGame() {
 					Vec2i pos = toMakeRoad[i];
 					Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
 					tile->type = TILE_ROAD;
-					tile->height = 0;
+					tile->elevation = 0;
 				}
 			}
 
@@ -686,8 +688,8 @@ void drawGame(float elapsed) {
 					if (tile->type == TILE_GROUND) color = 0xFF017301;
 					if (tile->type == TILE_ROAD) color = 0xFF966F02;
 
-					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
-					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
+					float heightShadePerc = clampMap(tile->elevation, 0, 3, 0, 0.25);
+					// float heightShadePerc = clampMap(tile->elevation, 0, 255, 0, 1);
 					color = lerpColor(color, 0xFF000000, heightShadePerc);
 
 					if (game->is2d) {
@@ -773,6 +775,7 @@ void drawGame(float elapsed) {
 						Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 						drawCircle(range, 0x80FF0000);
 					} else {
+						draw3dRing(v3(actor->position, 0), getRange(actor, worldToTile(actor->position)), 0xFFFF0000, 24);
 					}
 				}
 			}
@@ -1099,6 +1102,9 @@ void drawGame(float elapsed) {
 						aabb.max.z += height;
 						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
 						passMesh(cubeMesh, toMatrix(aabb), color);
+
+						Rect tileRect = tileToWorldRect(tilePos);
+						draw3dRing(v3(getCenter(tileRect), 0), getRange(event->actorType, tilePos), 0xFFFF0000, 24);
 					}
 				}
 			}
@@ -1237,6 +1243,7 @@ float getTile3dHeight(Vec2i tilePos) {
 	Tile *tile = getTileAt(tilePos);
 	if (tile) {
 		if (tile->type == TILE_ROAD) height *= 0.1;
+		height += tile->elevation * TILE_SIZE*SCALE_3D * 0.3;
 	}
 	return height;
 }
@@ -1270,6 +1277,26 @@ Matrix4 toMatrix(AABB aabb) {
 	matrix.TRANSLATE(getCenter(aabb));
 	matrix.SCALE(getSize(aabb));
 	return matrix;
+}
+
+void draw3dRing(Vec3 center, float radius, int color, int points, float thickness) {
+	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+
+	for (int i = 0; i < points; i++) {
+		float perc = i / (float)points;
+		float rads = 2*M_PI * perc;
+		rads += platform->time*0.2;
+		Vec3 pos = v3();
+		pos.x = center.x + cos(rads)*radius;
+		pos.y = center.y + sin(rads)*radius;
+		Vec2i tilePos = worldToTile(v2(pos.x, pos.y));
+
+		pos *= SCALE_3D;
+		pos.y *= -1;
+		pos.z = getTile3dHeight(tilePos);
+		AABB aabb = makeCenteredAABB(pos, v3(thickness, thickness, thickness));
+		passMesh(cubeMesh, toMatrix(aabb), color);
+	}
 }
 
 void updateAndDrawOverlay(float elapsed) {
