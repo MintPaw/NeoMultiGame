@@ -562,8 +562,6 @@ void updateGame() {
 		elapsed *= game->timeScale;
 	}
 
-	clearRenderer();
-
 	for (int i = 0; i < stepsToTake; i++) {
 		stepGame(elapsed);
 		drawGame(elapsed);
@@ -604,6 +602,8 @@ void drawGame(float elapsed) {
 	Globals *globals = &game->globals;
 	World *world = data->world;
 
+	clearRenderer();
+
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
 			CoreEvent *event = &game->coreEvents[i];
@@ -615,51 +615,87 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
-	if (game->is2d) {
-		Rect screenRect = {};
+	Rect screenRect2d = {};
+	Pass *pass = NULL;
+	if (game->is2d) { /// Setup camera
 		Matrix3 cameraMatrix = mat3();
-		{ /// Setup camera
-			cameraMatrix = mat3();
-			cameraMatrix.TRANSLATE(game->size/2);
-			cameraMatrix.SCALE(data->cameraZoom);
-			cameraMatrix.TRANSLATE(-data->cameraPosition);
+		cameraMatrix = mat3();
+		cameraMatrix.TRANSLATE(game->size/2);
+		cameraMatrix.SCALE(data->cameraZoom);
+		cameraMatrix.TRANSLATE(-data->cameraPosition);
 
-			game->mouse = cameraMatrix.invert() * platform->mouse;
+		game->mouse = cameraMatrix.invert() * platform->mouse;
 
-			screenRect.width = game->size.x / data->cameraZoom;
-			screenRect.height = game->size.y / data->cameraZoom;
-			screenRect.x = data->cameraPosition.x - screenRect.width/2;
-			screenRect.y = data->cameraPosition.y - screenRect.height/2;
-		} ///
+		screenRect2d.width = game->size.x / data->cameraZoom;
+		screenRect2d.height = game->size.y / data->cameraZoom;
+		screenRect2d.x = data->cameraPosition.x - screenRect2d.width/2;
+		screenRect2d.y = data->cameraPosition.y - screenRect2d.height/2;
 
 		pushCamera2d(cameraMatrix);
+	} else {
+		pass = createPass();
+		pushPass(pass);
 
-		{ /// Draw map
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
-				if (!overlaps(screenRect, chunk->rect)) continue;
-				if (!chunk->visible) continue;
+		Vec3 cameraTarget = v3();
+		cameraTarget.x = data->cameraPosition.x * SCALE_3D;
+		cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
+		cameraTarget.z = 0;
 
-				for (int y = 0; y < CHUNK_SIZE; y++) {
-					for (int x = 0; x < CHUNK_SIZE; x++) {
-						int tileIndex = y*CHUNK_SIZE + x;
+		Matrix4 srcMatrix = mat4();
+		srcMatrix.TRANSLATE(cameraTarget);
+		srcMatrix.ROTATE_EULER(toRad(globals->cameraAngleDeg), 0, 0);
+		srcMatrix.TRANSLATE(0, 0, 200);
+		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
+		Vec3 cameraSrc = srcMatrix * v3();
+
+		pass->camera.position = cameraSrc;
+		pass->camera.target = cameraTarget;
+
+		pass->camera.up = v3(0, 1, 0);
+		pass->camera.fovy = 59;
+		pass->camera.isOrtho = false;
+		pass->camera.size = game->size;
+		pass->camera.nearCull = 0.01;
+		pass->camera.farCull = 1000;
+		// pass->camera.orthoScale = 10;
+
+		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
+	} ///
+
+	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+	float closestHoveredTileDist = 0;
+	Vec2i closestHoveredTilePos = v2i();
+
+	{ /// Draw map
+		for (int i = 0; i < world->chunksNum; i++) {
+			Chunk *chunk = &world->chunks[i];
+			if (!chunk->visible) continue;
+
+			if (game->is2d) {
+				if (!overlaps(screenRect2d, chunk->rect)) continue;
+			} else {
+			}
+
+			for (int y = 0; y < CHUNK_SIZE; y++) {
+				for (int x = 0; x < CHUNK_SIZE; x++) {
+					int tileIndex = y*CHUNK_SIZE + x;
+					Tile *tile = &chunk->tiles[tileIndex];
+
+					int color = 0x00000000;
+					if (tile->type == TILE_HOME) color = 0xFFFFF333;
+					if (tile->type == TILE_GROUND) color = 0xFF017301;
+					if (tile->type == TILE_ROAD) color = 0xFF966F02;
+
+					float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
+					// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
+					color = lerpColor(color, 0xFF000000, heightShadePerc);
+
+					if (game->is2d) {
 						Rect rect = {};
 						rect.x = x*TILE_SIZE + chunk->rect.x;
 						rect.y = y*TILE_SIZE + chunk->rect.y;
 						rect.width = TILE_SIZE;
 						rect.height = TILE_SIZE;
-						Tile *tile = &chunk->tiles[tileIndex];
-
-						int color = 0x00000000;
-
-						if (tile->type == TILE_HOME) color = 0xFFFFF333;
-						if (tile->type == TILE_GROUND) color = 0xFF017301;
-						if (tile->type == TILE_ROAD) color = 0xFF966F02;
-
-						float heightShadePerc = clampMap(tile->height, 0, 3, 0, 0.25);
-						// float heightShadePerc = clampMap(tile->height, 0, 255, 0, 1);
-						color = lerpColor(color, 0xFF000000, heightShadePerc);
-
 						drawRect(rect, color);
 
 						if (game->debugShowDijkstraValues) {
@@ -681,60 +717,113 @@ void drawGame(float elapsed) {
 						}
 
 						if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
+					} else {
+						Vec2i tilePos = chunkTileToWorldTile(chunk, v2i(x, y));
+						AABB aabb = tileToAABB(tilePos);
+						Matrix4 matrix = toMatrix(aabb);
+						passMesh(cubeMesh, matrix, color);
+						for (int i = 0; i < cubeMesh->indsNum/3; i++) {
+							Tri tri = {};
+							tri.verts[0] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 0]].position;
+							tri.verts[1] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 1]].position;
+							tri.verts[2] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 2]].position;
+
+							float dist;
+							Vec2 uv;
+							if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
+								if (isZero(closestHoveredTilePos) || closestHoveredTileDist > dist) {
+									closestHoveredTileDist = dist;
+									closestHoveredTilePos = tilePos;
+								}
+							}
+						}
 					}
 				}
-
-				if (game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
 			}
-		} ///
 
-		{ /// Draw actors
-			for (int i = 0; i < world->actorsNum; i++) {
-				Actor *actor = &world->actors[i];
-				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+			if (game->is2d && game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
+		}
+	} ///
 
-				Chunk *chunk = worldToChunk(actor->position);
-				if (chunk && !chunk->visible) continue;
+	{ /// Draw actors
+		for (int i = 0; i < world->actorsNum; i++) {
+			Actor *actor = &world->actors[i];
+			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
 
-				bool isSelected = false;
-				for (int i = 0; i < data->selectedActorsNum; i++) {
-					if (data->selectedActors[i] == actor->id) {
-						isSelected = true;
-						break;
-					}
+			Chunk *chunk = worldToChunk(actor->position);
+			if (chunk && !chunk->visible) continue;
+
+			bool isSelected = false;
+			for (int i = 0; i < data->selectedActorsNum; i++) {
+				if (data->selectedActors[i] == actor->id) {
+					isSelected = true;
+					break;
+				}
+			}
+
+			if (isSelected) {
+				if (game->is2d) {
+					drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
+				} else {
 				}
 
-				if (isSelected) {
-					drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
-
-					if (info->isTower) {
+				if (info->isTower) {
+					if (game->is2d) {
 						Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 						drawCircle(range, 0x80FF0000);
+					} else {
 					}
 				}
+			}
 
-				Rect rect = getRect(actor);
+			Rect rect = getRect(actor);
+			AABB aabb = getAABB(actor);
 
-				if (actor->type == ACTOR_BALLISTA) {
+			if (actor->type == ACTOR_BALLISTA) {
+				if (game->is2d) {
 					drawRect(rect, 0xFF800000);
 
 					Line2 line;
 					line.start = getCenter(rect);
 					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 					drawLine(line, 4, 0xFFFF0000);
-				} else if (actor->type == ACTOR_MORTAR_TOWER) {
-					drawRect(rect, 0xFF525252);
-				} else if (actor->type == ACTOR_TESLA_COIL) {
-					float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-					int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 
+					{
+						Vec3 start = getCenter(aabb);
+						Vec3 dir = v3(1, 0, 0);
+						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
+						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
+						passMesh(cubeMesh, matrix, 0xFF202020);
+					}
+				}
+			} else if (actor->type == ACTOR_MORTAR_TOWER) {
+				if (game->is2d) {
+					drawRect(rect, 0xFF525252);
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_TESLA_COIL) {
+				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
+				int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
+
+				if (game->is2d) {
 					Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 					drawCircle(circle, sparkColor);
 
 					drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
-				} else if (actor->type == ACTOR_FROST_KEEP) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_FROST_KEEP) {
+				if (game->is2d) {
 					drawRect(rect, 0xFFE3F0F5);
-				} else if (actor->type == ACTOR_FLAME_THROWER) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_FLAME_THROWER) {
+				if (game->is2d) {
 					drawRect(rect, lerpColor(BURN_COLOR, 0xFF000000, 0.75));
 
 					Line2 line;
@@ -750,7 +839,11 @@ void drawGame(float elapsed) {
 					drawLine(tri.verts[0], tri.verts[1], 5, color);
 					drawLine(tri.verts[1], tri.verts[2], 5, color);
 					drawLine(tri.verts[2], tri.verts[0], 5, color);
-				} else if (actor->type == ACTOR_POISON_SPRAYER) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_POISON_SPRAYER) {
+				if (game->is2d) {
 					drawRect(rect, lerpColor(POISON_COLOR, 0xFF000000, 0.75));
 
 					Line2 line;
@@ -766,7 +859,11 @@ void drawGame(float elapsed) {
 					drawLine(tri.verts[0], tri.verts[1], 5, color);
 					drawLine(tri.verts[1], tri.verts[2], 5, color);
 					drawLine(tri.verts[2], tri.verts[0], 5, color);
-				} else if (actor->type == ACTOR_SHREDDER) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_SHREDDER) {
+				if (game->is2d) {
 					drawRect(rect, 0xFF800000);
 
 					Line2 line;
@@ -774,11 +871,23 @@ void drawGame(float elapsed) {
 					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 					line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
 					drawLine(line, 4, 0xFFFF0000);
-				} else if (actor->type == ACTOR_MANA_SIPHON) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_MANA_SIPHON) {
+				if (game->is2d) {
 					drawRect(rect, lerpColor(0xFFA4CCC8, 0xFF000000, 0.25));
-				} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
+				if (game->is2d) {
 					drawRect(rect, 0xFFA4B0CC);
-				} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+				}
+			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
+				if (game->is2d) {
 					drawRect(rect, 0xFF008000);
 
 					Rect vitalityRect = rect;
@@ -837,31 +946,53 @@ void drawGame(float elapsed) {
 						DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
 						drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
 					}
-				} else if (actor->type == ACTOR_ARROW) {
-					Rect bulletRect = makeCenteredSquare(actor->position, 8);
-					drawRect(bulletRect, 0xFFFF0000);
-				} else if (actor->type == ACTOR_MORTAR) {
-					float delayTime = info->bulletSpeed;
-					float explodeRange = info->baseRange;
-					if (actor->time < delayTime) {
-						float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
-						drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
-					}
-
-					if (actor->time >= delayTime) {
-						Circle circle = makeCircle(actor->position, explodeRange);
-						drawCircle(circle, 0xFFFFFFFF);
-					}
-				} else if (actor->type == ACTOR_FROST) {
-					drawRect(rect, 0x80FFFFFF);
-				} else if (actor->type == ACTOR_SAW) {
+				} else {
+					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
+				}
+			} else if (actor->type == ACTOR_ARROW) {
+				if (game->is2d) {
 					Rect bulletRect = makeCenteredSquare(actor->position, 8);
 					drawRect(bulletRect, 0xFFFF0000);
 				} else {
-					drawRect(rect, 0xFFFF00FF);
+				}
+			} else if (actor->type == ACTOR_MORTAR) {
+				float delayTime = info->bulletSpeed;
+				float explodeRange = info->baseRange;
+				if (actor->time < delayTime) {
+					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
+					if (game->is2d) {
+						drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
+					} else {
+					}
 				}
 
-				if (info->isTower) {
+				if (actor->time >= delayTime) {
+					if (game->is2d) {
+						Circle circle = makeCircle(actor->position, explodeRange);
+						drawCircle(circle, 0xFFFFFFFF);
+					} else {
+					}
+				}
+			} else if (actor->type == ACTOR_FROST) {
+				if (game->is2d) {
+					drawRect(rect, 0x80FFFFFF);
+				} else {
+				}
+			} else if (actor->type == ACTOR_SAW) {
+				if (game->is2d) {
+					Rect bulletRect = makeCenteredSquare(actor->position, 8);
+					drawRect(bulletRect, 0xFFFF0000);
+				} else {
+				}
+			} else {
+				if (game->is2d) {
+					drawRect(rect, 0xFFFF00FF);
+				} else {
+				}
+			}
+
+			if (info->isTower) {
+				if (game->is2d) {
 					Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
 					levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
 					levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
@@ -879,10 +1010,13 @@ void drawGame(float elapsed) {
 						xpRect.width *= actor->xp / maxXp;
 						drawRect(xpRect, 0xFFFFEF94);
 					}
+				} else {
 				}
+			}
 
-				if (getInfo(actor)->isEnemy) {
-					if (isHoveringActor(actor)) {
+			if (getInfo(actor)->isEnemy) {
+				if (isHoveringActor(actor)) {
+					if (game->is2d) {
 						Rect textRect = makeCenteredRect(actor->position, game->size*v2(0.02, 0.02));
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 						drawTextInRect(frameSprintf(
@@ -895,9 +1029,12 @@ void drawGame(float elapsed) {
 								actor->hp,
 								getInfo(actor)->maxHp
 						), props, textRect);
+					} else {
 					}
 				}
+			}
 
+			if (game->is2d) {
 				if (game->debugShowActorVelo) {
 					DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 					drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
@@ -906,20 +1043,22 @@ void drawGame(float elapsed) {
 					// drawLine(start, end, 5, 0xFFFF0000);
 				}
 			}
-		} ///
+		}
+	} ///
 
-		{ /// Update effects
-			for (int i = 0; i < game->effectsNum; i++) {
-				Effect *effect = &game->effects[i];
+	{ /// Update effects
+		for (int i = 0; i < game->effectsNum; i++) {
+			Effect *effect = &game->effects[i];
 
-				bool complete = false;
-				float maxTime = 1;
+			bool complete = false;
+			float maxTime = 1;
 
-				if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
-					CoreEvent *event = &effect->coreEvent;
-					if (event->type == CORE_EVENT_DAMAGE) {
-						float perc = effect->time / maxTime;
+			if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
+				CoreEvent *event = &effect->coreEvent;
+				if (event->type == CORE_EVENT_DAMAGE) {
+					float perc = effect->time / maxTime;
 
+					if (game->is2d) {
 						Rect textRect = makeCenteredRect(effect->position, game->size*v2(0.01, 0.01));
 
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
@@ -941,40 +1080,53 @@ void drawGame(float elapsed) {
 							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.hpValue), props, textRect);
 							textRect.y += textRect.height;
 						}
-					} else if (event->type == CORE_EVENT_SHOW_GHOST) {
-						complete = true;
-						Vec2i tilePosition = worldToTile(event->position);
-						Rect tileRect = tileToWorldRect(tilePosition);
+					} else {
+					}
+				} else if (event->type == CORE_EVENT_SHOW_GHOST) {
+					complete = true;
+					Vec2i tilePos = worldToTile(event->position);
+					if (game->is2d) {
+						Rect tileRect = tileToWorldRect(tilePos);
 						drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
 
-						Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePosition));
+						Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePos));
 						drawCircle(range, 0x80FF0000);
+					} else {
+						float height = getTile3dHeight(tilePos);
+						AABB aabb = tileToAABB(worldToTile(event->position));
+						aabb.min.z += height;
+						aabb.max.z += height;
+						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
+						passMesh(cubeMesh, toMatrix(aabb), color);
 					}
 				}
-
-				effect->time += elapsed;
-				if (effect->time > maxTime) complete = true;
-
-				if (complete) {
-					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
-					game->effectsNum--;
-					i--;
-					continue;
-				}
 			}
-		} ///
 
-		{ /// Show explore buttons
-			if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE) {
-				for (int i = 0; i < world->chunksNum; i++) {
-					Chunk *chunk = &world->chunks[i];
-					if (!chunk->visible) continue;
+			effect->time += elapsed;
+			if (effect->time > maxTime) complete = true;
 
-					for (int i = 0; i < chunk->connectionsNum; i++) {
-						Chunk *newChunk = getChunkAt(chunk->connections[i]);
-						Assert(newChunk);
+			if (complete) {
+				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+				game->effectsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
 
-						if (newChunk->visible) continue;
+	{ /// Show explore buttons
+		if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE) {
+			for (int i = 0; i < world->chunksNum; i++) {
+				Chunk *chunk = &world->chunks[i];
+				if (!chunk->visible) continue;
+
+				for (int i = 0; i < chunk->connectionsNum; i++) {
+					Chunk *newChunk = getChunkAt(chunk->connections[i]);
+					Assert(newChunk);
+
+					if (newChunk->visible) continue;
+
+					if (game->is2d) {
 
 						Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
 						Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
@@ -991,348 +1143,25 @@ void drawGame(float elapsed) {
 
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 						drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
+					} else {
 					}
+				}
 
-					bool isPortal = false; //@copyPastedIsPortal
-					if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
-					if (isPortal) {
+				bool isPortal = false; //@copyPastedIsPortal
+				if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
+				if (isPortal) {
+					if (game->is2d) {
 						Rect portalTileRect = tileToWorldRect(chunkTileToWorldTile(chunk, v2i(CHUNK_SIZE/2, CHUNK_SIZE/2)));
 						drawRect(portalTileRect, 0x80FF0000);
 					}
 				}
 			}
-		} ///
+		}
+	} ///
 
+	if (game->is2d) {
 		popCamera2d();
 	} else {
-		Pass *pass = createPass();
-		pushPass(pass);
-
-		Vec3 cameraTarget = v3();
-		cameraTarget.x = data->cameraPosition.x * SCALE_3D;
-		cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
-		cameraTarget.z = 0;
-
-		Matrix4 srcMatrix = mat4();
-		srcMatrix.TRANSLATE(cameraTarget);
-		srcMatrix.ROTATE_EULER(toRad(globals->cameraAngleDeg), 0, 0);
-		srcMatrix.TRANSLATE(0, 0, 200);
-		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
-		Vec3 cameraSrc = srcMatrix * v3();
-
-		pass->camera.position = cameraSrc;
-		pass->camera.target = cameraTarget;
-
-		pass->camera.up = v3(0, 1, 0);
-		pass->camera.fovy = 59;
-		pass->camera.isOrtho = false;
-		pass->camera.size = game->size;
-		pass->camera.nearCull = 0.01;
-		pass->camera.farCull = 1000;
-		// pass->camera.orthoScale = 10;
-
-		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
-
-		Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
-
-		float closestHoveredTileDist = 0;
-		Vec2i closestHoveredTilePos = v2i();
-
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
-			if (!chunk->visible) continue;
-
-			for (int y = 0; y < CHUNK_SIZE; y++) {
-				for (int x = 0; x < CHUNK_SIZE; x++) {
-					Vec2i tilePos = chunkTileToWorldTile(chunk, v2i(x, y));
-
-					AABB aabb = tileToAABB(tilePos);
-					Matrix4 matrix = toMatrix(aabb);
-
-					int tileIndex = y*CHUNK_SIZE + x;
-					Tile *tile = &chunk->tiles[tileIndex];
-
-					int color = 0x00000000;
-					if (tile->type == TILE_HOME) color = 0xFFFFF333;
-					if (tile->type == TILE_GROUND) color = 0xFF017301;
-					if (tile->type == TILE_ROAD) color = 0xFF966F02;
-
-					passMesh(cubeMesh, matrix, color);
-
-					for (int i = 0; i < cubeMesh->indsNum/3; i++) {
-						Tri tri = {};
-						tri.verts[0] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 0]].position;
-						tri.verts[1] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 1]].position;
-						tri.verts[2] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 2]].position;
-
-						float dist;
-						Vec2 uv;
-						if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
-							if (isZero(closestHoveredTilePos) || closestHoveredTileDist > dist) {
-								closestHoveredTileDist = dist;
-								closestHoveredTilePos = tilePos;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		{ /// Draw actors 3d
-			for (int i = 0; i < world->actorsNum; i++) {
-				Actor *actor = &world->actors[i];
-				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
-
-				Chunk *chunk = worldToChunk(actor->position);
-				if (chunk && !chunk->visible) continue;
-
-				// bool isSelected = false;
-				// for (int i = 0; i < data->selectedActorsNum; i++) {
-				// 	if (data->selectedActors[i] == actor->id) {
-				// 		isSelected = true;
-				// 		break;
-				// 	}
-				// }
-
-				// if (isSelected) {
-				// 	drawRect(inflatePerc(getRect(actor), 0.2), 0xFFEAF82A);
-
-				// 	if (info->isTower) {
-				// 		Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-				// 		drawCircle(range, 0x80FF0000);
-				// 	}
-				// }
-
-				AABB aabb = getAABB(actor);
-
-				if (actor->type == ACTOR_BALLISTA) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-
-					{
-						Vec3 start = getCenter(aabb);
-						Vec3 dir = v3(1, 0, 0);
-						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
-						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
-						passMesh(cubeMesh, matrix, 0xFF202020);
-					}
-				} else if (actor->type == ACTOR_MORTAR_TOWER) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-				} else if (actor->type == ACTOR_TESLA_COIL) {
-					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-					// int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
-
-					// Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-					// drawCircle(circle, sparkColor);
-
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-				} else if (actor->type == ACTOR_FROST_KEEP) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-				} else if (actor->type == ACTOR_FLAME_THROWER) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-
-					// Line2 line;
-					// line.start = getCenter(rect);
-					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-					// drawLine(line, 12, 0xFF000000);
-
-					// float range = getRange(actor, worldToTile(actor->position));
-					// Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
-
-					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-					// int color = setAofArgb(BURN_COLOR, perc*255.0);
-					// drawLine(tri.verts[0], tri.verts[1], 5, color);
-					// drawLine(tri.verts[1], tri.verts[2], 5, color);
-					// drawLine(tri.verts[2], tri.verts[0], 5, color);
-				} else if (actor->type == ACTOR_POISON_SPRAYER) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-
-					// Line2 line;
-					// line.start = getCenter(rect);
-					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-					// drawLine(line, 12, 0xFF000000);
-
-					// float range = getRange(actor, worldToTile(actor->position));
-					// Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
-
-					// float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-					// int color = setAofArgb(POISON_COLOR, perc*255.0);
-					// drawLine(tri.verts[0], tri.verts[1], 5, color);
-					// drawLine(tri.verts[1], tri.verts[2], 5, color);
-					// drawLine(tri.verts[2], tri.verts[0], 5, color);
-				} else if (actor->type == ACTOR_SHREDDER) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-
-					// Line2 line;
-					// line.start = getCenter(rect);
-					// line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
-					// line.start = line.end - radToVec2(actor->aimRads)*(TILE_SIZE);
-					// drawLine(line, 4, 0xFFFF0000);
-				} else if (actor->type == ACTOR_MANA_SIPHON) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-				} else if (actor->type == ACTOR_MANA_CRYSTAL) {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
-				} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
-					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
-
-					// Rect vitalityRect = rect;
-					// {
-					// 	vitalityRect.height = 4;
-					// 	vitalityRect.y = rect.y - vitalityRect.height - 4;
-					// 	float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
-
-					// 	float maxHpPerc = info->maxHp / totalPoints;
-					// 	Rect hpRect = vitalityRect;
-					// 	hpRect.width *= maxHpPerc;
-					// 	hpRect.width *= actor->hp / info->maxHp;
-					// 	drawRect(hpRect, 0xFF00FF00);
-
-					// 	float maxArmorPerc = info->maxArmor / totalPoints;
-					// 	Rect armorRect = vitalityRect;
-					// 	armorRect.x += maxHpPerc * vitalityRect.width;
-					// 	armorRect.width *= maxArmorPerc;
-					// 	armorRect.width *= actor->armor / info->maxArmor;
-					// 	drawRect(armorRect, 0xFFFFD66E);
-
-					// 	float maxShieldPerc = info->maxShield / totalPoints;
-					// 	Rect shieldRect = vitalityRect;
-					// 	shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
-					// 	shieldRect.width *= maxShieldPerc;
-					// 	shieldRect.width *= actor->shield / info->maxShield;
-					// 	drawRect(shieldRect, 0xFF718691);
-					// }
-
-					// if (actor->slow > 0) {
-					// 	Rect slowRect = vitalityRect;
-					// 	slowRect.y -= slowRect.height + 4;
-					// 	slowRect.width *= clampMap(actor->slow, 0, 100, 0, 1, QUINT_OUT);
-					// 	drawRect(slowRect, 0xFF01335C);
-					// }
-
-					// if (actor->poison) {
-					// 	Rect textRect = getRect(actor);
-					// 	textRect.x -= textRect.width;
-					// 	textRect.y -= textRect.height;
-					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
-					// 	drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
-					// }
-
-					// if (actor->burn) {
-					// 	Rect textRect = getRect(actor);
-					// 	textRect.y -= textRect.height;
-					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
-					// 	drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
-					// }
-
-					// if (actor->bleed) {
-					// 	Rect textRect = getRect(actor);
-					// 	textRect.x += textRect.width;
-					// 	textRect.y -= textRect.height;
-					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
-					// 	drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
-					// }
-				} else if (actor->type == ACTOR_ARROW) {
-					// Rect bulletRect = makeCenteredSquare(actor->position, 8);
-				} else if (actor->type == ACTOR_MORTAR) {
-					// float delayTime = info->bulletSpeed;
-					// float explodeRange = info->baseRange;
-					// if (actor->time < delayTime) {
-					// 	float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
-					// 	drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
-					// }
-
-					// if (actor->time >= delayTime) {
-					// 	Circle circle = makeCircle(actor->position, explodeRange);
-					// 	drawCircle(circle, 0xFFFFFFFF);
-					// }
-				} else if (actor->type == ACTOR_FROST) {
-					// drawRect(rect, 0x80FFFFFF);
-				} else if (actor->type == ACTOR_SAW) {
-					// Rect bulletRect = makeCenteredSquare(actor->position, 8);
-					// drawRect(bulletRect, 0xFFFF0000);
-				} else {
-					// drawRect(rect, 0xFFFF00FF);
-				}
-
-				if (info->isTower) {
-					// Rect levelNumberRect = makeCenteredSquare(v2(), game->size.y*0.03);
-					// levelNumberRect.x = rect.x + rect.width/2 - levelNumberRect.width/2;
-					// levelNumberRect.y = rect.y - levelNumberRect.height - game->size.y*0.01;
-
-					// DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-					// drawTextInRect(frameSprintf("%d", actor->level), props, levelNumberRect);
-
-					// if (actor->level < getMaxLevel(actor->type)) {
-					// 	Rect xpRect = rect;
-					// 	xpRect.height = game->size.y*0.005;
-					// 	xpRect.y -= xpRect.height + game->size.y*0.005;
-					// 	drawRect(xpRect, 0x80FFEF94);
-
-					// 	float maxXp = maxXpPerLevels[actor->level];
-					// 	xpRect.width *= actor->xp / maxXp;
-					// 	drawRect(xpRect, 0xFFFFEF94);
-					// }
-				}
-
-				if (getInfo(actor)->isEnemy) {
-					// if (isHoveringActor(actor)) {
-					// 	Rect textRect = makeCenteredRect(actor->position, game->size*v2(0.02, 0.02));
-					// 	DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-					// 	drawTextInRect(frameSprintf(
-					// 			"%s\n%.0f/%.0f\n%.0f/%.0f\n%.0f/%.0f\n",
-					// 			getInfo(actor)->name,
-					// 			actor->shield,
-					// 			getInfo(actor)->maxShield,
-					// 			actor->armor,
-					// 			getInfo(actor)->maxArmor,
-					// 			actor->hp,
-					// 			getInfo(actor)->maxHp
-					// 	), props, textRect);
-					// }
-				}
-
-				if (game->debugShowActorVelo) {
-					// DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-					// drawTextInRect(frameSprintf("%.01f\n%.01f", actor->velo.x, actor->velo.y), props, rect);
-				}
-			}
-		} ///
-
-		{ /// Update effects 3d
-			for (int i = 0; i < game->effectsNum; i++) {
-				Effect *effect = &game->effects[i];
-
-				bool complete = false;
-				float maxTime = 1;
-
-				if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
-					CoreEvent *event = &effect->coreEvent;
-					if (event->type == CORE_EVENT_DAMAGE) {
-					} else if (event->type == CORE_EVENT_SHOW_GHOST) {
-						complete = true;
-						float height = getTile3dHeight(worldToTile(event->position));
-						AABB aabb = tileToAABB(worldToTile(event->position));
-						aabb.min.z += height;
-						aabb.max.z += height;
-						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
-						passMesh(cubeMesh, toMatrix(aabb), color);
-
-						// Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePosition));
-						// drawCircle(range, 0x80FF0000);
-					}
-				}
-
-				effect->time += elapsed;
-				if (effect->time > maxTime) complete = true;
-
-				if (complete) {
-					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
-					game->effectsNum--;
-					i--;
-					continue;
-				}
-			}
-		} ///
-
 		game->hovered3dTilePos = closestHoveredTilePos;
 
 		popPass();
@@ -1359,9 +1188,29 @@ void drawGame(float elapsed) {
 
 				Raylib::rlEnd();
 			} else if (cmd->type == PASS_CMD_MESH) {
+#if 1
 				Material material = createMaterial();
 				material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
 				drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
+#else
+				Mesh *mesh = cmd->mesh;
+				Raylib::rlCheckRenderBatchLimit(mesh->indsNum);
+
+				Raylib::rlBegin(RL_TRIANGLES);
+
+				int a, r, g, b;
+				hexToArgb(cmd->meshTint, &a, &r, &g, &b);
+				Raylib::rlColor4ub(r, g, b, a);
+
+				for (int i = 0; i < mesh->indsNum; i++) {
+					MeshVertex *meshVert = &mesh->verts[mesh->inds[i]];
+					Vec3 position = cmd->meshMatrix * meshVert->position;
+					Raylib::rlTexCoord2f(meshVert->uv.x, meshVert->uv.y);
+					Raylib::rlNormal3f(meshVert->normal.x, meshVert->normal.y, meshVert->normal.z);
+					Raylib::rlVertex3f(position.x, position.y, position.z);
+				}
+				Raylib::rlEnd();
+#endif
 			}
 		}
 		end3d();

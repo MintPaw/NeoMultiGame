@@ -193,6 +193,7 @@ Material createMaterial() {
 }
 
 void uploadMesh(Mesh *mesh, bool hasWeights) {
+	if (mesh->vaoId) return;
 	// This could be faster if it was global and resizable
 	Vec3 *positions = (Vec3 *)frameMalloc(sizeof(Vec3) * mesh->vertsNum);
 	Vec2 *uvs = (Vec2 *)frameMalloc(sizeof(Vec2) * mesh->vertsNum);
@@ -405,5 +406,5 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		Raylib::rlSetMatrixProjection(matProjection);
 	}
 
-	unloadMesh(mesh);
+	// unloadMesh(mesh);
 }
