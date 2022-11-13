@@ -35,6 +35,7 @@ struct Light {
 // Input lighting values
 uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
+uniform vec4 colSpecular;
 uniform vec3 viewPos;
 
 void main()

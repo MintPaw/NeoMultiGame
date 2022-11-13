@@ -864,7 +864,7 @@ AABB makeAABB(Vec3 min=v3(), Vec3 max=v3());
 AABB inflate(AABB bounds, float amount);
 bool intersects(AABB bounds1, AABB bounds2);
 bool intersects(AABB bounds, Tri tri);
-bool overlaps(AABB aabb, Line3 line, Vec3 *hitOut);
+bool overlaps(AABB aabb, Line3 line, Vec3 *hitOut=NULL);
 float distance(AABB bounds1, AABB bounds2);
 Vec3 getSize(AABB bounds);
 Vec3 FORCE_INLINE getCenter(AABB bounds);

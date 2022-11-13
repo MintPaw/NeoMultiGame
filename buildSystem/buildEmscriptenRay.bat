@@ -33,6 +33,7 @@ set ASSETS_DIR=%PROJECT_DIR%\%GAME_NAME%Assets
 if "%GAME_NAME%" == "rtsClient" set ASSETS_DIR="C:\Dropbox\rtsGame\rtsClientAssets"
 if "%GAME_NAME%" == "horseGame" set ASSETS_DIR="C:\Dropbox\FallowCandy\HorseProjects\horseGameAssets"
 if "%GAME_NAME%" == "butt2GoGame" set ASSETS_DIR="C:\Dropbox\FallowCandy\Butt2Go\butt2GoGameAssets"
+if "%GAME_NAME%" == "concreteJungleGame" set ASSETS_DIR="C:\Dropbox\concreteJungle\concreteJungleGameAssets"
 
 if [%INTERNAL_MODE%]==[1] (
 	set COMPRESSION_LEVEL=0
@@ -90,6 +91,7 @@ if [%INTERNAL_MODE%]==[1] (
 
 if [%DEBUG_MODE%]==[1] (
 	set DEBUG_ARGS=-DFALLOW_DEBUG -g
+	REM set DEBUG_ARGS=-DFALLOW_DEBUG -gsource-map --source-map-base http://localhost:80/game/
 ) else (
 	set DEBUG_ARGS=
 )

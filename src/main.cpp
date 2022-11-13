@@ -439,7 +439,7 @@ NanoTime mainNano;
 #endif
 
 #if defined(PLAYING_tower2Game)
-# include "tower2Game.cpp"
+# include "tower2Game/tower2Game.cpp"
 #endif
 
 #if defined(PLAYING_deskGame)

@@ -625,12 +625,13 @@ bool writeFile(const char *fileName, void *data, int length) {
 }
 
 void appendFile(const char *fileName, void *data, int length) {
-	char realName[PATH_MAX_LEN];
+	char realName[PATH_MAX_LEN] = {};
 	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, fileName);
 
 	FILE *filePtr = fopen(realName, "a");
 	if (!filePtr) {
+		FILE *filePtr = fopen(realName, "w");
 		logf("Cannot find file %s\n", realName);
 		Assert(0);
 	}

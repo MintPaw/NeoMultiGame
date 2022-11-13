@@ -109,6 +109,7 @@ enum JoyButtons {
 };
 
 Platform *platform = NULL;
+bool defeatWindowsScalingInHtml5 = false;
 
 void initPlatform(int windowWidth, int windowHeight, char *windowTitle);
 
@@ -144,23 +145,22 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
 
-// #ifdef __EMSCRIPTEN__
-// 	float html5ExtraScaling = emscripten_get_device_pixel_ratio();
-// 	platform->windowWidth *= html5ExtraScaling;
-// 	platform->windowHeight *= html5ExtraScaling;
-// #endif
+#ifdef __EMSCRIPTEN__
+	if (defeatWindowsScalingInHtml5) {
+		float html5ExtraScaling = emscripten_get_device_pixel_ratio();
+		platform->windowWidth *= html5ExtraScaling;
+		platform->windowHeight *= html5ExtraScaling;
+	}
+#endif
 
 	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
 #ifdef _WIN32
 	platform->processHandle = GetCurrentProcess();
+	QueryPerformanceFrequency(&platform->performanceFrequency);
 #endif
 
 	pushRndSeed(time(NULL));
-
-#ifdef _WIN32
-	QueryPerformanceFrequency(&platform->performanceFrequency);
-#endif
 
 #if defined(FALLOW_COMMAND_LINE_ONLY)
 	platform->isCommandLineOnly = true;
@@ -174,20 +174,20 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->isInternalVersion = true;
 #endif
 
-	// if (platform->isInternalVersion) logf("Starting raylib engine\n");
-
 	Raylib::SetWindowState(Raylib::FLAG_WINDOW_RESIZABLE);
 	Raylib::InitWindow(platform->windowWidth, platform->windowHeight, windowTitle);
 
-// #ifdef __EMSCRIPTEN__
-// 	EM_ASM({
-// 		let newWidth = $0;
-// 		let newHeight = $1;
-// 		let canvasElement = document.getElementById("canvas");
-// 		canvasElement.style.width = newWidth+"px";
-// 		canvasElement.style.height = newHeight+"px";
-// 	}, windowWidth, windowHeight);
-// #endif
+#ifdef __EMSCRIPTEN__
+	if (defeatWindowsScalingInHtml5) {
+		EM_ASM({
+			let newWidth = $0;
+			let newHeight = $1;
+			let canvasElement = document.getElementById("canvas");
+			canvasElement.style.width = newWidth+"px";
+			canvasElement.style.height = newHeight+"px";
+		}, windowWidth, windowHeight);
+	}
+#endif
 
 	platform->windowScaling = Raylib::GetWindowScaleDPI().x;
 
@@ -601,8 +601,8 @@ struct Renderer {
 	void *tempTextureRowBuffer;
 	int tempTextureRowBufferSize;
 };
-
 Renderer *renderer = NULL;
+bool skip3dShaders = false;
 
 Raylib::Color toRaylibColor(int color) { return Raylib::GetColor(argbToRgba(color)); }
 Raylib::Vector3 toRaylib(Vec3 vec) { return {vec.x, vec.y, vec.z}; }
@@ -702,44 +702,46 @@ void initRenderer(int width, int height) {
 	setRendererBlendMode(BLEND_NORMAL);
 
 	{ /// Setup shaders
-#ifndef __EMSCRIPTEN__
-		renderer->alphaDiscardShader = loadShader(
-			NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
-			NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
-		);
+		if (!skip3dShaders) {
+			// renderer->alphaDiscardShader = loadShader(
+			// 	NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
+			// 	NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
+			// );
 
-		{
-			renderer->lightingAnimatedShader = loadShader(
-				"assets/common/shaders/raylib/glsl330/lightingAnimated.vs",
-				"assets/common/shaders/raylib/glsl330/lightingAnimated.fs"
-			);
+			{
+				renderer->lightingAnimatedShader = loadShader(
+					"assets/common/shaders/raylib/glsl330/lightingAnimated.vs",
+					"assets/common/shaders/raylib/glsl330/lightingAnimated.fs",
+					"assets/common/shaders/raylib/glsl100/lightingAnimated.vs",
+					"assets/common/shaders/raylib/glsl100/lightingAnimated.fs"
+				);
 
-			renderer->lightingAnimatedShaderBoneTransformsLoc = getUniformLocation(renderer->lightingAnimatedShader, "boneTransforms");
+				renderer->lightingAnimatedShaderBoneTransformsLoc = getUniformLocation(renderer->lightingAnimatedShader, "boneTransforms");
 
-			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = getUniformLocation(renderer->lightingAnimatedShader, "viewPos");
-			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = getUniformLocation(renderer->lightingAnimatedShader, "ambient");
-			renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = getUniformLocation(renderer->lightingAnimatedShader, "colSpecular");
-			float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-			int loc = renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
-			setShaderUniform(renderer->lightingAnimatedShader, loc, ambientLightValue, SHADER_UNIFORM_VEC4, 1);
+				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = getUniformLocation(renderer->lightingAnimatedShader, "viewPos");
+				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = getUniformLocation(renderer->lightingAnimatedShader, "ambient");
+				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = getUniformLocation(renderer->lightingAnimatedShader, "colSpecular");
+				float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
+				int loc = renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
+				setShaderUniform(renderer->lightingAnimatedShader, loc, ambientLightValue, SHADER_UNIFORM_VEC4, 1);
 
-			renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
-		}
+				renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
+			}
 
-		{
+			{
 #ifdef __EMSCRIPTEN__
-			char *glslFolder = "glsl100";
+				char *glslFolder = "glsl100";
 #else
-			char *glslFolder = "glsl330";
+				char *glslFolder = "glsl330";
 #endif
 
-			char *fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
-			renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
-			free(fs);
+				char *fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
+				renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
+				free(fs);
 
-			renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
+				renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
+			}
 		}
-#endif
 
 		renderer->outlineShader = loadShader(
 			NULL, "assets/common/shaders/raylib/glsl330/outline.fs",

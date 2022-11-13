@@ -385,8 +385,17 @@ void runGame() {
 
 	initFileOperations();
 
-	Vec2 res = v2(1600, 900);
+	Vec2 res = v2(1280, 720);
+#ifdef __EMSCRIPTEN__
+	// res *= 0.5;
 
+	EM_ASM({
+		let statusElement = document.getElementById("status");
+		statusElement.style.display = "none";
+	});
+#endif
+
+	defeatWindowsScalingInHtml5 = true;
 	initPlatform(res.x, res.y, "tower2");
 	platform->sleepWait = true;
 	initAudio();
@@ -418,6 +427,39 @@ void updateGame() {
 
 		rndInt(0, 3); // Burn an rnd seed???
 		isFirstStart = true;
+
+#if 0
+		{
+			float leafSize = 25;
+			float padSize = 50;
+
+			Texture *texture = getTexture("assets/leaf.png");
+
+			float finalWidth = (leafSize + padSize) * 2;
+			float finalHeight = leafSize * 2;
+			RenderTexture *finalTexture = createRenderTexture(finalWidth, finalHeight);
+
+			pushTargetTexture(finalTexture);
+			clearRenderer();
+			for (int y = 0; y < 2; y++) {
+				for (int x = 0; x < 2; x++) {
+					float xpos = x * (leafSize + padSize);
+					if (y == 1) xpos += padSize/2 + leafSize/2;
+					float ypos = y * leafSize;
+					Rect rect = makeRect(xpos, ypos, leafSize, leafSize);
+					RenderProps props = newRenderProps(texture, rect);
+					props.alpha = 0.25;
+					drawTexture(texture, props);
+				}
+			}
+			popTargetTexture();
+
+			u8 *bitmapData = getTextureData(finalTexture, _F_TD_FLIP_Y);
+
+			if (!stbi_write_png("C:/Dropbox/College/resume/leafImage.png", finalTexture->width, finalTexture->height, 4, bitmapData, finalTexture->width*4)) logf("Failed to dump\n");
+			exit(0);
+		}
+#endif
 	}
 
 	if (game->shouldReset) {
@@ -434,8 +476,8 @@ void updateGame() {
 		data->world = (World *)zalloc(sizeof(World));
 		World *world = data->world;
 
-		{ /// Generate map
-			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk) * CHUNKS_MAX);
+		{ /// Generate map //@todo This should be part of the core?
+			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
 			int chunksCouldExpandNum = 0;
 
 			Chunk *chunk = createChunk(v2i(0, 0));
@@ -459,19 +501,11 @@ void updateGame() {
 
 				Vec2i possiblePositions[4];
 				int possiblePositionsNum = 0;
-				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(-1, 0);
-				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(1, 0);
-				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, -1);
-				possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
-				for (int i = 0; i < possiblePositionsNum; i++) {
-					Vec2i possiblePosition = possiblePositions[i];
-					if (getChunkAt(possiblePosition)) {
-						arraySpliceIndex(possiblePositions, possiblePositionsNum, sizeof(Vec2i), i);
-						possiblePositionsNum--;
-						i--;
-						continue;
-					}
-				}
+
+				if (!getChunkAt(chunkToExpand->position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(-1, 0);
+				if (!getChunkAt(chunkToExpand->position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(1, 0);
+				if (!getChunkAt(chunkToExpand->position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, -1);
+				if (!getChunkAt(chunkToExpand->position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
 
 				if (possiblePositionsNum > 0) {
 					int chosenIndex = rndInt(0, possiblePositionsNum-1);
@@ -483,7 +517,7 @@ void updateGame() {
 					chunksCouldExpand[chunksCouldExpandNum++] = newChunk;
 				}
 
-				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Vec2i), expandIndex);
+				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Chunk *), expandIndex);
 				chunksCouldExpandNum--;
 			}
 
@@ -596,7 +630,11 @@ bool isHoveringActor(Actor *actor) {
 	if (game->is2d) {
 		return contains(getRect(actor), game->mouse);
 	} else {
-		return false;
+		AABB aabb = getAABB(actor);
+		Vec3 start = game->mouseRayPos;
+		Vec3 end = start + game->mouseRayDir*100.0;
+		Line3 line = makeLine3(start, end);
+		return overlaps(aabb, line);
 	}
 }
 
@@ -795,8 +833,10 @@ void drawGame(float elapsed) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 
 					{
+						Vec2 aimVec2 = radToVec2(actor->aimRads);
+
 						Vec3 start = getCenter(aabb);
-						Vec3 dir = v3(1, 0, 0);
+						Vec3 dir = v3(aimVec2.x, -aimVec2.y, 0);
 						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
 						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
 						passMesh(cubeMesh, matrix, 0xFF202020);
@@ -1238,7 +1278,7 @@ Effect *createEffect(EffectType type) {
 }
 
 float getTile3dHeight(Vec2i tilePos) {
-	float height = TILE_SIZE * SCALE_3D;
+	float height = TILE_SIZE * SCALE_3D * 0.25;
 
 	Tile *tile = getTileAt(tilePos);
 	if (tile) {
@@ -1304,7 +1344,7 @@ void updateAndDrawOverlay(float elapsed) {
 	Globals *globals = &game->globals;
 
 	{ /// Editor
-		if (keyPressed(KEY_CTRL) && keyJustPressed('R')) game->is2d = !game->is2d;
+		if (keyJustPressed('R')) game->is2d = !game->is2d;
 
 		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 		if (game->inEditor) {

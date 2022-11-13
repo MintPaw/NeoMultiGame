@@ -316,6 +316,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 				int boneIndex = i;
 				if (streq(bone->name, mesh->boneNames[meshIndex])) {
 					boneTransforms[meshIndex] = skeleton->meshTransforms[boneIndex];
+					boneTransforms[meshIndex] = boneTransforms[meshIndex].transpose(); // This must happen here to work on GLES 2.0
 				}
 			}
 		}
@@ -334,7 +335,7 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 		Raylib::rlEnableShader(material.shader->raylibShader.id);
 
 		if (material.shader == renderer->lightingAnimatedShader) {
-			glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, true, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
+			glUniformMatrix4fv(renderer->lightingAnimatedShaderBoneTransformsLoc, BONES_MAX, false, (float *)boneTransforms); // Raylib can't set uniform matrix arrays
 		}
 
 		int *shaderLocs = material.shader->raylibShader.locs;

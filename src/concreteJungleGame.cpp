@@ -145,7 +145,7 @@ alertedPointing
 #define BLOCKING_STAMINA_THRESHOLD 5
 #define SECS_PER_CITY_TICK 1
 Vec3 UNIT_SIZE = v3(150, 150, 300);
-#define ROOM_PREWARM_TIME 20
+#define ROOM_PREWARM_TIME 60
 
 #define GROUND_SPACING 0.1
 
@@ -754,6 +754,8 @@ struct Game {
 	float prevMapTime;
 	float mapTime;
 
+	bool centerInNextMap;
+
 	bool alliancesControlled[TEAMS_MAX];
 
 	Vec3 cameraTarget;
@@ -941,8 +943,17 @@ void runGame() {
 
 	initFileOperations();
 
-	Vec2 res = v2(1600, 900);
+	Vec2 res = v2(1280, 720);
+#ifdef __EMSCRIPTEN__
+	// res *= 0.5;
 
+	EM_ASM({
+		let statusElement = document.getElementById("status");
+		statusElement.style.display = "none";
+	});
+#endif
+
+	defeatWindowsScalingInHtml5 = true;
 	initPlatform(res.x, res.y, "Concrete Jungle");
 	platform->sleepWait = true;
 	initAudio();
@@ -963,13 +974,13 @@ void updateGame() {
 		game->particleFont = createFont("assets/common/arial.ttf", 25);
 		game->simpleStatsFont = createFont("assets/common/arial.ttf", 18);
 
-		game->pixelizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/pixelizer.fs");
+		game->pixelizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/pixelizer.fs", NULL, "assets/common/shaders/raylib/glsl100/pixelizer.fs");
 		game->pixelizePixelRatioLoc = getUniformLocation(game->pixelizeShader, "pixelRatio");
 
-		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs");
+		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs", NULL, "assets/common/shaders/raylib/glsl100/fxaa.fs");
 		game->fxaaResolutionLoc = getUniformLocation(game->fxaaShader, "resolution");
 
-		game->posterizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/posterization.fs");
+		game->posterizeShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/posterization.fs", NULL, "assets/common/shaders/raylib/glsl100/posterization.fs");
 		game->posterizeGammaLoc = getUniformLocation(game->posterizeShader, "gamma");
 		game->posterizeNumColorsLoc = getUniformLocation(game->posterizeShader, "numColors");
 
@@ -1189,7 +1200,9 @@ void updateGame() {
 
 		game->debugTimeScale = 1;
 		game->debugDrawUnitModels = true;
+#ifndef __EMSCRIPTEN__
 		game->debugDrawActorStatsSimple = true;
+#endif
 
 		game->cameraAngleDegrees.x = 75;
 		game->cameraAngleDegrees.y = 3;
@@ -1296,7 +1309,11 @@ void updateGame() {
 					WorldElement *element = &game->worldElements[i];
 
 					if (element->type == WORLD_ELEMENT_CUBE) {
-						drawAABB(element->aabb, element->color);
+						AABB aabb = element->aabb;
+						Vec3 size = getSize(aabb);
+						aabb.min -= size/2;
+						aabb.max += size/2;
+						drawAABB(aabb, element->color);
 					} else if (element->type == WORLD_ELEMENT_TRIANGLE) {
 						Vec2 uvs[3] = {};
 						logf("drawTriangle is gone now\n");
@@ -1539,6 +1556,10 @@ void stepGame(float elapsed) {
 			game->inStore = false;
 			game->inInventory = false;
 			game->lookingAtMap = false;
+#ifdef __EMSCRIPTEN__
+			game->nextMapIndex = getIndexByMap(getCityMapByCoords(2, 1));
+			game->centerInNextMap = true;
+#endif
 
 			memset(game->alliancesControlled, 0, sizeof(bool) * TEAMS_MAX);
 			game->alliancesControlled[0] = true;
@@ -1615,6 +1636,14 @@ void stepGame(float elapsed) {
 					}
 
 					newActor->position = playerSpawnPos;
+
+					if (game->centerInNextMap) {
+						game->centerInNextMap = false;
+
+						AABB groundAABB = getAABB(getActorOfType(destMap, ACTOR_GROUND));
+						newActor->position.x = (groundAABB.max.x + groundAABB.min.x) / 2;
+						newActor->position.y = (groundAABB.max.y + groundAABB.min.y) / 2;
+					}
 
 					bringWithinBounds(destMap, newActor);
 					player = newActor;
@@ -4612,11 +4641,16 @@ void stepGame(float elapsed) {
 				if (game->alliancesControlled[4]) textLines[textLinesNum++] = "Circle(hold) - Create weapon";
 				if (game->alliancesControlled[5]) textLines[textLinesNum++] = "D-pad down - Stash weapon";
 			} else {
+#ifdef __EMSCRIPTEN__
+				textLines[textLinesNum++] = "WSAD - Move";
+#endif
 				textLines[textLinesNum++] = "J - Punch";
 				textLines[textLinesNum++] = "K - Kick";
+#ifndef __EMSCRIPTEN__
 				textLines[textLinesNum++] = "L - Pickup";
 				textLines[textLinesNum++] = "M - Map";
 				if (game->alliancesControlled[0]) textLines[textLinesNum++] = frameSprintf("Q - Quaff potion (%d/3)", player->potionsLeft);
+#endif
 				if (game->alliancesControlled[1]) textLines[textLinesNum++] = "N - Dash";
 				if (game->alliancesControlled[2]) textLines[textLinesNum++] = "B - Armor up";
 				if (game->alliancesControlled[3]) textLines[textLinesNum++] = "U - Stasis";
@@ -4626,14 +4660,16 @@ void stepGame(float elapsed) {
 
 			Vec2 cursor = v2(3, game->size.y);
 			for (int i = textLinesNum-1; i >= 0; i--) {
-				Vec2 size = getTextSize(game->defaultFont, textLines[i]);
+				DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFC0C0C0);
+				Vec2 size = game->size*v2(0.2, 0.03);
 				Vec2 position;
 				position.x = cursor.x;
 				position.y = cursor.y - size.y;
+				props.position = position;
 
 				Rect rect = makeRect(position, size);
 				drawRect(rect, 0x80000000);
-				drawText(game->defaultFont, textLines[i], position, 0xFFC0C0C0);
+				drawTextInRect(textLines[i], props, rect, v2(0, 0.5));
 
 				cursor.y -= size.y;
 			}
@@ -4646,7 +4682,9 @@ void stepGame(float elapsed) {
 			cursor.y += size.y + 5;
 			if (game->leftToBeatTillUnlock > 0) {
 				str = frameSprintf("%d left", game->leftToBeatTillUnlock);
+#ifndef __EMSCRIPTEN__
 				drawText(game->defaultFont, str, cursor, 0xFFEEEEEE);
+#endif
 			}
 		} ///
 
@@ -4663,12 +4701,14 @@ void stepGame(float elapsed) {
 			rect.x = game->size.x/2 - rect.width/2;
 			rect.y = game->size.y * 0.01;
 
+#ifndef __EMSCRIPTEN__
 			DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFCCCCCC);
 			if (h > 0) {
 				drawTextInRect(frameSprintf("%02d:%02d:%02d", h, m, s), props, rect);
 			} else {
 				drawTextInRect(frameSprintf("%02d:%02d", m, s), props, rect);
 			}
+#endif
 		} ///
 
 	} /// 

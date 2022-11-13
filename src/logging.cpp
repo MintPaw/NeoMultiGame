@@ -15,7 +15,7 @@ void writeCrashLog();
 void logf(const char *msg, ...);
 void loggerAssert(bool expr, const char *fileName, int lineNum);
 void loggerPanic(const char *msg, const char *fileName, int lineNum);
-bool logfToFile(const char *msg, ...);
+void logfToFile(char *fileName, char *msg, ...);
 #define Assert(expr) loggerAssert(expr, __FILE__, __LINE__)
 #define Panic(msg) loggerPanic(msg, __FILE__, __LINE__)
 /// FUNCTIONS ^
@@ -30,6 +30,8 @@ struct LoggingSystem {
 	DataStream *logStream;
 
 	float time;
+
+	char *redirectPath;
 };
 
 LoggingSystem *logSys = NULL;
@@ -113,18 +115,14 @@ LogfBuffer *loggerLogString(char *msg) {
 	strncpy(log->buffer, msg, log->size);
 	log->logTime = logSys->time;
 
-#if defined(__EMSCRIPTEN__)
-		printf("%s", msg);
-#else
-		// printf("\x1B[33m");
-		printf("%s", msg);
-		// printf("\x1B[37m");
-#endif
+	printf("%s", msg);
 	fflush(stdout);
 
 	if (log->buffer[strlen(log->buffer)-1] == '\n') {
 		log->buffer[strlen(log->buffer)-1] = 0;
 	}
+
+	if (logSys->redirectPath) logfToFile(logSys->redirectPath, msg);
 
 	return log;
 }
@@ -169,7 +167,12 @@ void logfToFile(char *fileName, char *msg, ...) {
 	stbsp_vsnprintf(str, size+1, msg, args);
 	va_end(args);
 
-	void appendFile(const char *fileName, void *data, int length); //@hack
+	time_t t = time(NULL);
+	char *timeStr = ctime(&t);
+	if (timeStr[strlen(timeStr)-1] == '\n') timeStr[strlen(timeStr)-1] = '\0';
+	str = frameSprintf("[%s] %s", timeStr, str);
+
+	void appendFile(const char *fileName, void *data, int length); //@headerHack
 	appendFile(fileName, str, strlen(str));
 
 	DecMutex(&logSys->logfMutex);
@@ -228,7 +231,9 @@ void writeCrashLog() {
 	char *logPath = frameSprintf("%s/crashlog.txt", exeDir);
 
 	bool writeFile(const char *fileName, void *data, int length); //@headerHack
-	writeFile(logPath, buf, strlen(buf));
+	if (!writeFile(logPath, buf, strlen(buf))) {
+		exit(0);
+	}
 }
 
 #endif
