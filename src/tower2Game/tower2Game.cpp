@@ -253,8 +253,23 @@ struct Effect {
 	CoreEvent coreEvent;
 };
 
+struct WorldChannel {
+	int channelId;
+	Vec3 position;
+};
+
+struct NguiNamedStyleStack {
+#define NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN 64
+	char name[NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN];
+	NguiStyleStack style;
+};
+
 struct Globals {
 	float cameraAngleDeg;
+
+#define CUSTOM_STYLE_STACKS_MAX 64
+	NguiNamedStyleStack customStyleStacks[CUSTOM_STYLE_STACKS_MAX];
+	int customStyleStacksNum;
 };
 
 struct GameData {
@@ -299,6 +314,7 @@ struct Game {
 
 	Globals globals;
 
+	bool isDemo;
 	bool inEditor;
 	float timeScale;
 	Vec2 size;
@@ -309,6 +325,11 @@ struct Game {
 	Vec2i hovered3dTilePos;
 
 	bool shouldReset;
+
+	RenderTexture *gameTexture;
+	RenderTexture *finalTexture;
+	Shader *fxaaShader;
+	int fxaaResolutionLoc;
 
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 	int actorTypeCounts[ACTOR_TYPES_MAX];
@@ -368,6 +389,9 @@ Matrix4 toMatrix(AABB aabb);
 void draw3dRing(Vec3 center, float radius, int color, int points=24, float thickness=0.2);
 
 void updateAndDrawOverlay(float elapsed);
+void pushGameStyleStack(char *name);
+void popGameStyleStack(char *name);
+
 void saveGlobals();
 void loadGlobals();
 
@@ -415,6 +439,13 @@ void updateGame() {
 		game = (Game *)zalloc(sizeof(Game));
 		data = &game->data;
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
+
+		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs", NULL, "assets/common/shaders/raylib/glsl100/fxaa.fs");
+		game->fxaaResolutionLoc = getUniformLocation(game->fxaaShader, "resolution");
+
+#ifdef __EMSCRIPTEN__
+		game->isDemo = true;
+#endif
 
 		// if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
 
@@ -580,13 +611,28 @@ void updateGame() {
 
 		data->cameraZoom = 1;
 
-		if (isFirstStart) loadState("assets/states/autosave.save_state");
+		if (isFirstStart) {
+			if (game->isDemo) {
+				loadState("assets/states/demo0.save_state");
+			} else {
+				loadState("assets/states/autosave.save_state");
+			}
+		}
 	}
 
-	game->size = v2(platform->windowSize);
+	if (!equal(game->size, v2(platform->windowSize))) {
+		game->size = v2(platform->windowSize);
+
+		if (game->gameTexture) destroyTexture(game->gameTexture);
+		game->gameTexture = createRenderTexture(game->size.x, game->size.y);
+
+		if (game->finalTexture) destroyTexture(game->finalTexture);
+		game->finalTexture = createRenderTexture(game->size.x, game->size.y);
+	}
 
 	ngui->mouse = platform->mouse;
 	ngui->screenSize = game->size;
+	ngui->uiScale = game->size.y / 2160;
 
 	int stepsToTake = 1;
 	float elapsed = platform->elapsed;
@@ -631,9 +677,7 @@ bool isHoveringActor(Actor *actor) {
 		return contains(getRect(actor), game->mouse);
 	} else {
 		AABB aabb = getAABB(actor);
-		Vec3 start = game->mouseRayPos;
-		Vec3 end = start + game->mouseRayDir*100.0;
-		Line3 line = makeLine3(start, end);
+		Line3 line = makeLine3(game->mouseRayPos, game->mouseRayPos + game->mouseRayDir*100.0);
 		return overlaps(aabb, line);
 	}
 }
@@ -643,7 +687,6 @@ void drawGame(float elapsed) {
 	World *world = data->world;
 
 	clearRenderer();
-
 	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
 
 	{ /// Iterate CoreEvents
@@ -1173,17 +1216,14 @@ void drawGame(float elapsed) {
 
 					if (newChunk->visible) continue;
 
+					bool didExplore = false;
 					if (game->is2d) {
-
 						Vec2 middle = (getCenter(chunk->rect) + getCenter(newChunk->rect)) / 2;
 						Rect exploreRect = makeCenteredRect(middle, v2(300, 128));
 
 						if (contains(exploreRect, game->mouse)) {
 							exploreRect = inflatePerc(exploreRect, 0.1);
-							if (isMouseClicked()) {
-								newChunk->visible = true;
-								startNextWave();
-							}
+							if (isMouseClicked()) didExplore = true;
 						}
 
 						drawRectOutline(exploreRect, 4, 0xFFCCCCCC);
@@ -1191,6 +1231,25 @@ void drawGame(float elapsed) {
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 						drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
 					} else {
+						AABB aabb = {};
+						aabb.min.x = newChunk->rect.x * SCALE_3D;
+						aabb.min.y = newChunk->rect.y * SCALE_3D;
+						aabb.min.z = 0;
+						aabb.max.x = aabb.min.x + CHUNK_SIZE*TILE_SIZE*SCALE_3D;
+						aabb.max.y = aabb.min.y + CHUNK_SIZE*TILE_SIZE*SCALE_3D;
+						aabb.max.z = TILE_SIZE*SCALE_3D;
+						aabb.min.y *= -1;
+						aabb.max.y *= -1;
+						passMesh(cubeMesh, toMatrix(aabb), lerpColor(0xFFFF0000, 0xFFFF8080, timePhase(data->time)));
+
+						Line3 line = makeLine3(game->mouseRayPos, game->mouseRayPos + game->mouseRayDir*100.0);
+						if (isMouseClicked() && overlaps(aabb, line)) didExplore = true;
+					}
+
+					if (didExplore) {
+						newChunk->visible = true;
+						startNextWave();
+						break;
 					}
 				}
 
@@ -1209,11 +1268,20 @@ void drawGame(float elapsed) {
 	if (game->is2d) {
 		popCamera2d();
 	} else {
-
 		popPass();
+
+		pushTargetTexture(game->gameTexture);
+		clearRenderer();
 
 		start3d(pass->camera);
 		Raylib::rlDisableBackfaceCulling();
+
+		static Vec3 sunPosition = v3(0, -300, 200);
+		// ImGui::DragFloat3("sunPosition", &sunPosition.x);
+		renderer->lights[0].position.x = sunPosition.x;
+		renderer->lights[0].position.y = sunPosition.y;
+		renderer->lights[0].position.z = sunPosition.z;
+		updateLightingShader(pass->camera);
 
 		for (int i = 0; i < pass->cmdsNum; i++) {
 			PassCmd *cmd = &pass->cmds[i];
@@ -1260,6 +1328,25 @@ void drawGame(float elapsed) {
 			}
 		}
 		end3d();
+		popTargetTexture();
+
+		{
+			Vec2 fxaaSize = game->size;
+			setShaderUniform(game->fxaaShader, game->fxaaResolutionLoc, &fxaaSize.x, SHADER_UNIFORM_VEC2, 1);
+
+			pushTargetTexture(game->finalTexture);
+			clearRenderer();
+			startShader(game->fxaaShader);
+			RenderProps props = newRenderProps();
+			drawTexture(game->gameTexture, props);
+			endShader();
+			popTargetTexture();
+		}
+
+		{
+			RenderProps props = newRenderProps();
+			drawTexture(game->finalTexture, props);
+		}
 
 		destroyPass(pass);
 	}
@@ -1356,6 +1443,62 @@ void updateAndDrawOverlay(float elapsed) {
 				if (ImGui::Button("Load")) loadGlobals();
 
 				ImGui::SliderFloat("cameraAngleDeg", &globals->cameraAngleDeg, -90 + 0.01, 90 - 0.01);
+
+				if (ImGui::TreeNode("Ngui style")) {
+					for (int i = 0; i < globals->customStyleStacksNum; i++) {
+						ImGui::PushID(i);
+
+						bool shouldSpliceStack = false;
+						guiPushStyleColor(ImGuiCol_Button, 0xFF900000);
+						if (ImGui::Button("X")) shouldSpliceStack = true;
+						guiPopStyleColor();
+
+						ImGui::SameLine();
+						if (ImGui::ArrowButton("moveUp", ImGuiDir_Up)) {
+							if (i > 0) {
+								arraySwap(globals->customStyleStacks, globals->customStyleStacksNum, sizeof(NguiNamedStyleStack), i, i-1);
+								ImGui::PopID();
+								continue;
+							}
+						}
+						ImGui::SameLine();
+						if (ImGui::ArrowButton("moveDown", ImGuiDir_Down)) {
+							if (i < globals->customStyleStacksNum-1) {
+								arraySwap(globals->customStyleStacks, globals->customStyleStacksNum, sizeof(NguiNamedStyleStack), i, i+1);
+								ImGui::PopID();
+								continue;
+							}
+						}
+
+						ImGui::SameLine();
+						NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+						if (ImGui::TreeNode(frameSprintf("%d: %s###styleNode%d", i, namedStyle->name, i))) {
+							ImGui::InputText("Name", namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN);
+							nguiShowImGuiStyleEditor(&namedStyle->style);
+							ImGui::TreePop();
+						}
+
+						ImGui::PopID();
+
+						if (shouldSpliceStack) {
+							arraySpliceIndex(globals->customStyleStacks, globals->customStyleStacksNum, sizeof(NguiNamedStyleStack), i);
+							globals->customStyleStacksNum--;
+							i--;
+						}
+					}
+
+					if (ImGui::Button("Create custom style")) {
+						if (globals->customStyleStacksNum > CUSTOM_STYLE_STACKS_MAX-1) {
+							logf("Too many custom style stacks!\n");
+						} else {
+							NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[globals->customStyleStacksNum++];
+							memset(namedStyle, 0, sizeof(NguiNamedStyleStack));
+						}
+					}
+
+					ImGui::TreePop();
+				}
+
 				ImGui::TreePop();
 			}
 
@@ -1478,6 +1621,8 @@ void updateAndDrawOverlay(float elapsed) {
 	} ///
 
 	{ /// Update tool related ui
+		pushGameStyleStack("Base");
+
 		if (data->tool == TOOL_NONE) {
 			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
 			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
@@ -1548,6 +1693,7 @@ void updateAndDrawOverlay(float elapsed) {
 	} ///
 
 	if (game->presentedUpgradesNum > 0) {
+		pushGameStyleStack("Upgrades");
 		nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
 		for (int i = 0; i < game->presentedUpgradesNum; i++) {
 			Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
@@ -1592,22 +1738,30 @@ void updateAndDrawOverlay(float elapsed) {
 			}
 		}
 		nguiEndWindow();
+		popGameStyleStack("Upgrades");
 	}
 
 	{
-		Rect rect = makeRect(0, 0, 350, 100);
+		char *demoStr = "";
+		if (game->isDemo) {
+			demoStr = "\nWASD: Camera\nMouse wheel: Zoom\nM: Switch rendering mode";
+		}
+
+		Rect rect = makeRect(v2(), game->size*v2(0.2, 0.3));
 		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 		drawTextInRect(frameSprintf(
-			"Wave: %d\nHp: %d\nMoney $%d\nMana: %.1f/%.1f (+%.1f/s)",
+			"Wave: %d\nHp: %d\nMoney $%d\nMana: %.1f/%.1f (+%.1f/s)%s",
 			data->wave,
 			data->hp,
 			data->money,
 			data->mana,
 			data->maxMana,
-			game->manaToGain/elapsed
-		), props, rect);
+			game->manaToGain/elapsed,
+			demoStr
+		), props, rect, v2());
 	}
 
+	popGameStyleStack("Base");
 	nguiDraw(elapsed);
 
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
@@ -1616,13 +1770,48 @@ void updateAndDrawOverlay(float elapsed) {
 	drawOnScreenLog();
 }
 
+void pushGameStyleStack(char *name) {
+	Globals *globals = &game->globals;
+	for (int i = 0; i < globals->customStyleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+		if (streq(namedStyle->name, name)) {
+			nguiPushStyleStack(&namedStyle->style);
+			return;
+		}
+	}
+
+	logf("Couldn't find style stack %s\n", name);
+}
+
+void popGameStyleStack(char *name) {
+	Globals *globals = &game->globals;
+	for (int i = 0; i < globals->customStyleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+		if (streq(namedStyle->name, name)) {
+			nguiPopStyleStack(&namedStyle->style);
+			return;
+		}
+	}
+
+	logf("Couldn't find style stack %s\n", name);
+}
+
+
 void saveGlobals() {
 	Globals *globals = &game->globals;
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 0); // version
+	writeU32(stream, 1); // version
 
 	writeFloat(stream, globals->cameraAngleDeg);
+
+	writeU32(stream, globals->customStyleStacksNum);
+	for (int i = 0; i < globals->customStyleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+		writeString(stream, namedStyle->name);
+		writeNguiStyleStack(stream, namedStyle->style);
+	}
+
 
 	writeDataStream("assets/globals.bin", stream);
 	destroyDataStream(stream);
@@ -1636,6 +1825,15 @@ void loadGlobals() {
 	int version = readU32(stream);
 
 	globals->cameraAngleDeg = readFloat(stream);
+
+	if (version >= 1) {
+		globals->customStyleStacksNum = readU32(stream);
+		for (int i = 0; i < globals->customStyleStacksNum; i++) {
+			NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+			readStringInto(stream, namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN);
+			namedStyle->style = readNguiStyleStack(stream);
+		}
+	}
 
 	destroyDataStream(stream);
 }

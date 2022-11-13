@@ -675,7 +675,7 @@ void setDepthMask(bool enabled);
 
 Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader);
 void updateLightValues(Shader *shader, Light light);
-void updateLightingShader();
+void updateLightingShader(Camera camera);
 
 void processBatchDraws();
 void resetRenderContext();
