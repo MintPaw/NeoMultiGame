@@ -320,6 +320,8 @@ struct Game {
 	Vec2 size;
 	Vec2 mouse;
 
+	bool is2d;
+
 	Vec3 mouseRayPos;
 	Vec3 mouseRayDir;
 	Vec2i hovered3dTilePos;
@@ -331,6 +333,12 @@ struct Game {
 	Shader *fxaaShader;
 	int fxaaResolutionLoc;
 
+	Camera lastPassCamera;
+#define WORLD_SOUNDS_MAX CHANNELS_MAX
+	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
+	int worldChannelsNum;
+
+	/// Core
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 	int actorTypeCounts[ACTOR_TYPES_MAX];
 
@@ -341,8 +349,6 @@ struct Game {
 	float manaToGain;
 
 	GameData data;
-
-	bool is2d;
 
 	int presentedUpgrades[UPGRADES_MAX];
 	int presentedUpgradesNum;
@@ -389,6 +395,9 @@ Matrix4 toMatrix(AABB aabb);
 void draw3dRing(Vec3 center, float radius, int color, int points=24, float thickness=0.2);
 
 void updateAndDrawOverlay(float elapsed);
+
+int playWorldSound(char *path, Vec3 worldPosition);
+int playWorldSound(char *path, Vec2 worldPosition);
 void pushGameStyleStack(char *name);
 void popGameStyleStack(char *name);
 
@@ -651,6 +660,28 @@ void updateGame() {
 
 	updateAndDrawOverlay(elapsed*stepsToTake);
 
+	{ /// Update world channels
+		for (int i = 0; i < game->worldChannelsNum; i++) {
+			WorldChannel *worldChannel = &game->worldChannels[i];
+			Channel *channel = getChannel(worldChannel->channelId);
+			if (!channel) {
+				arraySpliceIndex(game->worldChannels, game->worldChannelsNum, sizeof(WorldChannel), i);
+				game->worldChannelsNum--;
+				i--;
+				continue;
+			}
+
+			Vec2 screenPos = worldSpaceTo2dNDC01(game->lastPassCamera, worldChannel->position) * game->size;
+
+			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
+			float dist = distance(game->lastPassCamera.position, worldChannel->position);
+			float vol = clampMap(dist, 0, 200, 1, 0);
+			float pan = screenPerc.x;
+			channel->userVolume2 = vol;
+			channel->pan = pan;
+		}
+	} ///
+
 	guiDraw();
 }
 
@@ -743,6 +774,7 @@ void drawGame(float elapsed) {
 		pass->camera.nearCull = 0.01;
 		pass->camera.farCull = 1000;
 		// pass->camera.orthoScale = 10;
+		game->lastPassCamera = pass->camera;
 
 		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
@@ -1144,6 +1176,9 @@ void drawGame(float elapsed) {
 				CoreEvent *event = &effect->coreEvent;
 				if (event->type == CORE_EVENT_DAMAGE) {
 					float perc = effect->time / maxTime;
+					if (perc == 0) {
+						playWorldSound("assets/audio/hit/0.ogg", effect->position);
+					}
 
 					if (game->is2d) {
 						Rect textRect = makeCenteredRect(effect->position, game->size*v2(0.01, 0.01));
@@ -1768,6 +1803,30 @@ void updateAndDrawOverlay(float elapsed) {
 	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
 	drawOnScreenLog();
+}
+
+int playWorldSound(char *path, Vec3 worldPosition) {
+	Sound *sound = getSound(path);
+	if (!sound) {
+		logf("No sound called %s\n", path);
+		return -1;
+	}
+
+	int id;
+	{
+		Channel *channel = playSound(sound);
+		// channel->userVolume = 0.2;
+		id = channel->id;
+	}
+	WorldChannel *worldChannel = &game->worldChannels[game->worldChannelsNum++];
+	memset(worldChannel, 0, sizeof(WorldChannel));
+	worldChannel->channelId = id;
+	worldChannel->position = worldPosition;
+	return id;
+}
+
+int playWorldSound(char *path, Vec2 worldPosition) {
+	return playWorldSound(path, v3(worldPosition, 0) * SCALE_3D * v3(1, -1, 1));
 }
 
 void pushGameStyleStack(char *name) {

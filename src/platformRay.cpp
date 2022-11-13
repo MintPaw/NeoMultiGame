@@ -1609,10 +1609,27 @@ void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
 }
 
 Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
-	Raylib::Matrix proj = Raylib::rlGetMatrixProjection();
+	Raylib::Matrix proj;
+	if (!camera.isOrtho) {
+		float aspect = camera.size.x / camera.size.y;
+		proj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+	} else {
+		proj = Raylib::rlGetMatrixProjection();
+	}
 	Raylib::Matrix view = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
-	view = Raylib::MatrixMultiply(view, Raylib::MatrixScale(camera.orthoScale, camera.orthoScale, camera.orthoScale));
+	if (camera.isOrtho) view = Raylib::MatrixMultiply(view, Raylib::MatrixScale(camera.orthoScale, camera.orthoScale, camera.orthoScale));
+#if 1
+	Raylib::Quaternion worldPos = { worldPosition.x, worldPosition.y, worldPosition.z, 1.0f };
 
+	worldPos = Raylib::QuaternionTransform(worldPos, view);
+	worldPos = Raylib::QuaternionTransform(worldPos, proj);
+
+	Raylib::Vector3 ndcPos = { worldPos.x/worldPos.w, -worldPos.y/worldPos.w, worldPos.z/worldPos.w };
+	Vec2 ndc = v2(ndcPos.x, ndcPos.y);
+	ndc.x++;
+	ndc.y++;
+	ndc /= 2;
+#else // This one used to work, with orthographic camera
 	Raylib::Matrix viewProj = Raylib::MatrixMultiply(view, proj);
 
 	Raylib::Matrix invViewProj = Raylib::MatrixInvert(viewProj);
@@ -1623,6 +1640,7 @@ Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
 	Vec2 ndc = v2(raylibPosition.x, raylibPosition.y);
 	ndc /= 2;
 	ndc.x++;
+#endif
 
 	return ndc;
 }
