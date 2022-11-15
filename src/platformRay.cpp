@@ -556,6 +556,9 @@ struct Renderer {
 	bool disabled;
 	int maxTextureUnits; // Does nothing
 
+	bool lastBackfaceCull;
+	BlendMode lastBlendMode;
+
 	Shader *lightingAnimatedShader;
 	int lightingAnimatedShaderBoneTransformsLoc;
 
@@ -672,6 +675,8 @@ void popAlpha();
 void setRendererBlendMode(BlendMode blendMode);
 void setDepthTest(bool enabled);
 void setDepthMask(bool enabled);
+void setBlending(bool enabled);
+void setBackfaceCulling(bool enabled);
 
 Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader);
 void updateLightValues(Shader *shader, Light light);
@@ -700,6 +705,7 @@ void initRenderer(int width, int height) {
 	pushCamera2d(mat3());
 	pushAlpha(1);
 	setRendererBlendMode(BLEND_NORMAL);
+	setBackfaceCulling(false);
 
 	{ /// Setup shaders
 		if (!skip3dShaders) {
@@ -1417,6 +1423,7 @@ void popAlpha() {
 
 void setRendererBlendMode(BlendMode blendMode) {
 	processBatchDraws();
+	renderer->lastBlendMode = blendMode;
 	Raylib::rlSetBlendMode(Raylib::BLEND_ALPHA);
 	Raylib::rlSetBlendMode(Raylib::BLEND_MULTIPLIED);
 
@@ -1450,6 +1457,19 @@ void setDepthMask(bool enabled) {
 	processBatchDraws();
 	if (enabled) Raylib::rlEnableDepthMask();
 	else Raylib::rlDisableDepthMask();
+}
+
+void setBlending(bool enabled) {
+	processBatchDraws();
+	if (enabled) Raylib::rlEnableColorBlend();
+	else Raylib::rlDisableColorBlend();
+}
+
+void setBackfaceCulling(bool enabled) {
+	processBatchDraws();
+	renderer->lastBackfaceCull = enabled;
+	if (enabled) Raylib::rlEnableBackfaceCulling();
+	else Raylib::rlDisableBackfaceCulling();
 }
 
 Light createLight(int number, int type, Raylib::Vector3 position, Raylib::Vector3 target, Raylib::Color color, Shader *shader) {
@@ -1914,11 +1934,11 @@ void guiDraw() {
 
 			Raylib::rlSetTexture(0);
 			Raylib::rlDisableScissorTest();
-			Raylib::rlEnableBackfaceCulling();
+			setBackfaceCulling(renderer->lastBackfaceCull);
 		}
 	}
 
-	setRendererBlendMode(BLEND_NORMAL);
+	setRendererBlendMode(renderer->lastBlendMode);
 }
 
 void guiTexture(Texture *texture) {

@@ -1,6 +1,5 @@
 // Add a way to see your upgrades
 // dps stats: per tower, per tower type (per wave/per game)
-// Tower building ghost should be a CoreEvent
 // GameData should contain presentedUpgrades
 
 // Upgrade ideas:
@@ -241,6 +240,7 @@ struct CoreEvent {
 	float hpValue;
 
 	ActorType actorType;
+	int actorId;
 };
 
 enum EffectType {
@@ -726,12 +726,10 @@ void drawGame(float elapsed) {
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
 			CoreEvent *event = &game->coreEvents[i];
-			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST || event->type == CORE_EVENT_MORTAR_EXPLOSION) {
+			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST || event->type == CORE_EVENT_MORTAR_EXPLOSION || event->type == CORE_EVENT_SHOOT) {
 				Effect *effect = createEffect(EFFECT_DEFAULT_CORE_EVENT);
 				effect->coreEvent = *event;
 				effect->position = event->position;
-			} else if (event->type == CORE_EVENT_SHOOT) {
-				playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
 			}
 		}
 	} ///
@@ -932,12 +930,9 @@ void drawGame(float elapsed) {
 				}
 			} else if (actor->type == ACTOR_TESLA_COIL) {
 				float perc = clampMap(actor->timeSinceLastShot, 0, 0.5, 0.5, 0);
-				int sparkColor = setAofArgb(0xFFB8FFFA, perc*255.0);
 
 				if (game->is2d) {
 					Circle circle = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
-					drawCircle(circle, sparkColor);
-
 					drawCircle(makeCircle(getCenter(rect), rect.width/2), 0xFFA0A0F0);
 				} else {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
@@ -1171,11 +1166,12 @@ void drawGame(float elapsed) {
 			Effect *effect = &game->effects[i];
 
 			bool complete = false;
-			float maxTime = 1;
+			float maxTime = 0.1;
 
 			if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
 				CoreEvent *event = &effect->coreEvent;
 				if (event->type == CORE_EVENT_DAMAGE) {
+					maxTime = 1;
 					float perc = effect->time / maxTime;
 					if (perc == 0) {
 						playWorldSound("assets/audio/hit/0.ogg", to3d(effect->position));
@@ -1205,6 +1201,30 @@ void drawGame(float elapsed) {
 						}
 					} else {
 					}
+				} else if (event->type == CORE_EVENT_SHOOT) {
+					maxTime = 0.15;
+					float perc = effect->time / maxTime;
+
+					if (perc == 0) playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
+					Actor *actor = getActor(event->actorId);
+					float range = 0;
+					if (actor) {
+						range = getRange(actor, worldToTile(event->position));
+					}
+
+					if (event->actorType == ACTOR_TESLA_COIL) {
+						int color = lerpColor(0xFFB8FFFA, 0x00B8FFFA, perc);
+						if (game->is2d) {
+							Circle circle = makeCircle(actor->position, range);
+							drawCircle(circle, color);
+						} else {
+							int ringCount = 5;
+							for (int i = 0; i < ringCount; i++) {
+								float radius = to3d(range) * ((i+1) / (float)ringCount);
+								draw3dRing(to3d(event->position), radius, color, 16);
+							}
+						}
+					}
 				} else if (event->type == CORE_EVENT_SHOW_GHOST) {
 					complete = true;
 					Vec2i tilePos = worldToTile(event->position);
@@ -1228,8 +1248,8 @@ void drawGame(float elapsed) {
 					}
 				} else if (event->type == CORE_EVENT_MORTAR_EXPLOSION) {
 					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
-					// maxTime = 0.25;
-					maxTime = 2;
+					maxTime = 0.25;
+					// maxTime = 2;
 					float perc = effect->time / maxTime;
 					int color = lerpColor(0xFFFFFFFF, 0x00FF0000, perc);
 
@@ -1237,7 +1257,11 @@ void drawGame(float elapsed) {
 						Circle circle = makeCircle(event->position, explodeRange);
 						drawCircle(circle, color);
 					} else {
-						draw3dRing(to3d(event->position), to3d(explodeRange), color, 24);
+						int ringCount = 10;
+						for (int i = 0; i < ringCount; i++) {
+							float radius = to3d(explodeRange) * ((i+1) / (float)ringCount);
+							draw3dRing(to3d(event->position), radius, color, 24);
+						}
 					}
 				}
 			}
@@ -1282,14 +1306,14 @@ void drawGame(float elapsed) {
 						drawTextInRect("Explore here", props, inflatePerc(exploreRect, -0.1));
 					} else {
 						AABB aabb = {};
-						aabb.min.x = newChunk->rect.x * SCALE_3D;
-						aabb.min.y = newChunk->rect.y * SCALE_3D;
-						aabb.min.z = 0;
-						aabb.max.x = aabb.min.x + CHUNK_SIZE*TILE_SIZE*SCALE_3D;
-						aabb.max.y = aabb.min.y + CHUNK_SIZE*TILE_SIZE*SCALE_3D;
+						aabb.min = to3d(getPosition(newChunk->rect));
+						aabb.max = to3d(getPosition(newChunk->rect) + getSize(newChunk->rect));
 						aabb.max.z = TILE_SIZE*SCALE_3D;
-						aabb.min.y *= -1;
-						aabb.max.y *= -1;
+
+						float temp = aabb.min.y;
+						aabb.min.y = aabb.max.y;
+						aabb.max.y = temp;
+
 						passMesh(cubeMesh, toMatrix(aabb), lerpColor(0xFFFF0000, 0xFFFF8080, timePhase(data->time)));
 
 						Line3 line = makeLine3(game->mouseRayPos, game->mouseRayPos + game->mouseRayDir*100.0);
@@ -1324,7 +1348,8 @@ void drawGame(float elapsed) {
 		clearRenderer();
 
 		start3d(pass->camera);
-		Raylib::rlDisableBackfaceCulling();
+		setBlending(true);
+		setBackfaceCulling(true);
 
 		static Vec3 sunPosition = v3(0, -300, 200);
 		// ImGui::DragFloat3("sunPosition", &sunPosition.x);
@@ -1432,6 +1457,12 @@ AABB tileToAABB(Vec2i tilePos) {
 	aabb.max.z = aabb.min.z + getTile3dHeight(tilePos);
 	aabb.min.y *= -1;
 	aabb.max.y *= -1;
+
+	if (aabb.min.y > aabb.max.y) {
+		float temp = aabb.min.y;
+		aabb.min.y = aabb.max.y;
+		aabb.max.y = temp;
+	}
 	return aabb;
 }
 
@@ -1457,6 +1488,14 @@ float to3d(float value) {
 }
 
 Matrix4 toMatrix(AABB aabb) {
+	if (aabb.min.y > aabb.max.y) {
+		aabb.print("Need to flip aabb");
+		float temp = aabb.min.y;
+		aabb.min.y = aabb.max.y;
+		aabb.max.y = temp;
+
+		aabb = inflate(aabb, timePhase(data->time));
+	}
 	Matrix4 matrix = mat4();
 	matrix.TRANSLATE(getCenter(aabb));
 	matrix.SCALE(getSize(aabb));

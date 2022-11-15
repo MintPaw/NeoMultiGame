@@ -37,7 +37,7 @@ Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
-CoreEvent *createCoreEvent(CoreEventType type);
+CoreEvent *createCoreEvent(CoreEventType type, Actor *actor);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -519,6 +519,12 @@ void stepGame(float elapsed) {
 						}
 					}
 				}
+
+				if (towerShouldFire) {
+					CoreEvent *event = createCoreEvent(CORE_EVENT_SHOOT, actor);
+					event->position = actor->position;
+					event->actorType = actor->type;
+				}
 			}
 
 			if (info->isTower || actor->type == ACTOR_MANA_SIPHON) {
@@ -535,10 +541,6 @@ void stepGame(float elapsed) {
 			if (actor->type == ACTOR_BALLISTA) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
-
-					CoreEvent *event = createCoreEvent(CORE_EVENT_SHOOT);
-					event->position = actor->position;
-					event->actorType = actor->type;
 				}
 			} else if (actor->type == ACTOR_MORTAR_TOWER) {
 				if (towerShouldFire) {
@@ -680,7 +682,7 @@ void stepGame(float elapsed) {
 
 					actor->markedForDeletion = true;
 
-					CoreEvent *event = createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION);
+					CoreEvent *event = createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION, actor);
 					event->position = actor->position;
 				}
 			} else if (actor->type == ACTOR_FROST) {
@@ -936,7 +938,7 @@ void stepGame(float elapsed) {
 			Vec2 center = getCenter(tileToWorldRect(tilePosition));
 
 			{
-				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST);
+				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST, NULL);
 				event->actorType = data->actorToBuild;
 				event->position = center;
 			}
@@ -1319,7 +1321,7 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 	dest->hp -= hpRealDamage;
 
 	if (!noCoreEvent) {
-		CoreEvent *event = createCoreEvent(CORE_EVENT_DAMAGE);
+		CoreEvent *event = createCoreEvent(CORE_EVENT_DAMAGE, dest);
 		event->position = dest->position;
 		event->armorValue = armorRealDamage;
 		event->shieldValue = shieldRealDamage;
@@ -1517,7 +1519,7 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
 	return tri;
 }
 
-CoreEvent *createCoreEvent(CoreEventType type) {
+CoreEvent *createCoreEvent(CoreEventType type, Actor *actor) {
 	if (game->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
 		game->coreEventsNum--;
@@ -1525,6 +1527,7 @@ CoreEvent *createCoreEvent(CoreEventType type) {
 	CoreEvent *event = &game->coreEvents[game->coreEventsNum++];
 	memset(event, 0, sizeof(CoreEvent));
 	event->type = type;
+	if (actor) event->actorId = actor->id;
 	return event;
 }
 

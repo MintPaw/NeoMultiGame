@@ -328,8 +328,6 @@ void drawMesh(Mesh *mesh, Matrix4 matrix, Skeleton *skeleton, Material material)
 	if (skeleton) hasWeights = true;
 	uploadMesh(mesh, hasWeights);
 
-	Raylib::rlDisableBackfaceCulling(); //@hack Triangle winding is backwards for me, and Raylib doesn't have a way of changing it
-
 	Raylib::Matrix raylibMatrix = toRaylib(matrix);
 	{
 		Raylib::rlEnableShader(material.shader->raylibShader.id);
