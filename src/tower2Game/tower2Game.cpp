@@ -226,8 +226,10 @@ struct Upgrade {
 };
 
 enum CoreEventType {
-	CORE_EVENT_DAMAGE,
 	CORE_EVENT_SHOW_GHOST,
+	CORE_EVENT_SHOOT,
+	CORE_EVENT_DAMAGE,
+	CORE_EVENT_MORTAR_EXPLOSION,
 };
 struct CoreEvent {
 	CoreEventType type;
@@ -389,6 +391,8 @@ Effect *createEffect(EffectType type);
 float getTile3dHeight(Vec2i tilePos);
 AABB tileToAABB(Vec2i tilePos);
 AABB getAABB(Actor *actor);
+Vec3 to3d(Vec2 value);
+float to3d(float value);
 
 Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
@@ -397,7 +401,6 @@ void draw3dRing(Vec3 center, float radius, int color, int points=24, float thick
 void updateAndDrawOverlay(float elapsed);
 
 int playWorldSound(char *path, Vec3 worldPosition);
-int playWorldSound(char *path, Vec2 worldPosition);
 void pushGameStyleStack(char *name);
 void popGameStyleStack(char *name);
 
@@ -723,15 +726,16 @@ void drawGame(float elapsed) {
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
 			CoreEvent *event = &game->coreEvents[i];
-			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST) {
+			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST || event->type == CORE_EVENT_MORTAR_EXPLOSION) {
 				Effect *effect = createEffect(EFFECT_DEFAULT_CORE_EVENT);
 				effect->coreEvent = *event;
 				effect->position = event->position;
+			} else if (event->type == CORE_EVENT_SHOOT) {
+				playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
 			}
 		}
 	} ///
 
-	Rect screenRect2d = {};
 	Pass *pass = NULL;
 	if (game->is2d) { /// Setup camera
 		Matrix3 cameraMatrix = mat3();
@@ -741,11 +745,6 @@ void drawGame(float elapsed) {
 		cameraMatrix.TRANSLATE(-data->cameraPosition);
 
 		game->mouse = cameraMatrix.invert() * platform->mouse;
-
-		screenRect2d.width = game->size.x / data->cameraZoom;
-		screenRect2d.height = game->size.y / data->cameraZoom;
-		screenRect2d.x = data->cameraPosition.x - screenRect2d.width/2;
-		screenRect2d.y = data->cameraPosition.y - screenRect2d.height/2;
 
 		pushCamera2d(cameraMatrix);
 	} else {
@@ -787,8 +786,15 @@ void drawGame(float elapsed) {
 			if (!chunk->visible) continue;
 
 			if (game->is2d) {
+				Rect screenRect2d = {};
+				screenRect2d.width = game->size.x / data->cameraZoom;
+				screenRect2d.height = game->size.y / data->cameraZoom;
+				screenRect2d.x = data->cameraPosition.x - screenRect2d.width/2;
+				screenRect2d.y = data->cameraPosition.y - screenRect2d.height/2;
+
 				if (!overlaps(screenRect2d, chunk->rect)) continue;
 			} else {
+				// Cull 3d here
 			}
 
 			for (int y = 0; y < CHUNK_SIZE; y++) {
@@ -888,7 +894,8 @@ void drawGame(float elapsed) {
 						Circle range = makeCircle(actor->position, getRange(actor, worldToTile(actor->position)));
 						drawCircle(range, 0x80FF0000);
 					} else {
-						draw3dRing(v3(actor->position, 0), getRange(actor, worldToTile(actor->position)), 0xFFFF0000, 24);
+						float radius = to3d(getRange(actor, worldToTile(actor->position)));
+						draw3dRing(to3d(actor->position), radius, 0xFFFF0000, 24);
 					}
 				}
 			}
@@ -1073,6 +1080,7 @@ void drawGame(float elapsed) {
 					Rect bulletRect = makeCenteredSquare(actor->position, 8);
 					drawRect(bulletRect, 0xFFFF0000);
 				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				}
 			} else if (actor->type == ACTOR_MORTAR) {
 				float delayTime = info->bulletSpeed;
@@ -1082,6 +1090,7 @@ void drawGame(float elapsed) {
 					if (game->is2d) {
 						drawCircle(actor->position, explodeRange*ghostPerc, 0x80900000);
 					} else {
+						draw3dRing(to3d(actor->position), to3d(explodeRange*ghostPerc), 0xFF802020);
 					}
 				}
 
@@ -1090,6 +1099,7 @@ void drawGame(float elapsed) {
 						Circle circle = makeCircle(actor->position, explodeRange);
 						drawCircle(circle, 0xFFFFFFFF);
 					} else {
+						draw3dRing(to3d(actor->position), to3d(explodeRange), 0xFFFFFFFF);
 					}
 				}
 			} else if (actor->type == ACTOR_FROST) {
@@ -1177,7 +1187,7 @@ void drawGame(float elapsed) {
 				if (event->type == CORE_EVENT_DAMAGE) {
 					float perc = effect->time / maxTime;
 					if (perc == 0) {
-						playWorldSound("assets/audio/hit/0.ogg", effect->position);
+						playWorldSound("assets/audio/hit/0.ogg", to3d(effect->position));
 					}
 
 					if (game->is2d) {
@@ -1221,8 +1231,17 @@ void drawGame(float elapsed) {
 						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
 						passMesh(cubeMesh, toMatrix(aabb), color);
 
-						Rect tileRect = tileToWorldRect(tilePos);
-						draw3dRing(v3(getCenter(tileRect), 0), getRange(event->actorType, tilePos), 0xFFFF0000, 24);
+						Vec3 position = getCenter(tileToAABB(tilePos));
+						float radius = getRange(event->actorType, tilePos) * SCALE_3D;
+						draw3dRing(position, radius, 0xFFFF0000, 24);
+					}
+				} else if (event->type == CORE_EVENT_MORTAR_EXPLOSION) {
+					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
+					if (game->is2d) {
+						Circle circle = makeCircle(event->position, explodeRange);
+						drawCircle(circle, 0xFFFFFFFF);
+					} else {
+						draw3dRing(to3d(event->position), to3d(explodeRange), 0xFFFF0000, 24);
 					}
 				}
 			}
@@ -1240,7 +1259,7 @@ void drawGame(float elapsed) {
 	} ///
 
 	{ /// Show explore buttons
-		if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE) {
+		if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE && data->hp > 0) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
@@ -1434,6 +1453,13 @@ AABB getAABB(Actor *actor) {
 	return aabb;
 }
 
+Vec3 to3d(Vec2 value) {
+	return v3(value, 0) * v3(1, -1, 1) * SCALE_3D;
+}
+float to3d(float value) {
+	return value * SCALE_3D;
+}
+
 Matrix4 toMatrix(AABB aabb) {
 	Matrix4 matrix = mat4();
 	matrix.TRANSLATE(getCenter(aabb));
@@ -1453,8 +1479,6 @@ void draw3dRing(Vec3 center, float radius, int color, int points, float thicknes
 		pos.y = center.y + sin(rads)*radius;
 		Vec2i tilePos = worldToTile(v2(pos.x, pos.y));
 
-		pos *= SCALE_3D;
-		pos.y *= -1;
 		pos.z = getTile3dHeight(tilePos);
 		AABB aabb = makeCenteredAABB(pos, v3(thickness, thickness, thickness));
 		passMesh(cubeMesh, toMatrix(aabb), color);
@@ -1471,6 +1495,7 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 		if (game->inEditor) {
 			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+			ImGui::Text("%d\n", world->actorsNum);
 
 			if (ImGui::TreeNode("Globals")) {
 				if (ImGui::Button("Save")) saveGlobals();
@@ -1779,7 +1804,7 @@ void updateAndDrawOverlay(float elapsed) {
 	{
 		char *demoStr = "";
 		if (game->isDemo) {
-			demoStr = "\nWASD: Camera\nMouse wheel: Zoom\nM: Switch rendering mode";
+			demoStr = "\nWASD: Camera\nMouse wheel: Zoom\nR: Switch rendering mode";
 		}
 
 		Rect rect = makeRect(v2(), game->size*v2(0.2, 0.3));
@@ -1815,7 +1840,7 @@ int playWorldSound(char *path, Vec3 worldPosition) {
 	int id;
 	{
 		Channel *channel = playSound(sound);
-		// channel->userVolume = 0.2;
+		channel->userVolume = 0.2;
 		id = channel->id;
 	}
 	WorldChannel *worldChannel = &game->worldChannels[game->worldChannelsNum++];
@@ -1823,10 +1848,6 @@ int playWorldSound(char *path, Vec3 worldPosition) {
 	worldChannel->channelId = id;
 	worldChannel->position = worldPosition;
 	return id;
-}
-
-int playWorldSound(char *path, Vec2 worldPosition) {
-	return playWorldSound(path, v3(worldPosition, 0) * SCALE_3D * v3(1, -1, 1));
 }
 
 void pushGameStyleStack(char *name) {

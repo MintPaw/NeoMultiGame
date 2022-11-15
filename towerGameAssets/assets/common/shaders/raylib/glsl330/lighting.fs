@@ -37,12 +37,11 @@ struct Light {
 uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
 uniform vec3 viewPos;
-uniform vec4 alpha;
 
 void main()
 {
     // Texel color fetching from texture sampler
-    vec4 texelColor = texture(texture0, fragTexCoord);
+    vec4 texelColor = texture(texture0, fragTexCoord) * fragColor;
     vec3 lightDot = vec3(0.0);
     vec3 normal = normalize(fragNormal);
     vec3 viewD = normalize(viewPos - fragPosition);
@@ -77,8 +76,6 @@ void main()
 
     finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
     finalColor += texelColor*(ambient/10.0)*colDiffuse;
-    finalColor *= alpha.x;
-    finalColor.a = alpha.x;
 
     // Gamma correction
     finalColor = pow(finalColor, vec4(1.0/2.2));

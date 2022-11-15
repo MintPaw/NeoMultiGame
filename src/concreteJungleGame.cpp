@@ -730,6 +730,8 @@ struct Game {
 
 	bool resizeDirty;
 
+	bool isDemo;
+
 	Globals globals;
 	bool inEditor;
 	float timeScale;
@@ -970,6 +972,10 @@ void updateGame() {
 	if (!game) {
 		logf("Game runtime memory is %dmb btw\n", sizeof(Game) / Megabytes(1));
 		game = (Game *)zalloc(sizeof(Game));
+#ifdef __EMSCRIPTEN__
+	game->isDemo = true;
+#endif
+
 		game->defaultFont = createFont("assets/common/arial.ttf", 40);
 		game->particleFont = createFont("assets/common/arial.ttf", 25);
 		game->simpleStatsFont = createFont("assets/common/arial.ttf", 18);
@@ -1519,8 +1525,13 @@ void updateGame() {
 			float distPerc = distance(v2(), screenPerc);
 			float vol = clampMap(distPerc, 0, 2, 1, 0);
 			float pan = screenPerc.x;
+
 			channel->userVolume2 = vol;
 			channel->pan = pan;
+			if (!game->isDemo) {
+				channel->userVolume2 = 0.2;
+				channel->pan = 0;
+			}
 		}
 	} ///
 
@@ -3525,6 +3536,11 @@ void stepGame(float elapsed) {
 				bool hasHpBar = true;
 				bool hasStaminaBar = true;
 
+				if (game->isDemo) {
+					hasHpBar = false;
+					hasStaminaBar = false;
+				}
+
 				Rect hpBgRect;
 				if (hasHpBar) {
 					hpBgRect = makeRect(0, 0, actor->size.x, 10);
@@ -4177,8 +4193,10 @@ void stepGame(float elapsed) {
 
 				Rect rect = makeRect(pos, size);
 
-				pushScreenRect(inflate(rect, 2), alphaColor(0x30000000, alpha));
-				pushScreenText(effectText, newDrawTextProps(game->particleFont, alphaColor(effectTextColor, alpha), pos));
+				if (!game->isDemo) {
+					pushScreenRect(inflate(rect, 2), alphaColor(0x30000000, alpha));
+					pushScreenText(effectText, newDrawTextProps(game->particleFont, alphaColor(effectTextColor, alpha), pos));
+				}
 			}
 
 			effect->time += elapsed;
@@ -5304,7 +5322,7 @@ void bringWithinBounds(Map *map, Actor *actor) {
 }
 
 Vec2 getScreenPoint(Vec3 position) {
-	Vec2 position2 = worldSpaceTo2dNDC01(game->camera3d, position) * v2(platform->windowSize);
+	Vec2 position2 = worldSpaceTo2dNDC01(game->camera3d, position) * v2(platform->windowSize) * 2;
 	return position2;
 }
 

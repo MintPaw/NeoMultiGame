@@ -1645,6 +1645,7 @@ Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
 	return ndc;
 }
 
+
 ///- Gui
 
 void guiTexture(Texture *texture);

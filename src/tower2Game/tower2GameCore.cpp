@@ -58,6 +58,7 @@ void initCore() {
 			ActorTypeInfo *info = &game->actorTypeInfos[i];
 			sprintf(info->name, "Actor %d", i);
 			info->size = v3(TILE_SIZE*0.5, TILE_SIZE*0.5, TILE_SIZE*0.5);
+			info->primaryColor = 0xFF000000;
 		}
 
 		for (int i = ACTOR_BALLISTA; i <= ACTOR_PARTICLE_CANNON; i++) {
@@ -276,6 +277,7 @@ void initCore() {
 		info->maxHp = 20000;
 
 		info = &game->actorTypeInfos[ACTOR_ARROW];
+		info->size = v3(0.1, 0.1, 0.1) * TILE_SIZE;
 		info->bulletSpeed = 20;
 
 		info = &game->actorTypeInfos[ACTOR_MORTAR];
@@ -533,6 +535,10 @@ void stepGame(float elapsed) {
 			if (actor->type == ACTOR_BALLISTA) {
 				if (towerShouldFire) {
 					Actor *bullet = createBullet(actor, target);
+
+					CoreEvent *event = createCoreEvent(CORE_EVENT_SHOOT);
+					event->position = actor->position;
+					event->actorType = actor->type;
 				}
 			} else if (actor->type == ACTOR_MORTAR_TOWER) {
 				if (towerShouldFire) {
@@ -673,6 +679,9 @@ void stepGame(float elapsed) {
 					}
 
 					actor->markedForDeletion = true;
+
+					CoreEvent *event = createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION);
+					event->position = actor->position;
 				}
 			} else if (actor->type == ACTOR_FROST) {
 				int maxTime = 10;

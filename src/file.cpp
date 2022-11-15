@@ -429,7 +429,7 @@ bool copyFile(const char *srcPath, const char *destPath) {
 		return false;
 	}
 #else
-	Panic("Can't run copyFile outside windows\n");
+	logf("Can't run copyFile outside windows\n");
 #endif
 
 	return true;
@@ -560,7 +560,7 @@ void renameFile(const char *currentName, const char *newName) {
 
 #else
 	logf("Line: %d\n", __LINE__);
-	Panic("Can't do this on this platform");
+	logf("Can't do this on this platform");
 #endif
 }
 
