@@ -1093,15 +1093,6 @@ void drawGame(float elapsed) {
 						draw3dRing(to3d(actor->position), to3d(explodeRange*ghostPerc), 0xFF802020);
 					}
 				}
-
-				if (actor->time >= delayTime) {
-					if (game->is2d) {
-						Circle circle = makeCircle(actor->position, explodeRange);
-						drawCircle(circle, 0xFFFFFFFF);
-					} else {
-						draw3dRing(to3d(actor->position), to3d(explodeRange), 0xFFFFFFFF);
-					}
-				}
 			} else if (actor->type == ACTOR_FROST) {
 				if (game->is2d) {
 					drawRect(rect, 0x80FFFFFF);
@@ -1237,11 +1228,16 @@ void drawGame(float elapsed) {
 					}
 				} else if (event->type == CORE_EVENT_MORTAR_EXPLOSION) {
 					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
+					// maxTime = 0.25;
+					maxTime = 2;
+					float perc = effect->time / maxTime;
+					int color = lerpColor(0xFFFFFFFF, 0x00FF0000, perc);
+
 					if (game->is2d) {
 						Circle circle = makeCircle(event->position, explodeRange);
-						drawCircle(circle, 0xFFFFFFFF);
+						drawCircle(circle, color);
 					} else {
-						draw3dRing(to3d(event->position), to3d(explodeRange), 0xFFFF0000, 24);
+						draw3dRing(to3d(event->position), to3d(explodeRange), color, 24);
 					}
 				}
 			}
