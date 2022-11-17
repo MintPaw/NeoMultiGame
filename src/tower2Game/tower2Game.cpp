@@ -267,7 +267,7 @@ struct NguiNamedStyleStack {
 };
 
 struct Globals {
-	float cameraAngleDeg;
+	Vec3 cameraAngle;
 
 #define CUSTOM_STYLE_STACKS_MAX 64
 	NguiNamedStyleStack customStyleStacks[CUSTOM_STYLE_STACKS_MAX];
@@ -749,22 +749,34 @@ void drawGame(float elapsed) {
 		pass = createPass();
 		pushPass(pass);
 
-		Vec3 cameraTarget = v3();
-		cameraTarget.x = data->cameraPosition.x * SCALE_3D;
-		cameraTarget.y = -data->cameraPosition.y * SCALE_3D;
-		cameraTarget.z = 0;
+		Vec3 cameraTarget = to3d(data->cameraPosition);
 
+#if 0
+		static float cameraRot = 0;
+		static float cameraDist = 10;
+		static float cameraHeight = 10;
+		ImGui::SliderFloat("cameraRot", &cameraRot, 0, 360);
+		ImGui::SliderFloat("cameraDist", &cameraDist, 3, 20);
+		ImGui::SliderFloat("cameraHeight", &cameraHeight, 3, 20);
+
+		Vec3 cameraSrc = cameraTarget;
+		cameraSrc.x += cos(toRad(cameraRot)) * cameraDist;
+		cameraSrc.y += sin(toRad(cameraRot)) * cameraDist;
+		cameraSrc.z += cameraHeight;
+		up = v3(0, 0, 1);
+#else
 		Matrix4 srcMatrix = mat4();
 		srcMatrix.TRANSLATE(cameraTarget);
-		srcMatrix.ROTATE_EULER(toRad(globals->cameraAngleDeg), 0, 0);
+		srcMatrix.ROTATE_EULER(globals->cameraAngle);
 		srcMatrix.TRANSLATE(0, 0, 200);
 		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
 		Vec3 cameraSrc = srcMatrix * v3();
+#endif
 
 		pass->camera.position = cameraSrc;
 		pass->camera.target = cameraTarget;
+		pass->camera.up = v3(0, 0, 1);
 
-		pass->camera.up = v3(0, 1, 0);
 		pass->camera.fovy = 59;
 		pass->camera.isOrtho = false;
 		pass->camera.size = game->size;
@@ -772,6 +784,14 @@ void drawGame(float elapsed) {
 		pass->camera.farCull = 1000;
 		// pass->camera.orthoScale = 10;
 		game->lastPassCamera = pass->camera;
+
+#if 0 // Shows the center cube
+		if (!game->is2d) {
+			AABB aabb = makeCenteredAABB(cameraTarget, v3(1, 1, 1) * 1);
+			Matrix4 matrix = toMatrix(aabb);
+			passMesh(cubeMesh, matrix, 0xFFFF0000);
+		}
+#endif
 
 		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
@@ -1530,14 +1550,13 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 		if (game->inEditor) {
 			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-			ImGui::Text("%d\n", world->actorsNum);
 
 			if (ImGui::TreeNode("Globals")) {
 				if (ImGui::Button("Save")) saveGlobals();
 				ImGui::SameLine();
 				if (ImGui::Button("Load")) loadGlobals();
 
-				ImGui::SliderFloat("cameraAngleDeg", &globals->cameraAngleDeg, -90 + 0.01, 90 - 0.01);
+				ImGui::SliderFloat3("cameraAngle", &globals->cameraAngle.x, -M_PI/2, M_PI/2);
 
 				if (ImGui::TreeNode("Ngui style")) {
 					for (int i = 0; i < globals->customStyleStacksNum; i++) {
@@ -1916,9 +1935,9 @@ void saveGlobals() {
 	Globals *globals = &game->globals;
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 1); // version
+	writeU32(stream, 2); // version
 
-	writeFloat(stream, globals->cameraAngleDeg);
+	writeVec3(stream, globals->cameraAngle);
 
 	writeU32(stream, globals->customStyleStacksNum);
 	for (int i = 0; i < globals->customStyleStacksNum; i++) {
@@ -1939,7 +1958,8 @@ void loadGlobals() {
 
 	int version = readU32(stream);
 
-	globals->cameraAngleDeg = readFloat(stream);
+	if (version <= 1) readFloat(stream); // cameraAngleDeg
+	if (version >= 2) globals->cameraAngle = readVec3(stream);
 
 	if (version >= 1) {
 		globals->customStyleStacksNum = readU32(stream);

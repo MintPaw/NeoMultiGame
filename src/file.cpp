@@ -438,8 +438,6 @@ bool copyFile(const char *srcPath, const char *destPath) {
 bool createDirectory(const char *dirName) {
 	if (directoryExists(dirName)) return true;
 	char realName[PATH_MAX_LEN] = {};
-	// strcpy(realName, exeDir);
-	// strcat(realName, "/");
 	if (dirName[1] != ':' && dirName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, dirName);
 

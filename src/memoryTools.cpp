@@ -55,6 +55,7 @@ int getIntAtEndOfString(char *str);
 StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
 
+char **mallocSplitString(char *str, char *delim, int *outStringsNum);
 char **frameSplitString(char *str, char *delim, int *outStrings);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
@@ -71,8 +72,14 @@ void freeFrameMemory();
 
 char *convertToHexString(void *data, int size);
 void *convertFromHexString(char *hex, int *outputSize=NULL);
+u32 stringHash32(const char *s);
+u32 hashU32(u32 x);
+void printBinary(u32 n);
+void dumpHex(const void* data, size_t size);
 
 int indexOfU32(u32 *haystack, int needle);
+
+char *epochToLocalTimeFrameString(u64 time);
 
 MemoryArena *createMemoryArena(int blockSize=Kilobytes(16), int blocksMax=8192);
 void *allocateMemory(MemoryArena *arena, int size);
@@ -491,6 +498,16 @@ char **frameSplitString(char *str, char *delim, int *outStringsNum) {
 	return out;
 }
 
+char **mallocSplitString(char *str, char *delim, int *outStringsNum) {
+	int frameStringsNum = 0;
+	char **frameStrings = frameSplitString(str, delim, &frameStringsNum);
+	char **mallocStrings = (char **)malloc(sizeof(char *) * frameStringsNum);
+	for (int i = 0; i < frameStringsNum; i++) mallocStrings[i] = stringClone(frameStrings[i]);
+
+	*outStringsNum = frameStringsNum;
+	return mallocStrings;
+}
+
 unsigned char *elementBuffer = NULL;
 int elementBufferSize = -1;
 
@@ -603,8 +620,6 @@ void *convertFromHexString(char *hex, int *outputSize) {
 	return output;
 }
 
-
-u32 stringHash32(const char *s);
 u32 stringHash32(const char *s) {
 	u32 hash = 0;
 
@@ -621,7 +636,6 @@ u32 stringHash32(const char *s) {
 	return hash;
 }
 
-u32 hashU32(u32 x);
 u32 hashU32(u32 x) {
 	x = ((x >> 16) ^ x) * 0x45d9f3b;
 	x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -629,7 +643,6 @@ u32 hashU32(u32 x) {
 	return x;
 }
 
-void printBinary(u32 n);
 void printBinary(u32 n) {
 	u32 i;
 	for (i = 1 << 31; i > 0; i = i / 2) {
@@ -637,7 +650,6 @@ void printBinary(u32 n) {
 	}
 }
 
-void dumpHex(const void* data, size_t size);
 void dumpHex(const void* data, size_t size) {
 	static char line[128] = {};
 	memset(line, 0, 128);
@@ -747,6 +759,17 @@ int indexOfU32(u32 *haystack, int haystackNum, u32 needle) {
 	}
 
 	return -1;
+}
+
+char *epochToLocalTimeFrameString(u64 time) {
+	time_t timeCopy = time;
+	char *buffer = (char *)frameMalloc(1024);
+	tm *timeInfoPtr = localtime(&timeCopy);
+	if (!timeInfoPtr) return NULL;
+
+	tm timeInfo = *timeInfoPtr;
+	strftime(buffer, 1024, "%m-%d-%Y %H:%M:%S", &timeInfo);
+	return buffer;
 }
 
 MemoryArena *createMemoryArena(int blockSize, int blocksMax) {
