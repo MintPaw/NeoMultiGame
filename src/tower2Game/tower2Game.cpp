@@ -16,6 +16,7 @@
 #define ARMOR_COLOR 0xFFFFD66E
 
 #define XP_PER_SEC 10
+#define FLAME_RADS (toRad(15))
 
 float maxXpPerLevels[] = {
 	100,
@@ -311,6 +312,20 @@ struct GameData {
 	int ownedUpgradesNum;
 };
 
+enum ParticleType {
+	PARTICLE_FLAME,
+};
+struct Particle {
+	ParticleType type;
+	Vec3 position;
+	Vec2 size;
+	Vec3 velo;
+	int tint;
+	float time;
+	float maxTime;
+	float delay;
+};
+
 struct Game {
 	Font *defaultFont;
 
@@ -335,7 +350,11 @@ struct Game {
 	Shader *fxaaShader;
 	int fxaaResolutionLoc;
 
-	Camera lastPassCamera;
+	Particle *particles;
+	int particlesNum;
+	int particlesMax;
+
+	Camera lastPassCamera; // Here because it's only needed for audio right now
 #define WORLD_SOUNDS_MAX CHANNELS_MAX
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
 	int worldChannelsNum;
@@ -393,10 +412,13 @@ AABB tileToAABB(Vec2i tilePos);
 AABB getAABB(Actor *actor);
 Vec3 to3d(Vec2 value);
 float to3d(float value);
+Vec3 radsTo3dDir(float rads);
+
 
 Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
 void draw3dRing(Vec3 center, float radius, int color, int points=24, float thickness=0.2);
+Particle *createParticle(ParticleType type);
 
 void updateAndDrawOverlay(float elapsed);
 
@@ -722,6 +744,7 @@ void drawGame(float elapsed) {
 
 	clearRenderer();
 	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
+	Mesh *sphereMesh = getMesh("assets/common/models/Sphere.Sphere.mesh");
 
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
@@ -933,10 +956,8 @@ void drawGame(float elapsed) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 
 					{
-						Vec2 aimVec2 = radToVec2(actor->aimRads);
-
 						Vec3 start = getCenter(aabb);
-						Vec3 dir = v3(aimVec2.x, -aimVec2.y, 0);
+						Vec3 dir = radsTo3dDir(actor->aimRads);
 						Vec3 end = start + dir*1*TILE_SIZE*SCALE_3D;
 						Matrix4 matrix = getBeamMatrix(start, end, 0.2*TILE_SIZE*SCALE_3D);
 						passMesh(cubeMesh, matrix, 0xFF202020);
@@ -1222,17 +1243,42 @@ void drawGame(float elapsed) {
 					} else {
 					}
 				} else if (event->type == CORE_EVENT_SHOOT) {
-					maxTime = 0.15;
-					float perc = effect->time / maxTime;
-
-					if (perc == 0) playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
 					Actor *actor = getActor(event->actorId);
 					float range = 0;
 					if (actor) {
 						range = getRange(actor, worldToTile(event->position));
 					}
 
+					if (event->actorType == ACTOR_BALLISTA) {
+						if (effect->time == 0) playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
+					} else if (event->actorType == ACTOR_FLAME_THROWER || event->actorType == ACTOR_POISON_SPRAYER) {
+						complete = true;
+
+						if (effect->time == 0) {
+							for (int i = 0; i < 10; i++) {
+								Particle *particle = createParticle(PARTICLE_FLAME);
+								particle->position = to3d(actor->position);
+
+								float rads = actor->aimRads;
+								rads += rndFloat(-1, 1) * FLAME_RADS;
+								Vec3 dir = radsTo3dDir(rads);
+								dir.z += rndFloat(-1, 1) * 0.3;
+								particle->velo = dir * rndFloat(0.1, 0.2);
+
+								particle->maxTime = 0.5;
+								if (event->actorType == ACTOR_FLAME_THROWER) {
+									particle->tint = lerpColor(0xFFFF0000, 0xFFFFFF00, rndFloat(0, 1));
+								} else {
+									particle->tint = lerpColor(0xFF612B9E, 0xFFFFFFFF, rndFloat(0, 0.2));
+								}
+							}
+						}
+					}
+
 					if (event->actorType == ACTOR_TESLA_COIL) {
+						maxTime = 0.15;
+						float perc = effect->time / maxTime;
+
 						int color = lerpColor(0xFFB8FFFA, 0x00B8FFFA, perc);
 						if (game->is2d) {
 							Circle circle = makeCircle(actor->position, range);
@@ -1292,6 +1338,69 @@ void drawGame(float elapsed) {
 			if (complete) {
 				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
 				game->effectsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
+
+	{ /// Update particles
+		for (int i = 0; i < game->particlesNum; i++) {
+			Particle *particle = &game->particles[i];
+			bool complete = false;
+
+			if (particle->delay > 0) {
+				particle->delay -= elapsed; 
+				continue;
+			}
+
+			particle->time += elapsed;
+			if (particle->time > particle->maxTime) complete = true;
+
+			float fadeInPerc = 0.10;
+			float fadeOutPerc = 0.10;
+			float scale = 1;
+			Vec3 accel = v3();
+			Vec3 damping = v3(0.05, 0.05, 0.05);
+			int color = particle->tint;
+
+			if (particle->type == PARTICLE_FLAME) {
+				fadeInPerc = 0.02;
+				fadeOutPerc = 0.70;
+				scale = 0.3;
+				damping *= 0.1;
+			}
+
+			float particleTimeScale = elapsed / (1/60.0);
+
+			particle->velo += (accel - damping*particle->velo) * particleTimeScale;
+
+			particle->position += particle->velo * particleTimeScale;
+
+			float alpha =
+				clampMap(particle->time, 0, particle->maxTime*fadeInPerc, 0, 1)
+				* clampMap(particle->time, particle->maxTime*(1-fadeOutPerc), particle->maxTime, 1, 0);
+
+			color = setAofArgb(color, getAofArgb(color)*alpha);
+
+			if (game->is2d) {
+			} else {
+				Matrix4 matrix = mat4();
+				matrix.TRANSLATE(particle->position);
+				matrix.SCALE(scale);
+				passMesh(cubeMesh, matrix, color);
+			}
+			// DrawBillboardCall billboard = {};
+			// billboard.texture = renderer->circleTexture1024;
+			// billboard.position = particle->position;
+			// billboard.size = particle->size;
+			// billboard.tint = particle->tint;
+			// billboard.alpha = alpha;
+			// pushBillboard(billboard);
+
+			if (complete) {
+				game->particles[i] = game->particles[game->particlesNum-1];
+				game->particlesNum--;
 				i--;
 				continue;
 			}
@@ -1506,6 +1615,11 @@ Vec3 to3d(Vec2 value) {
 float to3d(float value) {
 	return value * SCALE_3D;
 }
+Vec3 radsTo3dDir(float rads) {
+	Vec2 aimVec2 = radToVec2(rads);
+	Vec3 dir = v3(aimVec2.x, -aimVec2.y, 0);
+	return dir;
+}
 
 Matrix4 toMatrix(AABB aabb) {
 	if (aabb.min.y > aabb.max.y) {
@@ -1539,6 +1653,21 @@ void draw3dRing(Vec3 center, float radius, int color, int points, float thicknes
 		passMesh(cubeMesh, toMatrix(aabb), color);
 	}
 }
+
+Particle *createParticle(ParticleType type) {
+	if (game->particlesNum > game->particlesMax-1) {
+		game->particles = (Particle *)resizeArray(game->particles, sizeof(Particle), game->particlesNum, game->particlesMax*2 + 1);
+		game->particlesMax = game->particlesMax*2 + 1;
+	}
+
+	Particle *particle = &game->particles[game->particlesNum++];
+	memset(particle, 0, sizeof(Particle));
+	particle->type = type;
+	particle->tint = 0xFFFFFFFF;
+	particle->size = v2(32, 32);
+	return particle;
+}
+
 
 void updateAndDrawOverlay(float elapsed) {
 	World *world = data->world;

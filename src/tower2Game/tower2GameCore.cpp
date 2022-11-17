@@ -596,7 +596,7 @@ void stepGame(float elapsed) {
 			} else if (actor->type == ACTOR_FLAME_THROWER) {
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
-					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, FLAME_RADS);
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
@@ -608,7 +608,7 @@ void stepGame(float elapsed) {
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
 				if (towerShouldFire) {
 					float range = getRange(actor, worldToTile(actor->position));
-					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, toRad(15));
+					Tri2 tri = getAttackTri(actor->position, range, actor->aimRads, FLAME_RADS);
 
 					int enemiesInRangeNum = 0;
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
