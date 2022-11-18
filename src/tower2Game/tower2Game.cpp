@@ -1,6 +1,6 @@
 // Add a way to see your upgrades
 // dps stats: per tower, per tower type (per wave/per game)
-// GameData should contain presentedUpgrades
+// GameData should contain presentedUpgrades (or it at least needs to be reset upon resetting the game)
 
 // Upgrade ideas:
 // Saws go through X extra enemies
@@ -226,22 +226,24 @@ struct Upgrade {
 };
 
 enum CoreEventType {
-	CORE_EVENT_SHOW_GHOST,
-	CORE_EVENT_SHOOT,
 	CORE_EVENT_DAMAGE,
+	CORE_EVENT_SHOOT,
+	CORE_EVENT_HIT,
+	CORE_EVENT_SHOW_GHOST,
 	CORE_EVENT_MORTAR_EXPLOSION,
 };
 struct CoreEvent {
 	CoreEventType type;
-	Vec2 position;
 	float floatValue;
 
 	float shieldValue;
 	float armorValue;
 	float hpValue;
 
-	ActorType actorType;
-	int actorId;
+	Vec2 ghostPosition;
+	ActorType ghostActorType;
+	int srcId;
+	int destId;
 };
 
 enum EffectType {
@@ -249,7 +251,9 @@ enum EffectType {
 };
 struct Effect {
 	EffectType type;
-	Vec2 position;
+	ActorType actorType;
+	Vec3 position;
+
 	float time;
 	float floatValue;
 
@@ -413,7 +417,7 @@ AABB getAABB(Actor *actor);
 Vec3 to3d(Vec2 value);
 float to3d(float value);
 Vec3 radsTo3dDir(float rads);
-
+Vec2 to2d(Vec3 value);
 
 Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
@@ -749,10 +753,15 @@ void drawGame(float elapsed) {
 	{ /// Iterate CoreEvents
 		for (int i = 0; i < game->coreEventsNum; i++) {
 			CoreEvent *event = &game->coreEvents[i];
-			if (event->type == CORE_EVENT_DAMAGE || event->type == CORE_EVENT_SHOW_GHOST || event->type == CORE_EVENT_MORTAR_EXPLOSION || event->type == CORE_EVENT_SHOOT) {
+			if (
+				event->type == CORE_EVENT_DAMAGE ||
+				event->type == CORE_EVENT_SHOW_GHOST ||
+				event->type == CORE_EVENT_MORTAR_EXPLOSION ||
+				event->type == CORE_EVENT_SHOOT ||
+				event->type == CORE_EVENT_HIT
+			) {
 				Effect *effect = createEffect(EFFECT_DEFAULT_CORE_EVENT);
 				effect->coreEvent = *event;
-				effect->position = event->position;
 			}
 		}
 	} ///
@@ -1133,17 +1142,20 @@ void drawGame(float elapsed) {
 				if (game->is2d) {
 					drawRect(rect, 0x80FFFFFF);
 				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				}
 			} else if (actor->type == ACTOR_SAW) {
 				if (game->is2d) {
 					Rect bulletRect = makeCenteredSquare(actor->position, 8);
 					drawRect(bulletRect, 0xFFFF0000);
 				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				}
 			} else {
 				if (game->is2d) {
 					drawRect(rect, 0xFFFF00FF);
 				} else {
+					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				}
 			}
 
@@ -1211,62 +1223,85 @@ void drawGame(float elapsed) {
 
 			if (effect->type == EFFECT_DEFAULT_CORE_EVENT) {
 				CoreEvent *event = &effect->coreEvent;
+				Actor *src = getActor(event->srcId);
+				Actor *dest = getActor(event->destId);
+
 				if (event->type == CORE_EVENT_DAMAGE) {
 					maxTime = 1;
 					float perc = effect->time / maxTime;
 					if (perc == 0) {
-						playWorldSound("assets/audio/hit/0.ogg", to3d(effect->position));
+						if (src) effect->position = to3d(src->position);
 					}
 
 					if (game->is2d) {
-						Rect textRect = makeCenteredRect(effect->position, game->size*v2(0.01, 0.01));
-
+						Rect textRect = makeCenteredRect(to2d(effect->position), game->size*v2(0.01, 0.01));
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
 
-						if (effect->coreEvent.shieldValue != 0) {
+						if (event->shieldValue != 0) {
 							props.color = SHIELD_COLOR;
-							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.shieldValue), props, textRect);
+							drawTextInRect(frameSprintf("-%.0f", event->shieldValue), props, textRect);
 							textRect.y += textRect.height;
 						}
 
-						if (effect->coreEvent.armorValue != 0) {
+						if (event->armorValue != 0) {
 							props.color = ARMOR_COLOR;
-							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.armorValue), props, textRect);
+							drawTextInRect(frameSprintf("-%.0f", event->armorValue), props, textRect);
 							textRect.y += textRect.height;
 						}
 
-						if (effect->coreEvent.hpValue != 0) {
+						if (event->hpValue != 0) {
 							props.color = HP_COLOR;
-							drawTextInRect(frameSprintf("-%.0f", effect->coreEvent.hpValue), props, textRect);
+							drawTextInRect(frameSprintf("-%.0f", event->hpValue), props, textRect);
 							textRect.y += textRect.height;
 						}
 					} else {
 					}
 				} else if (event->type == CORE_EVENT_SHOOT) {
-					Actor *actor = getActor(event->actorId);
-					float range = 0;
-					if (actor) {
-						range = getRange(actor, worldToTile(event->position));
+					if (effect->time == 0 && src) {
+						effect->actorType = src->type;
+						effect->position = to3d(src->position);
 					}
+					float range = 0;
+					if (src) range = getRange(src, worldToTile(src->position));
 
-					if (event->actorType == ACTOR_BALLISTA) {
-						if (effect->time == 0) playWorldSound("assets/audio/shoot/0.ogg", to3d(event->position));
-					} else if (event->actorType == ACTOR_FLAME_THROWER || event->actorType == ACTOR_POISON_SPRAYER) {
+					if (effect->actorType == ACTOR_BALLISTA) {
+						if (effect->time == 0) playWorldSound("assets/audio/shoot/ballista", effect->position);
+					} else if (effect->actorType == ACTOR_TESLA_COIL) {
+						if (effect->time == 0) {
+							if (src) effect->position = to3d(src->position);
+							playWorldSound("assets/audio/shoot/teslaCoil", effect->position);
+						}
+
+						maxTime = 0.15;
+						float perc = effect->time / maxTime;
+
+						int color = lerpColor(0xFFB8FFFA, 0x00B8FFFA, perc);
+						if (game->is2d) {
+							Circle circle = makeCircle(to2d(effect->position), range);
+							drawCircle(circle, color);
+						} else {
+							int ringCount = 5;
+							for (int i = 0; i < ringCount; i++) {
+								float radius = to3d(range) * ((i+1) / (float)ringCount);
+								draw3dRing(effect->position, radius, color, 16);
+							}
+						}
+					} else if (effect->actorType == ACTOR_FLAME_THROWER || effect->actorType == ACTOR_POISON_SPRAYER) {
 						complete = true;
 
 						if (effect->time == 0) {
 							for (int i = 0; i < 10; i++) {
 								Particle *particle = createParticle(PARTICLE_FLAME);
-								particle->position = to3d(actor->position);
+								particle->position = effect->position;
 
-								float rads = actor->aimRads;
+								float rads = src->aimRads;
 								rads += rndFloat(-1, 1) * FLAME_RADS;
 								Vec3 dir = radsTo3dDir(rads);
 								dir.z += rndFloat(-1, 1) * 0.3;
 								particle->velo = dir * rndFloat(0.1, 0.2);
 
 								particle->maxTime = 0.5;
-								if (event->actorType == ACTOR_FLAME_THROWER) {
+								if (effect->actorType == ACTOR_FLAME_THROWER) {
 									particle->tint = lerpColor(0xFFFF0000, 0xFFFFFF00, rndFloat(0, 1));
 								} else {
 									particle->tint = lerpColor(0xFF612B9E, 0xFFFFFFFF, rndFloat(0, 0.2));
@@ -1274,45 +1309,21 @@ void drawGame(float elapsed) {
 							}
 						}
 					}
-
-					if (event->actorType == ACTOR_TESLA_COIL) {
-						maxTime = 0.15;
-						float perc = effect->time / maxTime;
-
-						int color = lerpColor(0xFFB8FFFA, 0x00B8FFFA, perc);
-						if (game->is2d) {
-							Circle circle = makeCircle(actor->position, range);
-							drawCircle(circle, color);
-						} else {
-							int ringCount = 5;
-							for (int i = 0; i < ringCount; i++) {
-								float radius = to3d(range) * ((i+1) / (float)ringCount);
-								draw3dRing(to3d(event->position), radius, color, 16);
-							}
-						}
+				} else if (event->type == CORE_EVENT_HIT) {
+					if (effect->time == 0) {
+						if (src) effect->actorType = src->type;
+						if (dest) effect->position = to3d(dest->position);
 					}
-				} else if (event->type == CORE_EVENT_SHOW_GHOST) {
-					complete = true;
-					Vec2i tilePos = worldToTile(event->position);
-					if (game->is2d) {
-						Rect tileRect = tileToWorldRect(tilePos);
-						drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
-
-						Circle range = makeCircle(getCenter(tileRect), getRange(event->actorType, tilePos));
-						drawCircle(range, 0x80FF0000);
-					} else {
-						float height = getTile3dHeight(tilePos);
-						AABB aabb = tileToAABB(worldToTile(event->position));
-						aabb.min.z += height;
-						aabb.max.z += height;
-						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
-						passMesh(cubeMesh, toMatrix(aabb), color);
-
-						Vec3 position = getCenter(tileToAABB(tilePos));
-						float radius = getRange(event->actorType, tilePos) * SCALE_3D;
-						draw3dRing(position, radius, 0xFFFF0000, 24);
+					if (effect->actorType == ACTOR_BALLISTA) {
+						if (effect->time == 0) playWorldSound("assets/audio/hit/ballista", effect->position);
+					} else if (effect->actorType == ACTOR_TESLA_COIL) {
+						if (effect->time == 0) playWorldSound("assets/audio/hit/teslaCoil", effect->position);
 					}
 				} else if (event->type == CORE_EVENT_MORTAR_EXPLOSION) {
+					if (effect->time == 0) {
+						if (src) effect->position = to3d(src->position);
+					}
+
 					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
 					maxTime = 0.25;
 					// maxTime = 2;
@@ -1320,14 +1331,35 @@ void drawGame(float elapsed) {
 					int color = lerpColor(0xFFFFFFFF, 0x00FF0000, perc);
 
 					if (game->is2d) {
-						Circle circle = makeCircle(event->position, explodeRange);
+						Circle circle = makeCircle(to2d(effect->position), explodeRange);
 						drawCircle(circle, color);
 					} else {
 						int ringCount = 10;
 						for (int i = 0; i < ringCount; i++) {
 							float radius = to3d(explodeRange) * ((i+1) / (float)ringCount);
-							draw3dRing(to3d(event->position), radius, color, 24);
+							draw3dRing(effect->position, radius, color, 24);
 						}
+					}
+				} else if (event->type == CORE_EVENT_SHOW_GHOST) {
+					complete = true;
+					Vec2i tilePos = worldToTile(event->ghostPosition);
+					if (game->is2d) {
+						Rect tileRect = tileToWorldRect(tilePos);
+						drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
+
+						Circle range = makeCircle(getCenter(tileRect), getRange(event->ghostActorType, tilePos));
+						drawCircle(range, 0x80FF0000);
+					} else {
+						float height = getTile3dHeight(tilePos);
+						AABB aabb = tileToAABB(worldToTile(event->ghostPosition));
+						aabb.min.z += height;
+						aabb.max.z += height;
+						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
+						passMesh(cubeMesh, toMatrix(aabb), color);
+
+						Vec3 position = getCenter(tileToAABB(tilePos));
+						float radius = getRange(event->ghostActorType, tilePos) * SCALE_3D;
+						draw3dRing(position, radius, 0xFFFF0000, 24);
 					}
 				}
 			}
@@ -1619,6 +1651,10 @@ Vec3 radsTo3dDir(float rads) {
 	Vec2 aimVec2 = radToVec2(rads);
 	Vec3 dir = v3(aimVec2.x, -aimVec2.y, 0);
 	return dir;
+}
+
+Vec2 to2d(Vec3 value) {
+	return v2(value.x, -value.y) / SCALE_3D;
 }
 
 Matrix4 toMatrix(AABB aabb) {
@@ -2014,7 +2050,7 @@ void updateAndDrawOverlay(float elapsed) {
 }
 
 int playWorldSound(char *path, Vec3 worldPosition) {
-	Sound *sound = getSound(path);
+	Sound *sound = getSound(resolveFuzzyPath(path));
 	if (!sound) {
 		logf("No sound called %s\n", path);
 		return -1;

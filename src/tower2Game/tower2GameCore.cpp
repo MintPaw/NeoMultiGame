@@ -37,7 +37,7 @@ Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
-CoreEvent *createCoreEvent(CoreEventType type, Actor *actor);
+CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL);
 
 void saveState(char *path);
 void writeWorld(DataStream *stream, World *world);
@@ -506,8 +506,9 @@ void stepGame(float elapsed) {
 						float manaCost = info->mana;
 						if (data->mana > manaCost) {
 							data->mana -= manaCost;
-							towerShouldFire = true;
 							actor->timeSinceLastShot = 0;
+							towerShouldFire = true;
+							createCoreEvent(CORE_EVENT_SHOOT, actor);
 						}
 					}
 
@@ -518,12 +519,6 @@ void stepGame(float elapsed) {
 							actor->xp = 0;
 						}
 					}
-				}
-
-				if (towerShouldFire) {
-					CoreEvent *event = createCoreEvent(CORE_EVENT_SHOOT, actor);
-					event->position = actor->position;
-					event->actorType = actor->type;
 				}
 			}
 
@@ -682,8 +677,7 @@ void stepGame(float elapsed) {
 
 					actor->markedForDeletion = true;
 
-					CoreEvent *event = createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION, actor);
-					event->position = actor->position;
+					createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION, actor);
 				}
 			} else if (actor->type == ACTOR_FROST) {
 				int maxTime = 10;
@@ -939,8 +933,8 @@ void stepGame(float elapsed) {
 
 			{
 				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST, NULL);
-				event->actorType = data->actorToBuild;
-				event->position = center;
+				event->ghostActorType = data->actorToBuild;
+				event->ghostPosition = center;
 			}
 
 			Tile *tile = getTileAt(tilePosition);
@@ -1300,6 +1294,8 @@ void dealDamage(Actor *src, Actor *dest) {
 
 	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
 	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
+
+	createCoreEvent(CORE_EVENT_HIT, src, dest);
 }
 
 void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent) {
@@ -1322,7 +1318,6 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 
 	if (!noCoreEvent) {
 		CoreEvent *event = createCoreEvent(CORE_EVENT_DAMAGE, dest);
-		event->position = dest->position;
 		event->armorValue = armorRealDamage;
 		event->shieldValue = shieldRealDamage;
 		event->hpValue = hpRealDamage;
@@ -1519,7 +1514,7 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
 	return tri;
 }
 
-CoreEvent *createCoreEvent(CoreEventType type, Actor *actor) {
+CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
 	if (game->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
 		game->coreEventsNum--;
@@ -1527,7 +1522,8 @@ CoreEvent *createCoreEvent(CoreEventType type, Actor *actor) {
 	CoreEvent *event = &game->coreEvents[game->coreEventsNum++];
 	memset(event, 0, sizeof(CoreEvent));
 	event->type = type;
-	if (actor) event->actorId = actor->id;
+	if (src) event->srcId = src->id;
+	if (dest) event->destId = dest->id;
 	return event;
 }
 

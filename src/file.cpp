@@ -13,6 +13,8 @@ void refreshAssetPaths();
 #include <errno.h>
 #endif
 
+#define PI_LOG_PATH "P:/logs/log.txt"
+
 enum FuzzyPathType {
 	FUZZY_ALL=0,
 	FUZZY_PNG,
