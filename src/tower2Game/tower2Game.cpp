@@ -240,7 +240,7 @@ struct CoreEvent {
 	float armorValue;
 	float hpValue;
 
-	Vec2 ghostPosition;
+	Vec2 ghostOrMortarPosition;
 	ActorType ghostActorType;
 	int srcId;
 	int destId;
@@ -1266,6 +1266,11 @@ void drawGame(float elapsed) {
 
 					if (effect->actorType == ACTOR_BALLISTA) {
 						if (effect->time == 0) playWorldSound("assets/audio/shoot/ballista", effect->position);
+					} else if (effect->actorType == ACTOR_MORTAR_TOWER) {
+						if (effect->time == 0) {
+							if (src) effect->position = to3d(src->position);
+							playWorldSound("assets/audio/shoot/launch", effect->position);
+						}
 					} else if (effect->actorType == ACTOR_TESLA_COIL) {
 						if (effect->time == 0) {
 							if (src) effect->position = to3d(src->position);
@@ -1290,6 +1295,13 @@ void drawGame(float elapsed) {
 						complete = true;
 
 						if (effect->time == 0) {
+							if (src) effect->position = to3d(src->position);
+							if (effect->actorType == ACTOR_FLAME_THROWER) {
+								playWorldSound("assets/audio/shoot/flame", effect->position);
+							} else {
+								playWorldSound("assets/audio/shoot/spray", effect->position);
+							}
+
 							for (int i = 0; i < 10; i++) {
 								Particle *particle = createParticle(PARTICLE_FLAME);
 								particle->position = effect->position;
@@ -1317,16 +1329,20 @@ void drawGame(float elapsed) {
 					if (effect->actorType == ACTOR_BALLISTA) {
 						if (effect->time == 0) playWorldSound("assets/audio/hit/ballista", effect->position);
 					} else if (effect->actorType == ACTOR_TESLA_COIL) {
-						if (effect->time == 0) playWorldSound("assets/audio/hit/teslaCoil", effect->position);
+						if (effect->time == 0) {
+							Channel *channel = getChannel(playWorldSound("assets/audio/hit/teslaCoil", effect->position));
+							if (channel) channel->delay = rndFloat(0, 0.05);
+						}
+					} else if (effect->actorType == ACTOR_SHREDDER) {
 					}
 				} else if (event->type == CORE_EVENT_MORTAR_EXPLOSION) {
 					if (effect->time == 0) {
-						if (src) effect->position = to3d(src->position);
+						effect->position = to3d(event->ghostOrMortarPosition);
+						playWorldSound("assets/audio/shoot/explosion", effect->position);
 					}
 
 					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
 					maxTime = 0.25;
-					// maxTime = 2;
 					float perc = effect->time / maxTime;
 					int color = lerpColor(0xFFFFFFFF, 0x00FF0000, perc);
 
@@ -1342,7 +1358,7 @@ void drawGame(float elapsed) {
 					}
 				} else if (event->type == CORE_EVENT_SHOW_GHOST) {
 					complete = true;
-					Vec2i tilePos = worldToTile(event->ghostPosition);
+					Vec2i tilePos = worldToTile(event->ghostOrMortarPosition);
 					if (game->is2d) {
 						Rect tileRect = tileToWorldRect(tilePos);
 						drawRect(tileRect, lerpColor(0x80000088, 0xFF000088, timePhase(data->time*2)));
@@ -1351,7 +1367,7 @@ void drawGame(float elapsed) {
 						drawCircle(range, 0x80FF0000);
 					} else {
 						float height = getTile3dHeight(tilePos);
-						AABB aabb = tileToAABB(worldToTile(event->ghostPosition));
+						AABB aabb = tileToAABB(worldToTile(event->ghostOrMortarPosition));
 						aabb.min.z += height;
 						aabb.max.z += height;
 						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
@@ -1682,7 +1698,7 @@ void draw3dRing(Vec3 center, float radius, int color, int points, float thicknes
 		Vec3 pos = v3();
 		pos.x = center.x + cos(rads)*radius;
 		pos.y = center.y + sin(rads)*radius;
-		Vec2i tilePos = worldToTile(v2(pos.x, pos.y));
+		Vec2i tilePos = worldToTile(to2d(pos));
 
 		pos.z = getTile3dHeight(tilePos);
 		AABB aabb = makeCenteredAABB(pos, v3(thickness, thickness, thickness));
@@ -1847,6 +1863,9 @@ void updateAndDrawOverlay(float elapsed) {
 				refreshAssetPaths();
 			}
 
+			static bool loadAtLowTimeScale = false;
+			ImGui::Checkbox("loadAtLowTimeScale", &loadAtLowTimeScale);
+
 			int pathCount = 0;
 			for (int i = 0; i < assetPathsNum; i++) {
 				char *path = assetPaths[i];
@@ -1856,6 +1875,7 @@ void updateAndDrawOverlay(float elapsed) {
 					if (dotPos) *dotPos = 0;
 					if (ImGui::Button(name)) {
 						loadState(path);
+						if (loadAtLowTimeScale) game->timeScale = 0.001;
 					}
 					if ((pathCount+1) % 5 != 0) ImGui::SameLine();
 					pathCount++;
@@ -1889,14 +1909,11 @@ void updateAndDrawOverlay(float elapsed) {
 			}
 		}
 
-		if (keyJustPressed('-')) {
-			game->timeScale *= 0.5;
-			logf("Time scale: %.3f\n", game->timeScale);
-		}
-		if (keyJustPressed('=')) {
-			game->timeScale *= 2;
-			logf("Time scale: %.3f\n", game->timeScale);
-		}
+		float oldTimeScale = game->timeScale;
+		if (keyJustPressed('-')) game->timeScale *= 0.5;
+		if (keyJustPressed('=')) game->timeScale *= 2;
+		if (keyJustPressed('0')) game->timeScale = 1;
+		if (oldTimeScale != game->timeScale) logf("Time scale: %.3f\n", game->timeScale);
 	} ///
 
 	{ /// Update tool related ui

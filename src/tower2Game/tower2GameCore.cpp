@@ -677,7 +677,8 @@ void stepGame(float elapsed) {
 
 					actor->markedForDeletion = true;
 
-					createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION, actor);
+					CoreEvent *event = createCoreEvent(CORE_EVENT_MORTAR_EXPLOSION, actor);
+					event->ghostOrMortarPosition = actor->position;
 				}
 			} else if (actor->type == ACTOR_FROST) {
 				int maxTime = 10;
@@ -932,9 +933,9 @@ void stepGame(float elapsed) {
 			Vec2 center = getCenter(tileToWorldRect(tilePosition));
 
 			{
-				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST, NULL);
+				CoreEvent *event = createCoreEvent(CORE_EVENT_SHOW_GHOST);
 				event->ghostActorType = data->actorToBuild;
-				event->ghostPosition = center;
+				event->ghostOrMortarPosition = center;
 			}
 
 			Tile *tile = getTileAt(tilePosition);
@@ -1295,7 +1296,7 @@ void dealDamage(Actor *src, Actor *dest) {
 	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
 	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
 
-	createCoreEvent(CORE_EVENT_HIT, src, dest);
+	createCoreEvent(CORE_EVENT_HIT, tower, dest);
 }
 
 void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent) {

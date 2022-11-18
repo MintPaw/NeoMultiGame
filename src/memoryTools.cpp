@@ -231,7 +231,7 @@ void freeFrameMemory() {
 
 	memSys->frameMemoryCurrentIndex = 0;
 
-	if (memSys->frameChunksNum > 0) printf("Overflowed frame %d extra allocation\n", memSys->frameChunksNum);
+	if (memSys->frameChunksNum > 30) printf("Overflowed frame %d extra allocation\n", memSys->frameChunksNum);
 
 	int extraMemoryNeeded = 0;
 	for (int i = 0; i < memSys->frameChunksNum; i++) {
