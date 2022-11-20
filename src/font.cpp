@@ -25,8 +25,6 @@ struct TextProps {
 	int index;
 	Vec2 cursor;
 	Vec2 scale;
-
-	RenderProps renderProps;
 };
 
 struct FontSystem {
@@ -48,7 +46,7 @@ FontSystem *fontSys = NULL;
 Font *createFont(const char *ttfPath, int fontSize);
 
 TextProps startText(const char *string, Vec2 position=v2());
-bool nextTextChar(TextProps *props);
+bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix, bool *outDisabled);
 
 Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(Font *font, const char *string, float maxWidth=9999);
@@ -88,7 +86,7 @@ TextProps startText(const char *string, Vec2 position) {
 	return props;
 }
 
-bool nextTextChar(TextProps *textProps) {
+bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix, bool *outDisabled) {
 	if (textProps->index == 0) {
 		if (!textProps->font && fontSys->defaultFont) textProps->font = fontSys->defaultFont;
 		textProps->cursor = textProps->position;
@@ -130,44 +128,36 @@ bool nextTextChar(TextProps *textProps) {
 		}
 	}
 
-	textProps->renderProps = newRenderProps();
+	if (curChar == '\n') {
+		textProps->cursor.x = textProps->position.x;
+		textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
+		*outDisabled = true;
+	} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) {
+		*outDisabled = true;
+	} else {
+		stbtt_packedchar *charData = &textProps->font->charData[curChar];
 
-	textProps->renderProps.tint = textProps->color;
+		Vec2 charDataOff;
+		charDataOff.x = charData->xoff;
+		charDataOff.y = charData->yoff + textProps->font->ascent;
+		outMatrix->TRANSLATE(textProps->cursor + charDataOff * textProps->scale);
 
-	{
-		if (curChar == '\n') {
-			textProps->cursor.x = textProps->position.x;
-			textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
-			textProps->renderProps.disabled = true;
-		} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) {
-			textProps->renderProps.disabled = true;
-		} else {
-			stbtt_packedchar *charData = &textProps->font->charData[curChar];
+		float srcX = charData->x0;
+		float srcY = charData->y0;
+		float srcWidth = charData->x1 - charData->x0;
+		float srcHeight = charData->y1 - charData->y0;
+		float textureWidth = textProps->font->texture->width;
+		float textureHeight = textProps->font->texture->height;
+		outUvMatrix->TRANSLATE(srcX/textureWidth, srcY/textureHeight);
+		outUvMatrix->SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
+		outMatrix->SCALE(srcWidth, srcHeight);
 
-			Vec2 charDataOff;
-			charDataOff.x = charData->xoff;
-			charDataOff.y = charData->yoff + textProps->font->ascent;
-			textProps->renderProps.matrix.TRANSLATE(textProps->cursor + charDataOff * textProps->scale);
+		if (curChar == ' ') *outDisabled = true;
 
-			float srcX = charData->x0;
-			float srcY = charData->y0;
-			float srcWidth = charData->x1 - charData->x0;
-			float srcHeight = charData->y1 - charData->y0;
-			float textureWidth = textProps->font->texture->width;
-			float textureHeight = textProps->font->texture->height;
-			textProps->renderProps.uvMatrix.TRANSLATE(srcX/textureWidth, srcY/textureHeight);
-			textProps->renderProps.uvMatrix.SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
-			textProps->renderProps.srcWidth = 1;
-			textProps->renderProps.srcHeight = 1;
-			textProps->renderProps.matrix.SCALE(srcWidth, srcHeight);
-
-			if (curChar == ' ') textProps->renderProps.disabled = true;
-
-			textProps->cursor.x += charData->xadvance * textProps->scale.x;
-		}
+		textProps->cursor.x += charData->xadvance * textProps->scale.x;
 	}
 
-	textProps->renderProps.matrix.SCALE(textProps->scale);
+	outMatrix->SCALE(textProps->scale);
 
 	textProps->index++;
 	return true;
@@ -232,7 +222,6 @@ Font *createFont(const char *ttfPath, int fontSize) {
 	for (int y = 0; y < FONT_HEIGHT_LIMIT; y++) {
 		for (int x = 0; x < FONT_WIDTH_LIMIT; x++) {
 			unsigned char byte = temp1bppPixels[y * FONT_WIDTH_LIMIT + x];
-			// byte = argbToHex(255, x, y, 0);
 			temp4bppPixels[(y * FONT_WIDTH_LIMIT + x) * 4 + 0] = 255;
 			temp4bppPixels[(y * FONT_WIDTH_LIMIT + x) * 4 + 1] = 255;
 			temp4bppPixels[(y * FONT_WIDTH_LIMIT + x) * 4 + 2] = 255;
@@ -240,7 +229,7 @@ Font *createFont(const char *ttfPath, int fontSize) {
 		}
 	}
 
-#if 0 // Output 1bpp image
+#if 0 // Output 4bpp image
 	{
 		char outputPath[256];
 		strcpy(outputPath, platform->filePathPrefix);
@@ -296,12 +285,22 @@ Vec2 drawText(Font *font, const char *text, Vec2 position, int color, float maxW
 	textProps.maxWidth = maxWidth;
 	textProps.scale = scale;
 	textProps.color = color;
-	while (nextTextChar(&textProps)) {
+
+	for (;;) {
+		Matrix3 charMatrix = mat3();
+		Matrix3 charUvMatrix = mat3();
+		bool charDisabled = false;
+		if (!nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) break;
+
 		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
 
-		if (!skipDraw) {
-			drawTexture(textProps.font->texture, textProps.renderProps);
-		}
+		RenderProps props = newRenderProps();
+		props.tint = textProps.color;
+		props.srcWidth = 1;
+		props.srcHeight = 1;
+		props.matrix = charMatrix;
+		props.uvMatrix = charUvMatrix;
+		if (!skipDraw && !charDisabled) drawTexture(textProps.font->texture, props);
 	}
 
 	textSize.y = textProps.cursor.y + textProps.font->lineSpacing*scale.y;

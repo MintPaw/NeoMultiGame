@@ -1290,6 +1290,8 @@ void drawGame(float elapsed) {
 							textRect.y += textRect.height;
 						}
 					} else {
+						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+						// passText(
 					}
 				} else if (event->type == CORE_EVENT_SHOOT) {
 					if (effect->time == 0 && src) {
