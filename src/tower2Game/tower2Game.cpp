@@ -5,6 +5,7 @@
 // Upgrade ideas:
 // Saws go through X extra enemies
 // Gaining the ability to slow down time more
+// Tower has a small chance of freezing
 
 #define FROST_FALL_DISTANCE 64
 
@@ -394,6 +395,7 @@ struct Game {
 	bool debugDrawChunkLines;
 	bool debugDrawTileLines;
 	bool debugShowActorVelo;
+	bool debugDisableBackfaceCulling;
 
 	char debugNewSaveStateName[PATH_MAX_LEN];
 };
@@ -766,7 +768,8 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
-	Pass *pass = NULL;
+	Pass *mainPass = NULL;
+	Pass *screenPass = NULL;
 	if (game->is2d) { /// Setup camera
 		Matrix3 cameraMatrix = mat3();
 		cameraMatrix = mat3();
@@ -778,54 +781,39 @@ void drawGame(float elapsed) {
 
 		pushCamera2d(cameraMatrix);
 	} else {
-		pass = createPass();
-		pushPass(pass);
+		mainPass = createPass();
+		screenPass = createPass();
+		pushPass(mainPass);
 
 		Vec3 cameraTarget = to3d(data->cameraPosition);
 
-#if 0
-		static float cameraRot = 0;
-		static float cameraDist = 10;
-		static float cameraHeight = 10;
-		ImGui::SliderFloat("cameraRot", &cameraRot, 0, 360);
-		ImGui::SliderFloat("cameraDist", &cameraDist, 3, 20);
-		ImGui::SliderFloat("cameraHeight", &cameraHeight, 3, 20);
-
-		Vec3 cameraSrc = cameraTarget;
-		cameraSrc.x += cos(toRad(cameraRot)) * cameraDist;
-		cameraSrc.y += sin(toRad(cameraRot)) * cameraDist;
-		cameraSrc.z += cameraHeight;
-		up = v3(0, 0, 1);
-#else
 		Matrix4 srcMatrix = mat4();
 		srcMatrix.TRANSLATE(cameraTarget);
 		srcMatrix.ROTATE_EULER(globals->cameraAngle);
 		srcMatrix.TRANSLATE(0, 0, 200);
 		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
 		Vec3 cameraSrc = srcMatrix * v3();
-#endif
 
-		pass->camera.position = cameraSrc;
-		pass->camera.target = cameraTarget;
-		pass->camera.up = v3(0, 0, 1);
+		mainPass->camera.position = cameraSrc;
+		mainPass->camera.target = cameraTarget;
+		mainPass->camera.up = v3(0, 0, 1);
 
-		pass->camera.fovy = 59;
-		pass->camera.isOrtho = false;
-		pass->camera.size = game->size;
-		pass->camera.nearCull = 0.01;
-		pass->camera.farCull = 1000;
-		// pass->camera.orthoScale = 10;
-		game->lastPassCamera = pass->camera;
+		mainPass->camera.fovy = 59;
+		mainPass->camera.isOrtho = false;
+		mainPass->camera.size = game->size;
+		mainPass->camera.nearCull = 0.01;
+		mainPass->camera.farCull = 1000;
+		game->lastPassCamera = mainPass->camera;
 
-#if 0 // Shows the center cube
-		if (!game->is2d) {
-			AABB aabb = makeCenteredAABB(cameraTarget, v3(1, 1, 1) * 1);
-			Matrix4 matrix = toMatrix(aabb);
-			passMesh(cubeMesh, matrix, 0xFFFF0000);
-		}
-#endif
+		screenPass->camera.position = v3(0.0001, 0, 1);
+		screenPass->camera.target = v3(0, 0, 0);
+		screenPass->camera.up = v3(0, 0, -1);
+		screenPass->camera.isOrtho = true;
+		screenPass->camera.nearCull = 0.01;
+		screenPass->camera.farCull = 1000;
+		screenPass->camera.size = game->size;
 
-		getMouseRay(pass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
+		getMouseRay(mainPass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
 
 	float closestHoveredTileDist = 0;
@@ -1119,6 +1107,14 @@ void drawGame(float elapsed) {
 					}
 				} else {
 					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
+
+					// Vec3 position = to3d(actor->position);
+					// position.z += 1;
+					// Vec2 size = v2(3, 3);
+					// Matrix3 matrix = mat3();
+					// matrix.TRANSLATE(v2(position));
+					// matrix.SCALE(3, 3);
+					// passTexture(renderer->whiteTexture, texture);
 				}
 			} else if (actor->type == ACTOR_ARROW) {
 				if (game->is2d) {
@@ -1516,6 +1512,17 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
+	{
+		pushPass(screenPass);
+		Tri tri;
+		tri.verts[0] = v3(0, 0, 0) * 10;
+		tri.verts[1] = v3(-1, 1, 0) * 10;
+		tri.verts[2] = v3(-1, 0, 0) * 10;
+		// tri *= 100;
+		passTri(tri, 0xFFFF0000);
+		popPass();
+	}
+
 	if (game->is2d) {
 		popCamera2d();
 	} else {
@@ -1524,62 +1531,83 @@ void drawGame(float elapsed) {
 		pushTargetTexture(game->gameTexture);
 		clearRenderer();
 
-		start3d(pass->camera);
-		setBlending(true);
-		setBackfaceCulling(true);
+		Pass *passes[] = {
+			mainPass,
+			screenPass,
+		};
+		int passesNum = ArrayLength(passes);
 
-		static Vec3 sunPosition = v3(0, -300, 200);
-		// ImGui::DragFloat3("sunPosition", &sunPosition.x);
-		renderer->lights[0].position.x = sunPosition.x;
-		renderer->lights[0].position.y = sunPosition.y;
-		renderer->lights[0].position.z = sunPosition.z;
-		updateLightingShader(pass->camera);
+		for (int i = 0; i < passesNum; i++) {
+			Pass *pass = passes[i];
 
-		for (int i = 0; i < pass->cmdsNum; i++) {
-			PassCmd *cmd = &pass->cmds[i];
-			if (cmd->type == PASS_CMD_TRI) {
-				Raylib::rlCheckRenderBatchLimit(3);
+			start3d(pass->camera);
+			setBlending(true);
+			setBackfaceCulling(true);
+			if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
 
-				// Raylib::rlSetTexture(textureId);
-				Raylib::rlBegin(RL_TRIANGLES);
+			static Vec3 sunPosition = v3(0, -300, 200);
+			// ImGui::DragFloat3("sunPosition", &sunPosition.x);
+			renderer->lights[0].position.x = sunPosition.x;
+			renderer->lights[0].position.y = sunPosition.y;
+			renderer->lights[0].position.z = sunPosition.z;
+			updateLightingShader(pass->camera);
 
-				for (int i = 0; i < 3; i++) {
-					int a, r, g, b;
-					hexToArgb(cmd->colors[i], &a, &r, &g, &b);
+			for (int i = 0; i < pass->cmdsNum; i++) {
+				PassCmd *cmd = &pass->cmds[i];
+				if (cmd->type == PASS_CMD_TRI || cmd->type == PASS_CMD_QUAD) {
+					int vertCount = 0;
+					if (cmd->type == PASS_CMD_TRI) {
+						vertCount = 3;
+						Raylib::rlBegin(RL_TRIANGLES);
+					} else if (cmd->type == PASS_CMD_QUAD) {
+						vertCount = 4;
+						Raylib::rlBegin(RL_QUADS);
+					}
 
-					Raylib::rlColor4ub(r, g, b, a);
-					Raylib::rlTexCoord2f(cmd->uvs[i].x, cmd->uvs[i].y);
-					Raylib::rlVertex3f(cmd->verts[i].x, cmd->verts[i].y, cmd->verts[i].z);
-				}
+					Raylib::rlCheckRenderBatchLimit(vertCount);
+					if (cmd->texture) Raylib::rlSetTexture(cmd->texture->raylibTexture.id);
 
-				Raylib::rlEnd();
-			} else if (cmd->type == PASS_CMD_MESH) {
+					for (int i = 0; i < vertCount; i++) {
+						int a, r, g, b;
+						hexToArgb(cmd->colors[i], &a, &r, &g, &b);
+
+						Raylib::rlColor4ub(r, g, b, a);
+						Raylib::rlTexCoord2f(cmd->uvs[i].x, cmd->uvs[i].y);
+						Raylib::rlVertex3f(cmd->verts[i].x, cmd->verts[i].y, cmd->verts[i].z);
+					}
+
+					if (cmd->texture) Raylib::rlSetTexture(0);
+					Raylib::rlEnd();
+				} else if (cmd->type == PASS_CMD_MESH) {
 #if 1
-				Material material = createMaterial();
-				material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
-				drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
+					Material material = createMaterial();
+					material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
+					drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
 #else
-				Mesh *mesh = cmd->mesh;
-				Raylib::rlCheckRenderBatchLimit(mesh->indsNum);
+					Mesh *mesh = cmd->mesh;
+					Raylib::rlCheckRenderBatchLimit(mesh->indsNum);
 
-				Raylib::rlBegin(RL_TRIANGLES);
+					Raylib::rlBegin(RL_TRIANGLES);
 
-				int a, r, g, b;
-				hexToArgb(cmd->meshTint, &a, &r, &g, &b);
-				Raylib::rlColor4ub(r, g, b, a);
+					int a, r, g, b;
+					hexToArgb(cmd->meshTint, &a, &r, &g, &b);
+					Raylib::rlColor4ub(r, g, b, a);
 
-				for (int i = 0; i < mesh->indsNum; i++) {
-					MeshVertex *meshVert = &mesh->verts[mesh->inds[i]];
-					Vec3 position = cmd->meshMatrix * meshVert->position;
-					Raylib::rlTexCoord2f(meshVert->uv.x, meshVert->uv.y);
-					Raylib::rlNormal3f(meshVert->normal.x, meshVert->normal.y, meshVert->normal.z);
-					Raylib::rlVertex3f(position.x, position.y, position.z);
-				}
-				Raylib::rlEnd();
+					for (int i = 0; i < mesh->indsNum; i++) {
+						MeshVertex *meshVert = &mesh->verts[mesh->inds[i]];
+						Vec3 position = cmd->meshMatrix * meshVert->position;
+						Raylib::rlTexCoord2f(meshVert->uv.x, meshVert->uv.y);
+						Raylib::rlNormal3f(meshVert->normal.x, meshVert->normal.y, meshVert->normal.z);
+						Raylib::rlVertex3f(position.x, position.y, position.z);
+					}
+					Raylib::rlEnd();
 #endif
+				}
 			}
+
+			end3d();
 		}
-		end3d();
+
 		popTargetTexture();
 
 		{
@@ -1600,7 +1628,7 @@ void drawGame(float elapsed) {
 			drawTexture(game->finalTexture, props);
 		}
 
-		destroyPass(pass);
+		destroyPass(mainPass);
 	}
 }
 
@@ -1804,6 +1832,7 @@ void updateAndDrawOverlay(float elapsed) {
 			ImGui::Checkbox("Draw tile lines", &game->debugDrawTileLines);
 			ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
 			ImGui::Checkbox("Is 2d", &game->is2d);
+			ImGui::Checkbox("Debug disable backface culling", &game->debugDisableBackfaceCulling);
 			if (ImGui::Button("Explore all")) {
 				for (int i = 0; i < world->chunksNum; i++) {
 					Chunk *chunk = &world->chunks[i];

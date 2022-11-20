@@ -10,6 +10,7 @@ struct PassCmd {
 	Vec3 verts[4];
 	Vec2 uvs[4];
 	int colors[4];
+	Texture *texture;
 
 	Mesh *mesh;
 	Matrix4 meshMatrix;
@@ -37,7 +38,7 @@ Pass *createPass();
 void destroyPass(Pass *pass);
 void pushPass(Pass *pass);
 void popPass();
-PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), int color=0xFFFFFFFF);
+PassCmd *passTexture(Texture *texture, Matrix3 matrix=mat3(), int color=0xFFFFFFFF, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1));
 PassCmd *passTri(Tri tri, int color=0xFFFFFFFF);
 PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int color=0xFFFFFFFF);
 
@@ -80,12 +81,10 @@ void popPass() {
 	passSys->passStackNum--;
 }
 
-PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color) {
-	logf("Not finished\n");
-	// alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
-	// if (renderer->disabled) return;
+PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color, Vec2 uv0, Vec2 uv1) {
 	if (getAofArgb(color) == 0) return NULL;
 	PassCmd *cmd = createPassCmd(getCurrentPass());
+	cmd->type = PASS_CMD_QUAD;
 	if (!cmd) return NULL;
 
 	cmd->verts[0] = v3(0, 0, 0);
@@ -93,16 +92,14 @@ PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color) {
 	cmd->verts[2] = v3(1, 1, 0);
 	cmd->verts[3] = v3(1, 0, 0);
 
-	matrix = renderer->baseMatrix2d * matrix; // Should passes manage their own camera?
-
 	for (int i = 0; i < 4; i++) {
 		cmd->verts[i] = matrix * cmd->verts[i];
 	}
 
-	cmd->uvs[0] = v2(0, 0);
-	cmd->uvs[0] = v2(0, 1);
-	cmd->uvs[0] = v2(1, 1);
-	cmd->uvs[0] = v2(1, 0);
+	cmd->uvs[0] = v2(uv0.x, uv0.y);
+	cmd->uvs[1] = v2(uv0.x, uv1.y);
+	cmd->uvs[2] = v2(uv1.x, uv1.y);
+	cmd->uvs[3] = v2(uv1.x, uv0.y);
 
 	// Matrix3 flipMatrix = {
 	// 	1,  0,  0,

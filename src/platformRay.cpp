@@ -496,7 +496,6 @@ struct Camera {
 	Vec3 up;
 	float fovy;
 	bool isOrtho;
-	float orthoScale;
 
 	Vec2 size;
 	float nearCull;
@@ -1557,15 +1556,13 @@ void start3d(Camera camera) {
 	if (!camera.isOrtho) {
 		if (camera.fovy == 0) logf("fovy is 0\n");
 		float aspect = camera.size.x/camera.size.y;
-		double top = camera.nearCull*tan(toRad(camera.fovy*0.5));
-		double right = top*aspect;
-		Raylib::rlFrustum(-right, right, -top, top, camera.nearCull, camera.farCull);
+		Raylib::Matrix matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+		Raylib::rlMultMatrixf(MatrixToFloat(matProj));
 	} else {
-		double top = camera.size.y/2 / camera.orthoScale;
-		double right = camera.size.x/2 / camera.orthoScale;
 		if (camera.fovy != 0) logf("fovy does nothing currently\n");
-		if (camera.orthoScale == 0) logf("Camera has an orthoScale of 0\n");
-
+		double top = camera.size.y/2;
+		double right = camera.size.x/2;
+		// Raylib::Matrix matOrtho = Raylib::MatrixOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
 		Raylib::rlOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
 	}
 
@@ -1637,7 +1634,6 @@ Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
 		proj = Raylib::rlGetMatrixProjection();
 	}
 	Raylib::Matrix view = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
-	if (camera.isOrtho) view = Raylib::MatrixMultiply(view, Raylib::MatrixScale(camera.orthoScale, camera.orthoScale, camera.orthoScale));
 #if 1
 	Raylib::Quaternion worldPos = { worldPosition.x, worldPosition.y, worldPosition.z, 1.0f };
 

@@ -69,4 +69,5 @@ void main() {
 
 	// Gamma correction
 	gl_FragColor = pow(finalColor, vec4(1.0/2.2));
+	gl_FragColor.rgba *= colDiffuse.a;
 }
