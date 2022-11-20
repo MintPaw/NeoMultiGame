@@ -8,6 +8,8 @@ struct LogfBuffer {
 	bool isInfo;
 };
 
+#define PI_LOG_PATH "P:/logs/log.txt"
+
 LogfBuffer *loggerLogString(char *msg);
 char *getLogfBufferString();
 void showLogfBufferErrorWindow();
@@ -167,9 +169,7 @@ void logfToFile(char *fileName, char *msg, ...) {
 	stbsp_vsnprintf(str, size+1, msg, args);
 	va_end(args);
 
-	time_t t = time(NULL);
-	char *timeStr = ctime(&t);
-	if (timeStr[strlen(timeStr)-1] == '\n') timeStr[strlen(timeStr)-1] = '\0';
+	char *timeStr = epochToLocalTimeFrameString(time(NULL));
 	str = frameSprintf("[%s] %s", timeStr, str);
 
 	void appendFile(const char *fileName, void *data, int length); //@headerHack

@@ -87,19 +87,19 @@ PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color, Vec2 uv0, Vec2
 	cmd->type = PASS_CMD_QUAD;
 	if (!cmd) return NULL;
 
-	cmd->verts[0] = v3(0, 0, 0);
-	cmd->verts[1] = v3(0, 1, 0);
-	cmd->verts[2] = v3(1, 1, 0);
-	cmd->verts[3] = v3(1, 0, 0);
+	cmd->verts[0] = v3(0, 0, 1);
+	cmd->verts[1] = v3(1, 0, 1);
+	cmd->verts[2] = v3(1, 1, 1);
+	cmd->verts[3] = v3(0, 1, 1);
 
 	for (int i = 0; i < 4; i++) {
 		cmd->verts[i] = matrix * cmd->verts[i];
 	}
 
 	cmd->uvs[0] = v2(uv0.x, uv0.y);
-	cmd->uvs[1] = v2(uv0.x, uv1.y);
+	cmd->uvs[1] = v2(uv1.x, uv0.y);
 	cmd->uvs[2] = v2(uv1.x, uv1.y);
-	cmd->uvs[3] = v2(uv1.x, uv0.y);
+	cmd->uvs[3] = v2(uv0.x, uv1.y);
 
 	// Matrix3 flipMatrix = {
 	// 	1,  0,  0,

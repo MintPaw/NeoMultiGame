@@ -768,7 +768,7 @@ char *epochToLocalTimeFrameString(u64 time) {
 	if (!timeInfoPtr) return NULL;
 
 	tm timeInfo = *timeInfoPtr;
-	strftime(buffer, 1024, "%m-%d-%Y %H:%M:%S", &timeInfo);
+	strftime(buffer, 1024, "%m/%d/%y %H:%M:%S", &timeInfo);
 	return buffer;
 }
 

@@ -347,6 +347,7 @@ struct Game {
 	Vec3 mouseRayPos;
 	Vec3 mouseRayDir;
 	Vec2i hovered3dTilePos;
+	Camera lastMainPassCamera;
 
 	bool shouldReset;
 
@@ -359,7 +360,6 @@ struct Game {
 	int particlesNum;
 	int particlesMax;
 
-	Camera lastPassCamera; // Here because it's only needed for audio right now
 #define WORLD_SOUNDS_MAX CHANNELS_MAX
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
 	int worldChannelsNum;
@@ -420,6 +420,8 @@ Vec3 to3d(Vec2 value);
 float to3d(float value);
 Vec3 radsTo3dDir(float rads);
 Vec2 to2d(Vec3 value);
+Vec2 toScreenPass(Vec3 worldPosition);
+Matrix3 toMatrix3(Rect rect);
 
 Matrix4 toMatrix(AABB aabb);
 #define getBeamMatrix(a, b, c) (getBeamMatrix)(a, b, c*0.5)
@@ -702,10 +704,10 @@ void updateGame() {
 				continue;
 			}
 
-			Vec2 screenPos = worldSpaceTo2dNDC01(game->lastPassCamera, worldChannel->position) * game->size;
+			Vec2 screenPos = worldSpaceTo2dNDC01(game->lastMainPassCamera, worldChannel->position) * game->size;
 
 			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
-			float dist = distance(game->lastPassCamera.position, worldChannel->position);
+			float dist = distance(game->lastMainPassCamera.position, worldChannel->position);
 			float vol = clampMap(dist, 0, 200, 1, 0);
 			float pan = screenPerc.x;
 			channel->userVolume2 = vol;
@@ -803,15 +805,18 @@ void drawGame(float elapsed) {
 		mainPass->camera.size = game->size;
 		mainPass->camera.nearCull = 0.01;
 		mainPass->camera.farCull = 1000;
-		game->lastPassCamera = mainPass->camera;
+		game->lastMainPassCamera = mainPass->camera;
 
-		screenPass->camera.position = v3(0.0001, 0, 1);
+		screenPass->camera.position = v3(0, 0.0001, 2);
 		screenPass->camera.target = v3(0, 0, 0);
 		screenPass->camera.up = v3(0, 0, -1);
 		screenPass->camera.isOrtho = true;
 		screenPass->camera.nearCull = 0.01;
 		screenPass->camera.farCull = 1000;
 		screenPass->camera.size = game->size;
+
+		screenPass->camera.position += v3(screenPass->camera.size/2, 0);
+		screenPass->camera.target += v3(screenPass->camera.size/2, 0);
 
 		getMouseRay(mainPass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
@@ -1108,13 +1113,47 @@ void drawGame(float elapsed) {
 				} else {
 					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
 
-					// Vec3 position = to3d(actor->position);
-					// position.z += 1;
-					// Vec2 size = v2(3, 3);
-					// Matrix3 matrix = mat3();
-					// matrix.TRANSLATE(v2(position));
-					// matrix.SCALE(3, 3);
-					// passTexture(renderer->whiteTexture, texture);
+					{
+						pushPass(screenPass);
+
+						Vec3 actorTop = to3d(actor->position);
+						actorTop.z += to3d(getInfo(actor)->size.z) + 1;
+
+						Vec2 cursor = toScreenPass(actorTop);
+
+						Rect vitalityRect = {};
+						vitalityRect.width = 100 * ngui->uiScale;
+						vitalityRect.height = 8 * ngui->uiScale;
+						vitalityRect.x = cursor.x - vitalityRect.width/2;
+						vitalityRect.y = cursor.y;
+						{
+							float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
+
+							float maxHpPerc = info->maxHp / totalPoints;
+							Rect hpRect = vitalityRect;
+							hpRect.width *= maxHpPerc;
+							hpRect.width *= actor->hp / info->maxHp;
+							Matrix3 matrix = toMatrix3(hpRect);
+							matrix.SCALE(timePhase(data->time));
+							passTexture(renderer->whiteTexture, matrix, 0xFF00FF00);
+
+							float maxArmorPerc = info->maxArmor / totalPoints;
+							Rect armorRect = vitalityRect;
+							armorRect.x += maxHpPerc * vitalityRect.width;
+							armorRect.width *= maxArmorPerc;
+							armorRect.width *= actor->armor / info->maxArmor;
+							passTexture(renderer->whiteTexture, toMatrix3(armorRect), 0xFFFFD66E);
+
+							float maxShieldPerc = info->maxShield / totalPoints;
+							Rect shieldRect = vitalityRect;
+							shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
+							shieldRect.width *= maxShieldPerc;
+							shieldRect.width *= actor->shield / info->maxShield;
+							passTexture(renderer->whiteTexture, toMatrix3(shieldRect), 0xFF718691);
+						}
+
+						popPass();
+					}
 				}
 			} else if (actor->type == ACTOR_ARROW) {
 				if (game->is2d) {
@@ -1512,16 +1551,27 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
+#if 0 // screen pass test
 	{
 		pushPass(screenPass);
 		Tri tri;
-		tri.verts[0] = v3(0, 0, 0) * 10;
-		tri.verts[1] = v3(-1, 1, 0) * 10;
-		tri.verts[2] = v3(-1, 0, 0) * 10;
-		// tri *= 100;
-		passTri(tri, 0xFFFF0000);
+		tri.verts[0] = v3(0, 0, 1);
+		tri.verts[1] = v3(-1, 1, 1);
+		tri.verts[2] = v3(-1, 0, 1);
+		Texture *texture = renderer->whiteTexture;
+		Vec2 size = v2(500, 500);
+		Matrix3 matrix = mat3();
+		matrix.TRANSLATE(-size/2);
+		matrix.SCALE(size);
+
+		for (int i = 0; i < 3; i++) tri.verts[i] = matrix * tri.verts[i];
+		tri.verts[0].print("v0");
+
+		passTexture(texture, matrix, 0xFFFF0000);
+		// passTri(tri, 0xFFFF0000);
 		popPass();
 	}
+#endif
 
 	if (game->is2d) {
 		popCamera2d();
@@ -1699,6 +1749,17 @@ Vec3 radsTo3dDir(float rads) {
 
 Vec2 to2d(Vec3 value) {
 	return v2(value.x, -value.y) / SCALE_3D;
+}
+Vec2 toScreenPass(Vec3 worldPosition) {
+	Vec2 screenPos = worldSpaceTo2dNDC01(game->lastMainPassCamera, worldPosition) * game->size;
+	screenPos.y = game->size.y - screenPos.y;
+	return screenPos;
+}
+Matrix3 toMatrix3(Rect rect) {
+	Matrix3 matrix = mat3();
+	matrix.TRANSLATE(getPosition(rect));
+	matrix.SCALE(getSize(rect));
+	return matrix;
 }
 
 Matrix4 toMatrix(AABB aabb) {
