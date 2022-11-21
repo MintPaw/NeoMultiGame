@@ -54,6 +54,7 @@ Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(Font *font, const char *string, float maxWidth=9999);
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color=0xFF000000, float maxWidth=9999, bool skipDraw=false, Vec2 scale=v2(1, 1));
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
+void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
 
 DrawTextProps newDrawTextProps();
 DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
@@ -410,6 +411,17 @@ void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
 	props.scale.y = textRect.height / size.y;
 	props.position = getPosition(textRect);
 	drawText(text, props);
+}
+
+void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
+	Vec2 size = getTextSize(props.font, text);
+
+	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
+
+	props.scale.x = textRect.width / size.x;
+	props.scale.y = textRect.height / size.y;
+	props.position = getPosition(textRect);
+	passText(text, props);
 }
 
 void drawOnScreenLog() {

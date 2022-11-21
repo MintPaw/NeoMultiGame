@@ -1126,6 +1126,7 @@ void drawGame(float elapsed) {
 						vitalityRect.height = 8 * ngui->uiScale;
 						vitalityRect.x = cursor.x - vitalityRect.width/2;
 						vitalityRect.y = cursor.y;
+						cursor.y += vitalityRect.height;
 						{
 							float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
 
@@ -1134,7 +1135,6 @@ void drawGame(float elapsed) {
 							hpRect.width *= maxHpPerc;
 							hpRect.width *= actor->hp / info->maxHp;
 							Matrix3 matrix = toMatrix3(hpRect);
-							matrix.SCALE(timePhase(data->time));
 							passTexture(renderer->whiteTexture, matrix, 0xFF00FF00);
 
 							float maxArmorPerc = info->maxArmor / totalPoints;
@@ -1151,9 +1151,28 @@ void drawGame(float elapsed) {
 							shieldRect.width *= actor->shield / info->maxShield;
 							passTexture(renderer->whiteTexture, toMatrix3(shieldRect), 0xFF718691);
 
-							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-							props.position = v2();
-							// passText("Hello", props);
+							Rect baseTextRect = makeRect(v2(), v2(100, 100)*ngui->uiScale);
+							baseTextRect.x = cursor.x - baseTextRect.width/2;
+							baseTextRect.y = cursor.y;
+							if (actor->poison) {
+								Rect textRect = baseTextRect;
+								textRect.x -= textRect.width;
+								DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
+								passTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+							}
+
+							if (actor->burn) {
+								Rect textRect = baseTextRect;
+								DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
+								passTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+							}
+
+							if (actor->bleed) {
+								Rect textRect = baseTextRect;
+								textRect.x += textRect.width;
+								DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
+								passTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+							}
 						}
 
 						popPass();
@@ -1579,16 +1598,6 @@ void drawGame(float elapsed) {
 	}
 #endif
 
-	{
-		pushPass(screenPass);
-
-		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-		props.position = v2(0, 200);
-		passText("Hello, this is a test of a bunch of different characters\nAnd another line", props);
-
-		popPass();
-	}
-
 	if (game->is2d) {
 		popCamera2d();
 	} else {
@@ -1956,6 +1965,15 @@ void updateAndDrawOverlay(float elapsed) {
 					}
 
 					iters++;
+				}
+			}
+
+			if (ImGui::Button("Kill everything")) {
+				data->actorsToSpawnNum = 0;
+
+				for (int i = 0; i < world->actorsNum; i++) {
+					Actor *actor = &world->actors[i];
+					if (getInfo(actor)->isEnemy) actor->hp = -10;
 				}
 			}
 
