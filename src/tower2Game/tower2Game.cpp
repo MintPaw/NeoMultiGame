@@ -1313,9 +1313,29 @@ void drawGame(float elapsed) {
 							textRect.y += textRect.height;
 						}
 					} else {
+						pushPass(screenPass);
+						Rect textRect = makeCenteredRect(toScreenPass(effect->position), game->size*v2(0.03, 0.03));
 						DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
-						// passText(
+
+						if (event->shieldValue != 0) {
+							props.color = SHIELD_COLOR;
+							passTextInRect(frameSprintf("-%.0f", event->shieldValue), props, textRect);
+							textRect.y += textRect.height;
+						}
+
+						if (event->armorValue != 0) {
+							props.color = ARMOR_COLOR;
+							passTextInRect(frameSprintf("-%.0f", event->armorValue), props, textRect);
+							textRect.y += textRect.height;
+						}
+
+						if (event->hpValue != 0) {
+							props.color = HP_COLOR;
+							passTextInRect(frameSprintf("-%.0f", event->hpValue), props, textRect);
+							textRect.y += textRect.height;
+						}
 					}
+					popPass();
 				} else if (event->type == CORE_EVENT_SHOOT) {
 					if (effect->time == 0 && src) {
 						effect->actorType = src->type;
