@@ -156,7 +156,8 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 	strcat(realRootDir, dirPath);
 	// logf("Root dir is %s\n", realRootDir);
 
-	char **fileNames = (char **)malloc(FILE_LIST_LIMIT * sizeof(char *));
+	int fileNamesMax = 32;
+	char **fileNames = (char **)malloc(fileNamesMax * sizeof(char *));
 	int fileNamesNum = 0;
 
 #if defined(_WIN32)
@@ -179,6 +180,12 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 		}
 
 		for (;;) {
+	// char **fileNames = (char **)malloc(fileNamesMax * sizeof(char *));
+			if (fileNamesNum > fileNamesMax-2) {
+				fileNames = (char **)resizeArray(fileNames, sizeof(char *), fileNamesNum, fileNamesMax*2 + 1);
+				fileNamesMax = fileNamesMax*2 + 1;
+			}
+
 			if (!streq(file.cFileName, ".") && !streq(file.cFileName, "..")) {
 				if (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 					char *newDir = (char *)malloc(PATH_MAX_LEN);
@@ -194,10 +201,6 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 						if (includeFolders) fileNames[fileNamesNum++] = newDir;
 					}
 				} else {
-					if (fileNamesNum == FILE_LIST_LIMIT-1) {
-						logf("Exceeded file limit\n");
-						Assert(0);
-					}
 					char *newFile = (char *)malloc(PATH_MAX_LEN);
 					strcpy(newFile, realDirPath+pathOffset);
 					newFile[strlen(newFile)-1] = 0;

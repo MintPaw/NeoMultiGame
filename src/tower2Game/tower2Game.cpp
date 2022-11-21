@@ -1150,6 +1150,10 @@ void drawGame(float elapsed) {
 							shieldRect.width *= maxShieldPerc;
 							shieldRect.width *= actor->shield / info->maxShield;
 							passTexture(renderer->whiteTexture, toMatrix3(shieldRect), 0xFF718691);
+
+							DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+							props.position = v2();
+							// passText("Hello", props);
 						}
 
 						popPass();
@@ -1574,6 +1578,16 @@ void drawGame(float elapsed) {
 		popPass();
 	}
 #endif
+
+	{
+		pushPass(screenPass);
+
+		DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+		props.position = v2(0, 200);
+		passText("Hello, this is a test of a bunch of different characters\nAnd another line", props);
+
+		popPass();
+	}
 
 	if (game->is2d) {
 		popCamera2d();

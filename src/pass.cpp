@@ -87,6 +87,8 @@ PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color, Vec2 uv0, Vec2
 	cmd->type = PASS_CMD_QUAD;
 	if (!cmd) return NULL;
 
+	cmd->texture = texture;
+
 	cmd->verts[0] = v3(0, 0, 1);
 	cmd->verts[1] = v3(1, 0, 1);
 	cmd->verts[2] = v3(1, 1, 1);

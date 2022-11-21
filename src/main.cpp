@@ -140,11 +140,11 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "zip.cpp"
 #include "textureSystem.cpp"
 #include "audio.cpp"
-#include "font.cpp"
 #include "skeleton.cpp"
 #include "mesh.cpp"
 #include "models.cpp"
 #include "pass.cpp"
+#include "font.cpp"
 
 #include "threads.cpp"
 #include "stringSave.cpp"

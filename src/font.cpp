@@ -31,9 +31,11 @@ struct FontSystem {
 	bool disabled;
 	Font *defaultFont;
 	Font *logFont;
+	bool yIsUp;
 };
 
 struct DrawTextProps {
+	bool skipDraw;
 	Font *font;
 	Vec2 position;
 	int color;
@@ -56,6 +58,7 @@ void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2
 DrawTextProps newDrawTextProps();
 DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
 Vec2 drawText(const char *text, DrawTextProps props);
+void passText(char *text, DrawTextProps drawTextProps);
 
 void initFonts();
 void drawOnScreenLog();
@@ -87,6 +90,10 @@ TextProps startText(const char *string, Vec2 position) {
 }
 
 bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix, bool *outDisabled) {
+	*outUvMatrix = mat3();
+	*outMatrix = mat3();
+	*outDisabled = false;
+
 	if (textProps->index == 0) {
 		if (!textProps->font && fontSys->defaultFont) textProps->font = fontSys->defaultFont;
 		textProps->cursor = textProps->position;
@@ -124,22 +131,38 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 
 		if (textProps->cursor.x - textProps->position.x + wordWidth > textProps->maxWidth) {
 			textProps->cursor.x = textProps->position.x;
-			textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
+			if (fontSys->yIsUp) {
+				textProps->cursor.y -= textProps->font->lineSpacing * textProps->scale.y;
+			} else {
+				textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
+			}
 		}
 	}
 
 	if (curChar == '\n') {
 		textProps->cursor.x = textProps->position.x;
-		textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
+		if (fontSys->yIsUp) {
+			textProps->cursor.y -= textProps->font->lineSpacing * textProps->scale.y;
+		} else {
+			textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
+		}
 		*outDisabled = true;
 	} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) {
 		*outDisabled = true;
 	} else {
 		stbtt_packedchar *charData = &textProps->font->charData[curChar];
 
-		Vec2 charDataOff;
+		Vec2 charDataOff = v2();
 		charDataOff.x = charData->xoff;
-		charDataOff.y = charData->yoff + textProps->font->ascent;
+		if (fontSys->yIsUp) { 
+			float lineHeight = textProps->font->ascent - textProps->font->descent;
+			charDataOff.y += lineHeight - (charData->y1 - charData->y0);
+			charDataOff.y -= charData->yoff;
+			charDataOff.y -= textProps->font->ascent;
+		} else {
+			charDataOff.y = charData->yoff;
+			charDataOff.y += textProps->font->ascent;
+		}
 		outMatrix->TRANSLATE(textProps->cursor + charDataOff * textProps->scale);
 
 		float srcX = charData->x0;
@@ -148,8 +171,17 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 		float srcHeight = charData->y1 - charData->y0;
 		float textureWidth = textProps->font->texture->width;
 		float textureHeight = textProps->font->texture->height;
-		outUvMatrix->TRANSLATE(srcX/textureWidth, srcY/textureHeight);
-		outUvMatrix->SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
+
+		if (fontSys->yIsUp) {
+			outUvMatrix->SCALE(1, -1);
+			outUvMatrix->TRANSLATE(srcX/textureWidth, srcY/textureHeight);
+			outUvMatrix->SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
+			outUvMatrix->TRANSLATE(0, 1);
+			outUvMatrix->SCALE(1, -1);
+		} else {
+			outUvMatrix->TRANSLATE(srcX/textureWidth, srcY/textureHeight);
+			outUvMatrix->SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
+		}
 		outMatrix->SCALE(srcWidth, srcHeight);
 
 		if (curChar == ' ') *outDisabled = true;
@@ -271,40 +303,12 @@ Vec2 getTextSize(Font *font, const char *string, float maxWidth) {
 }
 
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color, float maxWidth, bool skipDraw, Vec2 scale) {
-	if (fontSys->disabled) return v2(1, 1);
-	if (!text) return v2();
-	if (!font) {
-		logf("Tried to draw text '%s' with no font\n", text);
-		return v2();
-	}
-
-	Vec2 textSize = v2();
-
-	TextProps textProps = startText(text, position);
-	textProps.font = font;
-	textProps.maxWidth = maxWidth;
-	textProps.scale = scale;
-	textProps.color = color;
-
-	for (;;) {
-		Matrix3 charMatrix = mat3();
-		Matrix3 charUvMatrix = mat3();
-		bool charDisabled = false;
-		if (!nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) break;
-
-		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
-
-		RenderProps props = newRenderProps();
-		props.tint = textProps.color;
-		props.srcWidth = 1;
-		props.srcHeight = 1;
-		props.matrix = charMatrix;
-		props.uvMatrix = charUvMatrix;
-		if (!skipDraw && !charDisabled) drawTexture(textProps.font->texture, props);
-	}
-
-	textSize.y = textProps.cursor.y + textProps.font->lineSpacing*scale.y;
-	return textSize - position;
+	DrawTextProps props = newDrawTextProps(font, color, position);
+	props.maxWidth = maxWidth;
+	props.scale = scale;
+	props.skipDraw = skipDraw;
+	props.scale = scale;
+	return drawText(text, props);
 }
 
 DrawTextProps newDrawTextProps() {
@@ -324,8 +328,77 @@ DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position) {
 	return props;
 }
 
-Vec2 drawText(const char *text, DrawTextProps props) {
-	return drawText(props.font, text, props.position, props.color, props.maxWidth, false, props.scale);
+Vec2 drawText(const char *text, DrawTextProps drawTextProps) {
+	if (fontSys->disabled) return v2(1, 1);
+	if (!text) return v2(1, 1);
+	if (!drawTextProps.font) {
+		logf("Tried to draw text '%s' with no font\n", text);
+		return v2(1, 1);
+	}
+
+	Vec2 textSize = v2();
+
+	TextProps textProps = startText(text, drawTextProps.position);
+	textProps.font = drawTextProps.font;
+	textProps.maxWidth = drawTextProps.maxWidth;
+	textProps.scale = drawTextProps.scale;
+	textProps.color = drawTextProps.color;
+
+	Matrix3 charMatrix;
+	Matrix3 charUvMatrix;
+	bool charDisabled;
+	while (nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) {
+		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
+		if (drawTextProps.skipDraw || charDisabled) continue;
+
+		RenderProps props = newRenderProps();
+		props.tint = textProps.color;
+		props.srcWidth = 1;
+		props.srcHeight = 1;
+		props.matrix = charMatrix;
+		props.uvMatrix = charUvMatrix;
+		drawTexture(textProps.font->texture, props);
+	}
+
+	textSize.y = textProps.cursor.y + textProps.font->lineSpacing * drawTextProps.scale.y;
+	return textSize - drawTextProps.position;
+}
+
+void passText(char *text, DrawTextProps drawTextProps) {
+	if (fontSys->disabled) return;
+	if (!text) return;
+	if (!drawTextProps.font) {
+		logf("Tried to draw text '%s' with no font\n", text);
+		return;
+	}
+
+	bool oldYIsUp = fontSys->yIsUp;
+	fontSys->yIsUp = true;
+
+	Vec2 textSize = v2();
+
+	TextProps textProps = startText(text, drawTextProps.position);
+	textProps.font = drawTextProps.font;
+	textProps.maxWidth = drawTextProps.maxWidth;
+	textProps.scale = drawTextProps.scale;
+	textProps.color = drawTextProps.color;
+
+	Matrix3 charMatrix;
+	Matrix3 charUvMatrix;
+	bool charDisabled;
+	while (nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) {
+		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
+		if (drawTextProps.skipDraw || charDisabled) continue;
+
+		Vec2 uv0 = charUvMatrix * v2(0, 0);
+		Vec2 uv1 = charUvMatrix * v2(1, 1);
+		passTexture(textProps.font->texture, charMatrix, textProps.color, uv0, uv1);
+	}
+
+	textSize.y = textProps.cursor.y + textProps.font->lineSpacing * drawTextProps.scale.y;
+	textSize -= drawTextProps.position;
+
+	fontSys->yIsUp = oldYIsUp;
 }
 
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
