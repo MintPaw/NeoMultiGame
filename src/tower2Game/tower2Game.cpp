@@ -1334,8 +1334,8 @@ void drawGame(float elapsed) {
 							passTextInRect(frameSprintf("-%.0f", event->hpValue), props, textRect);
 							textRect.y += textRect.height;
 						}
+						popPass();
 					}
-					popPass();
 				} else if (event->type == CORE_EVENT_SHOOT) {
 					if (effect->time == 0 && src) {
 						effect->actorType = src->type;
