@@ -161,7 +161,6 @@ void popGameStyleStack(char *name);
 
 void saveGlobals();
 void loadGlobals();
-
 /// FUNCTIONS ^
 
 void runGame() {
@@ -814,27 +813,31 @@ void drawGame(float elapsed) {
 						drawRect(slowRect, 0xFF01335C);
 					}
 
-					if (actor->poison) {
+					float poisonAmount = sumDotTicks(actor, DOT_POISON);
+					float burnAmount = sumDotTicks(actor, DOT_BURN);
+					float bleedAmount = sumDotTicks(actor, DOT_BLEED);
+
+					if (poisonAmount) {
 						Rect textRect = getRect(actor);
 						textRect.x -= textRect.width;
 						textRect.y -= textRect.height;
 						DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
-						drawTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+						drawTextInRect(frameSprintf("%.0f", poisonAmount), props, textRect);
 					}
 
-					if (actor->burn) {
+					if (burnAmount) {
 						Rect textRect = getRect(actor);
 						textRect.y -= textRect.height;
 						DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
-						drawTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+						drawTextInRect(frameSprintf("%.0f", burnAmount), props, textRect);
 					}
 
-					if (actor->bleed) {
+					if (bleedAmount) {
 						Rect textRect = getRect(actor);
 						textRect.x += textRect.width;
 						textRect.y -= textRect.height;
 						DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
-						drawTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+						drawTextInRect(frameSprintf("%.0f", bleedAmount), props, textRect);
 					}
 				} else {
 					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
@@ -880,24 +883,29 @@ void drawGame(float elapsed) {
 							Rect baseTextRect = makeRect(v2(), v2(100, 100)*ngui->uiScale);
 							baseTextRect.x = cursor.x - baseTextRect.width/2;
 							baseTextRect.y = cursor.y;
-							if (actor->poison) {
+
+							float poisonAmount = sumDotTicks(actor, DOT_POISON);
+							float burnAmount = sumDotTicks(actor, DOT_BURN);
+							float bleedAmount = sumDotTicks(actor, DOT_BLEED);
+
+							if (poisonAmount) {
 								Rect textRect = baseTextRect;
 								textRect.x -= textRect.width;
 								DrawTextProps props = newDrawTextProps(game->defaultFont, POISON_COLOR);
-								passTextInRect(frameSprintf("%.0f", actor->poison), props, textRect);
+								passTextInRect(frameSprintf("%.0f", poisonAmount), props, textRect);
 							}
 
-							if (actor->burn) {
+							if (burnAmount) {
 								Rect textRect = baseTextRect;
 								DrawTextProps props = newDrawTextProps(game->defaultFont, BURN_COLOR);
-								passTextInRect(frameSprintf("%.0f", actor->burn), props, textRect);
+								passTextInRect(frameSprintf("%.0f", burnAmount), props, textRect);
 							}
 
-							if (actor->bleed) {
+							if (bleedAmount) {
 								Rect textRect = baseTextRect;
 								textRect.x += textRect.width;
 								DrawTextProps props = newDrawTextProps(game->defaultFont, BLEED_COLOR);
-								passTextInRect(frameSprintf("%.0f", actor->bleed), props, textRect);
+								passTextInRect(frameSprintf("%.0f", bleedAmount), props, textRect);
 							}
 						}
 

@@ -77,7 +77,6 @@ struct Dot {
 	DotType type;
 	int src;
 	int ticks;
-	float amountPerTick;
 };
 
 enum ActorType {
@@ -117,13 +116,13 @@ struct Actor {
 	float timeSinceLastShot;
 	bool markedForDeletion;
 
-	float slow;
-	float poison;
-	float burn;
-	float bleed;
-	float movementSpeed;
 	Dot *dots;
 	int dotsNum;
+	float slow;
+	float unused1;
+	float unused2;
+	float unused3;
+	float movementSpeed;
 
 	Priority priority;
 
@@ -141,6 +140,9 @@ struct Actor {
 	float xp;
 
 	float time;
+
+	/// Unserialized
+	int dotsMax;
 };
 
 enum TileType {
@@ -295,6 +297,8 @@ struct Core {
 	int presentedUpgrades[UPGRADES_MAX];
 	int presentedUpgradesNum;
 
+	float timeTillNextDot;
+
 #define CORE_EVENTS_MAX 1024
 	CoreEvent coreEvents[CORE_EVENTS_MAX];
 	int coreEventsNum;
@@ -320,17 +324,21 @@ Actor *createActor(ActorType type);
 void initActor(Actor *actor);
 void deinitActor(Actor *actor);
 Actor *getActor(int id);
-Actor *createBullet(Actor *src, Actor *target);
-void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent=false);
-void dealDamage(Actor *bullet, Actor *dest);
+
 Rect getRect(Actor *actor);
-Vec2 getFlowDirForRect(Rect rect);
 float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
 float getDamage(Actor *actor);
 float getRpm(Actor *actor);
 int getMaxLevel(ActorType actorType);
 ActorTypeInfo *getInfo(Actor *actor);
+
+Actor *createBullet(Actor *src, Actor *target);
+void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent=false);
+void dealDamage(Actor *bullet, Actor *dest);
+
+void createDot(Actor *src, Actor *dest, DotType type, int ticks);
+int sumDotTicks(Actor *actor, DotType type);
 
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
@@ -433,10 +441,10 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_FLAME_THROWER];
 		strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 5;
-		info->hpDamageMulti = 6;
-		info->armorDamageMulti = 9;
-		info->shieldDamageMulti = 3;
+		info->damage = 3;
+		info->hpDamageMulti = 1;
+		info->armorDamageMulti = 1;
+		info->shieldDamageMulti = 1;
 		info->baseRange = 4 * TILE_SIZE;
 		info->rpm = 60;
 		info->mana = 1;
@@ -446,10 +454,10 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_POISON_SPRAYER];
 		strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 5;
-		info->hpDamageMulti = 6;
-		info->armorDamageMulti = 3;
-		info->shieldDamageMulti = 9;
+		info->damage = 3;
+		info->hpDamageMulti = 1;
+		info->armorDamageMulti = 1;
+		info->shieldDamageMulti = 1;
 		info->baseRange = 4 * TILE_SIZE;
 		info->rpm = 60;
 		info->mana = 1;
@@ -459,8 +467,8 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_SHREDDER];
 		strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 10;
-		info->hpDamageMulti = 20;
+		info->damage = 5;
+		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 10;
 		info->shieldDamageMulti = 10;
 		info->baseRange = 5 * TILE_SIZE;
@@ -725,30 +733,6 @@ void stepGame(float elapsed) {
 
 			actor->slow -= 6*elapsed;
 
-			if (actor->poison) {
-				float toInflict = MinNum(actor->poison, 24*elapsed);
-				actor->poison -= toInflict;
-				if (actor->poison < 0) actor->poison = 0;
-
-				dealDamage(actor, toInflict, 2, 0.5, 0.5, true);
-			}
-
-			if (actor->burn) {
-				float toInflict = MinNum(actor->burn, 24*elapsed);
-				actor->burn -= toInflict;
-				if (actor->burn < 0) actor->burn = 0;
-
-				dealDamage(actor, toInflict, 0.5, 2, 0.5, true);
-			}
-
-			if (actor->bleed) {
-				float toInflict = MinNum(actor->bleed, 24*elapsed);
-				actor->bleed -= toInflict;
-				if (actor->bleed < 0) actor->bleed = 0;
-
-				dealDamage(actor, toInflict, 0.5, 0.5, 2, true);
-			}
-
 			bool towerCaresAboutTargets = true;
 			bool towerIsActiveBetweenWaves = true;
 			if (actor->type == ACTOR_FROST_KEEP) {
@@ -901,7 +885,7 @@ void stepGame(float elapsed) {
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
-						enemy->burn += getDamage(actor);
+						createDot(actor, enemy, DOT_BURN, getDamage(actor));
 					}
 				}
 			} else if (actor->type == ACTOR_POISON_SPRAYER) {
@@ -913,7 +897,7 @@ void stepGame(float elapsed) {
 					Actor **enemiesInRange = getActorsInRange(tri, &enemiesInRangeNum, true);
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
-						enemy->poison += getDamage(actor);
+						createDot(actor, enemy, DOT_POISON, getDamage(actor));
 					}
 				}
 			} else if (actor->type == ACTOR_SHREDDER) {
@@ -935,7 +919,25 @@ void stepGame(float elapsed) {
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
 
-				Vec2 dir = getFlowDirForRect(getRect(actor));
+				Vec2 dir = v2();
+				{ // getFlowDirForRect(Rect rect);
+					Rect rect = getRect(actor);
+					Vec2 position = getPosition(rect);
+					Vec2 size = getSize(rect);
+					Vec2 corners[4] = {
+						position + size*v2(0, 0),
+						position + size*v2(0, 1),
+						position + size*v2(1, 0),
+						position + size*v2(1, 1)
+					};
+
+					for (int i = 0; i < 4; i++) {
+						Vec2i tilePosition = worldToTile(corners[i]);
+						Tile *tile = getTileAt(tilePosition);
+						if (tile && !isZero(tile->flow)) dir += tile->flow;
+					}
+					dir = normalize(dir);
+				}
 
 				actor->accel = dir * (actor->movementSpeed * elapsed) * 5;
 
@@ -946,9 +948,6 @@ void stepGame(float elapsed) {
 					actor->markedForDeletion = true;
 				}
 
-				if (!actor->bleed) actor->hp += info->hpGainPerSec * elapsed;
-				if (!actor->burn) actor->armor += info->armorGainPerSec * elapsed;
-				if (!actor->poison) actor->shield += info->shieldGainPerSec * elapsed;
 				actor->hp = mathClamp(actor->hp, 0, info->maxHp);
 				actor->armor = mathClamp(actor->armor, 0, info->maxArmor);
 				actor->shield = mathClamp(actor->shield, 0, info->maxShield);
@@ -1076,6 +1075,9 @@ void stepGame(float elapsed) {
 						if (saw->sawHitListNum > 6-1) saw->markedForDeletion = true;
 						saw->sawHitList[saw->sawHitListNum++] = enemy->id;
 						dealDamage(saw, enemy);
+
+						Actor *tower = getActor(saw->parentTower);
+						if (tower) createDot(tower, enemy, DOT_BLEED, getDamage(tower)/2);
 					}
 				}
 			}
@@ -1089,6 +1091,53 @@ void stepGame(float elapsed) {
 			if (actor->hp <= 0 && info->maxHp > 0) actor->markedForDeletion = true;
 
 			actor->time += elapsed;
+		}
+	} ///
+
+	{ /// Update Dot
+		core->timeTillNextDot -= elapsed;
+		if (core->timeTillNextDot < 0) {
+			core->timeTillNextDot = 1;
+			for (int i = 0; i < world->actorsNum; i++) {
+				Actor *actor = &world->actors[i];
+				Dot *poison = NULL;
+				Dot *burn = NULL;
+				Dot *bleed = NULL;
+				for (int i = 0; i < actor->dotsNum; i++) {
+					Dot *dot = &actor->dots[i];
+					if (!poison && dot->type == DOT_POISON) poison = dot;
+					if (!burn && dot->type == DOT_BURN) burn = dot;
+					if (!bleed && dot->type == DOT_BLEED) bleed = dot;
+				}
+
+				auto tickDot = [](Actor *actor, Dot *dot) {
+					float amountPerTick = 10;
+					dot->ticks--;
+					if (dot->type == DOT_POISON) {
+						dealDamage(actor, amountPerTick, 2, 0.5, 1);
+					} else if (dot->type == DOT_BURN) {
+						dealDamage(actor, amountPerTick, 0.5, 2, 1);
+					} else if (dot->type == DOT_BLEED) {
+						dealDamage(actor, amountPerTick, 0.5, 0.5, 2);
+					} else {
+						logf("Unknown DotType %d\n", dot->type);
+					}
+				};
+
+				if (poison) tickDot(actor, poison);
+				if (burn) tickDot(actor, burn);
+				if (bleed) tickDot(actor, bleed);
+
+				for (int i = 0; i < actor->dotsNum; i++) {
+					Dot *dot = &actor->dots[i];
+					if (dot->ticks <= 0) {
+						arraySpliceIndex(actor->dots, actor->dotsNum, sizeof(Dot), i);
+						actor->dotsNum--;
+						i--;
+						continue;
+					}
+				}
+			}
 		}
 	} ///
 
@@ -1552,7 +1601,14 @@ void initActor(Actor *actor) {
 	}
 }
 void deinitActor(Actor *actor) {
-	if (actor->sawHitList) free(actor->sawHitList);
+	if (actor->sawHitList) {
+		free(actor->sawHitList);
+		actor->sawHitList = NULL;
+	}
+	if (actor->dots) {
+		free(actor->dots);
+		actor->dots = NULL;
+	}
 }
 
 Actor *getActor(int id) {
@@ -1564,6 +1620,73 @@ Actor *getActor(int id) {
 		if (actor->id == id) return actor;
 	}
 	return NULL;
+}
+
+Rect getRect(Actor *actor) {
+	Rect rect = makeCenteredRect(actor->position, v2(getInfo(actor)->size));
+	return rect;
+}
+
+float getRange(ActorType actorType, Vec2i tilePos) {
+	ActorTypeInfo *info = &core->actorTypeInfos[actorType];
+	float range = info->baseRange;
+
+	Tile *tile = getTileAt(tilePos);
+	if (tile) range += tile->elevation * TILE_SIZE;
+
+	for (int i = 0; i < data->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) range *= effect->value;
+		}
+	}
+
+	return range;
+}
+
+float getRange(Actor *actor, Vec2i tilePos) {
+	float range = getRange(actor->type, tilePos);
+	return range;
+}
+
+float getDamage(Actor *actor) {
+	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
+	float damage = info->damage;
+
+	for (int i = 0; i < data->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) damage *= effect->value;
+		}
+	}
+
+	damage *= 1 + actor->level*0.1;
+	return damage;
+}
+
+float getRpm(Actor *actor) {
+	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
+	float rpm = info->rpm;
+
+	for (int i = 0; i < data->ownedUpgradesNum; i++) {
+		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+		for (int i = 0; i < upgrade->effectsNum; i++) {
+			UpgradeEffect *effect = &upgrade->effects[i];
+			if (effect->type == UPGRADE_EFFECT_RPM_MULTI) rpm *= effect->value;
+		}
+	}
+
+	return rpm;
+}
+
+int getMaxLevel(ActorType actorType) {
+	return 3;
+}
+
+ActorTypeInfo *getInfo(Actor *actor) {
+	return &core->actorTypeInfos[actor->type];
 }
 
 Actor *createBullet(Actor *src, Actor *target) {
@@ -1629,91 +1752,25 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 	}
 }
 
-Rect getRect(Actor *actor) {
-	Rect rect = makeCenteredRect(actor->position, v2(getInfo(actor)->size));
-	return rect;
-}
-
-Vec2 getFlowDirForRect(Rect rect) {
-	Vec2 position = getPosition(rect);
-	Vec2 size = getSize(rect);
-	Vec2 corners[4] = {
-		position + size*v2(0, 0),
-		position + size*v2(0, 1),
-		position + size*v2(1, 0),
-		position + size*v2(1, 1)
-	};
-
-	Vec2 dir = v2();
-	for (int i = 0; i < 4; i++) {
-		Vec2i tilePosition = worldToTile(corners[i]);
-		Tile *tile = getTileAt(tilePosition);
-		if (tile && !isZero(tile->flow)) dir += tile->flow;
+void createDot(Actor *src, Actor *dest, DotType type, int ticks) {
+	if (dest->dotsNum > dest->dotsMax-1) {
+		dest->dots = (Dot *)resizeArray(dest->dots, sizeof(Dot), dest->dotsNum, dest->dotsMax+1);
+		dest->dotsMax += 1;
 	}
-	dir = normalize(dir);
-	return dir;
+	Dot *dot = &dest->dots[dest->dotsNum++];
+	memset(dot, 0, sizeof(Dot));
+	dot->type = type;
+	dot->src = src->id;
+	dot->ticks = ticks;
 }
 
-float getRange(ActorType actorType, Vec2i tilePos) {
-	ActorTypeInfo *info = &core->actorTypeInfos[actorType];
-	float range = info->baseRange;
-
-	Tile *tile = getTileAt(tilePos);
-	if (tile) range += tile->elevation * TILE_SIZE;
-
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) range *= effect->value;
-		}
+int sumDotTicks(Actor *actor, DotType type) {
+	int sum = 0;
+	for (int i = 0; i < actor->dotsNum; i++) {
+		Dot *dot = &actor->dots[i];
+		if (dot->type == type) sum += dot->ticks;
 	}
-
-	return range;
-}
-
-float getRange(Actor *actor, Vec2i tilePos) {
-	float range = getRange(actor->type, tilePos);
-	return range;
-}
-
-float getDamage(Actor *actor) {
-	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
-	float damage = info->damage;
-
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) damage *= effect->value;
-		}
-	}
-
-	damage *= 1 + actor->level*0.1;
-	return damage;
-}
-
-float getRpm(Actor *actor) {
-	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
-	float rpm = info->rpm;
-
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_RPM_MULTI) rpm *= effect->value;
-		}
-	}
-
-	return rpm;
-}
-
-int getMaxLevel(ActorType actorType) {
-	return 3;
-}
-
-ActorTypeInfo *getInfo(Actor *actor) {
-	return &core->actorTypeInfos[actor->type];
+	return sum;
 }
 
 Upgrade *getUpgrade(int id) {
@@ -1836,7 +1893,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 13); // version
+	writeU32(stream, 14); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -1894,10 +1951,17 @@ void writeActor(DataStream *stream, Actor *actor) {
 	writeFloat(stream, actor->timeTillNextShot);
 	writeU8(stream, actor->markedForDeletion);
 
+	writeU32(stream, actor->dotsNum);
+	for (int i = 0; i < actor->dotsNum; i++) {
+		Dot *dot = &actor->dots[i];
+		writeU32(stream, dot->type);
+		writeU32(stream, dot->src);
+		writeU32(stream, dot->ticks);
+	}
 	writeFloat(stream, actor->slow);
-	writeFloat(stream, actor->poison);
-	writeFloat(stream, actor->burn);
-	writeFloat(stream, actor->bleed);
+	writeFloat(stream, actor->unused1);
+	writeFloat(stream, actor->unused2);
+	writeFloat(stream, actor->unused3);
 	writeFloat(stream, actor->movementSpeed);
 	writeU32(stream, actor->priority);
 	writeU32(stream, actor->bulletTarget);
@@ -2002,11 +2066,21 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 	actor->timeTillNextShot = readFloat(stream);
 	actor->markedForDeletion = readU8(stream);
 
+	if (version >= 14) {
+		actor->dotsMax = actor->dotsNum = readU32(stream);
+		actor->dots = (Dot *)zalloc(sizeof(Dot) * actor->dotsMax);
+		for (int i = 0; i < actor->dotsNum; i++) {
+			Dot *dot = &actor->dots[i];
+			dot->type = (DotType)readU32(stream);
+			dot->src = readU32(stream);
+			dot->ticks = readU32(stream);
+		}
+	}
 	if (version >= 8) {
 		actor->slow = readFloat(stream);
-		actor->poison = readFloat(stream);
-		actor->burn = readFloat(stream);
-		actor->bleed = readFloat(stream);
+		actor->unused1 = readFloat(stream);
+		actor->unused2 = readFloat(stream);
+		actor->unused3 = readFloat(stream);
 		actor->movementSpeed = readFloat(stream);
 		actor->priority = (Priority)readU32(stream);
 		actor->bulletTarget = readU32(stream);
