@@ -1,3 +1,307 @@
+#ifdef CORE_HEADER
+#undef CORE_HEADER
+
+#define TILE_SIZE 64
+
+float maxXpPerLevels[] = {
+	100,
+	300,
+	1000,
+	5000,
+	50000,
+	300000,
+};
+
+struct ActorTypeInfo {
+#define ACTOR_TYPE_NAME_MAX_LEN 128
+	char name[ACTOR_TYPE_NAME_MAX_LEN];
+	bool isTower;
+	bool isEnemy;
+
+	float damage;
+	float hpDamageMulti;
+	float armorDamageMulti;
+	float shieldDamageMulti;
+	float baseRange;
+	float rpm;
+	float mana;
+	int price;
+	float priceMulti;
+
+	float maxHp;
+	float maxArmor;
+	float maxShield;
+	float hpGainPerSec;
+	float armorGainPerSec;
+	float shieldGainPerSec;
+	float movementSpeed;
+
+	float bulletSpeed;
+
+	int enemySpawnStartingWave;
+
+	int primaryColor;
+	Vec3 size;
+};
+
+enum Priority {
+	PRIORITY_PROGRESS,
+	PRIORITY_MOST_HEALTH,
+	PRIORITY_MOST_ARMOR,
+	PRIORITY_MOST_SHIELD,
+	PRIORITY_LEAST_HEALTH,
+	PRIORITY_LEAST_ARMOR,
+	PRIORITY_LEAST_SHIELD,
+	PRIORITY_FASTEST,
+	PRIORITY_SLOWEST,
+	PRIORITIES_MAX,
+};
+char *priorityStrings[] = {
+	"Progress",
+	"Most health",
+	"Most armor",
+	"Most shield",
+	"Least health",
+	"Least armor",
+	"Least shield",
+	"Fastest",
+	"Slowest",
+};
+
+enum DotType {
+	DOT_POISON,
+	DOT_BURN,
+	DOT_BLEED,
+};
+struct Dot {
+	DotType type;
+	int src;
+	int ticks;
+	float amountPerTick;
+};
+
+enum ActorType {
+	ACTOR_NONE=0,
+	ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
+	ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON, ACTOR_TOWER13, ACTOR_TOWER14, ACTOR_TOWER15, ACTOR_MANA_SIPHON,
+	ACTOR_ENEMY1, ACTOR_ENEMY2, ACTOR_ENEMY3, ACTOR_ENEMY4, ACTOR_ENEMY5, ACTOR_ENEMY6, ACTOR_ENEMY7, ACTOR_ENEMY8,
+	ACTOR_ENEMY9, ACTOR_ENEMY10, ACTOR_ENEMY11, ACTOR_ENEMY12, ACTOR_ENEMY13, ACTOR_ENEMY14, ACTOR_ENEMY15, ACTOR_ENEMY16,
+	ACTOR_ENEMY17, ACTOR_ENEMY18, ACTOR_ENEMY19, ACTOR_ENEMY20, ACTOR_ENEMY21, ACTOR_ENEMY22, ACTOR_ENEMY23, ACTOR_ENEMY24,
+	ACTOR_ENEMY25, ACTOR_ENEMY26, ACTOR_ENEMY27, ACTOR_ENEMY28, ACTOR_ENEMY29, ACTOR_ENEMY30, ACTOR_ENEMY31, ACTOR_ENEMY32,
+	ACTOR_ENEMY33, ACTOR_ENEMY34, ACTOR_ENEMY35, ACTOR_ENEMY36, ACTOR_ENEMY37, ACTOR_ENEMY38, ACTOR_ENEMY39, ACTOR_ENEMY40,
+	ACTOR_ENEMY41, ACTOR_ENEMY42, ACTOR_ENEMY43, ACTOR_ENEMY44, ACTOR_ENEMY45, ACTOR_ENEMY46, ACTOR_ENEMY47, ACTOR_ENEMY48,
+	ACTOR_ENEMY49, ACTOR_ENEMY50, ACTOR_ENEMY51, ACTOR_ENEMY52, ACTOR_ENEMY53, ACTOR_ENEMY54, ACTOR_ENEMY55, ACTOR_ENEMY56,
+	ACTOR_ENEMY57, ACTOR_ENEMY58, ACTOR_ENEMY59, ACTOR_ENEMY60, ACTOR_ENEMY61, ACTOR_ENEMY62, ACTOR_ENEMY63, ACTOR_ENEMY64,
+	ACTOR_ARROW, ACTOR_MORTAR, ACTOR_FROST, ACTOR_SAW,
+	ACTOR_BULLET5, ACTOR_BULLET6, ACTOR_BULLET7, ACTOR_BULLET8,
+	ACTOR_BULLET9, ACTOR_BULLET10, ACTOR_BULLET11, ACTOR_BULLET12,
+	ACTOR_BULLET13, ACTOR_BULLET14, ACTOR_BULLET15, ACTOR_BULLET16,
+	ACTOR_MANA_CRYSTAL,
+	ACTOR_TYPES_MAX,
+};
+struct Actor {
+	ActorType type;
+	int id;
+
+	Vec2 position;
+	Vec2 velo;
+	Vec2 accel;
+	float aimRads;
+	int aimTarget;
+
+	float hp;
+	float armor;
+	float shield;
+
+	float timeTillNextShot;
+	float timeSinceLastShot;
+	bool markedForDeletion;
+
+	float slow;
+	float poison;
+	float burn;
+	float bleed;
+	float movementSpeed;
+	Dot *dots;
+	int dotsNum;
+
+	Priority priority;
+
+	int bulletTarget;
+	Vec2 bulletTargetPosition;
+	int parentTower;
+
+#define SAW_HIT_LIST_MAX 64
+	int *sawHitList;
+	int sawHitListNum;
+
+	int amountPaid;
+
+	int level;
+	float xp;
+
+	float time;
+};
+
+enum TileType {
+	TILE_NONE,
+	TILE_HOME,
+	TILE_GROUND,
+	TILE_ROAD,
+};
+struct Tile {
+	TileType type;
+	Vec2 flow;
+	int costSoFar;
+	int dijkstraValue;
+	u8 elevation;
+	float perlinValue;
+};
+
+struct Chunk {
+	Vec2i position;
+	Rect rect;
+#define CHUNK_SIZE 7
+	Tile tiles[CHUNK_SIZE*CHUNK_SIZE];
+
+	Vec2i connections[4];
+	int connectionsNum;
+
+	bool visible;
+};
+
+struct World {
+#define ACTORS_MAX 65535
+	Actor actors[ACTORS_MAX];
+	int actorsNum;
+	int nextActorId;
+
+#define CHUNKS_MAX 512
+	Chunk chunks[CHUNKS_MAX];
+	int chunksNum;
+};
+
+enum Tool {
+	TOOL_NONE,
+	TOOL_BUILDING,
+	TOOL_SELECTED,
+};
+
+enum UpgradeEffectType {
+	UPGRADE_EFFECT_UNLOCK,
+	UPGRADE_EFFECT_DAMAGE_MULTI,
+	UPGRADE_EFFECT_RANGE_MULTI,
+	UPGRADE_EFFECT_RPM_MULTI,
+	UPGRADE_EFFECT_EXTRA_CARDS,
+	UPGRADE_EFFECT_EXTRA_MONEY,
+	UPGRADE_EFFECT_MANA_GAIN_MULTI,
+	UPGRADE_EFFECT_TYPES_MAX,
+};
+// char *upgradeEffectTypeStrings[] = {
+// 	"Unlock",
+// 	"Damage",
+// 	"Range",
+// 	"Rpm",
+// 	"Upgrade card",
+// 	"Mana",
+// };
+
+struct UpgradeEffect {
+	UpgradeEffectType type;
+	ActorType actorType;
+	float value;
+};
+struct Upgrade {
+	int id;
+#define UPGRADE_EFFECTS_MAX 8
+	UpgradeEffect effects[UPGRADE_EFFECTS_MAX];
+	int effectsNum;
+
+#define UPGRADE_PREREQS_MAX 8
+	int prereqs[UPGRADE_PREREQS_MAX];
+	int prereqsNum;
+};
+
+enum CoreEventType {
+	CORE_EVENT_DAMAGE,
+	CORE_EVENT_SHOOT,
+	CORE_EVENT_HIT,
+	CORE_EVENT_SHOW_GHOST,
+	CORE_EVENT_MORTAR_EXPLOSION,
+};
+struct CoreEvent {
+	CoreEventType type;
+	float floatValue;
+
+	float shieldValue;
+	float armorValue;
+	float hpValue;
+
+	Vec2 ghostOrMortarPosition;
+	ActorType ghostActorType;
+	int srcId;
+	int destId;
+};
+
+struct GameData {
+	World *world;
+#define CAMPAIGN_NAME_MAX_LEN 64
+	char campaignName[CAMPAIGN_NAME_MAX_LEN];
+
+	float time;
+
+	Vec2 cameraPosition;
+	float cameraZoom;
+
+	Tool prevTool;
+	Tool tool;
+	float toolTime;
+	ActorType actorToBuild;
+
+	int hp;
+	int money;
+	float mana;
+	float maxMana;
+
+	int wave;
+	float waveTime;
+	bool playingWave;
+
+	ActorType actorsToSpawn[ACTORS_MAX];
+	int actorsToSpawnNum;
+	float timeTillNextSpawn;
+
+#define SELECTED_ACTORS_MAX 2048
+	int selectedActors[SELECTED_ACTORS_MAX];
+	int selectedActorsNum;
+
+#define UPGRADES_MAX 256
+	int ownedUpgrades[UPGRADES_MAX];
+	int ownedUpgradesNum;
+};
+
+struct Core {
+	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
+	int actorTypeCounts[ACTOR_TYPES_MAX];
+
+	Upgrade upgrades[UPGRADES_MAX];
+	int upgradesNum;
+	int nextUpgradeId;
+
+	float manaToGain;
+
+	GameData data;
+
+	int presentedUpgrades[UPGRADES_MAX];
+	int presentedUpgradesNum;
+
+#define CORE_EVENTS_MAX 1024
+	CoreEvent coreEvents[CORE_EVENTS_MAX];
+	int coreEventsNum;
+};
+
+#else
+
 void initCore();
 void stepGame(float elapsed);
 
@@ -1739,3 +2043,5 @@ Tile readTile(DataStream *stream, int version) {
 	if (version >= 4) tile.elevation = readU8(stream);
 	return tile;
 }
+
+#endif
