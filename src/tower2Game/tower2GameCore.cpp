@@ -55,27 +55,27 @@ Tile readTile(DataStream *stream, int version);
 void initCore() {
 	{ /// Setup actor type infos
 		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
-			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			ActorTypeInfo *info = &core->actorTypeInfos[i];
 			sprintf(info->name, "Actor %d", i);
 			info->size = v3(TILE_SIZE*0.5, TILE_SIZE*0.5, TILE_SIZE*0.5);
 			info->primaryColor = 0xFF000000;
 		}
 
 		for (int i = ACTOR_BALLISTA; i <= ACTOR_PARTICLE_CANNON; i++) {
-			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			ActorTypeInfo *info = &core->actorTypeInfos[i];
 			info->isTower = true;
 			info->size = v3(TILE_SIZE*0.75, TILE_SIZE*0.75, TILE_SIZE*0.75);
 		}
 
 		for (int i = ACTOR_ENEMY1; i <= ACTOR_ENEMY64; i++) {
-			ActorTypeInfo *info = &game->actorTypeInfos[i];
+			ActorTypeInfo *info = &core->actorTypeInfos[i];
 			info->isEnemy = true;
 			info->size = v3(TILE_SIZE*0.25, TILE_SIZE*0.25, TILE_SIZE*0.25);
 		}
 
 		ActorTypeInfo *info = NULL;
 
-		info = &game->actorTypeInfos[ACTOR_BALLISTA];
+		info = &core->actorTypeInfos[ACTOR_BALLISTA];
 		strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 5;
 		info->hpDamageMulti = 10;
@@ -88,7 +88,7 @@ void initCore() {
 		info->priceMulti = 15;
 		info->primaryColor = 0xFF800000;
 
-		info = &game->actorTypeInfos[ACTOR_MORTAR_TOWER];
+		info = &core->actorTypeInfos[ACTOR_MORTAR_TOWER];
 		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 10;
 		info->hpDamageMulti = 10;
@@ -101,7 +101,7 @@ void initCore() {
 		info->priceMulti = 75;
 		info->primaryColor = 0xFF525252;
 
-		info = &game->actorTypeInfos[ACTOR_TESLA_COIL];
+		info = &core->actorTypeInfos[ACTOR_TESLA_COIL];
 		strncpy(info->name, "Tesla Coil", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 10;
 		info->hpDamageMulti = 6;
@@ -114,7 +114,7 @@ void initCore() {
 		info->priceMulti = 75;
 		info->primaryColor = 0xFFA0A0F0;
 
-		info = &game->actorTypeInfos[ACTOR_FROST_KEEP];
+		info = &core->actorTypeInfos[ACTOR_FROST_KEEP];
 		strncpy(info->name, "Frost Keep", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 5;
 		info->hpDamageMulti = 10;
@@ -127,7 +127,7 @@ void initCore() {
 		info->priceMulti = 100;
 		info->primaryColor = 0xFFE3F0F5;
 
-		info = &game->actorTypeInfos[ACTOR_FLAME_THROWER];
+		info = &core->actorTypeInfos[ACTOR_FLAME_THROWER];
 		strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 5;
 		info->hpDamageMulti = 6;
@@ -140,7 +140,7 @@ void initCore() {
 		info->priceMulti = 75;
 		info->primaryColor = lerpColor(BURN_COLOR, 0xFF000000, 0.75);
 
-		info = &game->actorTypeInfos[ACTOR_POISON_SPRAYER];
+		info = &core->actorTypeInfos[ACTOR_POISON_SPRAYER];
 		strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 5;
 		info->hpDamageMulti = 6;
@@ -153,7 +153,7 @@ void initCore() {
 		info->priceMulti = 75;
 		info->primaryColor = lerpColor(POISON_COLOR, 0xFF000000, 0.75);
 
-		info = &game->actorTypeInfos[ACTOR_SHREDDER];
+		info = &core->actorTypeInfos[ACTOR_SHREDDER];
 		strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 10;
 		info->hpDamageMulti = 20;
@@ -165,7 +165,7 @@ void initCore() {
 		info->priceMulti = 100;
 		info->primaryColor = 0xFF800000;
 
-		info = &game->actorTypeInfos[ACTOR_ENCAMPENT];
+		info = &core->actorTypeInfos[ACTOR_ENCAMPENT];
 		strncpy(info->name, "Encampent", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 20;
 		info->hpDamageMulti = 10;
@@ -176,7 +176,7 @@ void initCore() {
 		info->price = 500;
 		info->priceMulti = 100;
 
-		info = &game->actorTypeInfos[ACTOR_LOOKOUT];
+		info = &core->actorTypeInfos[ACTOR_LOOKOUT];
 		strncpy(info->name, "Lookout", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 1;
 		info->hpDamageMulti = 2;
@@ -187,7 +187,7 @@ void initCore() {
 		info->price = 500;
 		info->priceMulti = 100;
 
-		info = &game->actorTypeInfos[ACTOR_RADAR];
+		info = &core->actorTypeInfos[ACTOR_RADAR];
 		strncpy(info->name, "Radar", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 20;
 		info->hpDamageMulti = 20;
@@ -198,7 +198,7 @@ void initCore() {
 		info->price = 1000;
 		info->priceMulti = 250;
 
-		info = &game->actorTypeInfos[ACTOR_OBELISK];
+		info = &core->actorTypeInfos[ACTOR_OBELISK];
 		strncpy(info->name, "Obelisk", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 8;
 		info->hpDamageMulti = 5;
@@ -210,7 +210,7 @@ void initCore() {
 		info->price = 1000;
 		info->priceMulti = 250;
 
-		info = &game->actorTypeInfos[ACTOR_PARTICLE_CANNON];
+		info = &core->actorTypeInfos[ACTOR_PARTICLE_CANNON];
 		strncpy(info->name, "Particle Cannon", ACTOR_TYPE_NAME_MAX_LEN);
 		info->damage = 50;
 		info->hpDamageMulti = 15;
@@ -222,76 +222,76 @@ void initCore() {
 		info->price = 1000;
 		info->priceMulti = 250;
 
-		info = &game->actorTypeInfos[ACTOR_MANA_SIPHON];
+		info = &core->actorTypeInfos[ACTOR_MANA_SIPHON];
 		strncpy(info->name, "Mana Siphon", ACTOR_TYPE_NAME_MAX_LEN);
 		info->price = 100;
 		info->priceMulti = 10;
 		info->primaryColor = 0xFFA4CCC8;
 
-		info = &game->actorTypeInfos[ACTOR_MANA_CRYSTAL];
+		info = &core->actorTypeInfos[ACTOR_MANA_CRYSTAL];
 		strncpy(info->name, "Mana Crystal", ACTOR_TYPE_NAME_MAX_LEN);
 		info->primaryColor = 0xFFA4B0CC;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY1];
+		info = &core->actorTypeInfos[ACTOR_ENEMY1];
 		info->enemySpawnStartingWave = 1;
 		info->movementSpeed = 2;
 		info->maxHp = 100;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY2];
+		info = &core->actorTypeInfos[ACTOR_ENEMY2];
 		info->enemySpawnStartingWave = 3;
 		info->movementSpeed = 2;
 		info->maxHp = 300;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY3];
+		info = &core->actorTypeInfos[ACTOR_ENEMY3];
 		info->enemySpawnStartingWave = 5;
 		info->movementSpeed = 1.75;
 		info->maxHp = 400;
 		info->maxArmor = 200;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY4];
+		info = &core->actorTypeInfos[ACTOR_ENEMY4];
 		info->enemySpawnStartingWave = 7;
 		info->movementSpeed = 1.75;
 		info->maxHp = 800;
 		info->hpGainPerSec = 25;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY5];
+		info = &core->actorTypeInfos[ACTOR_ENEMY5];
 		info->enemySpawnStartingWave = 9;
 		info->movementSpeed = 1.75;
 		info->maxHp = 400;
 		info->maxArmor = 600;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY6];
+		info = &core->actorTypeInfos[ACTOR_ENEMY6];
 		info->enemySpawnStartingWave = 11;
 		info->movementSpeed = 1;
 		info->maxHp = 300;
 		info->maxArmor = 1500;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY7];
+		info = &core->actorTypeInfos[ACTOR_ENEMY7];
 		info->enemySpawnStartingWave = 13;
 		info->movementSpeed = 1.25;
 		info->maxHp = 2000;
 
-		info = &game->actorTypeInfos[ACTOR_ENEMY8];
+		info = &core->actorTypeInfos[ACTOR_ENEMY8];
 		info->enemySpawnStartingWave = 15;
 		info->movementSpeed = 1;
 		info->maxHp = 20000;
 
-		info = &game->actorTypeInfos[ACTOR_ARROW];
+		info = &core->actorTypeInfos[ACTOR_ARROW];
 		info->size = v3(0.1, 0.1, 0.1) * TILE_SIZE;
 		info->bulletSpeed = 20;
 
-		info = &game->actorTypeInfos[ACTOR_MORTAR];
+		info = &core->actorTypeInfos[ACTOR_MORTAR];
 		info->bulletSpeed = 0.5;
 		info->baseRange = 2 * TILE_SIZE;
 	} ///
 
 	{ /// Setup upgrades
 		auto createUpgrade = []() {
-			if (game->upgradesNum > UPGRADES_MAX-1) Panic("Too many upgrades");
+			if (core->upgradesNum > UPGRADES_MAX-1) Panic("Too many upgrades");
 
-			Upgrade *upgrade = &game->upgrades[game->upgradesNum++];
+			Upgrade *upgrade = &core->upgrades[core->upgradesNum++];
 			memset(upgrade, 0, sizeof(Upgrade));
-			upgrade->id = ++game->nextUpgradeId;
+			upgrade->id = ++core->nextUpgradeId;
 			return upgrade;
 		};
 
@@ -302,8 +302,8 @@ void initCore() {
 		};
 		// ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 
-		game->upgradesNum = 0;
-		game->nextUpgradeId = 0;
+		core->upgradesNum = 0;
+		core->nextUpgradeId = 0;
 		for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
 			ActorType actorType = actorsCouldUpgrade[i];
 
@@ -399,22 +399,22 @@ void initCore() {
 
 void stepGame(float elapsed) {
 	float timeScale = elapsed / (1/60.0);
-	game->coreEventsNum = 0;
+	core->coreEventsNum = 0;
 
 	World *world = data->world;
 
-	memset(game->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
+	memset(core->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
-		game->actorTypeCounts[actor->type]++;
+		core->actorTypeCounts[actor->type]++;
 	}
 
-	game->manaToGain = 1 * elapsed;
+	core->manaToGain = 1 * elapsed;
 	int enemiesAlive = 0;
 	{ /// Update actors
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
-			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+			ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 			actor->movementSpeed = info->movementSpeed;
 			actor->movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
@@ -465,7 +465,7 @@ void stepGame(float elapsed) {
 					float bestEnemyScore = 0;
 					for (int i = 0; i < enemiesInRangeNum; i++) {
 						Actor *enemy = enemiesInRange[i];
-						// ActorTypeInfo *enemyInfo = &game->actorTypeInfos[enemy->type];
+						// ActorTypeInfo *enemyInfo = &core->actorTypeInfos[enemy->type];
 						float score = 0;
 						if (actor->priority == PRIORITY_PROGRESS) {
 							Tile *tile = getTileAt(worldToTile(enemy->position));
@@ -626,7 +626,7 @@ void stepGame(float elapsed) {
 					if (other->type == ACTOR_MANA_CRYSTAL) count++;
 				}
 
-				game->manaToGain += (float)count * elapsed;
+				core->manaToGain += (float)count * elapsed;
 			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
 				enemiesAlive++;
@@ -794,7 +794,7 @@ void stepGame(float elapsed) {
 			actor->timeSinceLastShot += elapsed;
 
 			if (actor->markedForDeletion) {
-				ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+				ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 				if (info->isEnemy) {
 					int moneyToGain = 0;
 					if (actor->type == ACTOR_ENEMY1) {
@@ -868,8 +868,8 @@ void stepGame(float elapsed) {
 
 			int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
 			int possibleNum = 0;
-			for (int i = 0; i < game->upgradesNum; i++) {
-				Upgrade *upgrade = &game->upgrades[i];
+			for (int i = 0; i < core->upgradesNum; i++) {
+				Upgrade *upgrade = &core->upgrades[i];
 				if (hasUpgrade(upgrade->id)) continue;
 
 				bool hasPrereqs = true;
@@ -890,11 +890,11 @@ void stepGame(float elapsed) {
 				}
 			}
 
-			game->presentedUpgradesNum = 0;
+			core->presentedUpgradesNum = 0;
 			for (int i = 0; i < maxUpgradeCards; i++) {
 				if (possibleNum == 0) continue;
 				int chosenIndex = rndInt(0, possibleNum-1);
-				game->presentedUpgrades[game->presentedUpgradesNum++] = possible[chosenIndex];
+				core->presentedUpgrades[core->presentedUpgradesNum++] = possible[chosenIndex];
 				arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
 				possibleNum--;
 			}
@@ -908,11 +908,11 @@ void stepGame(float elapsed) {
 			Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
 			for (int i = 0; i < upgrade->effectsNum; i++) {
 				UpgradeEffect *effect = &upgrade->effects[i];
-				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) game->manaToGain *= effect->value;
+				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) core->manaToGain *= effect->value;
 			}
 		}
 
-		if (data->playingWave) data->mana += game->manaToGain;
+		if (data->playingWave) data->mana += core->manaToGain;
 		if (data->mana > data->maxMana) data->mana = data->maxMana;
 	} ///
 
@@ -927,7 +927,7 @@ void stepGame(float elapsed) {
 		} else if (data->tool == TOOL_BUILDING) {
 			if (platform->rightMouseDown) data->tool = TOOL_NONE;
 
-			ActorTypeInfo *info = &game->actorTypeInfos[data->actorToBuild];
+			ActorTypeInfo *info = &core->actorTypeInfos[data->actorToBuild];
 
 			Vec2i tilePosition = getTileHovering();
 			Vec2 center = getCenter(tileToWorldRect(tilePosition));
@@ -953,7 +953,7 @@ void stepGame(float elapsed) {
 			}
 
 			if (canBuild && isMouseClicked()) {
-				float price = info->price + info->priceMulti*game->actorTypeCounts[data->actorToBuild];
+				float price = info->price + info->priceMulti*core->actorTypeCounts[data->actorToBuild];
 				if (data->money >= price) {
 					data->money -= price;
 					Actor *newTower = createActor(data->actorToBuild);
@@ -1234,7 +1234,7 @@ Actor *createActor(ActorType type) {
 	initActor(actor);
 	actor->id = ++world->nextActorId;
 
-	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	actor->hp = info->maxHp;
 	actor->armor = info->maxArmor;
 	actor->shield = info->maxShield;
@@ -1280,7 +1280,7 @@ Actor *createBullet(Actor *src, Actor *target) {
 void dealDamage(Actor *src, Actor *dest) {
 	Actor *tower = NULL;
 
-	ActorTypeInfo *srcInfo = &game->actorTypeInfos[src->type];
+	ActorTypeInfo *srcInfo = &core->actorTypeInfos[src->type];
 	if (srcInfo->isTower) {
 		tower = src;
 	} else {
@@ -1293,7 +1293,7 @@ void dealDamage(Actor *src, Actor *dest) {
 
 	float damage = getDamage(tower);
 
-	ActorTypeInfo *towerInfo = &game->actorTypeInfos[tower->type];
+	ActorTypeInfo *towerInfo = &core->actorTypeInfos[tower->type];
 	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
 
 	createCoreEvent(CORE_EVENT_HIT, tower, dest);
@@ -1351,7 +1351,7 @@ Vec2 getFlowDirForRect(Rect rect) {
 }
 
 float getRange(ActorType actorType, Vec2i tilePos) {
-	ActorTypeInfo *info = &game->actorTypeInfos[actorType];
+	ActorTypeInfo *info = &core->actorTypeInfos[actorType];
 	float range = info->baseRange;
 
 	Tile *tile = getTileAt(tilePos);
@@ -1374,7 +1374,7 @@ float getRange(Actor *actor, Vec2i tilePos) {
 }
 
 float getDamage(Actor *actor) {
-	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	float damage = info->damage;
 
 	for (int i = 0; i < data->ownedUpgradesNum; i++) {
@@ -1390,7 +1390,7 @@ float getDamage(Actor *actor) {
 }
 
 float getRpm(Actor *actor) {
-	ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	float rpm = info->rpm;
 
 	for (int i = 0; i < data->ownedUpgradesNum; i++) {
@@ -1409,12 +1409,12 @@ int getMaxLevel(ActorType actorType) {
 }
 
 ActorTypeInfo *getInfo(Actor *actor) {
-	return &game->actorTypeInfos[actor->type];
+	return &core->actorTypeInfos[actor->type];
 }
 
 Upgrade *getUpgrade(int id) {
-	for (int i = 0; i < game->upgradesNum; i++) {
-		Upgrade *upgrade = &game->upgrades[i];
+	for (int i = 0; i < core->upgradesNum; i++) {
+		Upgrade *upgrade = &core->upgrades[i];
 		if (upgrade->id == id) return upgrade;
 	}
 
@@ -1449,7 +1449,7 @@ Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 	int enemiesInRangeNum = 0;
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
-		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
+		ActorTypeInfo *otherInfo = &core->actorTypeInfos[actor->type];
 		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
 		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
@@ -1467,7 +1467,7 @@ Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly) {
 	int enemiesInRangeNum = 0;
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
-		ActorTypeInfo *otherInfo = &game->actorTypeInfos[actor->type];
+		ActorTypeInfo *otherInfo = &core->actorTypeInfos[actor->type];
 		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
 		if (overlaps(getRect(actor), range)) {
@@ -1488,7 +1488,7 @@ void startNextWave() {
 	int possibleActorsNum = 0;
 
 	for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
-		ActorTypeInfo *info = &game->actorTypeInfos[i];
+		ActorTypeInfo *info = &core->actorTypeInfos[i];
 		if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= data->wave) {
 			possibleActors[possibleActorsNum++] = (ActorType)i;
 		}
@@ -1516,11 +1516,11 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
 }
 
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
-	if (game->coreEventsNum > CORE_EVENTS_MAX-1) {
+	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
-		game->coreEventsNum--;
+		core->coreEventsNum--;
 	}
-	CoreEvent *event = &game->coreEvents[game->coreEventsNum++];
+	CoreEvent *event = &core->coreEvents[core->coreEventsNum++];
 	memset(event, 0, sizeof(CoreEvent));
 	event->type = type;
 	if (src) event->srcId = src->id;

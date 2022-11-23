@@ -3,6 +3,7 @@
 // GameData should contain presentedUpgrades (or it at least needs to be reset upon resetting the game)
 
 // Upgrade ideas:
+// Item that allows you to save
 // Saws go through X extra enemies
 // Gaining the ability to slow down time more
 // Tower has a small chance of freezing
@@ -84,6 +85,9 @@ char *priorityStrings[] = {
 	"Slowest",
 };
 
+struct DoT {
+};
+
 enum ActorType {
 	ACTOR_NONE=0,
 	ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
@@ -126,6 +130,8 @@ struct Actor {
 	float burn;
 	float bleed;
 	float movementSpeed;
+	DoT *dots;
+	int dotsNum;
 
 	Priority priority;
 
@@ -317,6 +323,26 @@ struct GameData {
 	int ownedUpgradesNum;
 };
 
+struct Core {
+	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
+	int actorTypeCounts[ACTOR_TYPES_MAX];
+
+	Upgrade upgrades[UPGRADES_MAX];
+	int upgradesNum;
+	int nextUpgradeId;
+
+	float manaToGain;
+
+	GameData data;
+
+	int presentedUpgrades[UPGRADES_MAX];
+	int presentedUpgradesNum;
+
+#define CORE_EVENTS_MAX 1024
+	CoreEvent coreEvents[CORE_EVENTS_MAX];
+	int coreEventsNum;
+};
+
 enum ParticleType {
 	PARTICLE_FLAME,
 };
@@ -364,28 +390,12 @@ struct Game {
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
 	int worldChannelsNum;
 
-	/// Core
-	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
-	int actorTypeCounts[ACTOR_TYPES_MAX];
-
-	Upgrade upgrades[UPGRADES_MAX];
-	int upgradesNum;
-	int nextUpgradeId;
-
-	float manaToGain;
-
-	GameData data;
-
-	int presentedUpgrades[UPGRADES_MAX];
-	int presentedUpgradesNum;
-
-#define CORE_EVENTS_MAX 1024
-	CoreEvent coreEvents[CORE_EVENTS_MAX];
-	int coreEventsNum;
-
 #define EFFECTS_MAX 1024
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
+
+	/// Core
+	Core core;
 
 	/// Editor/debug
 	bool debugShowFrameTimes;
@@ -402,6 +412,7 @@ struct Game {
 
 Game *game = NULL;
 GameData *data = NULL;
+Core *core = NULL;
 
 void runGame();
 void updateGame();
@@ -479,7 +490,8 @@ void updateGame() {
 	bool isFirstStart = false;
 	if (!game) {
 		game = (Game *)zalloc(sizeof(Game));
-		data = &game->data;
+		core = &game->core;
+		data = &core->data;
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
 
 		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs", NULL, "assets/common/shaders/raylib/glsl100/fxaa.fs");
@@ -755,8 +767,8 @@ void drawGame(float elapsed) {
 	Mesh *sphereMesh = getMesh("assets/common/models/Sphere.Sphere.mesh");
 
 	{ /// Iterate CoreEvents
-		for (int i = 0; i < game->coreEventsNum; i++) {
-			CoreEvent *event = &game->coreEvents[i];
+		for (int i = 0; i < core->coreEventsNum; i++) {
+			CoreEvent *event = &core->coreEvents[i];
 			if (
 				event->type == CORE_EVENT_DAMAGE ||
 				event->type == CORE_EVENT_SHOW_GHOST ||
@@ -913,7 +925,7 @@ void drawGame(float elapsed) {
 	{ /// Draw actors
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
-			ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+			ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 			Chunk *chunk = worldToChunk(actor->position);
 			if (chunk && !chunk->visible) continue;
@@ -1421,7 +1433,7 @@ void drawGame(float elapsed) {
 						playWorldSound("assets/audio/shoot/explosion", effect->position);
 					}
 
-					float explodeRange = game->actorTypeInfos[ACTOR_MORTAR].baseRange;
+					float explodeRange = core->actorTypeInfos[ACTOR_MORTAR].baseRange;
 					maxTime = 0.25;
 					float perc = effect->time / maxTime;
 					int color = lerpColor(0xFFFFFFFF, 0x00FF0000, perc);
@@ -1536,7 +1548,7 @@ void drawGame(float elapsed) {
 	} ///
 
 	{ /// Show explore buttons
-		if (!data->playingWave && !game->presentedUpgradesNum && data->tool == TOOL_NONE && data->hp > 0) {
+		if (!data->playingWave && !core->presentedUpgradesNum && data->tool == TOOL_NONE && data->hp > 0) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
@@ -2080,8 +2092,8 @@ void updateAndDrawOverlay(float elapsed) {
 
 			for (int i = 0; i < typesCanBuyNum; i++) {
 				ActorType actorType = typesCanBuy[i];
-				ActorTypeInfo *info = &game->actorTypeInfos[actorType];
-				float price = info->price + info->priceMulti*game->actorTypeCounts[actorType];
+				ActorTypeInfo *info = &core->actorTypeInfos[actorType];
+				float price = info->price + info->priceMulti*core->actorTypeCounts[actorType];
 				char *label = frameSprintf("%s $%.0f\n", info->name, price);
 				if (nguiButton(label)) {
 					data->tool = TOOL_BUILDING;
@@ -2100,11 +2112,11 @@ void updateAndDrawOverlay(float elapsed) {
 			if (nguiButton("Sell")) {
 				for (int i = 0; i < data->selectedActorsNum; i++) {
 					Actor *actor = getActor(data->selectedActors[i]);
-					ActorTypeInfo *info = &game->actorTypeInfos[actor->type];
+					ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 					actor->markedForDeletion = true;
 					data->money += actor->amountPaid;
-					data->money += info->price + ((game->actorTypeCounts[actor->type]-1) * info->priceMulti);
+					data->money += info->price + ((core->actorTypeCounts[actor->type]-1) * info->priceMulti);
 
 					arraySpliceIndex(data->selectedActors, data->selectedActorsNum, sizeof(int), i);
 					data->selectedActorsNum--;
@@ -2132,15 +2144,15 @@ void updateAndDrawOverlay(float elapsed) {
 		}
 	} ///
 
-	if (game->presentedUpgradesNum > 0) {
+	if (core->presentedUpgradesNum > 0) {
 		pushGameStyleStack("Upgrades");
 		nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
-		for (int i = 0; i < game->presentedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(game->presentedUpgrades[i]);
+		for (int i = 0; i < core->presentedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(core->presentedUpgrades[i]);
 			char *label = "";
 			for (int i = 0; i < upgrade->effectsNum; i++) {
 				UpgradeEffect *effect = &upgrade->effects[i];
-				ActorTypeInfo *info = &game->actorTypeInfos[effect->actorType];
+				ActorTypeInfo *info = &core->actorTypeInfos[effect->actorType];
 
 				char *line = "";
 				if (effect->type == UPGRADE_EFFECT_UNLOCK) {
@@ -2165,7 +2177,7 @@ void updateAndDrawOverlay(float elapsed) {
 			}
 			if (nguiButton(label)) {
 				data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
-				game->presentedUpgradesNum = 0;
+				core->presentedUpgradesNum = 0;
 
 				if (data->hp > 0) {
 					// if (fileExists("assets/states/autosave.save_state")) {
@@ -2196,7 +2208,7 @@ void updateAndDrawOverlay(float elapsed) {
 			data->money,
 			data->mana,
 			data->maxMana,
-			game->manaToGain/elapsed,
+			core->manaToGain/elapsed,
 			demoStr
 		), props, rect, v2());
 	}
