@@ -79,6 +79,13 @@ struct Dot {
 	int ticks;
 };
 
+struct Stats {
+	int shots;
+	float shieldDamage;
+	float armorDamage;
+	float hpDamage;
+};
+
 enum ActorType {
 	ACTOR_NONE=0,
 	ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER, ACTOR_ENCAMPENT,
@@ -123,6 +130,9 @@ struct Actor {
 	float unused2;
 	float unused3;
 	float movementSpeed;
+
+	Stats *stats;
+	int statsNum;
 
 	Priority priority;
 
@@ -280,6 +290,9 @@ struct GameData {
 #define UPGRADES_MAX 256
 	int ownedUpgrades[UPGRADES_MAX];
 	int ownedUpgradesNum;
+
+	Stats *actorTypeStats[ACTOR_TYPES_MAX];
+	int actorTypeStatsEach;
 };
 
 struct Core {
@@ -334,7 +347,7 @@ int getMaxLevel(ActorType actorType);
 ActorTypeInfo *getInfo(Actor *actor);
 
 Actor *createBullet(Actor *src, Actor *target);
-void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent=false);
+void dealDamage(Actor *dest, int srcId, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent=false);
 void dealDamage(Actor *bullet, Actor *dest);
 
 void createDot(Actor *src, Actor *dest, DotType type, int ticks);
@@ -349,15 +362,20 @@ Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
 void startNextWave();
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
+void addShotStat(Actor *actor);
+void addDamageStat(Actor *actor, float shieldAmount, float armorAmount, float hpAmount);
+
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL);
 
 void saveState(char *path);
+void writeStats(DataStream *stream, Stats stats);
 void writeWorld(DataStream *stream, World *world);
 void writeActor(DataStream *stream, Actor *actor);
 void writeChunk(DataStream *stream, Chunk *chunk);
 void writeTile(DataStream *stream, Tile tile);
 
 void loadState(char *path);
+void readStats(DataStream *stream, Stats *stats, int version);
 void readWorld(DataStream *stream, World *world, int version);
 void readActor(DataStream *stream, Actor *actor, int version);
 void readChunk(DataStream *stream, Chunk *chunk, int version);
@@ -721,12 +739,25 @@ void stepGame(float elapsed) {
 		core->actorTypeCounts[actor->type]++;
 	}
 
+	int statsMax = data->wave+2;
+	if (data->actorTypeStatsEach < statsMax-1) {
+		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+			data->actorTypeStats[i] = (Stats *)resizeArray(data->actorTypeStats[i], sizeof(Stats), data->actorTypeStatsEach, statsMax);
+		}
+		data->actorTypeStatsEach = statsMax;
+	}
+
 	core->manaToGain = 1 * elapsed;
 	int enemiesAlive = 0;
 	{ /// Update actors
 		for (int i = 0; i < world->actorsNum; i++) {
 			Actor *actor = &world->actors[i];
 			ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
+
+			if (actor->statsNum < statsMax-1) {
+				actor->stats = (Stats *)resizeArray(actor->stats, sizeof(Stats), actor->statsNum, statsMax);
+				actor->statsNum = statsMax;
+			}
 
 			actor->movementSpeed = info->movementSpeed;
 			actor->movementSpeed *= clampMap(actor->slow, 0, 10, 1, 0.4);
@@ -797,6 +828,7 @@ void stepGame(float elapsed) {
 							actor->timeSinceLastShot = 0;
 							towerShouldFire = true;
 							createCoreEvent(CORE_EVENT_SHOOT, actor);
+							addShotStat(actor);
 						}
 					}
 
@@ -1114,11 +1146,11 @@ void stepGame(float elapsed) {
 					float amountPerTick = 10;
 					dot->ticks--;
 					if (dot->type == DOT_POISON) {
-						dealDamage(actor, amountPerTick, 2, 0.5, 1);
+						dealDamage(actor, dot->src, amountPerTick, 2, 0.5, 1);
 					} else if (dot->type == DOT_BURN) {
-						dealDamage(actor, amountPerTick, 0.5, 2, 1);
+						dealDamage(actor, dot->src, amountPerTick, 0.5, 2, 1);
 					} else if (dot->type == DOT_BLEED) {
-						dealDamage(actor, amountPerTick, 0.5, 0.5, 2);
+						dealDamage(actor, dot->src, amountPerTick, 0.5, 0.5, 2);
 					} else {
 						logf("Unknown DotType %d\n", dot->type);
 					}
@@ -1721,12 +1753,12 @@ void dealDamage(Actor *src, Actor *dest) {
 	float damage = getDamage(tower);
 
 	ActorTypeInfo *towerInfo = &core->actorTypeInfos[tower->type];
-	dealDamage(dest, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
+	dealDamage(dest, tower->id, damage, towerInfo->shieldDamageMulti, towerInfo->armorDamageMulti, towerInfo->hpDamageMulti);
 
 	createCoreEvent(CORE_EVENT_HIT, tower, dest);
 }
 
-void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent) {
+void dealDamage(Actor *dest, int srcId, float amount, float shieldDamageMulti, float armorDamageMulti, float hpDamageMulti, bool noCoreEvent) {
 	float damageLeft = amount;
 
 	float toBreakShield = dest->shield / shieldDamageMulti;
@@ -1743,6 +1775,13 @@ void dealDamage(Actor *dest, float amount, float shieldDamageMulti, float armorD
 
 	float hpRealDamage = damageLeft * hpDamageMulti;
 	dest->hp -= hpRealDamage;
+
+	Actor *src = getActor(srcId);
+	if (src) {
+		addDamageStat(src, shieldRealDamage, armorRealDamage, hpRealDamage);
+	} else {
+		logf("No damage src for stats\n");
+	}
 
 	if (!noCoreEvent) {
 		CoreEvent *event = createCoreEvent(CORE_EVENT_DAMAGE, dest);
@@ -1876,6 +1915,36 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
 	return tri;
 }
 
+void addShotStat(Actor *actor) {
+	Stats *actorAll = &actor->stats[0];
+	Stats *actorWave = &actor->stats[data->wave];
+	Stats *typeAll = &data->actorTypeStats[actor->type][0];
+	Stats *typeWave = &data->actorTypeStats[actor->type][data->wave];
+	actorAll->shots++;
+	actorWave->shots++;
+	typeAll->shots++;
+	typeWave->shots++;
+}
+
+void addDamageStat(Actor *actor, float shieldAmount, float armorAmount, float hpAmount) {
+	Stats *actorAll = &actor->stats[0];
+	Stats *actorWave = &actor->stats[data->wave];
+	Stats *typeAll = &data->actorTypeStats[actor->type][0];
+	Stats *typeWave = &data->actorTypeStats[actor->type][data->wave];
+	actorAll->shieldDamage += shieldAmount;
+	actorWave->shieldDamage += shieldAmount;
+	typeAll->shieldDamage += shieldAmount;
+	typeWave->shieldDamage += shieldAmount;
+	actorAll->armorDamage += armorAmount;
+	actorWave->armorDamage += armorAmount;
+	typeAll->armorDamage += armorAmount;
+	typeWave->armorDamage += armorAmount;
+	actorAll->hpDamage += hpAmount;
+	actorWave->hpDamage += hpAmount;
+	typeAll->hpDamage += hpAmount;
+	typeWave->hpDamage += hpAmount;
+}
+
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
 	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
@@ -1893,7 +1962,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 14); // version
+	writeU32(stream, 17); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -1924,8 +1993,24 @@ void saveState(char *path) {
 	writeU32(stream, data->ownedUpgradesNum);
 	for (int i = 0; i < data->ownedUpgradesNum; i++) writeU32(stream, data->ownedUpgrades[i]);
 
+	writeU32(stream, ACTOR_TYPES_MAX);
+	writeU32(stream, data->actorTypeStatsEach);
+	for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+		Stats *actorStats = data->actorTypeStats[i];
+		for (int i = 0; i < data->actorTypeStatsEach; i++) {
+			writeStats(stream, actorStats[i]);
+		}
+	}
+
 	writeDataStream(path, stream);
 	destroyDataStream(stream);
+}
+
+void writeStats(DataStream *stream, Stats stats) {
+	writeU32(stream, stats.shots);
+	writeFloat(stream, stats.shieldDamage);
+	writeFloat(stream, stats.armorDamage);
+	writeFloat(stream, stats.hpDamage);
 }
 
 void writeWorld(DataStream *stream, World *world) {
@@ -1963,6 +2048,10 @@ void writeActor(DataStream *stream, Actor *actor) {
 	writeFloat(stream, actor->unused2);
 	writeFloat(stream, actor->unused3);
 	writeFloat(stream, actor->movementSpeed);
+
+	writeU32(stream, actor->statsNum);
+	for (int i = 0; i < actor->statsNum; i++) writeStats(stream, actor->stats[i]);
+
 	writeU32(stream, actor->priority);
 	writeU32(stream, actor->bulletTarget);
 	writeVec2(stream, actor->bulletTargetPosition);
@@ -2038,9 +2127,36 @@ void loadState(char *path) {
 		for (int i = 0; i < data->ownedUpgradesNum; i++) data->ownedUpgrades[i] = readU32(stream);
 	}
 
+	if (version >= 16) {
+		int actorTypeStatsToLoad = readU32(stream);
+		if (actorTypeStatsToLoad > ACTOR_TYPES_MAX) {
+			logf("Trimming loaded actors stats from %d to %d\n", actorTypeStatsToLoad, ACTOR_TYPES_MAX);
+			actorTypeStatsToLoad = ACTOR_TYPES_MAX;
+		}
+		data->actorTypeStatsEach = readU32(stream);
+		for (int i = 0; i < actorTypeStatsToLoad; i++) {
+			if (data->actorTypeStats[i]) {
+				free(data->actorTypeStats[i]);
+				data->actorTypeStats[i] = NULL;
+			}
+			data->actorTypeStats[i] = (Stats *)zalloc(sizeof(Stats)*data->actorTypeStatsEach);
+			Stats *actorStats = data->actorTypeStats[i];
+			for (int i = 0; i < data->actorTypeStatsEach; i++) {
+				readStats(stream, &actorStats[i], version);
+			}
+		}
+	}
+
 	destroyDataStream(stream);
 
 	generateMapFields();
+}
+
+void readStats(DataStream *stream, Stats *stats, int version) {
+	stats->shots = readU32(stream);
+	stats->shieldDamage = readFloat(stream);
+	stats->armorDamage = readFloat(stream);
+	stats->hpDamage = readFloat(stream);
 }
 
 void readWorld(DataStream *stream, World *world, int version) {
@@ -2082,6 +2198,13 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 		actor->unused2 = readFloat(stream);
 		actor->unused3 = readFloat(stream);
 		actor->movementSpeed = readFloat(stream);
+
+		if (version >= 17) {
+			actor->statsNum = readU32(stream);
+			actor->stats = (Stats *)zalloc(sizeof(Stats) * actor->statsNum);
+			for (int i = 0; i < actor->statsNum; i++) readStats(stream, &actor->stats[i], version);
+		}
+
 		actor->priority = (Priority)readU32(stream);
 		actor->bulletTarget = readU32(stream);
 		actor->bulletTargetPosition = readVec2(stream);

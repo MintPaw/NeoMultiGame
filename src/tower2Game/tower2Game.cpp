@@ -1665,6 +1665,71 @@ void updateAndDrawOverlay(float elapsed) {
 				ImGui::TreePop();
 			}
 
+			if (ImGui::TreeNode("Stats")) {
+				static int statWave = -1;
+				ImGui::InputInt("statWave", &statWave);
+				if (statWave < 0) statWave = 0;
+				if (statWave > data->wave) statWave = data->wave;
+
+				if (ImGui::BeginTable("Stats table", 5, ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersH|ImGuiTableFlags_BordersV)) {
+					ImGui::TableSetupColumn("name");
+					ImGui::TableSetupColumn("shots");
+					ImGui::TableSetupColumn("shieldDamage");
+					ImGui::TableSetupColumn("armorDamage");
+					ImGui::TableSetupColumn("hpDamage");
+					ImGui::TableHeadersRow();
+
+					for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+						ActorTypeInfo *info = &core->actorTypeInfos[i];
+						if (stringStartsWith(info->name, "Actor")) continue;
+
+						Stats *stats = &data->actorTypeStats[i][statWave];
+
+						ImGui::PushID(i);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%s", info->name);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%d", stats->shots);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->shieldDamage);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->armorDamage);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->hpDamage);
+
+						ImGui::PopID();
+					}
+
+					if (data->selectedActorsNum > 0) {
+						Actor *actor = getActor(data->selectedActors[0]);
+						Stats *stats = &actor->stats[statWave];
+						ImGui::TableNextColumn();
+						ImGui::Text("Selected");
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%d", stats->shots);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->shieldDamage);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->armorDamage);
+
+						ImGui::TableNextColumn();
+						ImGui::Text("%.1f", stats->hpDamage);
+					}
+
+					ImGui::EndTable();
+				}
+
+				ImGui::TreePop();
+			}
+
 			ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 			ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
 			ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
