@@ -110,6 +110,8 @@ struct Game {
 
 	bool uiUpgradeListOpened;
 
+	bool isOnLastStep;
+
 	Core core;
 
 	/// Editor/debug
@@ -381,6 +383,8 @@ void updateGame() {
 	}
 
 	for (int i = 0; i < stepsToTake; i++) {
+		game->isOnLastStep = false;
+		if (i == stepsToTake-1) game->isOnLastStep = true;
 		stepGame(elapsed);
 		drawGame(elapsed);
 	}
@@ -1303,28 +1307,6 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
-#if 0 // screen pass test
-	{
-		pushPass(screenPass);
-		Tri tri;
-		tri.verts[0] = v3(0, 0, 1);
-		tri.verts[1] = v3(-1, 1, 1);
-		tri.verts[2] = v3(-1, 0, 1);
-		Texture *texture = renderer->whiteTexture;
-		Vec2 size = v2(500, 500);
-		Matrix3 matrix = mat3();
-		matrix.TRANSLATE(-size/2);
-		matrix.SCALE(size);
-
-		for (int i = 0; i < 3; i++) tri.verts[i] = matrix * tri.verts[i];
-		tri.verts[0].print("v0");
-
-		passTexture(texture, matrix, 0xFFFF0000);
-		// passTri(tri, 0xFFFF0000);
-		popPass();
-	}
-#endif
-
 	if (game->is2d) {
 		popCamera2d();
 	} else {
@@ -1338,6 +1320,7 @@ void drawGame(float elapsed) {
 			screenPass,
 		};
 		int passesNum = ArrayLength(passes);
+		if (!game->isOnLastStep) passesNum = 0;
 
 		for (int i = 0; i < passesNum; i++) {
 			Pass *pass = passes[i];
