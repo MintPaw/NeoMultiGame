@@ -651,34 +651,34 @@ void initCore() {
 			Upgrade *prevUpgrade = NULL;
 
 			prevUpgrade = unlockUpgrade;
-			for (int i = 0; i < 3; i++) {
+			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
 				effect->actorType = actorType;
-				effect->value = 1 + (0.1 * (i+1));
+				effect->value = 2;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
 
 			prevUpgrade = unlockUpgrade;
-			for (int i = 0; i < 3; i++) {
+			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RANGE_MULTI;
 				effect->actorType = actorType;
-				effect->value = 1 + (0.1 * (i+1));
+				effect->value = 2;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
 
 			prevUpgrade = unlockUpgrade;
-			for (int i = 0; i < 3; i++) {
+			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RPM_MULTI;
 				effect->actorType = actorType;
-				effect->value = 1 + (0.1 * (i+1));
+				effect->value = 2;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
@@ -1847,6 +1847,36 @@ bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
 	}
 
 	return false;
+}
+
+char *getUpgradeDescription(Upgrade *upgrade) {
+	char *desc = "";
+	for (int i = 0; i < upgrade->effectsNum; i++) {
+		UpgradeEffect *effect = &upgrade->effects[i];
+		ActorTypeInfo *info = &core->actorTypeInfos[effect->actorType];
+
+		char *line = "";
+		if (effect->type == UPGRADE_EFFECT_UNLOCK) {
+			line = frameSprintf("Unlock %s", info->name);
+		} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
+			line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
+			line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
+			line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
+			line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
+			line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
+			line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
+		} else {
+			line = frameSprintf("Unlabeled effect %d", effect->type);
+		}
+		if (i != 0) desc = frameSprintf("%s\n", desc);
+		desc = frameSprintf("%s%s", desc, line);
+	}
+	return desc;
 }
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {

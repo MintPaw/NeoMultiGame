@@ -1,7 +1,4 @@
-// Randomize damage effect location
-// Poison ticks are too few to see 10% damage boost
-// You shouldn't get a card every round
-// Add a way to see your upgrades
+// You shouldn't get a card every round (Results phase)
 // GameData should contain presentedUpgrades (or it at least needs to be reset upon resetting the game)
 
 // Upgrade ideas:
@@ -111,7 +108,8 @@ struct Game {
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
 
-	/// Core
+	bool uiUpgradeListOpened;
+
 	Core core;
 
 	/// Editor/debug
@@ -228,52 +226,20 @@ void updateGame() {
 
 		rndInt(0, 3); // Burn an rnd seed???
 		isFirstStart = true;
-
-#if 0
-		{
-			float leafSize = 25;
-			float padSize = 50;
-
-			Texture *texture = getTexture("assets/leaf.png");
-
-			float finalWidth = (leafSize + padSize) * 2;
-			float finalHeight = leafSize * 2;
-			RenderTexture *finalTexture = createRenderTexture(finalWidth, finalHeight);
-
-			pushTargetTexture(finalTexture);
-			clearRenderer();
-			for (int y = 0; y < 2; y++) {
-				for (int x = 0; x < 2; x++) {
-					float xpos = x * (leafSize + padSize);
-					if (y == 1) xpos += padSize/2 + leafSize/2;
-					float ypos = y * leafSize;
-					Rect rect = makeRect(xpos, ypos, leafSize, leafSize);
-					RenderProps props = newRenderProps(texture, rect);
-					props.alpha = 0.25;
-					drawTexture(texture, props);
-				}
-			}
-			popTargetTexture();
-
-			u8 *bitmapData = getTextureData(finalTexture, _F_TD_FLIP_Y);
-
-			if (!stbi_write_png("C:/Dropbox/College/resume/leafImage.png", finalTexture->width, finalTexture->height, 4, bitmapData, finalTexture->width*4)) logf("Failed to dump\n");
-			exit(0);
-		}
-#endif
+		game->shouldReset = true;
 	}
 
 	if (game->shouldReset) {
 		game->shouldReset = false;
 
-		World *world = data->world;
-		for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
-		free(world);
-		data->world = NULL;
-		memset(data, 0, sizeof(GameData));
-	}
+		if (data->world) {
+			World *world = data->world;
+			for (int i = 0; i < data->world->actorsNum; i++) deinitActor(&world->actors[i]);
+			free(world);
+			data->world = NULL;
+			memset(data, 0, sizeof(GameData));
+		}
 
-	if (!data->world) {
 		data->world = (World *)zalloc(sizeof(World));
 		World *world = data->world;
 
@@ -1025,7 +991,11 @@ void drawGame(float elapsed) {
 					maxTime = 1;
 					float perc = effect->time / maxTime;
 					if (perc == 0) {
-						if (src) effect->position = to3d(src->position);
+						if (src) {
+							effect->position = to3d(src->position);
+							effect->position.x += to3d(rndFloat(-1, 1) * (game->size.x*0.01));
+							effect->position.y += to3d(rndFloat(-1, 1) * (game->size.y*0.01));
+						}
 					}
 
 					if (game->is2d) {
@@ -1902,6 +1872,30 @@ void updateAndDrawOverlay(float elapsed) {
 
 			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
 			nguiEndWindow();
+
+
+			{ /// Upgrades ui
+				Vec2 nextWindowPosition = game->size*v2(0, 1);
+				if (game->uiUpgradeListOpened) {
+					pushGameStyleStack("Upgrade List");
+					nguiStartWindow("Upgrade List Window", nextWindowPosition, v2(0, 1));
+					for (int i = 0; i < data->ownedUpgradesNum; i++) {
+						Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+						char *str = frameSprintf("%d: %s", i, getUpgradeDescription(upgrade));
+						nguiButton(str);
+					}
+					nguiEndWindow();
+					popGameStyleStack("Upgrade List");
+
+					nextWindowPosition = getPosition(ngui->lastWindowRect);
+				}
+
+				pushGameStyleStack("Upgrade Expander");
+				nguiStartWindow("Upgrade List Epander", nextWindowPosition, v2(0, 1));
+				if (nguiButton("Upgrades")) game->uiUpgradeListOpened = !game->uiUpgradeListOpened;
+				nguiEndWindow();
+				popGameStyleStack("Upgrade Expander");
+			} ///
 		} else if (data->tool == TOOL_BUILDING) {
 			// Nothing...
 		} else if (data->tool == TOOL_SELECTED) {
@@ -1951,32 +1945,8 @@ void updateAndDrawOverlay(float elapsed) {
 		nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
 		for (int i = 0; i < core->presentedUpgradesNum; i++) {
 			Upgrade *upgrade = getUpgrade(core->presentedUpgrades[i]);
-			char *label = "";
-			for (int i = 0; i < upgrade->effectsNum; i++) {
-				UpgradeEffect *effect = &upgrade->effects[i];
-				ActorTypeInfo *info = &core->actorTypeInfos[effect->actorType];
+			char *label = getUpgradeDescription(upgrade);
 
-				char *line = "";
-				if (effect->type == UPGRADE_EFFECT_UNLOCK) {
-					line = frameSprintf("Unlock %s", info->name);
-				} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
-					line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
-				} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
-					line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
-				} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
-					line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
-				} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
-					line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
-				} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
-					line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
-				} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
-					line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
-				} else {
-					line = frameSprintf("Unlabeled effect %d", effect->type);
-				}
-				if (i != 0) label = frameSprintf("%s\n", label);
-				label = frameSprintf("%s%s", label, line);
-			}
 			if (nguiButton(label)) {
 				data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
 				core->presentedUpgradesNum = 0;
