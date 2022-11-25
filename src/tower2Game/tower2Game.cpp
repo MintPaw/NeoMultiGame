@@ -1,5 +1,7 @@
+// Randomize damage effect location
+// Poison ticks are too few to see 10% damage boost
+// You shouldn't get a card every round
 // Add a way to see your upgrades
-// dps stats: per tower, per tower type (per wave/per game)
 // GameData should contain presentedUpgrades (or it at least needs to be reset upon resetting the game)
 
 // Upgrade ideas:
@@ -7,6 +9,7 @@
 // Saws go through X extra enemies
 // Gaining the ability to slow down time more
 // Tower has a small chance of freezing
+// Poison explosion
 
 #define FROST_FALL_DISTANCE 64
 
@@ -1671,12 +1674,14 @@ void updateAndDrawOverlay(float elapsed) {
 				if (statWave < 0) statWave = 0;
 				if (statWave > data->wave) statWave = data->wave;
 
-				if (ImGui::BeginTable("Stats table", 5, ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersH|ImGuiTableFlags_BordersV)) {
+				if (ImGui::BeginTable("Stats table", 7, ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersH|ImGuiTableFlags_BordersV)) {
 					ImGui::TableSetupColumn("name");
+					ImGui::TableSetupColumn("investment");
 					ImGui::TableSetupColumn("shots");
 					ImGui::TableSetupColumn("shieldDamage");
 					ImGui::TableSetupColumn("armorDamage");
 					ImGui::TableSetupColumn("hpDamage");
+					ImGui::TableSetupColumn("damagePerDollar");
 					ImGui::TableHeadersRow();
 
 					for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
@@ -1691,6 +1696,9 @@ void updateAndDrawOverlay(float elapsed) {
 						ImGui::Text("%s", info->name);
 
 						ImGui::TableNextColumn();
+						ImGui::Text("$%d", stats->investment);
+
+						ImGui::TableNextColumn();
 						ImGui::Text("%d", stats->shots);
 
 						ImGui::TableNextColumn();
@@ -1701,6 +1709,10 @@ void updateAndDrawOverlay(float elapsed) {
 
 						ImGui::TableNextColumn();
 						ImGui::Text("%.1f", stats->hpDamage);
+
+						ImGui::TableNextColumn();
+						float damagePerDollar = (stats->hpDamage + stats->armorDamage + stats->shieldDamage) / (float)stats->investment;
+						ImGui::Text("%.1f", damagePerDollar);
 
 						ImGui::PopID();
 					}
@@ -1902,8 +1914,11 @@ void updateAndDrawOverlay(float elapsed) {
 					ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 					actor->markedForDeletion = true;
-					data->money += actor->amountPaid;
-					data->money += info->price + ((core->actorTypeCounts[actor->type]-1) * info->priceMulti);
+					int toGain = 0;
+					toGain += actor->amountPaid;
+					toGain += info->price + ((core->actorTypeCounts[actor->type]-1) * info->priceMulti);
+					data->money += toGain;
+					addInvestmentStat(actor, -toGain);
 
 					arraySpliceIndex(data->selectedActors, data->selectedActorsNum, sizeof(int), i);
 					data->selectedActorsNum--;

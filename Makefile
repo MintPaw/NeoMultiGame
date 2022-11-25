@@ -355,9 +355,6 @@ reEncodeAllOggs:
 		done; \
 		find . -type f -name "*.wav" -delete
 
-shipPlay:
-	$(MAKE) shipDir SHIP_DIR="$(PARAPHORE_COM_PATH)/play"
-
 shipFpsDesktop:
 	cmd /c "\
 		set GAME_NAME=fpsGame&& \

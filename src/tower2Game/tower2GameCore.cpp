@@ -80,6 +80,7 @@ struct Dot {
 };
 
 struct Stats {
+	int investment;
 	int shots;
 	float shieldDamage;
 	float armorDamage;
@@ -364,6 +365,7 @@ Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
 void addShotStat(Actor *actor);
 void addDamageStat(Actor *actor, float shieldAmount, float armorAmount, float hpAmount);
+void addInvestmentStat(Actor *actor, int amount);
 
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL);
 
@@ -412,7 +414,7 @@ void initCore() {
 		info->armorDamageMulti = 5;
 		info->shieldDamageMulti = 5;
 		info->baseRange = 5 * TILE_SIZE;
-		info->rpm = 20;
+		info->rpm = 16;
 		info->mana = 0;
 		info->price = 10;
 		info->priceMulti = 15;
@@ -739,7 +741,7 @@ void stepGame(float elapsed) {
 		core->actorTypeCounts[actor->type]++;
 	}
 
-	int statsMax = data->wave+2;
+	int statsMax = data->wave+2; //@copyPastedStatsMax
 	if (data->actorTypeStatsEach < statsMax-1) {
 		for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
 			data->actorTypeStats[i] = (Stats *)resizeArray(data->actorTypeStats[i], sizeof(Stats), data->actorTypeStatsEach, statsMax);
@@ -1343,6 +1345,7 @@ void stepGame(float elapsed) {
 					data->money -= price;
 					Actor *newTower = createActor(data->actorToBuild);
 					newTower->position = center;
+					addInvestmentStat(newTower, price);
 					if (!keyPressed(KEY_SHIFT)) data->tool = TOOL_NONE;
 				} else {
 					infof("Not enough money\n");
@@ -1623,6 +1626,10 @@ Actor *createActor(ActorType type) {
 	actor->hp = info->maxHp;
 	actor->armor = info->maxArmor;
 	actor->shield = info->maxShield;
+
+	int statsMax = data->wave+2; //@copyPastedStatsMax
+	actor->stats = (Stats *)zalloc(sizeof(Stats) * statsMax);
+	actor->statsNum = statsMax;
 
 	return actor;
 }
@@ -1945,6 +1952,17 @@ void addDamageStat(Actor *actor, float shieldAmount, float armorAmount, float hp
 	typeWave->hpDamage += hpAmount;
 }
 
+void addInvestmentStat(Actor *actor, int amount) {
+	Stats *actorAll = &actor->stats[0];
+	Stats *actorWave = &actor->stats[data->wave];
+	Stats *typeAll = &data->actorTypeStats[actor->type][0];
+	Stats *typeWave = &data->actorTypeStats[actor->type][data->wave];
+	actorAll->investment += amount;
+	actorWave->investment += amount;
+	typeAll->investment += amount;
+	typeWave->investment += amount;
+}
+
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
 	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
@@ -1962,7 +1980,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 17); // version
+	writeU32(stream, 18); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2007,6 +2025,7 @@ void saveState(char *path) {
 }
 
 void writeStats(DataStream *stream, Stats stats) {
+	writeU32(stream, stats.investment);
 	writeU32(stream, stats.shots);
 	writeFloat(stream, stats.shieldDamage);
 	writeFloat(stream, stats.armorDamage);
@@ -2153,6 +2172,7 @@ void loadState(char *path) {
 }
 
 void readStats(DataStream *stream, Stats *stats, int version) {
+	if (version >= 18) stats->investment = readU32(stream);
 	stats->shots = readU32(stream);
 	stats->shieldDamage = readFloat(stream);
 	stats->armorDamage = readFloat(stream);
