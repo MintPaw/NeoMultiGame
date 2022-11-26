@@ -1,6 +1,3 @@
-// You shouldn't get a card every round (Results phase)
-// GameData should contain presentedUpgrades (or it at least needs to be reset upon resetting the game)
-
 // Upgrade ideas:
 // Item that allows you to save
 // Saws go through X extra enemies
@@ -1247,7 +1244,7 @@ void drawGame(float elapsed) {
 	} ///
 
 	{ /// Show explore buttons
-		if (!data->playingWave && !core->presentedUpgradesNum && data->tool == TOOL_NONE && data->hp > 0) {
+		if (data->phase == PHASE_PLANNING && data->tool == TOOL_NONE && data->hp > 0) {
 			for (int i = 0; i < world->chunksNum; i++) {
 				Chunk *chunk = &world->chunks[i];
 				if (!chunk->visible) continue;
@@ -1289,6 +1286,10 @@ void drawGame(float elapsed) {
 					}
 
 					if (didExplore) {
+						if (data->hp > 0) {
+							saveState("assets/states/autosave.save_state");
+							copyFile("assets/states/autosave.save_state", frameSprintf("assets/states/%s_autosave_%d.save_state", data->campaignName, data->wave));
+						}
 						newChunk->visible = true;
 						startNextWave();
 						break;
@@ -1923,25 +1924,22 @@ void updateAndDrawOverlay(float elapsed) {
 		}
 	} ///
 
-	if (core->presentedUpgradesNum > 0) {
+	if (data->phase == PHASE_RESULTS) {
 		pushGameStyleStack("Upgrades");
 		nguiStartWindow("Upgrade window", v2(0, platform->windowHeight/2), v2(0, 0.5));
-		for (int i = 0; i < core->presentedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(core->presentedUpgrades[i]);
-			char *label = getUpgradeDescription(upgrade);
+		if (core->presentedUpgradesNum > 0) {
+			for (int i = 0; i < core->presentedUpgradesNum; i++) {
+				Upgrade *upgrade = getUpgrade(core->presentedUpgrades[i]);
+				char *label = getUpgradeDescription(upgrade);
 
-			if (nguiButton(label)) {
-				data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
-				core->presentedUpgradesNum = 0;
-
-				if (data->hp > 0) {
-					// if (fileExists("assets/states/autosave.save_state")) {
-					// 	if (fileExists("assets/states/prevAutosave.save_state")) deleteFile("assets/states/prevAutosave.save_state");
-					// 	copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
-					// }
-					saveState("assets/states/autosave.save_state");
-					copyFile("assets/states/autosave.save_state", frameSprintf("assets/states/%s_autosave_%d.save_state", data->campaignName, data->wave));
+				if (nguiButton(label)) {
+					data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+					data->phase = PHASE_PLANNING;
 				}
+			}
+		} else {
+			if (nguiButton("Next...")) {
+				data->phase = PHASE_PLANNING;
 			}
 		}
 		nguiEndWindow();

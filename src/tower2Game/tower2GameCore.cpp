@@ -256,6 +256,12 @@ struct CoreEvent {
 	int destId;
 };
 
+enum Phase {
+	PHASE_PLANNING,
+	PHASE_WAVE,
+	PHASE_RESULTS,
+};
+
 struct GameData {
 	World *world;
 #define CAMPAIGN_NAME_MAX_LEN 64
@@ -276,9 +282,11 @@ struct GameData {
 	float mana;
 	float maxMana;
 
+	Phase phase;
+	Phase prevPhase;
+	float phaseTime;
+
 	int wave;
-	float waveTime;
-	bool playingWave;
 
 	ActorType actorsToSpawn[ACTORS_MAX];
 	int actorsToSpawnNum;
@@ -735,6 +743,11 @@ void stepGame(float elapsed) {
 
 	World *world = data->world;
 
+	if (data->prevPhase != data->phase) {
+		data->prevPhase = data->phase;
+		data->phaseTime = 0;
+	}
+
 	memset(core->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
 	for (int i = 0; i < world->actorsNum; i++) {
 		Actor *actor = &world->actors[i];
@@ -815,7 +828,7 @@ void stepGame(float elapsed) {
 				}
 
 				bool isActive = true;
-				if (!data->playingWave && !towerIsActiveBetweenWaves) isActive = false;
+				if (data->phase != PHASE_WAVE && !towerIsActiveBetweenWaves) isActive = false;
 				if (!target && towerCaresAboutTargets) isActive = false;
 
 				actor->timeTillNextShot -= elapsed;
@@ -1210,7 +1223,20 @@ void stepGame(float elapsed) {
 		}
 	} ///
 
-	if (data->playingWave) {
+	{ /// Gain mana
+		for (int i = 0; i < data->ownedUpgradesNum; i++) {
+			Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+			for (int i = 0; i < upgrade->effectsNum; i++) {
+				UpgradeEffect *effect = &upgrade->effects[i];
+				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) core->manaToGain *= effect->value;
+			}
+		}
+
+		if (data->phase == PHASE_WAVE) data->mana += core->manaToGain;
+		if (data->mana > data->maxMana) data->mana = data->maxMana;
+	} ///
+
+	if (data->phase == PHASE_WAVE) {
 		{ /// Spawn enemies
 			if (data->actorsToSpawnNum > 0) data->timeTillNextSpawn -= elapsed;
 			if (data->timeTillNextSpawn <= 0) {
@@ -1250,58 +1276,48 @@ void stepGame(float elapsed) {
 			}
 		} ///
 
-		if (data->waveTime > 1 && enemiesAlive == 0 && data->actorsToSpawnNum == 0) { /// End wave
-			data->playingWave = false;
-
-			int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
-			int possibleNum = 0;
-			for (int i = 0; i < core->upgradesNum; i++) {
-				Upgrade *upgrade = &core->upgrades[i];
-				if (hasUpgrade(upgrade->id)) continue;
-
-				bool hasPrereqs = true;
-				for (int i = 0; i < upgrade->prereqsNum; i++) {
-					if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
-				}
-				if (!hasPrereqs) continue;
-
-				possible[possibleNum++] = upgrade->id;
-			}
-
-			int maxUpgradeCards = 3;
-			for (int i = 0; i < data->ownedUpgradesNum; i++) {
-				Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-				for (int i = 0; i < upgrade->effectsNum; i++) {
-					UpgradeEffect *effect = &upgrade->effects[i];
-					if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
-				}
-			}
-
+		if (data->phaseTime > 1 && enemiesAlive == 0 && data->actorsToSpawnNum == 0) { /// End wave
+			data->phase = PHASE_RESULTS;
 			core->presentedUpgradesNum = 0;
-			for (int i = 0; i < maxUpgradeCards; i++) {
-				if (possibleNum == 0) continue;
-				int chosenIndex = rndInt(0, possibleNum-1);
-				core->presentedUpgrades[core->presentedUpgradesNum++] = possible[chosenIndex];
-				arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
-				possibleNum--;
+
+			int cardEveryXTurns = 3;
+			if (data->wave % cardEveryXTurns == 0) {
+				int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
+				int possibleNum = 0;
+				for (int i = 0; i < core->upgradesNum; i++) {
+					Upgrade *upgrade = &core->upgrades[i];
+					if (hasUpgrade(upgrade->id)) continue;
+
+					bool hasPrereqs = true;
+					for (int i = 0; i < upgrade->prereqsNum; i++) {
+						if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+					}
+					if (!hasPrereqs) continue;
+
+					possible[possibleNum++] = upgrade->id;
+				}
+
+				int maxUpgradeCards = 3;
+				for (int i = 0; i < data->ownedUpgradesNum; i++) {
+					Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
+					for (int i = 0; i < upgrade->effectsNum; i++) {
+						UpgradeEffect *effect = &upgrade->effects[i];
+						if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
+					}
+				}
+
+				core->presentedUpgradesNum = 0;
+				for (int i = 0; i < maxUpgradeCards; i++) {
+					if (possibleNum == 0) continue;
+					int chosenIndex = rndInt(0, possibleNum-1);
+					core->presentedUpgrades[core->presentedUpgradesNum++] = possible[chosenIndex];
+					arraySpliceIndex(possible, possibleNum, sizeof(int), chosenIndex);
+					possibleNum--;
+				}
 			}
 		} ///
-
-		data->waveTime += elapsed;
 	}
-
-	{ /// Gain mana
-		for (int i = 0; i < data->ownedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-			for (int i = 0; i < upgrade->effectsNum; i++) {
-				UpgradeEffect *effect = &upgrade->effects[i];
-				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) core->manaToGain *= effect->value;
-			}
-		}
-
-		if (data->playingWave) data->mana += core->manaToGain;
-		if (data->mana > data->maxMana) data->mana = data->maxMana;
-	} ///
+	data->phaseTime += elapsed;
 
 	{ /// Update tool
 		if (data->prevTool != data->tool) {
@@ -1917,8 +1933,7 @@ Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly) {
 }
 
 void startNextWave() {
-	data->playingWave = true;
-	data->waveTime = 0;
+	data->phase = PHASE_WAVE;
 	data->wave++;
 
 	ActorType *possibleActors = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
@@ -2010,7 +2025,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 18); // version
+	writeU32(stream, 19); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2027,9 +2042,12 @@ void saveState(char *path) {
 	writeU32(stream, data->money);
 	writeFloat(stream, data->mana);
 	writeFloat(stream, data->maxMana);
+	writeU32(stream, data->phase);
+	writeU32(stream, data->prevPhase);
+	writeU32(stream, data->phaseTime);
 	writeU32(stream, data->wave);
-	writeFloat(stream, data->waveTime);
-	writeU8(stream, data->playingWave);
+	writeFloat(stream, 0); // writeFloat(stream, data->waveTime);
+	writeU8(stream, 0); // writeU8(stream, data->playingWave);
 
 	writeU32(stream, data->actorsToSpawnNum);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) writeU32(stream, data->actorsToSpawn[i]);
@@ -2159,9 +2177,14 @@ void loadState(char *path) {
 	data->money = readU32(stream);
 	data->mana = version >= 7 ? readFloat(stream) : 100;
 	data->maxMana = version >= 7 ? readFloat(stream) : 100;
+	if (version >= 19) {
+		data->phase = (Phase)readU32(stream);
+		data->prevPhase = (Phase)readU32(stream);
+		data->phaseTime = readU32(stream);
+	}
 	data->wave = readU32(stream);
-	if (version >= 10) data->waveTime = readFloat(stream);
-	data->playingWave = readU8(stream);
+	readFloat(stream); //data->waveTime
+	readU8(stream); //data->playingWave
 	data->actorsToSpawnNum = readU32(stream);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) data->actorsToSpawn[i] = (ActorType)readU32(stream);
 	data->timeTillNextSpawn = readFloat(stream);
