@@ -783,7 +783,7 @@ void nguiDraw(float elapsed) {
 
 			if (contains(windowRect, ngui->mouse)) {
 				ngui->mouseHoveringThisFrame = true;
-				if (platform->mouseJustDown) ngui->mouseJustDownThisFrame = true;
+				if (platform->mouseJustDown || platform->justTapped) ngui->mouseJustDownThisFrame = true;
 			}
 
 			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
@@ -901,7 +901,7 @@ void nguiDraw(float elapsed) {
 
 						child->bgColor = tintColor(child->bgColor, hoverTint);
 
-						if (platform->mouseJustDown) {
+						if (platform->mouseJustDown || platform->justTapped) {
 							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
 							child->bgColor = tintColor(child->bgColor, activeTint);
 

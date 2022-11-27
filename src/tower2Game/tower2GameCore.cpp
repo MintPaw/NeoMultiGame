@@ -469,7 +469,7 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_FLAME_THROWER];
 		strncpy(info->name, "Flame Thrower", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 3;
+		info->damage = 6;
 		info->hpDamageMulti = 1;
 		info->armorDamageMulti = 1;
 		info->shieldDamageMulti = 1;
@@ -482,7 +482,7 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_POISON_SPRAYER];
 		strncpy(info->name, "Poison Sprayer", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 3;
+		info->damage = 6;
 		info->hpDamageMulti = 1;
 		info->armorDamageMulti = 1;
 		info->shieldDamageMulti = 1;
@@ -495,7 +495,7 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_SHREDDER];
 		strncpy(info->name, "Shredder", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 5;
+		info->damage = 6;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 10;
 		info->shieldDamageMulti = 10;
@@ -638,9 +638,9 @@ void initCore() {
 		Upgrade *upgrade = NULL;
 
 		ActorType actorsCouldUpgrade[] = {
-			ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FROST_KEEP, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
+			ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
 		};
-		// ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
+		// ACTOR_FROST_KEEP, ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 
 		core->upgradesNum = 0;
 		core->nextUpgradeId = 0;
@@ -664,7 +664,7 @@ void initCore() {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
 				effect->actorType = actorType;
-				effect->value = 2;
+				effect->value = 1.5;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
@@ -675,7 +675,7 @@ void initCore() {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RANGE_MULTI;
 				effect->actorType = actorType;
-				effect->value = 2;
+				effect->value = 1.5;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
@@ -686,7 +686,7 @@ void initCore() {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RPM_MULTI;
 				effect->actorType = actorType;
-				effect->value = 2;
+				effect->value = 1.5;
 				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
@@ -1158,7 +1158,7 @@ void stepGame(float elapsed) {
 				}
 
 				auto tickDot = [](Actor *actor, Dot *dot) {
-					float amountPerTick = 10;
+					float amountPerTick = 5;
 					dot->ticks--;
 					if (dot->type == DOT_POISON) {
 						dealDamage(actor, dot->src, amountPerTick, 2, 0.5, 1);
@@ -1280,7 +1280,7 @@ void stepGame(float elapsed) {
 			data->phase = PHASE_RESULTS;
 			core->presentedUpgradesNum = 0;
 
-			int cardEveryXTurns = 3;
+			int cardEveryXTurns = 2;
 			if (data->wave % cardEveryXTurns == 0) {
 				int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
 				int possibleNum = 0;
@@ -1693,7 +1693,9 @@ float getRange(ActorType actorType, Vec2i tilePos) {
 		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
 		for (int i = 0; i < upgrade->effectsNum; i++) {
 			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) range *= effect->value;
+			if (effect->actorType != actorType) continue;
+			if (effect->type != UPGRADE_EFFECT_RANGE_MULTI) continue;
+			range *= effect->value;
 		}
 	}
 
@@ -1713,7 +1715,9 @@ float getDamage(Actor *actor) {
 		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
 		for (int i = 0; i < upgrade->effectsNum; i++) {
 			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) damage *= effect->value;
+			if (effect->actorType != actor->type) continue;
+			if (effect->type != UPGRADE_EFFECT_DAMAGE_MULTI) continue;
+			damage *= effect->value;
 		}
 	}
 
@@ -1729,7 +1733,9 @@ float getRpm(Actor *actor) {
 		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
 		for (int i = 0; i < upgrade->effectsNum; i++) {
 			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == UPGRADE_EFFECT_RPM_MULTI) rpm *= effect->value;
+			if (effect->actorType != actor->type) continue;
+			if (effect->type != UPGRADE_EFFECT_RPM_MULTI) continue;
+			rpm *= effect->value;
 		}
 	}
 

@@ -48,6 +48,7 @@ struct Platform {
 	bool rightMouseDown;
 	bool rightMouseJustDown;
 	bool rightMouseJustUp;
+	bool justTapped;
 	bool useRelativeMouse; //@todo Actually make this work
 	Vec2 relativeMouse; //@todo Actually make this work
 	bool windowHasFocus; //@todo Actually make this work
@@ -246,6 +247,7 @@ void platformUpdate() {
 		platform->rightMouseJustUp = Raylib::IsMouseButtonReleased(Raylib::MOUSE_BUTTON_RIGHT);
 		platform->rightMouseDown = Raylib::IsMouseButtonDown(Raylib::MOUSE_BUTTON_RIGHT);
 		platform->mouseWheel = Raylib::GetMouseWheelMove();
+
 #ifdef __EMSCRIPTEN__
 		platform->mouseWheel *= -1;
 #endif
@@ -253,6 +255,15 @@ void platformUpdate() {
 		Raylib::Vector2 mouse = Raylib::GetMousePosition();
 		platform->mouse.x = mouse.x;
 		platform->mouse.y = mouse.y;
+
+		int gesture = Raylib::GetGestureDetected();
+		platform->justTapped = false;
+		if (gesture == Raylib::GESTURE_TAP) {
+			Raylib::Vector2 point = Raylib::GetTouchPosition(0);
+			platform->mouse.x = point.x;
+			platform->mouse.y = point.y;
+			platform->justTapped = true;
+		}
 
 		if (platform->hoveringGui) {
 			platform->mouseJustUp = false;

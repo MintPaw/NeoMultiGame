@@ -4,6 +4,11 @@
 // Gaining the ability to slow down time more
 // Tower has a small chance of freezing
 // Poison explosion
+// A bunch of money
+// All towers start at max level
+
+// Mode ideas:
+// A huge amount of starting money with few (1?) big waves
 
 #define FROST_FALL_DISTANCE 64
 
@@ -93,6 +98,8 @@ struct Game {
 	Shader *fxaaShader;
 	int fxaaResolutionLoc;
 
+	Shader *postShader;
+
 	Particle *particles;
 	int particlesNum;
 	int particlesMax;
@@ -108,6 +115,7 @@ struct Game {
 	bool uiUpgradeListOpened;
 
 	bool isOnLastStep;
+	bool isOnFirstStep;
 
 	Core core;
 
@@ -209,6 +217,8 @@ void updateGame() {
 
 		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs", NULL, "assets/common/shaders/raylib/glsl100/fxaa.fs");
 		game->fxaaResolutionLoc = getUniformLocation(game->fxaaShader, "resolution");
+
+		game->postShader = loadShader(NULL, "assets/shaders/glsl330/post.fs", NULL, "assets/shaders/glsl100/post.fs");
 
 #ifdef __EMSCRIPTEN__
 		game->isDemo = true;
@@ -381,7 +391,10 @@ void updateGame() {
 
 	for (int i = 0; i < stepsToTake; i++) {
 		game->isOnLastStep = false;
+		game->isOnFirstStep = false;
 		if (i == stepsToTake-1) game->isOnLastStep = true;
+		if (i == 0) game->isOnFirstStep = true;
+
 		stepGame(elapsed);
 		drawGame(elapsed);
 	}
@@ -414,12 +427,13 @@ void updateGame() {
 }
 
 bool isMouseClicked() {
-	bool ret = platform->mouseJustDown;
+	bool ret = platform->mouseJustDown || platform->justTapped;
 	if (ngui->mouseHoveringThisFrame) ret = false;
 	if (ngui->mouseHoveringLastFrame) ret = false;
 	if (ngui->mouseJustDownThisFrame) ret = false;
 	if (data->prevTool != data->tool) ret = false;
 	if (data->toolTime < 0.05) ret = false;
+	if (!game->isOnLastStep) ret = false;
 	return ret;
 }
 
@@ -516,9 +530,10 @@ void drawGame(float elapsed) {
 		getMouseRay(mainPass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
 	} ///
 
-	float closestHoveredTileDist = 0;
-	Vec2i closestHoveredTilePos = v2i();
 	{ /// Draw map
+		float closestHoveredTileDist = -1;
+		Vec2i closestHoveredTilePos = v2i();
+
 		for (int i = 0; i < world->chunksNum; i++) {
 			Chunk *chunk = &world->chunks[i];
 			if (!chunk->visible) continue;
@@ -581,18 +596,20 @@ void drawGame(float elapsed) {
 						AABB aabb = tileToAABB(tilePos);
 						Matrix4 matrix = toMatrix(aabb);
 						passMesh(cubeMesh, matrix, color);
-						for (int i = 0; i < cubeMesh->indsNum/3; i++) {
-							Tri tri = {};
-							tri.verts[0] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 0]].position;
-							tri.verts[1] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 1]].position;
-							tri.verts[2] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 2]].position;
+						if (game->isOnLastStep) {
+							for (int i = 0; i < cubeMesh->indsNum/3; i++) {
+								Tri tri = {};
+								tri.verts[0] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 0]].position;
+								tri.verts[1] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 1]].position;
+								tri.verts[2] = matrix * cubeMesh->verts[cubeMesh->inds[i*3 + 2]].position;
 
-							float dist;
-							Vec2 uv;
-							if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
-								if (isZero(closestHoveredTilePos) || closestHoveredTileDist > dist) {
-									closestHoveredTileDist = dist;
-									closestHoveredTilePos = tilePos;
+								float dist;
+								Vec2 uv;
+								if (rayIntersectsTriangle(game->mouseRayPos, game->mouseRayDir, tri, &dist, &uv)) {
+									if (closestHoveredTileDist == -1 || closestHoveredTileDist > dist) {
+										closestHoveredTileDist = dist;
+										closestHoveredTilePos = tilePos;
+									}
 								}
 							}
 						}
@@ -602,8 +619,9 @@ void drawGame(float elapsed) {
 
 			if (game->is2d && game->debugDrawChunkLines) drawRectOutline(chunk->rect, 8, 0xA0FFFFFF);
 		}
+
+		if (closestHoveredTileDist != -1) game->hovered3dTilePos = closestHoveredTilePos;
 	} ///
-	game->hovered3dTilePos = closestHoveredTilePos;
 
 	{ /// Draw actors
 		for (int i = 0; i < world->actorsNum; i++) {
@@ -1410,8 +1428,18 @@ void drawGame(float elapsed) {
 		}
 
 		{
+			pushTargetTexture(game->gameTexture);
+			clearRenderer();
+			startShader(game->postShader);
 			RenderProps props = newRenderProps();
 			drawTexture(game->finalTexture, props);
+			endShader();
+			popTargetTexture();
+		}
+
+		{
+			RenderProps props = newRenderProps();
+			drawTexture(game->gameTexture, props); //@incomplete Make real ping pong switcher
 		}
 
 		destroyPass(mainPass);
@@ -1443,7 +1471,7 @@ float getTile3dHeight(Vec2i tilePos) {
 
 AABB tileToAABB(Vec2i tilePos) {
 	AABB aabb = {};
-	aabb.min = v3(tilePos.x, tilePos.y, 0) * TILE_SIZE * SCALE_3D;
+	aabb.min = v3(tilePos.x, tilePos.y, 0) * TILE_SIZE*SCALE_3D;
 	aabb.max = aabb.min + TILE_SIZE*SCALE_3D;
 	aabb.max.z = aabb.min.z + getTile3dHeight(tilePos);
 	aabb.min.y *= -1;
