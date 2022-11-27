@@ -127,9 +127,6 @@ struct Actor {
 	Dot *dots;
 	int dotsNum;
 	float slow;
-	float unused1;
-	float unused2;
-	float unused3;
 	float movementSpeed;
 
 	Stats *stats;
@@ -2031,7 +2028,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 19); // version
+	writeU32(stream, 20); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2052,8 +2049,6 @@ void saveState(char *path) {
 	writeU32(stream, data->prevPhase);
 	writeU32(stream, data->phaseTime);
 	writeU32(stream, data->wave);
-	writeFloat(stream, 0); // writeFloat(stream, data->waveTime);
-	writeU8(stream, 0); // writeU8(stream, data->playingWave);
 
 	writeU32(stream, data->actorsToSpawnNum);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) writeU32(stream, data->actorsToSpawn[i]);
@@ -2117,9 +2112,6 @@ void writeActor(DataStream *stream, Actor *actor) {
 		writeU32(stream, dot->ticks);
 	}
 	writeFloat(stream, actor->slow);
-	writeFloat(stream, actor->unused1);
-	writeFloat(stream, actor->unused2);
-	writeFloat(stream, actor->unused3);
 	writeFloat(stream, actor->movementSpeed);
 
 	writeU32(stream, actor->statsNum);
@@ -2169,59 +2161,49 @@ void loadState(char *path) {
 	}
 
 	int version = readU32(stream);
-	if (version >= 1) lcgSeed = readU32(stream);
-	if (version >= 11) readStringInto(stream, data->campaignName, CAMPAIGN_NAME_MAX_LEN);
+	lcgSeed = readU32(stream);
+	readStringInto(stream, data->campaignName, CAMPAIGN_NAME_MAX_LEN);
 	data->time = readFloat(stream);
 	data->cameraPosition = readVec2(stream);
 	data->cameraZoom = readFloat(stream);
 	readWorld(stream, data->world, version);
-	if (version >= 6) data->prevTool = (Tool)readU32(stream);
+	data->prevTool = (Tool)readU32(stream);
 	data->tool = (Tool)readU32(stream);
-	if (version >= 6) data->toolTime = readFloat(stream);
+	data->toolTime = readFloat(stream);
 	data->actorToBuild = (ActorType)readU32(stream);
-	data->hp = version >= 3 ? readU32(stream) : 10;
+	data->hp = readU32(stream);
 	data->money = readU32(stream);
-	data->mana = version >= 7 ? readFloat(stream) : 100;
-	data->maxMana = version >= 7 ? readFloat(stream) : 100;
-	if (version >= 19) {
-		data->phase = (Phase)readU32(stream);
-		data->prevPhase = (Phase)readU32(stream);
-		data->phaseTime = readU32(stream);
-	}
+	data->mana = readFloat(stream);
+	data->maxMana = readFloat(stream);
+	data->phase = (Phase)readU32(stream);
+	data->prevPhase = (Phase)readU32(stream);
+	data->phaseTime = readU32(stream);
 	data->wave = readU32(stream);
-	readFloat(stream); //data->waveTime
-	readU8(stream); //data->playingWave
 	data->actorsToSpawnNum = readU32(stream);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) data->actorsToSpawn[i] = (ActorType)readU32(stream);
 	data->timeTillNextSpawn = readFloat(stream);
 
-	if (version >= 5) {
-		data->selectedActorsNum = readU32(stream);
-		for (int i = 0; i < data->selectedActorsNum; i++) data->selectedActors[i] = readU32(stream);
-	}
+	data->selectedActorsNum = readU32(stream);
+	for (int i = 0; i < data->selectedActorsNum; i++) data->selectedActors[i] = readU32(stream);
 
-	if (version >= 9) {
-		data->ownedUpgradesNum = readU32(stream);
-		for (int i = 0; i < data->ownedUpgradesNum; i++) data->ownedUpgrades[i] = readU32(stream);
-	}
+	data->ownedUpgradesNum = readU32(stream);
+	for (int i = 0; i < data->ownedUpgradesNum; i++) data->ownedUpgrades[i] = readU32(stream);
 
-	if (version >= 16) {
-		int actorTypeStatsToLoad = readU32(stream);
-		if (actorTypeStatsToLoad > ACTOR_TYPES_MAX) {
-			logf("Trimming loaded actors stats from %d to %d\n", actorTypeStatsToLoad, ACTOR_TYPES_MAX);
-			actorTypeStatsToLoad = ACTOR_TYPES_MAX;
+	int actorTypeStatsToLoad = readU32(stream);
+	if (actorTypeStatsToLoad > ACTOR_TYPES_MAX) {
+		logf("Trimming loaded actors stats from %d to %d\n", actorTypeStatsToLoad, ACTOR_TYPES_MAX);
+		actorTypeStatsToLoad = ACTOR_TYPES_MAX;
+	}
+	data->actorTypeStatsEach = readU32(stream);
+	for (int i = 0; i < actorTypeStatsToLoad; i++) {
+		if (data->actorTypeStats[i]) {
+			free(data->actorTypeStats[i]);
+			data->actorTypeStats[i] = NULL;
 		}
-		data->actorTypeStatsEach = readU32(stream);
-		for (int i = 0; i < actorTypeStatsToLoad; i++) {
-			if (data->actorTypeStats[i]) {
-				free(data->actorTypeStats[i]);
-				data->actorTypeStats[i] = NULL;
-			}
-			data->actorTypeStats[i] = (Stats *)zalloc(sizeof(Stats)*data->actorTypeStatsEach);
-			Stats *actorStats = data->actorTypeStats[i];
-			for (int i = 0; i < data->actorTypeStatsEach; i++) {
-				readStats(stream, &actorStats[i], version);
-			}
+		data->actorTypeStats[i] = (Stats *)zalloc(sizeof(Stats)*data->actorTypeStatsEach);
+		Stats *actorStats = data->actorTypeStats[i];
+		for (int i = 0; i < data->actorTypeStatsEach; i++) {
+			readStats(stream, &actorStats[i], version);
 		}
 	}
 
@@ -2231,7 +2213,7 @@ void loadState(char *path) {
 }
 
 void readStats(DataStream *stream, Stats *stats, int version) {
-	if (version >= 18) stats->investment = readU32(stream);
+	stats->investment = readU32(stream);
 	stats->shots = readU32(stream);
 	stats->shieldDamage = readFloat(stream);
 	stats->armorDamage = readFloat(stream);
@@ -2252,53 +2234,44 @@ void readActor(DataStream *stream, Actor *actor, int version) {
 	actor->id = readU32(stream);
 	actor->position = readVec2(stream);
 	actor->velo = readVec2(stream);
-	actor->accel = version >= 8 ? readVec2(stream) : v2();
+	actor->accel = readVec2(stream);
 	actor->aimRads = readFloat(stream);
-	if (version >= 13) actor->aimTarget = readU32(stream);
+	actor->aimTarget = readU32(stream);
 	actor->hp = readFloat(stream);
-	if (version >= 2) actor->armor = readFloat(stream);
-	if (version >= 2) actor->shield = readFloat(stream);
+	actor->armor = readFloat(stream);
+	actor->shield = readFloat(stream);
 	actor->timeTillNextShot = readFloat(stream);
 	actor->markedForDeletion = readU8(stream);
 
-	if (version >= 14) {
-		actor->dotsMax = actor->dotsNum = readU32(stream);
-		actor->dots = (Dot *)zalloc(sizeof(Dot) * actor->dotsMax);
-		for (int i = 0; i < actor->dotsNum; i++) {
-			Dot *dot = &actor->dots[i];
-			dot->type = (DotType)readU32(stream);
-			dot->src = readU32(stream);
-			dot->ticks = readU32(stream);
-		}
+	actor->dotsMax = actor->dotsNum = readU32(stream);
+	actor->dots = (Dot *)zalloc(sizeof(Dot) * actor->dotsMax);
+	for (int i = 0; i < actor->dotsNum; i++) {
+		Dot *dot = &actor->dots[i];
+		dot->type = (DotType)readU32(stream);
+		dot->src = readU32(stream);
+		dot->ticks = readU32(stream);
 	}
-	if (version >= 8) {
-		actor->slow = readFloat(stream);
-		actor->unused1 = readFloat(stream);
-		actor->unused2 = readFloat(stream);
-		actor->unused3 = readFloat(stream);
-		actor->movementSpeed = readFloat(stream);
+	actor->slow = readFloat(stream);
+	actor->movementSpeed = readFloat(stream);
 
-		if (version >= 17) {
-			actor->statsNum = readU32(stream);
-			actor->stats = (Stats *)zalloc(sizeof(Stats) * actor->statsNum);
-			for (int i = 0; i < actor->statsNum; i++) readStats(stream, &actor->stats[i], version);
-		}
+	actor->statsNum = readU32(stream);
+	actor->stats = (Stats *)zalloc(sizeof(Stats) * actor->statsNum);
+	for (int i = 0; i < actor->statsNum; i++) readStats(stream, &actor->stats[i], version);
 
-		actor->priority = (Priority)readU32(stream);
-		actor->bulletTarget = readU32(stream);
-		actor->bulletTargetPosition = readVec2(stream);
-		actor->parentTower = readU32(stream);
+	actor->priority = (Priority)readU32(stream);
+	actor->bulletTarget = readU32(stream);
+	actor->bulletTargetPosition = readVec2(stream);
+	actor->parentTower = readU32(stream);
 
-		actor->sawHitListNum = readU32(stream);
-		for (int i = 0; i < actor->sawHitListNum; i++) actor->sawHitList[i] = readU32(stream);
+	actor->sawHitListNum = readU32(stream);
+	for (int i = 0; i < actor->sawHitListNum; i++) actor->sawHitList[i] = readU32(stream);
 
-		actor->amountPaid = readU32(stream);
+	actor->amountPaid = readU32(stream);
 
-		if (version >= 12) actor->level = readU32(stream);
-		if (version >= 12) actor->xp = readFloat(stream);
+	actor->level = readU32(stream);
+	actor->xp = readFloat(stream);
 
-		actor->time = readFloat(stream);
-	}
+	actor->time = readFloat(stream);
 }
 
 void readChunk(DataStream *stream, Chunk *chunk, int version) {
@@ -2316,7 +2289,7 @@ Tile readTile(DataStream *stream, int version) {
 	tile.flow = readVec2(stream);
 	tile.costSoFar = readU32(stream);
 	tile.dijkstraValue = readU32(stream);
-	if (version >= 4) tile.elevation = readU8(stream);
+	tile.elevation = readU8(stream);
 	return tile;
 }
 

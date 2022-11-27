@@ -1789,7 +1789,17 @@ void updateAndDrawOverlay(float elapsed) {
 					if (getInfo(actor)->isEnemy) actor->hp = -10;
 				}
 			}
+			ImGui::Separator();
 
+			if (ImGui::Button("Resave all states")) {
+				int filesNum = 0;
+				char **files = getFrameDirectoryList("assets/states", &filesNum);
+				for (int i = 0; i < filesNum; i++) {
+					loadState(files[i]);
+					saveState(files[i]);
+				}
+				loadState("assets/states/autosave.save_state");
+			}
 			ImGui::Separator();
 
 			ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
