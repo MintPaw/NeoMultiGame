@@ -1,3 +1,6 @@
+// Remove campaign thing
+// Make multiple modes
+
 // Upgrade ideas:
 // Item that allows you to save
 // Saws go through X extra enemies
@@ -6,6 +9,7 @@
 // Poison explosion
 // A bunch of money
 // All towers start at max level
+// Damage ticks go faster
 
 // Mode ideas:
 // A huge amount of starting money with few (1?) big waves

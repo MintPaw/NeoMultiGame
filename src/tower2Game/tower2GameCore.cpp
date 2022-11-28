@@ -427,7 +427,7 @@ void initCore() {
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR_TOWER];
 		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 10;
+		info->damage = 5;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 15;
 		info->shieldDamageMulti = 5;
@@ -1121,7 +1121,7 @@ void stepGame(float elapsed) {
 						dealDamage(saw, enemy);
 
 						Actor *tower = getActor(saw->parentTower);
-						if (tower) createDot(tower, enemy, DOT_BLEED, getDamage(tower)/2);
+						if (tower) createDot(tower, enemy, DOT_BLEED, getDamage(tower)*1.5);
 					}
 				}
 			}
@@ -1199,6 +1199,7 @@ void stepGame(float elapsed) {
 					} else {
 						moneyToGain += info->enemySpawnStartingWave;
 					}
+					moneyToGain *= 2;
 
 					for (int i = 0; i < data->ownedUpgradesNum; i++) {
 						Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
@@ -1278,7 +1279,7 @@ void stepGame(float elapsed) {
 			core->presentedUpgradesNum = 0;
 
 			int cardEveryXTurns = 2;
-			if (data->wave % cardEveryXTurns == 0) {
+			if ((data->wave + cardEveryXTurns-1) % cardEveryXTurns == 0) {
 				int *possible = (int *)frameMalloc(sizeof(int) * UPGRADES_MAX);
 				int possibleNum = 0;
 				for (int i = 0; i < core->upgradesNum; i++) {
