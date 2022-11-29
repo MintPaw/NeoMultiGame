@@ -1,8 +1,7 @@
-// Remove campaign thing
-// Make multiple modes
+// Show info about the waves
 
 // Upgrade ideas:
-// Item that allows you to save
+// Item that allows you to load
 // Saws go through X extra enemies
 // Gaining the ability to slow down time more
 // Tower has a small chance of freezing
@@ -13,6 +12,7 @@
 
 // Mode ideas:
 // A huge amount of starting money with few (1?) big waves
+// Dying enemies spawn a copy of the previous type
 
 #define FROST_FALL_DISTANCE 64
 
@@ -1310,7 +1310,7 @@ void drawGame(float elapsed) {
 					if (didExplore) {
 						if (data->hp > 0) {
 							saveState("assets/states/autosave.save_state");
-							copyFile("assets/states/autosave.save_state", frameSprintf("assets/states/%s_autosave_%d.save_state", data->campaignName, data->wave));
+							copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
 						}
 						newChunk->visible = true;
 						startNextWave();
@@ -1842,7 +1842,7 @@ void updateAndDrawOverlay(float elapsed) {
 		}
 	} ///
 
-	{ /// Get input and move camera
+	{ /// Get input
 		Vec2 moveDir = v2();
 		if (keyPressed('W')) moveDir.y--;
 		if (keyPressed('S')) moveDir.y++;
@@ -1860,11 +1860,35 @@ void updateAndDrawOverlay(float elapsed) {
 			}
 		}
 
-		float oldTimeScale = game->timeScale;
-		if (keyJustPressed('-')) game->timeScale *= 0.5;
-		if (keyJustPressed('=')) game->timeScale *= 2;
-		if (keyJustPressed('0')) game->timeScale = 1;
-		if (oldTimeScale != game->timeScale) logf("Time scale: %.3f\n", game->timeScale);
+		{
+			float timeScaleValues[16] = {};
+			int timeScaleValuesNum = 0;
+
+			timeScaleValues[timeScaleValuesNum++] = 0.25;
+			timeScaleValues[timeScaleValuesNum++] = 0.5;
+			timeScaleValues[timeScaleValuesNum++] = 1;
+			timeScaleValues[timeScaleValuesNum++] = 2;
+			timeScaleValues[timeScaleValuesNum++] = 4;
+			timeScaleValues[timeScaleValuesNum++] = 8;
+
+			int defaultTimeScaleIndex = 0;
+			int timeScaleIndex = 0;
+			for (int i = 0; i < timeScaleValuesNum; i++) {
+				if (timeScaleValues[i] == game->timeScale) timeScaleIndex = i;
+				if (timeScaleValues[i] == 1) defaultTimeScaleIndex = i;
+			}
+
+			if (keyJustPressed('-')) timeScaleIndex--;
+			if (keyJustPressed('=')) timeScaleIndex++;
+			if (keyJustPressed('0')) timeScaleIndex = defaultTimeScaleIndex;
+			if (timeScaleIndex < 0) timeScaleIndex = 0;
+			if (timeScaleIndex > timeScaleValuesNum-1) timeScaleIndex = timeScaleValuesNum-1;
+
+			if (game->timeScale != timeScaleValues[timeScaleIndex]) {
+				game->timeScale = timeScaleValues[timeScaleIndex];
+				logf("Time scale: %.3f\n", game->timeScale);
+			}
+		}
 	} ///
 
 	{ /// Update tool related ui
