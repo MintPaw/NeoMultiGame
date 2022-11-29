@@ -3,7 +3,6 @@
 // Upgrade ideas:
 // Item that allows you to load
 // Saws go through X extra enemies
-// Gaining the ability to slow down time more
 // Tower has a small chance of freezing
 // Poison explosion
 // A bunch of money
@@ -25,6 +24,12 @@
 
 #define XP_PER_SEC 10
 #define FLAME_RADS (toRad(15))
+
+#define StartForEachUpgradeEffect for (int i = 0; i < data->ownedUpgradesNum; i++) { \
+				Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]); \
+				for (int i = 0; i < upgrade->effectsNum; i++) { \
+					UpgradeEffect *effect = &upgrade->effects[i];
+#define EndForEachUpgradeEffect }}
 
 #define CORE_HEADER
 #include "tower2GameCore.cpp"
@@ -88,6 +93,7 @@ struct Game {
 	Vec2 size;
 	Vec2 mouse;
 
+	bool shouldReset;
 	bool is2d;
 
 	Vec3 mouseRayPos;
@@ -95,10 +101,9 @@ struct Game {
 	Vec2i hovered3dTilePos;
 	Camera lastMainPassCamera;
 
-	bool shouldReset;
-
 	RenderTexture *gameTexture;
 	RenderTexture *finalTexture;
+
 	Shader *fxaaShader;
 	int fxaaResolutionLoc;
 
@@ -119,7 +124,6 @@ struct Game {
 	bool uiUpgradeListOpened;
 
 	bool isOnLastStep;
-	bool isOnFirstStep;
 
 	Core core;
 
@@ -149,6 +153,8 @@ bool isHoveringActor(Actor *actor);
 #include "tower2GameCore.cpp"
 void drawGame(float elapsed);
 Effect *createEffect(EffectType type);
+
+char *getUpgradeDescription(Upgrade *upgrade);
 
 float getTile3dHeight(Vec2i tilePos);
 AABB tileToAABB(Vec2i tilePos);
@@ -232,6 +238,14 @@ void updateGame() {
 
 		loadGlobals();
 		initCore();
+
+		{ /// Extra upgrades
+			Upgrade *upgrade = createUpgrade();
+			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_EXTRA_TIME_SCALE;
+			effect->value = 0.01;
+		} ///
+
 		game->timeScale = 1;
 		game->is2d = false;
 
@@ -395,9 +409,7 @@ void updateGame() {
 
 	for (int i = 0; i < stepsToTake; i++) {
 		game->isOnLastStep = false;
-		game->isOnFirstStep = false;
 		if (i == stepsToTake-1) game->isOnLastStep = true;
-		if (i == 0) game->isOnFirstStep = true;
 
 		stepGame(elapsed);
 		drawGame(elapsed);
@@ -1462,6 +1474,38 @@ Effect *createEffect(EffectType type) {
 	return effect;
 }
 
+char *getUpgradeDescription(Upgrade *upgrade) {
+	char *desc = "";
+	for (int i = 0; i < upgrade->effectsNum; i++) {
+		UpgradeEffect *effect = &upgrade->effects[i];
+		ActorTypeInfo *info = &core->actorTypeInfos[effect->actorType];
+
+		char *line = "";
+		if (effect->type == UPGRADE_EFFECT_UNLOCK) {
+			line = frameSprintf("Unlock %s", info->name);
+		} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
+			line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
+			line = frameSprintf("%s range %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_RPM_MULTI) {
+			line = frameSprintf("%s rpm %.0f%%", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) {
+			line = frameSprintf("Get %.0f extra upgrade card choice(s)", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) {
+			line = frameSprintf("Gain an extra %.0f money per kill", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) {
+			line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_TIME_SCALE) {
+			line = frameSprintf("Allows timeScale to be set to %g", effect->value);
+		} else {
+			line = frameSprintf("Unlabeled effect %d", effect->type);
+		}
+		if (i != 0) desc = frameSprintf("%s\n", desc);
+		desc = frameSprintf("%s%s", desc, line);
+	}
+	return desc;
+}
+
 float getTile3dHeight(Vec2i tilePos) {
 	float height = TILE_SIZE * SCALE_3D * 0.25;
 
@@ -1728,6 +1772,23 @@ void updateAndDrawOverlay(float elapsed) {
 				ImGui::TreePop();
 			}
 
+			if (ImGui::TreeNode("Upgrades")) {
+				for (int i = 0; i < core->upgradesNum; i++) {
+					ImGui::PushID(i);
+
+					Upgrade *upgrade = &core->upgrades[i];
+					if (!hasUpgrade(upgrade->id)) {
+						if (ImGui::Button("Unlock")) data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+						ImGui::SameLine();
+					}
+					ImGui::Text("%s", getUpgradeDescription(upgrade));
+					ImGui::Separator();
+
+					ImGui::PopID();
+				}
+				ImGui::TreePop();
+			}
+
 			ImGui::Checkbox("Show Dijkstra values", &game->debugShowDijkstraValues);
 			ImGui::Checkbox("Show Flow Field values", &game->debugShowFlowFieldValues);
 			ImGui::Checkbox("Show perlin values", &game->debugShowPerlinValues);
@@ -1861,7 +1922,7 @@ void updateAndDrawOverlay(float elapsed) {
 		}
 
 		{
-			float timeScaleValues[16] = {};
+			float *timeScaleValues = (float *)frameMalloc(sizeof(float) * 64);
 			int timeScaleValuesNum = 0;
 
 			timeScaleValues[timeScaleValuesNum++] = 0.25;
@@ -1870,6 +1931,18 @@ void updateAndDrawOverlay(float elapsed) {
 			timeScaleValues[timeScaleValuesNum++] = 2;
 			timeScaleValues[timeScaleValuesNum++] = 4;
 			timeScaleValues[timeScaleValuesNum++] = 8;
+
+			StartForEachUpgradeEffect;
+			if (effect->type == UPGRADE_EFFECT_EXTRA_TIME_SCALE) timeScaleValues[timeScaleValuesNum++] = effect->value;
+			EndForEachUpgradeEffect;
+
+			auto qsortFloats = [](const void *a, const void *b)->int {
+				float fa = *(const float*) a;
+				float fb = *(const float*) b;
+				return (fa > fb) - (fa < fb);
+			};
+
+			qsort(timeScaleValues, timeScaleValuesNum, sizeof(float), qsortFloats);
 
 			int defaultTimeScaleIndex = 0;
 			int timeScaleIndex = 0;
