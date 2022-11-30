@@ -2,9 +2,9 @@
 // Show info about the waves
 
 // Upgrade ideas:
-// Saws go through X extra enemies
 // Tower has a small chance of freezing
 // Poison explosion
+// Fire spread
 // A bunch of money
 // All towers start at max level
 // Damage ticks go faster
@@ -1412,6 +1412,8 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = frameSprintf("Allows timeScale to be set to %g", effect->value);
 		} else if (effect->type == UPGRADE_EFFECT_RELOAD) {
 			line = "Allows you to reload and try the wave again if you lose";
+		} else if (effect->type == UPGRADE_EFFECT_EXTRA_SAW_PIERCE) {
+			line = frameSprintf("Saws pierce through %g more enemies", effect->value);
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}

@@ -196,6 +196,7 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_MANA_GAIN_MULTI,
 	UPGRADE_EFFECT_EXTRA_TIME_SCALE,
 	UPGRADE_EFFECT_RELOAD,
+	UPGRADE_EFFECT_EXTRA_SAW_PIERCE,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
 
@@ -733,6 +734,13 @@ void initCore(MapGenMode mapGenMode) {
 			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_RELOAD;
 		}
+
+		{
+			Upgrade *upgrade = createUpgrade();
+			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_EXTRA_SAW_PIERCE;
+			effect->value = 6;
+		}
 	} ///
 
 	if (mapGenMode == MAP_GEN_NONE) {
@@ -1224,7 +1232,13 @@ void stepGame(float elapsed) {
 
 						if (!canHit) continue;
 
-						if (saw->sawHitListNum > 6-1) saw->markedForDeletion = true;
+						int sawPierceMax = 6;
+
+						StartForEachUpgradeEffect;
+						if (effect->type == UPGRADE_EFFECT_EXTRA_SAW_PIERCE) sawPierceMax += effect->value;
+						EndForEachUpgradeEffect;
+
+						if (saw->sawHitListNum > sawPierceMax-1) saw->markedForDeletion = true;
 						saw->sawHitList[saw->sawHitListNum++] = enemy->id;
 						dealDamage(saw, enemy);
 
