@@ -195,6 +195,7 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_EXTRA_MONEY,
 	UPGRADE_EFFECT_MANA_GAIN_MULTI,
 	UPGRADE_EFFECT_EXTRA_TIME_SCALE,
+	UPGRADE_EFFECT_RELOAD,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
 
@@ -725,6 +726,12 @@ void initCore(MapGenMode mapGenMode) {
 			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_EXTRA_TIME_SCALE;
 			effect->value = 0.01;
+		}
+
+		{
+			Upgrade *upgrade = createUpgrade();
+			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_RELOAD;
 		}
 	} ///
 

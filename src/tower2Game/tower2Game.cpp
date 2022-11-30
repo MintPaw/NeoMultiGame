@@ -2,7 +2,6 @@
 // Show info about the waves
 
 // Upgrade ideas:
-// Item that allows you to load
 // Saws go through X extra enemies
 // Tower has a small chance of freezing
 // Poison explosion
@@ -104,6 +103,7 @@ struct Game {
 	float stateTime;
 
 	bool shouldReset;
+	char *shouldLoadState;
 	bool is2d;
 
 	Vec3 mouseRayPos;
@@ -286,9 +286,14 @@ void updateGame() {
 		ImGui::SetNextWindowPos(ImVec2(game->size.x/2, game->size.y/2), ImGuiCond_Always, ImVec2(0.5, 0.5));
 		ImGui::Begin("Menu", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-		if (ImGui::Button("Play")) {
+		if (ImGui::Button("Continue") || keyJustPressed('W')) {
 			initCore(MAP_GEN_NONE);
 			loadState("assets/states/autosave.save_state");
+			game->state = GAME_PLAY;
+		}
+
+		if (ImGui::Button("Play")) {
+			initCore(MAP_GEN_RANDOM);
 			game->state = GAME_PLAY;
 		}
 
@@ -297,6 +302,12 @@ void updateGame() {
 		if (game->shouldReset) {
 			game->shouldReset = false;
 			initCore(MAP_GEN_RANDOM);
+		}
+
+		if (game->shouldLoadState) {
+			loadState(game->shouldLoadState);
+			free(game->shouldLoadState);
+			game->shouldLoadState = NULL;
 		}
 
 		int stepsToTake = 1;
@@ -1399,6 +1410,8 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = frameSprintf("%.0f%% mana gain", effect->value*100.0);
 		} else if (effect->type == UPGRADE_EFFECT_EXTRA_TIME_SCALE) {
 			line = frameSprintf("Allows timeScale to be set to %g", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_RELOAD) {
+			line = "Allows you to reload and try the wave again if you lose";
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}
@@ -1832,6 +1845,7 @@ void updateAndDrawOverlay(float elapsed) {
 			timeScaleValues[timeScaleValuesNum++] = 2;
 			timeScaleValues[timeScaleValuesNum++] = 4;
 			timeScaleValues[timeScaleValuesNum++] = 8;
+			timeScaleValues[timeScaleValuesNum++] = 16;
 
 			StartForEachUpgradeEffect;
 			if (effect->type == UPGRADE_EFFECT_EXTRA_TIME_SCALE) timeScaleValues[timeScaleValuesNum++] = effect->value;
@@ -1869,36 +1883,37 @@ void updateAndDrawOverlay(float elapsed) {
 		pushGameStyleStack("Base");
 
 		if (data->tool == TOOL_NONE) {
-			nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
-			nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
+			{ /// Tools window
+				nguiStartWindow("Tools window", game->size*v2(0.5, 1), v2(0.5, 1));
+				nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 4);
 
-			ActorType *typesCanBuy = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
-			int typesCanBuyNum = 0;
-			typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FLAME_THROWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_FLAME_THROWER;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_POISON_SPRAYER)) typesCanBuy[typesCanBuyNum++] = ACTOR_POISON_SPRAYER;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_SHREDDER)) typesCanBuy[typesCanBuyNum++] = ACTOR_SHREDDER;
-			if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MANA_SIPHON)) typesCanBuy[typesCanBuyNum++] = ACTOR_MANA_SIPHON;
+				ActorType *typesCanBuy = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
+				int typesCanBuyNum = 0;
+				typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FLAME_THROWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_FLAME_THROWER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_POISON_SPRAYER)) typesCanBuy[typesCanBuyNum++] = ACTOR_POISON_SPRAYER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_SHREDDER)) typesCanBuy[typesCanBuyNum++] = ACTOR_SHREDDER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MANA_SIPHON)) typesCanBuy[typesCanBuyNum++] = ACTOR_MANA_SIPHON;
 
-			for (int i = 0; i < typesCanBuyNum; i++) {
-				ActorType actorType = typesCanBuy[i];
-				ActorTypeInfo *info = &core->actorTypeInfos[actorType];
-				float price = info->price + info->priceMulti*core->actorTypeCounts[actorType];
-				char *label = frameSprintf("%s $%.0f\n", info->name, price);
-				if (nguiButton(label)) {
-					data->tool = TOOL_BUILDING;
-					data->actorToBuild = actorType;
+				for (int i = 0; i < typesCanBuyNum; i++) {
+					ActorType actorType = typesCanBuy[i];
+					ActorTypeInfo *info = &core->actorTypeInfos[actorType];
+					float price = info->price + info->priceMulti*core->actorTypeCounts[actorType];
+					char *label = frameSprintf("%s $%.0f\n", info->name, price);
+					if (nguiButton(label)) {
+						data->tool = TOOL_BUILDING;
+						data->actorToBuild = actorType;
+					}
 				}
-			}
 
-			nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
-			nguiEndWindow();
+				nguiPopStyleVar(NGUI_STYLE_ELEMENTS_IN_ROW);
+				nguiEndWindow();
+			} ///
 
-
-			{ /// Upgrades ui
+			{ /// Upgrades window
 				Vec2 nextWindowPosition = game->size*v2(0, 1);
 				if (game->uiUpgradeListOpened) {
 					pushGameStyleStack("Upgrade List");
@@ -1919,6 +1934,18 @@ void updateAndDrawOverlay(float elapsed) {
 				if (nguiButton("Upgrades")) game->uiUpgradeListOpened = !game->uiUpgradeListOpened;
 				nguiEndWindow();
 				popGameStyleStack("Upgrade Expander");
+			} ///
+
+			{ /// Toggles window
+				pushGameStyleStack("Toggles");
+				nguiStartWindow("Toggles Window", game->size, v2(1, 1));
+				if (hasUpgradeEffect(UPGRADE_EFFECT_RELOAD, ACTOR_NONE)) {
+					if (data->hp <= 0 && data->phase == PHASE_PLANNING) {
+						if (nguiButton("Reload")) game->shouldLoadState = stringClone("assets/states/autosave.save_state");
+					}
+				}
+				nguiEndWindow();
+				popGameStyleStack("Toggles");
 			} ///
 		} else if (data->tool == TOOL_BUILDING) {
 			// Nothing...
