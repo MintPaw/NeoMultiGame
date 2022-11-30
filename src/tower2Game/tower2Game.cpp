@@ -233,6 +233,7 @@ void updateGame() {
 		game = (Game *)zalloc(sizeof(Game));
 		core = &game->core;
 		data = &core->data;
+
 		game->defaultFont = createFont("assets/common/arial.ttf", 80);
 
 		game->fxaaShader = loadShader(NULL, "assets/common/shaders/raylib/glsl330/fxaa.fs", NULL, "assets/common/shaders/raylib/glsl100/fxaa.fs");
@@ -247,14 +248,6 @@ void updateGame() {
 		// if (ArrayLength(upgradeEffectTypeStrings) != UPGRADE_EFFECT_TYPES_MAX) Panic("Upgrade type string mismatch\n");
 
 		loadGlobals();
-		initCore();
-
-		{ /// Extra upgrades
-			Upgrade *upgrade = createUpgrade();
-			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-			effect->type = UPGRADE_EFFECT_EXTRA_TIME_SCALE;
-			effect->value = 0.01;
-		} ///
 
 		game->timeScale = 1;
 		game->is2d = false;
@@ -262,126 +255,11 @@ void updateGame() {
 		maximizeWindow();
 
 		rndInt(0, 3); // Burn an rnd seed???
-		isFirstStart = true;
-		game->shouldReset = true;
-	}
 
-	if (game->shouldReset) {
-		game->shouldReset = false;
-
-		for (int i = 0; i < data->actorsNum; i++) deinitActor(&data->actors[i]);
-		memset(data, 0, sizeof(GameData));
-
-		{ /// Generate map //@todo This should be part of the core?
-			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
-			int chunksCouldExpandNum = 0;
-
-			Chunk *chunk = createChunk(v2i(0, 0));
-
-			int maxChunks = 45;
-
-			for (;;) {
-				if (data->chunksNum > maxChunks-1) {
-					logf("Done.\n");
-					break;
-				}
-
-				if (chunksCouldExpandNum == 0) {
-					Chunk *randomChunk = &data->chunks[rndInt(0, data->chunksNum-1)];
-					chunksCouldExpand[chunksCouldExpandNum++] = randomChunk;
-					continue;
-				}
-
-				int expandIndex = rndInt(0, chunksCouldExpandNum-1);
-				Chunk *chunkToExpand = chunksCouldExpand[expandIndex];
-
-				Vec2i possiblePositions[4];
-				int possiblePositionsNum = 0;
-
-				if (!getChunkAt(chunkToExpand->position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(-1, 0);
-				if (!getChunkAt(chunkToExpand->position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(1, 0);
-				if (!getChunkAt(chunkToExpand->position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, -1);
-				if (!getChunkAt(chunkToExpand->position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
-
-				if (possiblePositionsNum > 0) {
-					int chosenIndex = rndInt(0, possiblePositionsNum-1);
-					Vec2i position = possiblePositions[chosenIndex];
-					Chunk *newChunk = createChunk(position);
-					newChunk->connections[newChunk->connectionsNum++] = chunkToExpand->position;
-					chunkToExpand->connections[chunkToExpand->connectionsNum++] = newChunk->position;
-
-					chunksCouldExpand[chunksCouldExpandNum++] = newChunk;
-				}
-
-				arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Chunk *), expandIndex);
-				chunksCouldExpandNum--;
-			}
-
-			for (int i = 0; i < data->chunksNum; i++) {
-				Chunk *chunk = &data->chunks[i];
-
-				Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
-				bool cutUp = false;
-				bool cutDown = false;
-				bool cutLeft = false;
-				bool cutRight = false;
-				for (int i = 0; i < chunk->connectionsNum; i++) {
-					Vec2i connection = chunk->connections[i];
-					cutUp = cutUp || connection.y < chunk->position.y;
-					cutDown = cutDown || connection.y > chunk->position.y;
-					cutLeft = cutLeft || connection.x < chunk->position.x;
-					cutRight = cutRight || connection.x > chunk->position.x;
-				}
-
-				Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
-				int toMakeRoadNum = 0;
-				for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
-					if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
-					if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
-					if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
-					if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
-				}
-
-				for (int i = 0; i < toMakeRoadNum; i++) {
-					Vec2i pos = toMakeRoad[i];
-					Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
-					tile->type = TILE_ROAD;
-					tile->elevation = 0;
-				}
-			}
-
-			data->chunks[0].visible = true;
-
-			for (int i = 0; i < data->chunksNum; i++) {
-				Chunk *chunk = &data->chunks[i];
-				for (int y = 0; y < CHUNK_SIZE; y++) {
-					for (int x = 0; x < CHUNK_SIZE; x++) {
-						int tileIndex = y*CHUNK_SIZE + x;
-						Tile *tile = &chunk->tiles[tileIndex];
-						if (tile->type != TILE_GROUND) continue;
-						if (rndPerc(0.01)) {
-							Actor *actor = createActor(ACTOR_MANA_CRYSTAL);
-							actor->position = tileToWorld(chunkTileToWorldTile(chunk, v2i(x, y)));
-						}
-					}
-				}
-			}
-		} ///
-
-		data->hp = 10;
-		data->money = 1000;
-		data->mana = 100;
-		data->maxMana = 100;
-		generateMapFields();
-
-		data->cameraZoom = 1;
-
-		if (isFirstStart) {
-			if (game->isDemo) {
-				loadState("assets/states/demo0.save_state");
-			} else {
-				loadState("assets/states/autosave.save_state");
-			}
+		if (game->isDemo) {
+			initCore(MAP_GEN_NONE);
+			loadState("assets/states/demo.save_state");
+			game->state = GAME_PLAY;
 		}
 	}
 
@@ -409,11 +287,18 @@ void updateGame() {
 		ImGui::Begin("Menu", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		if (ImGui::Button("Play")) {
+			initCore(MAP_GEN_NONE);
+			loadState("assets/states/autosave.save_state");
 			game->state = GAME_PLAY;
 		}
 
 		ImGui::End();
 	} else if (game->state == GAME_PLAY) {
+		if (game->shouldReset) {
+			game->shouldReset = false;
+			initCore(MAP_GEN_RANDOM);
+		}
+
 		int stepsToTake = 1;
 		float elapsed = platform->elapsed;
 		Globals *globals = &game->globals;
