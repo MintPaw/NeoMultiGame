@@ -187,17 +187,25 @@ enum Tool {
 };
 
 enum UpgradeEffectType {
-	UPGRADE_EFFECT_UNLOCK,
-	UPGRADE_EFFECT_DAMAGE_MULTI,
-	UPGRADE_EFFECT_RANGE_MULTI,
-	UPGRADE_EFFECT_RPM_MULTI,
-	UPGRADE_EFFECT_EXTRA_CARDS,
-	UPGRADE_EFFECT_EXTRA_MONEY,
-	UPGRADE_EFFECT_MANA_GAIN_MULTI,
-	UPGRADE_EFFECT_EXTRA_TIME_SCALE,
-	UPGRADE_EFFECT_RELOAD,
-	UPGRADE_EFFECT_EXTRA_SAW_PIERCE,
-	UPGRADE_EFFECT_TYPES_MAX,
+	UPGRADE_EFFECT_UNLOCK_BALLISTA=0,
+	UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER=1,
+	UPGRADE_EFFECT_UNLOCK_TESLA_COIL=2,
+	UPGRADE_EFFECT_UNLOCK_FLAME_THROWER=3,
+	UPGRADE_EFFECT_UNLOCK_POISON_SPRAYER=4,
+	UPGRADE_EFFECT_UNLOCK_SHREDDER=5,
+	UPGRADE_EFFECT_UNLOCK_MANA_SIPHON=6,
+	UPGRADE_EFFECT_UNLOCK_FROST_KEEP=7,
+	//...
+	UPGRADE_EFFECT_DAMAGE_MULTI=32,
+	UPGRADE_EFFECT_RANGE_MULTI=33,
+	UPGRADE_EFFECT_RPM_MULTI=34,
+	UPGRADE_EFFECT_EXTRA_CARDS=35,
+	UPGRADE_EFFECT_EXTRA_MONEY=36,
+	UPGRADE_EFFECT_MANA_GAIN_MULTI=37,
+	UPGRADE_EFFECT_EXTRA_TIME_SCALE=38,
+	UPGRADE_EFFECT_RELOAD=39,
+	UPGRADE_EFFECT_EXTRA_SAW_PIERCE=40,
+	UPGRADE_EFFECT_TYPES_MAX=41,
 };
 
 struct UpgradeEffect {
@@ -212,8 +220,11 @@ struct Upgrade {
 	int effectsNum;
 
 #define UPGRADE_PREREQS_MAX 8
-	int prereqs[UPGRADE_PREREQS_MAX];
-	int prereqsNum;
+	int prereqUpgrades[UPGRADE_PREREQS_MAX];
+	int prereqUpgradesNum;
+
+	UpgradeEffectType prereqEffects[UPGRADE_PREREQS_MAX];
+	int prereqEffectsNum;
 };
 
 enum CoreEventType {
@@ -359,7 +370,7 @@ int sumDotTicks(Actor *actor, DotType type);
 Upgrade *createUpgrade();
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
-bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType);
+bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType=ACTOR_NONE);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
@@ -623,58 +634,89 @@ void initCore(MapGenMode mapGenMode) {
 
 	{ /// Setup upgrades
 		Upgrade *upgrade = NULL;
+		UpgradeEffect *effect = NULL;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_BALLISTA;
+		data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_TESLA_COIL;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_FLAME_THROWER;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_POISON_SPRAYER;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_SHREDDER;
+
+		upgrade = createUpgrade();
+		effect = &upgrade->effects[upgrade->effectsNum++];
+		effect->type = UPGRADE_EFFECT_UNLOCK_FROST_KEEP;
 
 		ActorType actorsCouldUpgrade[] = {
 			ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
 		};
 		// ACTOR_FROST_KEEP, ACTOR_ENCAMPENT, ACTOR_LOOKOUT, ACTOR_RADAR, ACTOR_OBELISK, ACTOR_PARTICLE_CANNON,
 
-		core->upgradesNum = 0;
-		core->nextUpgradeId = 0;
 		for (int i = 0; i < ArrayLength(actorsCouldUpgrade); i++) {
 			ActorType actorType = actorsCouldUpgrade[i];
 
-			Upgrade *unlockUpgrade = NULL;
-			if (actorType != ACTOR_BALLISTA) {
-				Upgrade *upgrade = createUpgrade();
-				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-				effect->type = UPGRADE_EFFECT_UNLOCK;
-				effect->actorType = actorType;
-				unlockUpgrade = upgrade;
-			}
+			UpgradeEffectType unlockEffect;
+			if (actorType == ACTOR_BALLISTA) unlockEffect = UPGRADE_EFFECT_UNLOCK_BALLISTA;
+			if (actorType == ACTOR_MORTAR_TOWER) unlockEffect = UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER;
+			if (actorType == ACTOR_TESLA_COIL) unlockEffect = UPGRADE_EFFECT_UNLOCK_TESLA_COIL;
+			if (actorType == ACTOR_FLAME_THROWER) unlockEffect = UPGRADE_EFFECT_UNLOCK_FLAME_THROWER;
+			if (actorType == ACTOR_POISON_SPRAYER) unlockEffect = UPGRADE_EFFECT_UNLOCK_POISON_SPRAYER;
+			if (actorType == ACTOR_SHREDDER) unlockEffect = UPGRADE_EFFECT_UNLOCK_SHREDDER;
+			if (actorType == ACTOR_MANA_SIPHON) unlockEffect = UPGRADE_EFFECT_UNLOCK_MANA_SIPHON;
+			if (actorType == ACTOR_FROST_KEEP) unlockEffect = UPGRADE_EFFECT_UNLOCK_FROST_KEEP;
 
 			Upgrade *prevUpgrade = NULL;
 
-			prevUpgrade = unlockUpgrade;
 			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_DAMAGE_MULTI;
 				effect->actorType = actorType;
 				effect->value = 1.5;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
+				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = unlockEffect;
 				prevUpgrade = upgrade;
 			}
 
-			prevUpgrade = unlockUpgrade;
+			prevUpgrade = NULL;
 			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RANGE_MULTI;
 				effect->actorType = actorType;
 				effect->value = 1.5;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
+				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = unlockEffect;
 				prevUpgrade = upgrade;
 			}
 
-			prevUpgrade = unlockUpgrade;
+			prevUpgrade = NULL;
 			for (int i = 0; i < 2; i++) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_RPM_MULTI;
 				effect->actorType = actorType;
 				effect->value = 1.5;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
+				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = unlockEffect;
 				prevUpgrade = upgrade;
 			}
 		}
@@ -686,7 +728,7 @@ void initCore(MapGenMode mapGenMode) {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_EXTRA_CARDS;
 				effect->value = 1;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
 		}
@@ -698,7 +740,7 @@ void initCore(MapGenMode mapGenMode) {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_EXTRA_MONEY;
 				effect->value = i+1;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
 		}
@@ -710,16 +752,9 @@ void initCore(MapGenMode mapGenMode) {
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_MANA_GAIN_MULTI;
 				effect->value = 1.1;
-				if (prevUpgrade) upgrade->prereqs[upgrade->prereqsNum++] = prevUpgrade->id;
+				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
-		}
-
-		{
-			Upgrade *upgrade = createUpgrade();
-			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
-			effect->type = UPGRADE_EFFECT_UNLOCK;
-			effect->actorType = ACTOR_MANA_SIPHON;
 		}
 
 		{
@@ -740,6 +775,7 @@ void initCore(MapGenMode mapGenMode) {
 			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_EXTRA_SAW_PIERCE;
 			effect->value = 6;
+			upgrade->prereqEffects[upgrade->prereqEffectsNum++] = UPGRADE_EFFECT_UNLOCK_SHREDDER;
 		}
 	} ///
 
@@ -1409,8 +1445,11 @@ void stepGame(float elapsed) {
 					if (hasUpgrade(upgrade->id)) continue;
 
 					bool hasPrereqs = true;
-					for (int i = 0; i < upgrade->prereqsNum; i++) {
-						if (!hasUpgrade(upgrade->prereqs[i])) hasPrereqs = false;
+					for (int i = 0; i < upgrade->prereqUpgradesNum; i++) {
+						if (!hasUpgrade(upgrade->prereqUpgrades[i])) hasPrereqs = false;
+					}
+					for (int i = 0; i < upgrade->prereqEffectsNum; i++) {
+						if (!hasUpgradeEffect(upgrade->prereqEffects[i], ACTOR_NONE)) hasPrereqs = false;
 					}
 					if (!hasPrereqs) continue;
 

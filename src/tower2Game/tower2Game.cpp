@@ -1394,8 +1394,22 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 		ActorTypeInfo *info = &core->actorTypeInfos[effect->actorType];
 
 		char *line = "";
-		if (effect->type == UPGRADE_EFFECT_UNLOCK) {
-			line = frameSprintf("Unlock %s", info->name);
+		if (effect->type == UPGRADE_EFFECT_UNLOCK_BALLISTA) {
+			line = "Unlock Ballista";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER) {
+			line = "Unlock Mortar Tower";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_TESLA_COIL) {
+			line = "Unlock Tesla Coil";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_FLAME_THROWER) {
+			line = "Unlock Flame Thrower";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_POISON_SPRAYER) {
+			line = "Unlock Poison Sprayer";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_SHREDDER) {
+			line = "Unlock Shredder";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_MANA_SIPHON) {
+			line = "Unlock Mana Siphon";
+		} else if (effect->type == UPGRADE_EFFECT_UNLOCK_FROST_KEEP) {
+			line = "Unlock Frost Keep";
 		} else if (effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) {
 			line = frameSprintf("%s damage %.0f%%", info->name, effect->value*100.0);
 		} else if (effect->type == UPGRADE_EFFECT_RANGE_MULTI) {
@@ -1892,13 +1906,13 @@ void updateAndDrawOverlay(float elapsed) {
 				ActorType *typesCanBuy = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
 				int typesCanBuyNum = 0;
 				typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_FLAME_THROWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_FLAME_THROWER;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_POISON_SPRAYER)) typesCanBuy[typesCanBuyNum++] = ACTOR_POISON_SPRAYER;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_SHREDDER)) typesCanBuy[typesCanBuyNum++] = ACTOR_SHREDDER;
-				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK, ACTOR_MANA_SIPHON)) typesCanBuy[typesCanBuyNum++] = ACTOR_MANA_SIPHON;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_FLAME_THROWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_FLAME_THROWER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_POISON_SPRAYER)) typesCanBuy[typesCanBuyNum++] = ACTOR_POISON_SPRAYER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_SHREDDER)) typesCanBuy[typesCanBuyNum++] = ACTOR_SHREDDER;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_MANA_SIPHON)) typesCanBuy[typesCanBuyNum++] = ACTOR_MANA_SIPHON;
 
 				for (int i = 0; i < typesCanBuyNum; i++) {
 					ActorType actorType = typesCanBuy[i];
