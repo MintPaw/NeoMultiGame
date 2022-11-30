@@ -1,3 +1,4 @@
+// Make ImGui game starter
 // Show info about the waves
 
 // Upgrade ideas:
@@ -82,6 +83,11 @@ struct Particle {
 	float delay;
 };
 
+enum GameState {
+	GAME_MENU,
+	GAME_PLAY,
+};
+
 struct Game {
 	Font *defaultFont;
 
@@ -92,6 +98,10 @@ struct Game {
 	float timeScale;
 	Vec2 size;
 	Vec2 mouse;
+
+	GameState prevState;
+	GameState state;
+	float stateTime;
 
 	bool shouldReset;
 	bool is2d;
@@ -397,49 +407,65 @@ void updateGame() {
 	ngui->screenSize = game->size;
 	ngui->uiScale = game->size.y / 2160;
 
-	int stepsToTake = 1;
-	float elapsed = platform->elapsed;
-	Globals *globals = &game->globals;
-
-	if (game->timeScale > 1) {
-		stepsToTake = game->timeScale;
-	} else if (game->timeScale < 1) {
-		elapsed *= game->timeScale;
+	if (game->prevState != game->state) {
+		game->prevState = game->state;
+		game->stateTime = 0;
 	}
 
-	for (int i = 0; i < stepsToTake; i++) {
-		game->isOnLastStep = false;
-		if (i == stepsToTake-1) game->isOnLastStep = true;
+	if (game->state == GAME_MENU) {
+		ImGui::SetNextWindowPos(ImVec2(game->size.x/2, game->size.y/2), ImGuiCond_Always, ImVec2(0.5, 0.5));
+		ImGui::Begin("Menu", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-		stepGame(elapsed);
-		drawGame(elapsed);
-	}
-
-	updateAndDrawOverlay(elapsed*stepsToTake);
-
-	{ /// Update world channels
-		for (int i = 0; i < game->worldChannelsNum; i++) {
-			WorldChannel *worldChannel = &game->worldChannels[i];
-			Channel *channel = getChannel(worldChannel->channelId);
-			if (!channel) {
-				arraySpliceIndex(game->worldChannels, game->worldChannelsNum, sizeof(WorldChannel), i);
-				game->worldChannelsNum--;
-				i--;
-				continue;
-			}
-
-			Vec2 screenPos = worldSpaceTo2dNDC01(game->lastMainPassCamera, worldChannel->position) * game->size;
-
-			Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
-			float dist = distance(game->lastMainPassCamera.position, worldChannel->position);
-			float vol = clampMap(dist, 0, 200, 1, 0);
-			float pan = screenPerc.x;
-			channel->userVolume2 = vol;
-			channel->pan = pan;
+		if (ImGui::Button("Play")) {
+			game->state = GAME_PLAY;
 		}
-	} ///
 
-	guiDraw();
+		ImGui::End();
+	} else if (game->state == GAME_PLAY) {
+		int stepsToTake = 1;
+		float elapsed = platform->elapsed;
+		Globals *globals = &game->globals;
+
+		if (game->timeScale > 1) {
+			stepsToTake = game->timeScale;
+		} else if (game->timeScale < 1) {
+			elapsed *= game->timeScale;
+		}
+
+		for (int i = 0; i < stepsToTake; i++) {
+			game->isOnLastStep = false;
+			if (i == stepsToTake-1) game->isOnLastStep = true;
+
+			stepGame(elapsed);
+			drawGame(elapsed);
+		}
+
+		updateAndDrawOverlay(elapsed*stepsToTake);
+
+		{ /// Update world channels
+			for (int i = 0; i < game->worldChannelsNum; i++) {
+				WorldChannel *worldChannel = &game->worldChannels[i];
+				Channel *channel = getChannel(worldChannel->channelId);
+				if (!channel) {
+					arraySpliceIndex(game->worldChannels, game->worldChannelsNum, sizeof(WorldChannel), i);
+					game->worldChannelsNum--;
+					i--;
+					continue;
+				}
+
+				Vec2 screenPos = worldSpaceTo2dNDC01(game->lastMainPassCamera, worldChannel->position) * game->size;
+
+				Vec2 screenPerc = (game->size/2 - screenPos) / game->size*2;
+				float dist = distance(game->lastMainPassCamera.position, worldChannel->position);
+				float vol = clampMap(dist, 0, 200, 1, 0);
+				float pan = screenPerc.x;
+				channel->userVolume2 = vol;
+				channel->pan = pan;
+			}
+		} ///
+	}
+
+	guiDraw(); // I'm not sure why this is here
 }
 
 bool isMouseClicked() {
