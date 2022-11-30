@@ -222,7 +222,7 @@ void runGame() {
 	initFonts();
 	nguiInit();
 
-	logf("Game+World is %.1fmb\n", (sizeof(World)+sizeof(Game)) / (float)(Megabytes(1)));
+	logf("Core+Game is %.1fmb\n", (sizeof(Core)+sizeof(Game)) / (float)(Megabytes(1)));
 
 	platformUpdateLoop(updateGame);
 }
@@ -269,16 +269,8 @@ void updateGame() {
 	if (game->shouldReset) {
 		game->shouldReset = false;
 
-		if (data->world) {
-			World *world = data->world;
-			for (int i = 0; i < data->world->actorsNum; i++) deinitActor(&world->actors[i]);
-			free(world);
-			data->world = NULL;
-			memset(data, 0, sizeof(GameData));
-		}
-
-		data->world = (World *)zalloc(sizeof(World));
-		World *world = data->world;
+		for (int i = 0; i < data->actorsNum; i++) deinitActor(&data->actors[i]);
+		memset(data, 0, sizeof(GameData));
 
 		{ /// Generate map //@todo This should be part of the core?
 			Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
@@ -289,13 +281,13 @@ void updateGame() {
 			int maxChunks = 45;
 
 			for (;;) {
-				if (world->chunksNum > maxChunks-1) {
+				if (data->chunksNum > maxChunks-1) {
 					logf("Done.\n");
 					break;
 				}
 
 				if (chunksCouldExpandNum == 0) {
-					Chunk *randomChunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+					Chunk *randomChunk = &data->chunks[rndInt(0, data->chunksNum-1)];
 					chunksCouldExpand[chunksCouldExpandNum++] = randomChunk;
 					continue;
 				}
@@ -325,8 +317,8 @@ void updateGame() {
 				chunksCouldExpandNum--;
 			}
 
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
+			for (int i = 0; i < data->chunksNum; i++) {
+				Chunk *chunk = &data->chunks[i];
 
 				Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				bool cutUp = false;
@@ -358,10 +350,10 @@ void updateGame() {
 				}
 			}
 
-			world->chunks[0].visible = true;
+			data->chunks[0].visible = true;
 
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
+			for (int i = 0; i < data->chunksNum; i++) {
+				Chunk *chunk = &data->chunks[i];
 				for (int y = 0; y < CHUNK_SIZE; y++) {
 					for (int x = 0; x < CHUNK_SIZE; x++) {
 						int tileIndex = y*CHUNK_SIZE + x;
@@ -499,7 +491,6 @@ bool isHoveringActor(Actor *actor) {
 
 void drawGame(float elapsed) {
 	Globals *globals = &game->globals;
-	World *world = data->world;
 
 	clearRenderer();
 	Mesh *cubeMesh = getMesh("assets/common/models/Cube.Cube.mesh");
@@ -576,8 +567,8 @@ void drawGame(float elapsed) {
 		float closestHoveredTileDist = -1;
 		Vec2i closestHoveredTilePos = v2i();
 
-		for (int i = 0; i < world->chunksNum; i++) {
-			Chunk *chunk = &world->chunks[i];
+		for (int i = 0; i < data->chunksNum; i++) {
+			Chunk *chunk = &data->chunks[i];
 			if (!chunk->visible) continue;
 
 			if (game->is2d) {
@@ -666,8 +657,8 @@ void drawGame(float elapsed) {
 	} ///
 
 	{ /// Draw actors
-		for (int i = 0; i < world->actorsNum; i++) {
-			Actor *actor = &world->actors[i];
+		for (int i = 0; i < data->actorsNum; i++) {
+			Actor *actor = &data->actors[i];
 			ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 			Chunk *chunk = worldToChunk(actor->position);
@@ -1305,8 +1296,8 @@ void drawGame(float elapsed) {
 
 	{ /// Show explore buttons
 		if (data->phase == PHASE_PLANNING && data->tool == TOOL_NONE && data->hp > 0) {
-			for (int i = 0; i < world->chunksNum; i++) {
-				Chunk *chunk = &world->chunks[i];
+			for (int i = 0; i < data->chunksNum; i++) {
+				Chunk *chunk = &data->chunks[i];
 				if (!chunk->visible) continue;
 
 				for (int i = 0; i < chunk->connectionsNum; i++) {
@@ -1649,7 +1640,6 @@ Particle *createParticle(ParticleType type) {
 
 
 void updateAndDrawOverlay(float elapsed) {
-	World *world = data->world;
 	Globals *globals = &game->globals;
 
 	{ /// Editor
@@ -1824,8 +1814,8 @@ void updateAndDrawOverlay(float elapsed) {
 			ImGui::Checkbox("Is 2d", &game->is2d);
 			ImGui::Checkbox("Debug disable backface culling", &game->debugDisableBackfaceCulling);
 			if (ImGui::Button("Explore all")) {
-				for (int i = 0; i < world->chunksNum; i++) {
-					Chunk *chunk = &world->chunks[i];
+				for (int i = 0; i < data->chunksNum; i++) {
+					Chunk *chunk = &data->chunks[i];
 					chunk->visible = true;
 				}
 			}
@@ -1846,7 +1836,7 @@ void updateAndDrawOverlay(float elapsed) {
 						break;
 					}
 
-					Chunk *chunk = &world->chunks[rndInt(0, world->chunksNum-1)];
+					Chunk *chunk = &data->chunks[rndInt(0, data->chunksNum-1)];
 					if (!chunk->visible) continue;
 					Vec2i chunkTilePos;
 					chunkTilePos.x = rndInt(0, CHUNK_SIZE-1);
@@ -1857,8 +1847,8 @@ void updateAndDrawOverlay(float elapsed) {
 					bool canBuild = true;
 					if (tile->type != TILE_GROUND) canBuild = false;
 
-					for (int i = 0; i < world->actorsNum; i++) {
-						Actor *other = &world->actors[i];
+					for (int i = 0; i < data->actorsNum; i++) {
+						Actor *other = &data->actors[i];
 						if (equal(worldToTile(other->position), tilePos)) canBuild = false;
 					}
 
@@ -1875,8 +1865,8 @@ void updateAndDrawOverlay(float elapsed) {
 			if (ImGui::Button("Kill everything")) {
 				data->actorsToSpawnNum = 0;
 
-				for (int i = 0; i < world->actorsNum; i++) {
-					Actor *actor = &world->actors[i];
+				for (int i = 0; i < data->actorsNum; i++) {
+					Actor *actor = &data->actors[i];
 					if (getInfo(actor)->isEnemy) actor->hp = -10;
 				}
 			}

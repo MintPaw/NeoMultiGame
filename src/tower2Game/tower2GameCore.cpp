@@ -180,17 +180,6 @@ struct Chunk {
 	bool visible;
 };
 
-struct World {
-#define ACTORS_MAX 65535
-	Actor actors[ACTORS_MAX];
-	int actorsNum;
-	int nextActorId;
-
-#define CHUNKS_MAX 512
-	Chunk chunks[CHUNKS_MAX];
-	int chunksNum;
-};
-
 enum Tool {
 	TOOL_NONE,
 	TOOL_BUILDING,
@@ -253,7 +242,15 @@ enum Phase {
 };
 
 struct GameData {
-	World *world;
+#define ACTORS_MAX 65535
+	Actor actors[ACTORS_MAX];
+	int actorsNum;
+	int nextActorId;
+
+#define CHUNKS_MAX 512
+	Chunk chunks[CHUNKS_MAX];
+	int chunksNum;
+
 #define CAMPAIGN_NAME_MAX_LEN 64
 	char campaignName[CAMPAIGN_NAME_MAX_LEN];
 
@@ -370,14 +367,12 @@ CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL
 
 void saveState(char *path);
 void writeStats(DataStream *stream, Stats stats);
-void writeWorld(DataStream *stream, World *world);
 void writeActor(DataStream *stream, Actor *actor);
 void writeChunk(DataStream *stream, Chunk *chunk);
 void writeTile(DataStream *stream, Tile tile);
 
 void loadState(char *path);
 void readStats(DataStream *stream, Stats *stats, int version);
-void readWorld(DataStream *stream, World *world, int version);
 void readActor(DataStream *stream, Actor *actor, int version);
 void readChunk(DataStream *stream, Chunk *chunk, int version);
 Tile readTile(DataStream *stream, int version);
@@ -723,16 +718,14 @@ void stepGame(float elapsed) {
 	float timeScale = elapsed / (1/60.0);
 	core->coreEventsNum = 0;
 
-	World *world = data->world;
-
 	if (data->prevPhase != data->phase) {
 		data->prevPhase = data->phase;
 		data->phaseTime = 0;
 	}
 
 	memset(core->actorTypeCounts, 0, sizeof(int) * ACTOR_TYPES_MAX);
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
+	for (int i = 0; i < data->actorsNum; i++) {
+		Actor *actor = &data->actors[i];
 		core->actorTypeCounts[actor->type]++;
 	}
 
@@ -747,8 +740,8 @@ void stepGame(float elapsed) {
 	core->manaToGain = 1 * elapsed;
 	int enemiesAlive = 0;
 	{ /// Update actors
-		for (int i = 0; i < world->actorsNum; i++) {
-			Actor *actor = &world->actors[i];
+		for (int i = 0; i < data->actorsNum; i++) {
+			Actor *actor = &data->actors[i];
 			ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 
 			if (actor->statsNum < statsMax-1) {
@@ -1127,8 +1120,8 @@ void stepGame(float elapsed) {
 		core->timeTillNextDot -= elapsed;
 		if (core->timeTillNextDot < 0) {
 			core->timeTillNextDot = 1;
-			for (int i = 0; i < world->actorsNum; i++) {
-				Actor *actor = &world->actors[i];
+			for (int i = 0; i < data->actorsNum; i++) {
+				Actor *actor = &data->actors[i];
 				Dot *poison = NULL;
 				Dot *burn = NULL;
 				Dot *bleed = NULL;
@@ -1171,8 +1164,8 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Post update actors
-		for (int i = 0; i < world->actorsNum; i++) {
-			Actor *actor = &world->actors[i];
+		for (int i = 0; i < data->actorsNum; i++) {
+			Actor *actor = &data->actors[i];
 			actor->timeSinceLastShot += elapsed;
 
 			if (actor->markedForDeletion) {
@@ -1198,8 +1191,8 @@ void stepGame(float elapsed) {
 				}
 
 				deinitActor(actor);
-				arraySpliceIndex(world->actors, world->actorsNum, sizeof(Actor), i);
-				world->actorsNum--;
+				arraySpliceIndex(data->actors, data->actorsNum, sizeof(Actor), i);
+				data->actorsNum--;
 				i--;
 				continue;
 			}
@@ -1227,8 +1220,8 @@ void stepGame(float elapsed) {
 
 				Vec2 *spawnPoints = (Vec2 *)frameMalloc(sizeof(Vec2) * CHUNKS_MAX);
 				int spawnPointsNum = 0;
-				for (int i = 0; i < world->chunksNum; i++) {
-					Chunk *chunk = &world->chunks[i];
+				for (int i = 0; i < data->chunksNum; i++) {
+					Chunk *chunk = &data->chunks[i];
 
 					bool isPortal = false; //@copyPastedIsPortal
 					if (chunk->connectionsNum == 1 && !isZero(chunk->position)) isPortal = true;
@@ -1333,8 +1326,8 @@ void stepGame(float elapsed) {
 			if (canBuild && !tile) canBuild = false;
 			if (canBuild && tile->type != TILE_GROUND) canBuild = false;
 
-			for (int i = 0; i < world->actorsNum; i++) {
-				Actor *other = &world->actors[i];
+			for (int i = 0; i < data->actorsNum; i++) {
+				Actor *other = &data->actors[i];
 				if (equal(worldToTile(other->position), tilePosition)) canBuild = false;
 			}
 
@@ -1362,9 +1355,8 @@ void stepGame(float elapsed) {
 }
 
 void generateMapFields() {
-	World *world = data->world;
-	for (int i = 0; i < world->chunksNum; i++) {
-		Chunk *chunk = &world->chunks[i];
+	for (int i = 0; i < data->chunksNum; i++) {
+		Chunk *chunk = &data->chunks[i];
 		for (int i = 0; i < CHUNK_SIZE*CHUNK_SIZE; i++) {
 			Tile *tile = &chunk->tiles[i];
 			tile->flow = v2();
@@ -1424,8 +1416,8 @@ void generateMapFields() {
 	}
 
 	/// Build Flow Field
-	for (int i = 0; i < world->chunksNum; i++) {
-		Chunk *chunk = &world->chunks[i];
+	for (int i = 0; i < data->chunksNum; i++) {
+		Chunk *chunk = &data->chunks[i];
 
 		for (int y = 0; y < CHUNK_SIZE; y++) {
 			for (int x = 0; x < CHUNK_SIZE; x++) {
@@ -1482,14 +1474,12 @@ void generateMapFields() {
 }
 
 Chunk *createChunk(Vec2i position) {
-	World *world = data->world;
-
-	if (world->chunksNum > CHUNKS_MAX-1) {
+	if (data->chunksNum > CHUNKS_MAX-1) {
 		logf("Too many chunks!\n");
 		return NULL;
 	}
 
-	Chunk *chunk = &world->chunks[world->chunksNum++];
+	Chunk *chunk = &data->chunks[data->chunksNum++];
 	memset(chunk, 0, sizeof(Chunk));
 	chunk->position = position;
 	chunk->rect.width = CHUNK_SIZE * TILE_SIZE;
@@ -1516,10 +1506,8 @@ Chunk *createChunk(Vec2i position) {
 }
 
 Chunk *getChunkAt(Vec2i position) {
-	World *world = data->world;
-
-	for (int i = 0; i < world->chunksNum; i++) {
-		Chunk *chunk = &world->chunks[i];
+	for (int i = 0; i < data->chunksNum; i++) {
+		Chunk *chunk = &data->chunks[i];
 		if (equal(chunk->position, position)) return chunk;
 	}
 
@@ -1609,17 +1597,15 @@ bool tileBlocksPathing(TileType type) {
 }
 
 Actor *createActor(ActorType type) {
-	World *world = data->world;
-
-	if (world->actorsNum > ACTORS_MAX-1) {
+	if (data->actorsNum > ACTORS_MAX-1) {
 		Panic("Too many actors\n"); //@robustness
 	}
 
-	Actor *actor = &world->actors[world->actorsNum++];
+	Actor *actor = &data->actors[data->actorsNum++];
 	memset(actor, 0, sizeof(Actor));
 	actor->type = type;
 	initActor(actor);
-	actor->id = ++world->nextActorId;
+	actor->id = ++data->nextActorId;
 
 	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	actor->hp = info->maxHp;
@@ -1650,11 +1636,10 @@ void deinitActor(Actor *actor) {
 }
 
 Actor *getActor(int id) {
-	World *world = data->world;
 	if (id == 0) return NULL;
 
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
+	for (int i = 0; i < data->actorsNum; i++) {
+		Actor *actor = &data->actors[i];
 		if (actor->id == id) return actor;
 	}
 	return NULL;
@@ -1864,12 +1849,10 @@ bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
 }
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
-	World *world = data->world;
-
-	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
+	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * data->actorsNum);
 	int enemiesInRangeNum = 0;
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
+	for (int i = 0; i < data->actorsNum; i++) {
+		Actor *actor = &data->actors[i];
 		ActorTypeInfo *otherInfo = &core->actorTypeInfos[actor->type];
 		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
@@ -1882,12 +1865,10 @@ Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 }
 
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly) {
-	World *world = data->world;
-
-	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * world->actorsNum);
+	Actor **enemiesInRange = (Actor **)frameMalloc(sizeof(Actor **) * data->actorsNum);
 	int enemiesInRangeNum = 0;
-	for (int i = 0; i < world->actorsNum; i++) {
-		Actor *actor = &world->actors[i];
+	for (int i = 0; i < data->actorsNum; i++) {
+		Actor *actor = &data->actors[i];
 		ActorTypeInfo *otherInfo = &core->actorTypeInfos[actor->type];
 		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
@@ -1999,8 +1980,11 @@ void saveState(char *path) {
 	writeFloat(stream, data->time);
 	writeVec2(stream, data->cameraPosition);
 	writeFloat(stream, data->cameraZoom);
-	writeWorld(stream, data->world);
-
+	writeU32(stream, data->actorsNum);
+	for (int i = 0; i < data->actorsNum; i++) writeActor(stream, &data->actors[i]);
+	writeU32(stream, data->nextActorId);
+	writeU32(stream, data->chunksNum);
+	for (int i = 0; i < data->chunksNum; i++) writeChunk(stream, &data->chunks[i]);
 	writeU32(stream, data->prevTool);
 	writeU32(stream, data->tool);
 	writeFloat(stream, data->toolTime);
@@ -2044,15 +2028,6 @@ void writeStats(DataStream *stream, Stats stats) {
 	writeFloat(stream, stats.shieldDamage);
 	writeFloat(stream, stats.armorDamage);
 	writeFloat(stream, stats.hpDamage);
-}
-
-void writeWorld(DataStream *stream, World *world) {
-	writeU32(stream, world->actorsNum);
-	for (int i = 0; i < world->actorsNum; i++) writeActor(stream, &world->actors[i]);
-	writeU32(stream, world->nextActorId);
-
-	writeU32(stream, world->chunksNum);
-	for (int i = 0; i < world->chunksNum; i++) writeChunk(stream, &world->chunks[i]);
 }
 
 void writeActor(DataStream *stream, Actor *actor) {
@@ -2116,8 +2091,7 @@ void writeTile(DataStream *stream, Tile tile) {
 }
 
 void loadState(char *path) {
-	World *world = data->world;
-	for (int i = 0; i < world->actorsNum; i++) deinitActor(&world->actors[i]);
+	for (int i = 0; i < data->actorsNum; i++) deinitActor(&data->actors[i]);
 
 	DataStream *stream = loadDataStream(path);
 	if (!stream) {
@@ -2131,7 +2105,11 @@ void loadState(char *path) {
 	data->time = readFloat(stream);
 	data->cameraPosition = readVec2(stream);
 	data->cameraZoom = readFloat(stream);
-	readWorld(stream, data->world, version);
+	data->actorsNum = readU32(stream);
+	for (int i = 0; i < data->actorsNum; i++) readActor(stream, &data->actors[i], version);
+	data->nextActorId = readU32(stream);
+	data->chunksNum = readU32(stream);
+	for (int i = 0; i < data->chunksNum; i++) readChunk(stream, &data->chunks[i], version);
 	data->prevTool = (Tool)readU32(stream);
 	data->tool = (Tool)readU32(stream);
 	data->toolTime = readFloat(stream);
@@ -2183,14 +2161,6 @@ void readStats(DataStream *stream, Stats *stats, int version) {
 	stats->shieldDamage = readFloat(stream);
 	stats->armorDamage = readFloat(stream);
 	stats->hpDamage = readFloat(stream);
-}
-
-void readWorld(DataStream *stream, World *world, int version) {
-	world->actorsNum = readU32(stream);
-	for (int i = 0; i < world->actorsNum; i++) readActor(stream, &world->actors[i], version);
-	world->nextActorId = readU32(stream);
-	world->chunksNum = readU32(stream);
-	for (int i = 0; i < world->chunksNum; i++) readChunk(stream, &world->chunks[i], version);
 }
 
 void readActor(DataStream *stream, Actor *actor, int version) {
