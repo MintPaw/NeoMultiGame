@@ -313,6 +313,8 @@ struct GameData {
 };
 
 struct Core {
+	MapGenMode mapGenMode;
+
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 	int actorTypeCounts[ACTOR_TYPES_MAX];
 
@@ -339,6 +341,7 @@ struct Core {
 void initCore(MapGenMode mapGenMode);
 void stepGame(float elapsed);
 
+bool generateMap(MapGenMode mapGenMode);
 void generateMapFields();
 Chunk *createChunk(Vec2i position);
 Chunk *getChunkAt(Vec2i position);
@@ -840,106 +843,16 @@ void initCore(MapGenMode mapGenMode) {
 		}
 	} ///
 
-	if (mapGenMode == MAP_GEN_NONE) {
-		// Nothing...
-	} else if (mapGenMode == MAP_GEN_RANDOM) {
-		Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
-		int chunksCouldExpandNum = 0;
-
-		Chunk *chunk = createChunk(v2i(0, 0));
-
-		int maxChunks = 45;
-
-		for (;;) {
-			if (data->chunksNum > maxChunks-1) {
-				logf("Done generating.\n");
-				break;
-			}
-
-			if (chunksCouldExpandNum == 0) {
-				Chunk *randomChunk = &data->chunks[rndInt(0, data->chunksNum-1)];
-				chunksCouldExpand[chunksCouldExpandNum++] = randomChunk;
-				continue;
-			}
-
-			int expandIndex = rndInt(0, chunksCouldExpandNum-1);
-			Chunk *chunkToExpand = chunksCouldExpand[expandIndex];
-
-			Vec2i possiblePositions[4];
-			int possiblePositionsNum = 0;
-
-			if (!getChunkAt(chunkToExpand->position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(-1, 0);
-			if (!getChunkAt(chunkToExpand->position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(1, 0);
-			if (!getChunkAt(chunkToExpand->position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, -1);
-			if (!getChunkAt(chunkToExpand->position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = chunkToExpand->position + v2i(0, 1);
-
-			if (possiblePositionsNum > 0) {
-				int chosenIndex = rndInt(0, possiblePositionsNum-1);
-				Vec2i position = possiblePositions[chosenIndex];
-				Chunk *newChunk = createChunk(position);
-				newChunk->connections[newChunk->connectionsNum++] = chunkToExpand->position;
-				chunkToExpand->connections[chunkToExpand->connectionsNum++] = newChunk->position;
-
-				chunksCouldExpand[chunksCouldExpandNum++] = newChunk;
-			}
-
-			arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Chunk *), expandIndex);
-			chunksCouldExpandNum--;
+	for (int i = 0; ; i++) {
+		if (generateMap(mapGenMode)) break;
+		if (i == 1000) {
+			logf("Failed to generate map 1000 times\n");
+			break;
 		}
-
-		for (int i = 0; i < data->chunksNum; i++) {
-			Chunk *chunk = &data->chunks[i];
-
-			Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
-			bool cutUp = false;
-			bool cutDown = false;
-			bool cutLeft = false;
-			bool cutRight = false;
-			for (int i = 0; i < chunk->connectionsNum; i++) {
-				Vec2i connection = chunk->connections[i];
-				cutUp = cutUp || connection.y < chunk->position.y;
-				cutDown = cutDown || connection.y > chunk->position.y;
-				cutLeft = cutLeft || connection.x < chunk->position.x;
-				cutRight = cutRight || connection.x > chunk->position.x;
-			}
-
-			Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
-			int toMakeRoadNum = 0;
-			for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
-				if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
-				if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
-				if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
-				if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
-			}
-
-			for (int i = 0; i < toMakeRoadNum; i++) {
-				Vec2i pos = toMakeRoad[i];
-				Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
-				tile->type = TILE_ROAD;
-				tile->elevation = 0;
-			}
-		}
-
-		data->chunks[0].visible = true;
-
-		for (int i = 0; i < data->chunksNum; i++) {
-			Chunk *chunk = &data->chunks[i];
-			for (int y = 0; y < CHUNK_SIZE; y++) {
-				for (int x = 0; x < CHUNK_SIZE; x++) {
-					int tileIndex = y*CHUNK_SIZE + x;
-					Tile *tile = &chunk->tiles[tileIndex];
-					if (tile->type != TILE_GROUND) continue;
-					if (rndPerc(0.01)) {
-						Actor *actor = createActor(ACTOR_MANA_CRYSTAL);
-						actor->position = tileToWorld(chunkTileToWorldTile(chunk, v2i(x, y)));
-					}
-				}
-			}
-		}
-	} else if (mapGenMode == MAP_GEN_CONTROLLED_SPLIT) {
 	}
 
 	if (mapGenMode != MAP_GEN_NONE) generateMapFields();
+	core->mapGenMode = mapGenMode;
 
 	data->hp = 10;
 	data->money = 1000;
@@ -1611,6 +1524,154 @@ void stepGame(float elapsed) {
 	data->time += elapsed;
 }
 
+bool generateMap(MapGenMode mapGenMode) {
+	auto connect = [](Chunk *chunkA, Chunk *chunkB) {
+		if (chunkA->connectionsNum > 4-1) logf("Too many connections!\n");
+		if (chunkB->connectionsNum > 4-1) logf("Too many connections!\n");
+		chunkA->connections[chunkA->connectionsNum++] = chunkB->position;
+		chunkB->connections[chunkB->connectionsNum++] = chunkA->position;
+	};
+
+	auto getAdjecentOpenChunkPositions = [](Vec2i position, int *outPossiblePositionsNum)->Vec2i *{
+		Vec2i *possiblePositions = (Vec2i *)frameMalloc(sizeof(Vec2i) * 4);
+		int possiblePositionsNum = 0;
+
+		if (!getChunkAt(position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(-1, 0);
+		if (!getChunkAt(position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(1, 0);
+		if (!getChunkAt(position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, -1);
+		if (!getChunkAt(position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, 1);
+
+		*outPossiblePositionsNum = possiblePositionsNum;
+		return possiblePositions;
+	};
+
+	auto carveChunkConnections = []() {
+		for (int i = 0; i < data->chunksNum; i++) {
+			Chunk *chunk = &data->chunks[i];
+
+			Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+			bool cutUp = false;
+			bool cutDown = false;
+			bool cutLeft = false;
+			bool cutRight = false;
+			for (int i = 0; i < chunk->connectionsNum; i++) {
+				Vec2i connection = chunk->connections[i];
+				cutUp = cutUp || connection.y < chunk->position.y;
+				cutDown = cutDown || connection.y > chunk->position.y;
+				cutLeft = cutLeft || connection.x < chunk->position.x;
+				cutRight = cutRight || connection.x > chunk->position.x;
+			}
+
+			Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
+			int toMakeRoadNum = 0;
+			for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
+				if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
+				if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
+				if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
+				if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
+			}
+
+			for (int i = 0; i < toMakeRoadNum; i++) {
+				Vec2i pos = toMakeRoad[i];
+				Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
+				tile->type = TILE_ROAD;
+				tile->elevation = 0;
+			}
+		}
+	};
+
+	data->chunksNum = 0;
+
+	if (mapGenMode == MAP_GEN_NONE) {
+		// Nothing...
+	} else if (mapGenMode == MAP_GEN_RANDOM) {
+		Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
+		int chunksCouldExpandNum = 0;
+
+		Chunk *chunk = createChunk(v2i(0, 0));
+
+		int maxChunks = 45;
+
+		for (;;) {
+			if (data->chunksNum > maxChunks-1) {
+				logf("Done generating.\n");
+				break;
+			}
+
+			if (chunksCouldExpandNum == 0) {
+				Chunk *randomChunk = &data->chunks[rndInt(0, data->chunksNum-1)];
+				chunksCouldExpand[chunksCouldExpandNum++] = randomChunk;
+				continue;
+			}
+
+			int expandIndex = rndInt(0, chunksCouldExpandNum-1);
+			Chunk *chunkToExpand = chunksCouldExpand[expandIndex];
+
+			int possiblePositionsNum = 0;
+			Vec2i *possiblePositions = getAdjecentOpenChunkPositions(chunkToExpand->position, &possiblePositionsNum);
+
+			if (possiblePositionsNum > 0) {
+				int chosenIndex = rndInt(0, possiblePositionsNum-1);
+				Vec2i position = possiblePositions[chosenIndex];
+				Chunk *newChunk = createChunk(position);
+				connect(newChunk, chunkToExpand);
+
+				chunksCouldExpand[chunksCouldExpandNum++] = newChunk;
+			}
+
+			arraySpliceIndex(chunksCouldExpand, chunksCouldExpandNum, sizeof(Chunk *), expandIndex);
+			chunksCouldExpandNum--;
+		}
+
+		carveChunkConnections();
+		data->chunks[0].visible = true;
+	} else if (mapGenMode == MAP_GEN_CONTROLLED_SPLIT) {
+		int maxChunks = 45;
+
+		Chunk *chunk = createChunk(v2i(0, 0));
+
+		Chunk *splitChunk = NULL;
+
+		for (int i = 0; i < maxChunks; i++) {
+			if (i == 10) splitChunk = chunk;
+			if (i == 30) chunk = splitChunk;
+
+			int possiblePositionsNum = 0;
+			Vec2i *possiblePositions = getAdjecentOpenChunkPositions(chunk->position, &possiblePositionsNum);
+
+			if (possiblePositionsNum == 0) {
+				logf("Failed to generate\n");
+				return false;
+			}
+
+			Vec2i nextPos = possiblePositions[rndInt(0, possiblePositionsNum-1)];
+			Chunk *newChunk = createChunk(nextPos);
+			connect(newChunk, chunk);
+			chunk = newChunk;
+		}
+
+		carveChunkConnections();
+		data->chunks[0].visible = true;
+	}
+
+	for (int i = 0; i < data->chunksNum; i++) {
+		Chunk *chunk = &data->chunks[i];
+		for (int y = 0; y < CHUNK_SIZE; y++) {
+			for (int x = 0; x < CHUNK_SIZE; x++) {
+				int tileIndex = y*CHUNK_SIZE + x;
+				Tile *tile = &chunk->tiles[tileIndex];
+				if (tile->type != TILE_GROUND) continue;
+				if (rndPerc(0.01)) {
+					Actor *actor = createActor(ACTOR_MANA_CRYSTAL);
+					actor->position = tileToWorld(chunkTileToWorldTile(chunk, v2i(x, y)));
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
 void generateMapFields() {
 	for (int i = 0; i < data->chunksNum; i++) {
 		Chunk *chunk = &data->chunks[i];
@@ -2163,6 +2224,14 @@ void startNextWave() {
 		value = tweenEase(value, QUAD_IN);
 		int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
 		data->actorsToSpawn[data->actorsToSpawnNum++] = possibleActors[index];
+	}
+
+	if (data->wave == 15) {
+		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY8;
+	}
+
+	if (data->wave == 25) {
+		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY14;
 	}
 }
 

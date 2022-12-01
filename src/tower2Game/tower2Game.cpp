@@ -1,4 +1,3 @@
-// Make a map generate that has better splitting
 // Make is so bosses spawn at the right time
 // Map editor
 // Show info about the waves
@@ -313,7 +312,7 @@ void updateGame() {
 	} else if (game->state == GAME_PLAY) {
 		if (game->shouldReset) {
 			game->shouldReset = false;
-			initCore(MAP_GEN_RANDOM);
+			initCore(core->mapGenMode);
 		}
 
 		if (game->shouldLoadState) {
@@ -1741,6 +1740,8 @@ void updateAndDrawOverlay(float elapsed) {
 			ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
 			ImGui::Checkbox("Is 2d", &game->is2d);
 			ImGui::Checkbox("Debug disable backface culling", &game->debugDisableBackfaceCulling);
+			if (ImGui::Button("Reset game")) game->shouldReset = true;
+			ImGui::SameLine();
 			if (ImGui::Button("Explore all")) {
 				for (int i = 0; i < data->chunksNum; i++) {
 					Chunk *chunk = &data->chunks[i];
@@ -1840,7 +1841,6 @@ void updateAndDrawOverlay(float elapsed) {
 
 			ImGui::NewLine();
 			ImGui::Separator();
-			if (ImGui::Button("Reset game")) game->shouldReset = true;
 			ImGui::InputText("Campaign name", data->campaignName, CAMPAIGN_NAME_MAX_LEN);
 
 			ImGui::End();
