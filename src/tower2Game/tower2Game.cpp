@@ -1,5 +1,10 @@
-// Make ImGui game starter
+// Make a map generate that has better splitting
+// Make is so bosses spawn at the right time
+// Map editor
 // Show info about the waves
+// Have the option to destroy portals
+// Cumulative saves
+// Add the rest of the enemies
 
 // Upgrade ideas:
 // Tower has a small chance of freezing
@@ -12,6 +17,8 @@
 // Mode ideas:
 // A huge amount of starting money with few (1?) big waves
 // Dying enemies spawn a copy of the previous type
+// 8/10-split
+// Hyrda roulette
 
 #define FROST_FALL_DISTANCE 64
 
@@ -292,8 +299,13 @@ void updateGame() {
 			game->state = GAME_PLAY;
 		}
 
-		if (ImGui::Button("Play")) {
+		if (ImGui::Button("Play random")) {
 			initCore(MAP_GEN_RANDOM);
+			game->state = GAME_PLAY;
+		}
+
+		if (ImGui::Button("Play controlled split")) {
+			initCore(MAP_GEN_CONTROLLED_SPLIT);
 			game->state = GAME_PLAY;
 		}
 
@@ -1428,6 +1440,8 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = "Allows you to reload and try the wave again if you lose";
 		} else if (effect->type == UPGRADE_EFFECT_EXTRA_SAW_PIERCE) {
 			line = frameSprintf("Saws pierce through %g more enemies", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC) {
+			line = frameSprintf("All tower start at a minimum of %g%% leveled up", effect->value*100.0);
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}

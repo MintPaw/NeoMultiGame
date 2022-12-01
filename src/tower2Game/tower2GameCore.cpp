@@ -17,6 +17,7 @@ struct ActorTypeInfo {
 	char name[ACTOR_TYPE_NAME_MAX_LEN];
 	bool isTower;
 	bool isEnemy;
+	int tier;
 
 	float damage;
 	float hpDamageMulti;
@@ -205,7 +206,8 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_EXTRA_TIME_SCALE=38,
 	UPGRADE_EFFECT_RELOAD=39,
 	UPGRADE_EFFECT_EXTRA_SAW_PIERCE=40,
-	UPGRADE_EFFECT_TYPES_MAX=41,
+	UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC=41,
+	UPGRADE_EFFECT_TYPES_MAX,
 };
 
 struct UpgradeEffect {
@@ -257,6 +259,7 @@ enum Phase {
 enum MapGenMode {
 	MAP_GEN_NONE,
 	MAP_GEN_RANDOM,
+	MAP_GEN_CONTROLLED_SPLIT,
 };
 
 struct GameData {
@@ -437,7 +440,7 @@ void initCore(MapGenMode mapGenMode) {
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR_TOWER];
 		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 5;
+		info->damage = 7.5;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 15;
 		info->shieldDamageMulti = 5;
@@ -579,49 +582,100 @@ void initCore(MapGenMode mapGenMode) {
 		strncpy(info->name, "Mana Crystal", ACTOR_TYPE_NAME_MAX_LEN);
 		info->primaryColor = 0xFFA4B0CC;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY1];
+		info = &core->actorTypeInfos[ACTOR_ENEMY1]; // Goblin
+		info->tier = 1;
 		info->enemySpawnStartingWave = 1;
 		info->movementSpeed = 2;
 		info->maxHp = 100;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY2];
+		info = &core->actorTypeInfos[ACTOR_ENEMY2]; // Orc
+		info->tier = 1;
 		info->enemySpawnStartingWave = 3;
 		info->movementSpeed = 2;
 		info->maxHp = 300;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY3];
+		info = &core->actorTypeInfos[ACTOR_ENEMY3]; // Armored Goblin
+		info->tier = 1;
 		info->enemySpawnStartingWave = 5;
 		info->movementSpeed = 1.75;
 		info->maxHp = 400;
 		info->maxArmor = 200;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY4];
+		info = &core->actorTypeInfos[ACTOR_ENEMY4]; // Troll
+		info->tier = 1;
 		info->enemySpawnStartingWave = 7;
 		info->movementSpeed = 1.75;
 		info->maxHp = 800;
 		info->hpGainPerSec = 25;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY5];
+		info = &core->actorTypeInfos[ACTOR_ENEMY5]; // Armored Orc
+		info->tier = 1;
 		info->enemySpawnStartingWave = 9;
 		info->movementSpeed = 1.75;
 		info->maxHp = 400;
 		info->maxArmor = 600;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY6];
+		info = &core->actorTypeInfos[ACTOR_ENEMY6]; // Battering Ram
+		info->tier = 1;
 		info->enemySpawnStartingWave = 11;
 		info->movementSpeed = 1;
 		info->maxHp = 300;
 		info->maxArmor = 1500;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY7];
+		info = &core->actorTypeInfos[ACTOR_ENEMY7]; // Cyclops
+		info->tier = 1;
 		info->enemySpawnStartingWave = 13;
 		info->movementSpeed = 1.25;
 		info->maxHp = 2000;
 
-		info = &core->actorTypeInfos[ACTOR_ENEMY8];
+		info = &core->actorTypeInfos[ACTOR_ENEMY8]; // Ooogie
+		info->tier = 999;
 		info->enemySpawnStartingWave = 15;
 		info->movementSpeed = 1;
 		info->maxHp = 20000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY9]; // Witch
+		info->tier = 2;
+		info->enemySpawnStartingWave = 16;
+		info->movementSpeed = 3;
+		info->maxHp = 1000;
+		info->maxShield = 1000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY10]; // Bat
+		info->tier = 2;
+		info->enemySpawnStartingWave = 18;
+		info->movementSpeed = 3.6;
+		info->maxHp = 2000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY11]; // Vampire
+		info->tier = 2;
+		info->enemySpawnStartingWave = 20;
+		info->movementSpeed = 2;
+		info->maxHp = 3000;
+		info->hpGainPerSec = 100;
+		info->maxShield = 1000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY12]; // Jack'o'Lantern
+		info->tier = 2;
+		info->enemySpawnStartingWave = 22;
+		info->movementSpeed = 1.5;
+		info->maxHp = 1000;
+		info->maxArmor = 5000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY13]; // Werewolf
+		info->tier = 2;
+		info->enemySpawnStartingWave = 24;
+		info->movementSpeed = 2;
+		info->maxHp = 3000;
+		info->hpGainPerSec = 3000;
+		info->maxShield = 2000;
+
+		info = &core->actorTypeInfos[ACTOR_ENEMY14]; // Ooogie von Ooogovich
+		info->tier = 2;
+		info->enemySpawnStartingWave = 999;
+		info->movementSpeed = 1.1;
+		info->maxHp = 40000;
+		info->hpGainPerSec = 100;
 
 		info = &core->actorTypeInfos[ACTOR_ARROW];
 		info->size = v3(0.1, 0.1, 0.1) * TILE_SIZE;
@@ -661,9 +715,9 @@ void initCore(MapGenMode mapGenMode) {
 		effect = &upgrade->effects[upgrade->effectsNum++];
 		effect->type = UPGRADE_EFFECT_UNLOCK_SHREDDER;
 
-		upgrade = createUpgrade();
-		effect = &upgrade->effects[upgrade->effectsNum++];
-		effect->type = UPGRADE_EFFECT_UNLOCK_FROST_KEEP;
+		// upgrade = createUpgrade();
+		// effect = &upgrade->effects[upgrade->effectsNum++];
+		// effect->type = UPGRADE_EFFECT_UNLOCK_FROST_KEEP;
 
 		ActorType actorsCouldUpgrade[] = {
 			ACTOR_BALLISTA, ACTOR_MORTAR_TOWER, ACTOR_TESLA_COIL, ACTOR_FLAME_THROWER, ACTOR_POISON_SPRAYER, ACTOR_SHREDDER,
@@ -727,7 +781,7 @@ void initCore(MapGenMode mapGenMode) {
 				Upgrade *upgrade = createUpgrade();
 				UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = UPGRADE_EFFECT_EXTRA_CARDS;
-				effect->value = 1;
+				effect->value = 2;
 				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				prevUpgrade = upgrade;
 			}
@@ -777,12 +831,18 @@ void initCore(MapGenMode mapGenMode) {
 			effect->value = 6;
 			upgrade->prereqEffects[upgrade->prereqEffectsNum++] = UPGRADE_EFFECT_UNLOCK_SHREDDER;
 		}
+
+		{
+			Upgrade *upgrade = createUpgrade();
+			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC;
+			effect->value = 1;
+		}
 	} ///
 
 	if (mapGenMode == MAP_GEN_NONE) {
 		// Nothing...
 	} else if (mapGenMode == MAP_GEN_RANDOM) {
-
 		Chunk **chunksCouldExpand = (Chunk **)frameMalloc(sizeof(Chunk *) * CHUNKS_MAX);
 		int chunksCouldExpandNum = 0;
 
@@ -876,6 +936,7 @@ void initCore(MapGenMode mapGenMode) {
 				}
 			}
 		}
+	} else if (mapGenMode == MAP_GEN_CONTROLLED_SPLIT) {
 	}
 
 	if (mapGenMode != MAP_GEN_NONE) generateMapFields();
@@ -998,10 +1059,23 @@ void stepGame(float elapsed) {
 
 					if (actor->level < getMaxLevel(actor->type)) {
 						actor->xp += XP_PER_SEC * elapsed;
-						if (actor->xp > maxXpPerLevels[actor->level]) {
-							actor->level++;
-							actor->xp = 0;
-						}
+					}
+				}
+
+				{
+					float minLevelPerc = 0;
+					StartForEachUpgradeEffect;
+					if (effect->type == UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC) {
+						minLevelPerc = MaxNum(minLevelPerc, effect->value);
+					}
+					EndForEachUpgradeEffect;
+
+					int minLevel = getMaxLevel(actor->type) * minLevelPerc;
+					if (actor->level < minLevel) actor->xp += 50;
+
+					if (actor->xp > maxXpPerLevels[actor->level]) {
+						actor->level++;
+						actor->xp = 0;
 					}
 				}
 			}
