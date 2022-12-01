@@ -185,6 +185,7 @@ enum Tool {
 	TOOL_NONE,
 	TOOL_BUILDING,
 	TOOL_SELECTED,
+	TOOL_TILE_SELECTION,
 };
 
 enum UpgradeEffectType {
@@ -263,6 +264,8 @@ enum MapGenMode {
 };
 
 struct GameData {
+	MapGenMode mapGenMode;
+
 #define ACTORS_MAX 65535
 	Actor actors[ACTORS_MAX];
 	int actorsNum;
@@ -313,8 +316,6 @@ struct GameData {
 };
 
 struct Core {
-	MapGenMode mapGenMode;
-
 	ActorTypeInfo actorTypeInfos[ACTOR_TYPES_MAX];
 	int actorTypeCounts[ACTOR_TYPES_MAX];
 
@@ -342,8 +343,13 @@ void initCore(MapGenMode mapGenMode);
 void stepGame(float elapsed);
 
 bool generateMap(MapGenMode mapGenMode);
+void connect(Chunk *chunkA, Chunk *chunkB);
+Vec2i *getAdjecentOpenChunkPositions(Vec2i position, int *outPossiblePositionsNum);
+void carveChunkConnections(Chunk *chunk);
 void generateMapFields();
 Chunk *createChunk(Vec2i position);
+void removeConnection(Chunk *chunk, Vec2i toRemove);
+void removeChunk(Chunk *chunk);
 Chunk *getChunkAt(Vec2i position);
 Tile *getTileAt(Vec2i position);
 Vec2i chunkTileToWorldTile(Chunk *chunk, Vec2i tile);
@@ -852,7 +858,7 @@ void initCore(MapGenMode mapGenMode) {
 	}
 
 	if (mapGenMode != MAP_GEN_NONE) generateMapFields();
-	core->mapGenMode = mapGenMode;
+	data->mapGenMode = mapGenMode;
 
 	data->hp = 10;
 	data->money = 1000;
@@ -1525,61 +1531,6 @@ void stepGame(float elapsed) {
 }
 
 bool generateMap(MapGenMode mapGenMode) {
-	auto connect = [](Chunk *chunkA, Chunk *chunkB) {
-		if (chunkA->connectionsNum > 4-1) logf("Too many connections!\n");
-		if (chunkB->connectionsNum > 4-1) logf("Too many connections!\n");
-		chunkA->connections[chunkA->connectionsNum++] = chunkB->position;
-		chunkB->connections[chunkB->connectionsNum++] = chunkA->position;
-	};
-
-	auto getAdjecentOpenChunkPositions = [](Vec2i position, int *outPossiblePositionsNum)->Vec2i *{
-		Vec2i *possiblePositions = (Vec2i *)frameMalloc(sizeof(Vec2i) * 4);
-		int possiblePositionsNum = 0;
-
-		if (!getChunkAt(position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(-1, 0);
-		if (!getChunkAt(position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(1, 0);
-		if (!getChunkAt(position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, -1);
-		if (!getChunkAt(position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, 1);
-
-		*outPossiblePositionsNum = possiblePositionsNum;
-		return possiblePositions;
-	};
-
-	auto carveChunkConnections = []() {
-		for (int i = 0; i < data->chunksNum; i++) {
-			Chunk *chunk = &data->chunks[i];
-
-			Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
-			bool cutUp = false;
-			bool cutDown = false;
-			bool cutLeft = false;
-			bool cutRight = false;
-			for (int i = 0; i < chunk->connectionsNum; i++) {
-				Vec2i connection = chunk->connections[i];
-				cutUp = cutUp || connection.y < chunk->position.y;
-				cutDown = cutDown || connection.y > chunk->position.y;
-				cutLeft = cutLeft || connection.x < chunk->position.x;
-				cutRight = cutRight || connection.x > chunk->position.x;
-			}
-
-			Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
-			int toMakeRoadNum = 0;
-			for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
-				if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
-				if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
-				if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
-				if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
-			}
-
-			for (int i = 0; i < toMakeRoadNum; i++) {
-				Vec2i pos = toMakeRoad[i];
-				Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
-				tile->type = TILE_ROAD;
-				tile->elevation = 0;
-			}
-		}
-	};
-
 	data->chunksNum = 0;
 
 	if (mapGenMode == MAP_GEN_NONE) {
@@ -1623,7 +1574,10 @@ bool generateMap(MapGenMode mapGenMode) {
 			chunksCouldExpandNum--;
 		}
 
-		carveChunkConnections();
+		for (int i = 0; i < data->chunksNum; i++) {
+			Chunk *chunk = &data->chunks[i];
+			carveChunkConnections(chunk);
+		}
 		data->chunks[0].visible = true;
 	} else if (mapGenMode == MAP_GEN_CONTROLLED_SPLIT) {
 		int maxChunks = 45;
@@ -1650,7 +1604,10 @@ bool generateMap(MapGenMode mapGenMode) {
 			chunk = newChunk;
 		}
 
-		carveChunkConnections();
+		for (int i = 0; i < data->chunksNum; i++) {
+			Chunk *chunk = &data->chunks[i];
+			carveChunkConnections(chunk);
+		}
 		data->chunks[0].visible = true;
 	}
 
@@ -1670,6 +1627,57 @@ bool generateMap(MapGenMode mapGenMode) {
 	}
 
 	return true;
+}
+
+void connect(Chunk *chunkA, Chunk *chunkB) {
+	if (chunkA->connectionsNum > 4-1) logf("Too many connections!\n");
+	if (chunkB->connectionsNum > 4-1) logf("Too many connections!\n");
+	chunkA->connections[chunkA->connectionsNum++] = chunkB->position;
+	chunkB->connections[chunkB->connectionsNum++] = chunkA->position;
+}
+
+Vec2i *getAdjecentOpenChunkPositions(Vec2i position, int *outPossiblePositionsNum) {
+	Vec2i *possiblePositions = (Vec2i *)frameMalloc(sizeof(Vec2i) * 4);
+	int possiblePositionsNum = 0;
+
+	if (!getChunkAt(position + v2i(-1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(-1, 0);
+	if (!getChunkAt(position + v2i(1, 0))) possiblePositions[possiblePositionsNum++] = position + v2i(1, 0);
+	if (!getChunkAt(position + v2i(0, -1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, -1);
+	if (!getChunkAt(position + v2i(0, 1))) possiblePositions[possiblePositionsNum++] = position + v2i(0, 1);
+
+	*outPossiblePositionsNum = possiblePositionsNum;
+	return possiblePositions;
+}
+
+void carveChunkConnections(Chunk *chunk) {
+	Vec2i centerTile = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
+	bool cutUp = false;
+	bool cutDown = false;
+	bool cutLeft = false;
+	bool cutRight = false;
+	for (int i = 0; i < chunk->connectionsNum; i++) {
+		Vec2i connection = chunk->connections[i];
+		cutUp = cutUp || connection.y < chunk->position.y;
+		cutDown = cutDown || connection.y > chunk->position.y;
+		cutLeft = cutLeft || connection.x < chunk->position.x;
+		cutRight = cutRight || connection.x > chunk->position.x;
+	}
+
+	Vec2i *toMakeRoad = (Vec2i *)frameMalloc(sizeof(Vec2i) * (CHUNK_SIZE * CHUNK_SIZE));
+	int toMakeRoadNum = 0;
+	for (int i = 0; i < ceilf(CHUNK_SIZE/2.0); i++) {
+		if (cutLeft) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(-i, 0);
+		if (cutRight) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(i, 0);
+		if (cutUp) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, -i);
+		if (cutDown) toMakeRoad[toMakeRoadNum++] = centerTile + v2i(0, i);
+	}
+
+	for (int i = 0; i < toMakeRoadNum; i++) {
+		Vec2i pos = toMakeRoad[i];
+		Tile *tile = &chunk->tiles[pos.y * CHUNK_SIZE + pos.x];
+		tile->type = TILE_ROAD;
+		tile->elevation = 0;
+	}
 }
 
 void generateMapFields() {
@@ -1821,6 +1829,34 @@ Chunk *createChunk(Vec2i position) {
 	}
 
 	return chunk;
+}
+
+void removeConnection(Chunk *chunk, Vec2i toRemove) {
+	for (int i = 0; i < chunk->connectionsNum; i++) {
+		if (equal(chunk->connections[i], toRemove)) {
+			arraySpliceIndex(chunk->connections, chunk->connectionsNum, sizeof(Vec2i), i);
+			chunk->connectionsNum--;
+			return;
+		}
+	}
+
+	logf("Failed to remove connection\n");
+}
+
+void removeChunk(Chunk *chunk) {
+	for (int i = 0; i < chunk->connectionsNum; i++) {
+		Chunk *otherChunk = getChunkAt(chunk->connections[i]);
+		removeConnection(otherChunk, chunk->position);
+	}
+	for (int i = 0; i < data->chunksNum; i++) {
+		if (&data->chunks[i] == chunk) {
+			arraySpliceIndex(data->chunks, data->chunksNum, sizeof(Chunk), i);
+			data->chunksNum--;
+			return;
+		}
+	}
+
+	logf("Failed to remove chunk\n");
 }
 
 Chunk *getChunkAt(Vec2i position) {
@@ -2300,12 +2336,13 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 20); // version
+	writeU32(stream, 21); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
 	writeVec2(stream, data->cameraPosition);
 	writeFloat(stream, data->cameraZoom);
+	writeU32(stream, data->mapGenMode);
 	writeU32(stream, data->actorsNum);
 	for (int i = 0; i < data->actorsNum; i++) writeActor(stream, &data->actors[i]);
 	writeU32(stream, data->nextActorId);
@@ -2431,6 +2468,7 @@ void loadState(char *path) {
 	data->time = readFloat(stream);
 	data->cameraPosition = readVec2(stream);
 	data->cameraZoom = readFloat(stream);
+	if (version >= 21) data->mapGenMode = (MapGenMode)readU32(stream);
 	data->actorsNum = readU32(stream);
 	for (int i = 0; i < data->actorsNum; i++) readActor(stream, &data->actors[i], version);
 	data->nextActorId = readU32(stream);

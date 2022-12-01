@@ -1,5 +1,4 @@
-// Make is so bosses spawn at the right time
-// Map editor
+// Allow map editor to regenerate perlin heightmap
 // Show info about the waves
 // Have the option to destroy portals
 // Cumulative saves
@@ -154,6 +153,9 @@ struct Game {
 	bool debugDisableBackfaceCulling;
 
 	char debugNewSaveStateName[PATH_MAX_LEN];
+
+	Tile *selectedTile;
+	Vec2i selectedTilePosition;
 };
 
 Game *game = NULL;
@@ -173,7 +175,7 @@ Effect *createEffect(EffectType type);
 char *getUpgradeDescription(Upgrade *upgrade);
 
 float getTile3dHeight(Vec2i tilePos);
-AABB tileToAABB(Vec2i tilePos);
+AABB getTileAABB(Vec2i tilePos);
 AABB getAABB(Actor *actor);
 Vec3 to3d(Vec2 value);
 float to3d(float value);
@@ -312,7 +314,7 @@ void updateGame() {
 	} else if (game->state == GAME_PLAY) {
 		if (game->shouldReset) {
 			game->shouldReset = false;
-			initCore(core->mapGenMode);
+			initCore(data->mapGenMode);
 		}
 
 		if (game->shouldLoadState) {
@@ -368,7 +370,7 @@ void updateGame() {
 }
 
 bool isMouseClicked() {
-	bool ret = platform->mouseJustDown || platform->justTapped;
+	bool ret = platform->mouseJustDown;
 	if (ngui->mouseHoveringThisFrame) ret = false;
 	if (ngui->mouseHoveringLastFrame) ret = false;
 	if (ngui->mouseJustDownThisFrame) ret = false;
@@ -533,7 +535,7 @@ void drawGame(float elapsed) {
 						if (game->debugDrawTileLines) drawRectOutline(rect, 4, 0xA0FFFFFF);
 					} else {
 						Vec2i tilePos = chunkTileToWorldTile(chunk, v2i(x, y));
-						AABB aabb = tileToAABB(tilePos);
+						AABB aabb = getTileAABB(tilePos);
 						Matrix4 matrix = toMatrix(aabb);
 						passMesh(cubeMesh, matrix, color);
 						if (game->isOnLastStep) {
@@ -1113,13 +1115,13 @@ void drawGame(float elapsed) {
 						drawCircle(range, 0x80FF0000);
 					} else {
 						float height = getTile3dHeight(tilePos);
-						AABB aabb = tileToAABB(worldToTile(event->ghostOrMortarPosition));
+						AABB aabb = getTileAABB(worldToTile(event->ghostOrMortarPosition));
 						aabb.min.z += height;
 						aabb.max.z += height;
 						int color = lerpColor(0xFF808080, 0xFF000080, timePhase(platform->time*2));
 						passMesh(cubeMesh, toMatrix(aabb), color);
 
-						Vec3 position = getCenter(tileToAABB(tilePos));
+						Vec3 position = getCenter(getTileAABB(tilePos));
 						float radius = getRange(event->ghostActorType, tilePos) * SCALE_3D;
 						draw3dRing(position, radius, 0xFFFF0000, 24);
 					}
@@ -1265,6 +1267,35 @@ void drawGame(float elapsed) {
 			}
 		}
 	} ///
+
+	{
+		if (data->tool == TOOL_TILE_SELECTION) {
+			Vec2i tilePos = getTileHovering();
+			Tile *tile = getTileAt(tilePos);
+			if (tile) {
+				if (game->is2d) {
+				} else {
+					Matrix4 matrix = toMatrix(getTileAABB(tilePos));
+					passMesh(cubeMesh, matrix, lerpColor(0x00FF0000, 0xFFFF0000, timePhase(platform->time)));
+				}
+
+				if (isMouseClicked()) {
+					game->selectedTile = tile;
+					game->selectedTilePosition = tilePos;
+				}
+			}
+
+			if (game->selectedTile) {
+				if (game->is2d) {
+				} else {
+					Matrix4 matrix = toMatrix(getTileAABB(game->selectedTilePosition));
+					passMesh(cubeMesh, matrix, lerpColor(0x00FF0000, 0xFFFFFF00, timePhase(platform->time*3)));
+				}
+			}
+
+			if (platform->rightMouseDown) data->tool = TOOL_NONE;
+		}
+	}
 
 	if (game->is2d) {
 		popCamera2d();
@@ -1461,7 +1492,7 @@ float getTile3dHeight(Vec2i tilePos) {
 	return height;
 }
 
-AABB tileToAABB(Vec2i tilePos) {
+AABB getTileAABB(Vec2i tilePos) {
 	AABB aabb = {};
 	aabb.min = v3(tilePos.x, tilePos.y, 0) * TILE_SIZE*SCALE_3D;
 	aabb.max = aabb.min + TILE_SIZE*SCALE_3D;
@@ -1575,6 +1606,8 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 		if (game->inEditor) {
 			ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+			if (ImGui::Button("Tile selection tool")) data->tool = TOOL_TILE_SELECTION;
 
 			if (ImGui::TreeNode("Globals")) {
 				if (ImGui::Button("Save")) saveGlobals();
@@ -1844,6 +1877,49 @@ void updateAndDrawOverlay(float elapsed) {
 			ImGui::InputText("Campaign name", data->campaignName, CAMPAIGN_NAME_MAX_LEN);
 
 			ImGui::End();
+
+			if (game->selectedTile) {
+				Tile *tile = game->selectedTile;
+				ImGui::SetNextWindowPos(ImVec2(game->size.x, 0), ImGuiCond_Always, ImVec2(1, 0));
+				ImGui::Begin("TileProps", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+				Chunk *selectedChunk = worldToChunk(tileToWorld(game->selectedTilePosition));
+				if (ImGui::Button("Delete this chunk")) {
+					removeChunk(selectedChunk);
+					game->selectedTile = NULL;
+				}
+
+				Vec2i newChunkPos = v2i();
+				if (ImGui::Button("New chunk ->")) newChunkPos = selectedChunk->position + v2i(1, 0);
+				if (ImGui::Button("New chunk <-")) newChunkPos = selectedChunk->position + v2i(-1, 0);
+				if (ImGui::Button("New chunk ^")) newChunkPos = selectedChunk->position + v2i(0, -1);
+				if (ImGui::Button("New chunk v")) newChunkPos = selectedChunk->position + v2i(0, 1);
+
+				if (!isZero(newChunkPos)) {
+					if (getChunkAt(newChunkPos)) {
+						logf("There's already a chunk there\n");
+					} else {
+						Chunk *chunk = createChunk(newChunkPos);
+						chunk->visible = true;
+						connect(selectedChunk, chunk);
+					}
+				}
+
+				if (ImGui::Button("Recarve chunk connections")) carveChunkConnections(selectedChunk);
+
+				ImGui::Separator();
+
+				ImGui::Text("Elevation:");
+				ImGui::SameLine();
+				if (ImGui::Button("-###DecElevation") && tile->elevation > 0) tile->elevation--;
+				ImGui::SameLine();
+				ImGui::Text("%d", tile->elevation);
+				ImGui::SameLine();
+				if (ImGui::Button("+###IncElevation") && tile->elevation < 3) tile->elevation++;
+				ImGui::SameLine();
+
+				ImGui::End();
+			}
 		}
 	} ///
 
