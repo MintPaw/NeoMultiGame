@@ -23,7 +23,6 @@
 // Hyrda roulette
 
 #define FROST_FALL_DISTANCE 64
-// Look here nocheckin
 
 #define POISON_COLOR 0xFF6B4876
 #define BURN_COLOR 0xFFDCAB2C

@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# https://github.com/clankill3r/NOCHECKIN
+
+exit_code=0
+
+# get the staged files
+s_files=$(git diff --name-only --cached --diff-filter=d)
+
+# if a staged file contains the keyword, cancel this commit
+for s_file in ${s_files};do
+    if git grep -q -E -iF '@nocheckin' :$s_file;then
+        echo "ERROR: ${s_file} contains the keyword @nocheckin"
+        exit_code=1
+    fi
+done
+
+exit $exit_code
