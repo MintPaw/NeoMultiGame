@@ -208,6 +208,7 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_RELOAD=39,
 	UPGRADE_EFFECT_EXTRA_SAW_PIERCE=40,
 	UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC=41,
+	UPGRADE_EFFECT_BULLET_SPEED_MULTI=42,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
 
@@ -369,6 +370,7 @@ float getRange(ActorType actorType, Vec2i tilePos);
 float getRange(Actor *actor, Vec2i tilePos);
 float getDamage(Actor *actor);
 float getRpm(Actor *actor);
+float getBulletSpeed(Actor *actor);
 int getMaxLevel(ActorType actorType);
 ActorTypeInfo *getInfo(Actor *actor);
 
@@ -449,7 +451,7 @@ void initCore(MapGenMode mapGenMode) {
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR_TOWER];
 		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 7.5;
+		info->damage = 10;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 15;
 		info->shieldDamageMulti = 5;
@@ -691,7 +693,7 @@ void initCore(MapGenMode mapGenMode) {
 		info->bulletSpeed = 20;
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR];
-		info->bulletSpeed = 0.5;
+		info->bulletSpeed = 1;
 		info->baseRange = 2 * TILE_SIZE;
 	} ///
 
@@ -846,6 +848,21 @@ void initCore(MapGenMode mapGenMode) {
 			UpgradeEffect *effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC;
 			effect->value = 1;
+		}
+
+		{
+			int prevId = -1;
+			upgrade = createUpgrade();
+			effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_BULLET_SPEED_MULTI;
+			effect->value = 2;
+			prevId = upgrade->id;
+
+			upgrade = createUpgrade();
+			effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_BULLET_SPEED_MULTI;
+			effect->value = 2;
+			upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
 		}
 	} ///
 
@@ -1157,7 +1174,7 @@ void stepGame(float elapsed) {
 					if (target) actor->position = target->position;
 				}
 
-				float delayTime = info->bulletSpeed;
+				float delayTime = 2 / getBulletSpeed(actor);
 				float explodeRange = info->baseRange;
 				if (actor->time >= delayTime) {
 					int enemiesInRangeNum = 0;
@@ -1352,13 +1369,9 @@ void stepGame(float elapsed) {
 					}
 					moneyToGain *= 2;
 
-					for (int i = 0; i < data->ownedUpgradesNum; i++) {
-						Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-						for (int i = 0; i < upgrade->effectsNum; i++) {
-							UpgradeEffect *effect = &upgrade->effects[i];
-							if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
-						}
-					}
+					StartForEachUpgradeEffect;
+					if (effect->type == UPGRADE_EFFECT_EXTRA_MONEY) moneyToGain += effect->value;
+					EndForEachUpgradeEffect;
 
 					data->money += moneyToGain;
 				}
@@ -1373,13 +1386,9 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Gain mana
-		for (int i = 0; i < data->ownedUpgradesNum; i++) {
-			Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-			for (int i = 0; i < upgrade->effectsNum; i++) {
-				UpgradeEffect *effect = &upgrade->effects[i];
-				if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) core->manaToGain *= effect->value;
-			}
-		}
+		StartForEachUpgradeEffect;
+		if (effect->type == UPGRADE_EFFECT_MANA_GAIN_MULTI) core->manaToGain *= effect->value;
+		EndForEachUpgradeEffect;
 
 		if (data->phase == PHASE_WAVE) data->mana += core->manaToGain;
 		if (data->mana > data->maxMana) data->mana = data->maxMana;
@@ -1450,13 +1459,9 @@ void stepGame(float elapsed) {
 				}
 
 				int maxUpgradeCards = 3;
-				for (int i = 0; i < data->ownedUpgradesNum; i++) {
-					Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-					for (int i = 0; i < upgrade->effectsNum; i++) {
-						UpgradeEffect *effect = &upgrade->effects[i];
-						if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
-					}
-				}
+				StartForEachUpgradeEffect;
+				if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
+				EndForEachUpgradeEffect;
 
 				core->presentedUpgradesNum = 0;
 				for (int i = 0; i < maxUpgradeCards; i++) {
@@ -2011,15 +2016,9 @@ float getRange(ActorType actorType, Vec2i tilePos) {
 	Tile *tile = getTileAt(tilePos);
 	if (tile) range += tile->elevation * TILE_SIZE;
 
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->actorType != actorType) continue;
-			if (effect->type != UPGRADE_EFFECT_RANGE_MULTI) continue;
-			range *= effect->value;
-		}
-	}
+	StartForEachUpgradeEffect;
+	if (effect->actorType == actorType && effect->type == UPGRADE_EFFECT_RANGE_MULTI) range *= effect->value;
+	EndForEachUpgradeEffect;
 
 	return range;
 }
@@ -2033,15 +2032,9 @@ float getDamage(Actor *actor) {
 	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	float damage = info->damage;
 
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->actorType != actor->type) continue;
-			if (effect->type != UPGRADE_EFFECT_DAMAGE_MULTI) continue;
-			damage *= effect->value;
-		}
-	}
+	StartForEachUpgradeEffect;
+	if (effect->actorType == actor->type && effect->type == UPGRADE_EFFECT_DAMAGE_MULTI) damage *= effect->value;
+	EndForEachUpgradeEffect;
 
 	damage *= 1 + actor->level*0.1;
 	return damage;
@@ -2051,17 +2044,21 @@ float getRpm(Actor *actor) {
 	ActorTypeInfo *info = &core->actorTypeInfos[actor->type];
 	float rpm = info->rpm;
 
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->actorType != actor->type) continue;
-			if (effect->type != UPGRADE_EFFECT_RPM_MULTI) continue;
-			rpm *= effect->value;
-		}
-	}
+	StartForEachUpgradeEffect;
+	if (effect->actorType == actor->type && effect->type == UPGRADE_EFFECT_RPM_MULTI) rpm *= effect->value;
+	EndForEachUpgradeEffect;
 
 	return rpm;
+}
+
+float getBulletSpeed(Actor *actor) {
+	float bulletSpeed = getInfo(actor)->bulletSpeed;
+
+	StartForEachUpgradeEffect;
+	if (effect->type == UPGRADE_EFFECT_BULLET_SPEED_MULTI) bulletSpeed *= effect->value;
+	EndForEachUpgradeEffect;
+
+	return bulletSpeed;
 }
 
 int getMaxLevel(ActorType actorType) {
@@ -2191,13 +2188,9 @@ bool hasUpgrade(int id) {
 }
 
 bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
-	for (int i = 0; i < data->ownedUpgradesNum; i++) {
-		Upgrade *upgrade = getUpgrade(data->ownedUpgrades[i]);
-		for (int i = 0; i < upgrade->effectsNum; i++) {
-			UpgradeEffect *effect = &upgrade->effects[i];
-			if (effect->type == effectType && effect->actorType == actorType) return true;
-		}
-	}
+	StartForEachUpgradeEffect;
+	if (effect->type == effectType && effect->actorType == actorType) return true;
+	EndForEachUpgradeEffect;
 
 	return false;
 }

@@ -4,6 +4,10 @@
 // Cumulative saves
 // Add the rest of the enemies
 
+// Graphics:
+// Different sun positions before/after the wave
+// Ground plane/fog
+
 // Upgrade ideas:
 // Tower has a small chance of freezing
 // Poison explosion
@@ -19,6 +23,7 @@
 // Hyrda roulette
 
 #define FROST_FALL_DISTANCE 64
+// Look here nocheckin
 
 #define POISON_COLOR 0xFF6B4876
 #define BURN_COLOR 0xFFDCAB2C
@@ -850,7 +855,7 @@ void drawGame(float elapsed) {
 					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
 				}
 			} else if (actor->type == ACTOR_MORTAR) {
-				float delayTime = info->bulletSpeed;
+				float delayTime = 2 / getBulletSpeed(actor);
 				float explodeRange = info->baseRange;
 				if (actor->time < delayTime) {
 					float ghostPerc = clampMap(actor->time, 0, delayTime, 0.75, 1);
