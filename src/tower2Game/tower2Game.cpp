@@ -132,6 +132,8 @@ struct Game {
 	int particlesNum;
 	int particlesMax;
 
+	Vec3 sunPosition;
+
 #define WORLD_SOUNDS_MAX CHANNELS_MAX
 	WorldChannel worldChannels[WORLD_SOUNDS_MAX];
 	int worldChannelsNum;
@@ -263,6 +265,7 @@ void updateGame() {
 
 		game->timeScale = 1;
 		game->is2d = false;
+		// game->sunPosition = v3(0, -300, 200);
 
 		maximizeWindow();
 
@@ -427,53 +430,55 @@ void drawGame(float elapsed) {
 
 	Pass *mainPass = NULL;
 	Pass *screenPass = NULL;
-	if (game->is2d) { /// Setup camera
-		Matrix3 cameraMatrix = mat3();
-		cameraMatrix = mat3();
-		cameraMatrix.TRANSLATE(game->size/2);
-		cameraMatrix.SCALE(data->cameraZoom);
-		cameraMatrix.TRANSLATE(-data->cameraPosition);
+	{ /// Setup camera
+		if (game->is2d) {
+			Matrix3 cameraMatrix = mat3();
+			cameraMatrix = mat3();
+			cameraMatrix.TRANSLATE(game->size/2);
+			cameraMatrix.SCALE(data->cameraZoom);
+			cameraMatrix.TRANSLATE(-data->cameraPosition);
 
-		game->mouse = cameraMatrix.invert() * platform->mouse;
+			game->mouse = cameraMatrix.invert() * platform->mouse;
 
-		pushCamera2d(cameraMatrix);
-	} else {
-		mainPass = createPass();
-		screenPass = createPass();
-		pushPass(mainPass);
+			pushCamera2d(cameraMatrix);
+		} else {
+			mainPass = createPass();
+			screenPass = createPass();
+			pushPass(mainPass);
 
-		Vec3 cameraTarget = to3d(data->cameraPosition);
+			Vec3 cameraTarget = to3d(data->cameraPosition);
 
-		Matrix4 srcMatrix = mat4();
-		srcMatrix.TRANSLATE(cameraTarget);
-		srcMatrix.ROTATE_EULER(globals->cameraAngle);
-		srcMatrix.TRANSLATE(0, 0, 200);
-		srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
-		Vec3 cameraSrc = srcMatrix * v3();
+			Matrix4 srcMatrix = mat4();
+			srcMatrix.TRANSLATE(cameraTarget);
+			srcMatrix.ROTATE_EULER(globals->cameraAngle);
+			srcMatrix.TRANSLATE(0, 0, 200);
+			srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
+			Vec3 cameraSrc = srcMatrix * v3();
 
-		mainPass->camera.position = cameraSrc;
-		mainPass->camera.target = cameraTarget;
-		mainPass->camera.up = v3(0, 0, 1);
+			mainPass->camera.position = cameraSrc;
+			mainPass->camera.target = cameraTarget;
+			mainPass->camera.up = v3(0, 0, 1);
 
-		mainPass->camera.fovy = 59;
-		mainPass->camera.isOrtho = false;
-		mainPass->camera.size = game->size;
-		mainPass->camera.nearCull = 0.01;
-		mainPass->camera.farCull = 1000;
-		game->lastMainPassCamera = mainPass->camera;
+			mainPass->camera.fovy = 59;
+			mainPass->camera.isOrtho = false;
+			mainPass->camera.size = game->size;
+			mainPass->camera.nearCull = 0.01;
+			mainPass->camera.farCull = 1000;
+			game->lastMainPassCamera = mainPass->camera;
 
-		screenPass->camera.position = v3(0, 0.0001, 2);
-		screenPass->camera.target = v3(0, 0, 0);
-		screenPass->camera.up = v3(0, 0, -1);
-		screenPass->camera.isOrtho = true;
-		screenPass->camera.nearCull = 0.01;
-		screenPass->camera.farCull = 1000;
-		screenPass->camera.size = game->size;
+			screenPass->camera.position = v3(0, 0.0001, 2);
+			screenPass->camera.target = v3(0, 0, 0);
+			screenPass->camera.up = v3(0, 0, -1);
+			screenPass->camera.isOrtho = true;
+			screenPass->camera.nearCull = 0.01;
+			screenPass->camera.farCull = 1000;
+			screenPass->camera.size = game->size;
 
-		screenPass->camera.position += v3(screenPass->camera.size/2, 0);
-		screenPass->camera.target += v3(screenPass->camera.size/2, 0);
+			screenPass->camera.position += v3(screenPass->camera.size/2, 0);
+			screenPass->camera.target += v3(screenPass->camera.size/2, 0);
 
-		getMouseRay(mainPass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
+			getMouseRay(mainPass->camera, platform->mouse, &game->mouseRayPos, &game->mouseRayDir);
+		}
 	} ///
 
 	{ /// Draw map
@@ -1272,7 +1277,24 @@ void drawGame(float elapsed) {
 		}
 	} ///
 
-	{
+	{ /// Update sun
+		Vec3 sunPosition = game->sunPosition;
+		if (data->phase == PHASE_WAVE) {
+			float wavePerc = 1 - ((float)(data->actorsToSpawnNum + core->enemiesAlive) / (float)data->startingActorsToSpawnNum);
+			sunPosition.x = clampMap(wavePerc, 0, 1, -1000, 1000);
+			sunPosition.y = 0;
+			sunPosition.z = 200;
+		} else {
+			sunPosition.x = 1000;
+			sunPosition.y = 0;
+			sunPosition.z = 30;
+		}
+
+		if (isZero(game->sunPosition)) game->sunPosition = sunPosition;
+		game->sunPosition = lerp(game->sunPosition, sunPosition, 0.01);
+	} ///
+
+	{ /// Update map editor tool
 		if (data->tool == TOOL_TILE_SELECTION) {
 			Vec2i tilePos = getTileHovering();
 			Tile *tile = getTileAt(tilePos);
@@ -1299,126 +1321,126 @@ void drawGame(float elapsed) {
 
 			if (platform->rightMouseDown) data->tool = TOOL_NONE;
 		}
-	}
+	} ///
 
-	if (game->is2d) {
-		popCamera2d();
-	} else {
-		popPass();
+	{ /// Render pass
+		if (game->is2d) {
+			popCamera2d();
+		} else {
+			popPass();
 
-		pushTargetTexture(game->gameTexture);
-		clearRenderer();
-
-		Pass *passes[] = {
-			mainPass,
-			screenPass,
-		};
-		int passesNum = ArrayLength(passes);
-		if (!game->isOnLastStep) passesNum = 0;
-
-		for (int i = 0; i < passesNum; i++) {
-			Pass *pass = passes[i];
-
-			start3d(pass->camera);
-			setBlending(true);
-			setBackfaceCulling(true);
-			if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
-
-			static Vec3 sunPosition = v3(0, -300, 200);
-			// ImGui::DragFloat3("sunPosition", &sunPosition.x);
-			renderer->lights[0].position.x = sunPosition.x;
-			renderer->lights[0].position.y = sunPosition.y;
-			renderer->lights[0].position.z = sunPosition.z;
-			updateLightingShader(pass->camera);
-
-			for (int i = 0; i < pass->cmdsNum; i++) {
-				PassCmd *cmd = &pass->cmds[i];
-				if (cmd->type == PASS_CMD_TRI || cmd->type == PASS_CMD_QUAD) {
-					int vertCount = 0;
-					if (cmd->type == PASS_CMD_TRI) {
-						vertCount = 3;
-						Raylib::rlBegin(RL_TRIANGLES);
-					} else if (cmd->type == PASS_CMD_QUAD) {
-						vertCount = 4;
-						Raylib::rlBegin(RL_QUADS);
-					}
-
-					Raylib::rlCheckRenderBatchLimit(vertCount);
-					if (cmd->texture) Raylib::rlSetTexture(cmd->texture->raylibTexture.id);
-
-					for (int i = 0; i < vertCount; i++) {
-						int a, r, g, b;
-						hexToArgb(cmd->colors[i], &a, &r, &g, &b);
-
-						Raylib::rlColor4ub(r, g, b, a);
-						Raylib::rlTexCoord2f(cmd->uvs[i].x, cmd->uvs[i].y);
-						Raylib::rlVertex3f(cmd->verts[i].x, cmd->verts[i].y, cmd->verts[i].z);
-					}
-
-					if (cmd->texture) Raylib::rlSetTexture(0);
-					Raylib::rlEnd();
-				} else if (cmd->type == PASS_CMD_MESH) {
-#if 1
-					Material material = createMaterial();
-					material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
-					drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
-#else
-					Mesh *mesh = cmd->mesh;
-					Raylib::rlCheckRenderBatchLimit(mesh->indsNum);
-
-					Raylib::rlBegin(RL_TRIANGLES);
-
-					int a, r, g, b;
-					hexToArgb(cmd->meshTint, &a, &r, &g, &b);
-					Raylib::rlColor4ub(r, g, b, a);
-
-					for (int i = 0; i < mesh->indsNum; i++) {
-						MeshVertex *meshVert = &mesh->verts[mesh->inds[i]];
-						Vec3 position = cmd->meshMatrix * meshVert->position;
-						Raylib::rlTexCoord2f(meshVert->uv.x, meshVert->uv.y);
-						Raylib::rlNormal3f(meshVert->normal.x, meshVert->normal.y, meshVert->normal.z);
-						Raylib::rlVertex3f(position.x, position.y, position.z);
-					}
-					Raylib::rlEnd();
-#endif
-				}
-			}
-
-			end3d();
-		}
-
-		popTargetTexture();
-
-		{
-			Vec2 fxaaSize = game->size;
-			setShaderUniform(game->fxaaShader, game->fxaaResolutionLoc, &fxaaSize.x, SHADER_UNIFORM_VEC2, 1);
-
-			pushTargetTexture(game->finalTexture);
-			clearRenderer();
-			startShader(game->fxaaShader);
-			RenderProps props = newRenderProps();
-			drawTexture(game->gameTexture, props);
-			endShader();
-			popTargetTexture();
-		}
-
-		{
 			pushTargetTexture(game->gameTexture);
 			clearRenderer();
-			startShader(game->postShader);
-			RenderProps props = newRenderProps();
-			drawTexture(game->finalTexture, props);
-			endShader();
+
+			Pass *passes[] = {
+				mainPass,
+				screenPass,
+			};
+			int passesNum = ArrayLength(passes);
+			if (!game->isOnLastStep) passesNum = 0;
+
+			for (int i = 0; i < passesNum; i++) {
+				Pass *pass = passes[i];
+
+				start3d(pass->camera);
+				setBlending(true);
+				setBackfaceCulling(true);
+				if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
+
+				renderer->lights[0].position.x = game->sunPosition.x;
+				renderer->lights[0].position.y = game->sunPosition.y;
+				renderer->lights[0].position.z = game->sunPosition.z;
+				updateLightingShader(pass->camera);
+
+				for (int i = 0; i < pass->cmdsNum; i++) {
+					PassCmd *cmd = &pass->cmds[i];
+					if (cmd->type == PASS_CMD_TRI || cmd->type == PASS_CMD_QUAD) {
+						int vertCount = 0;
+						if (cmd->type == PASS_CMD_TRI) {
+							vertCount = 3;
+							Raylib::rlBegin(RL_TRIANGLES);
+						} else if (cmd->type == PASS_CMD_QUAD) {
+							vertCount = 4;
+							Raylib::rlBegin(RL_QUADS);
+						}
+
+						Raylib::rlCheckRenderBatchLimit(vertCount);
+						if (cmd->texture) Raylib::rlSetTexture(cmd->texture->raylibTexture.id);
+
+						for (int i = 0; i < vertCount; i++) {
+							int a, r, g, b;
+							hexToArgb(cmd->colors[i], &a, &r, &g, &b);
+
+							Raylib::rlColor4ub(r, g, b, a);
+							Raylib::rlTexCoord2f(cmd->uvs[i].x, cmd->uvs[i].y);
+							Raylib::rlVertex3f(cmd->verts[i].x, cmd->verts[i].y, cmd->verts[i].z);
+						}
+
+						if (cmd->texture) Raylib::rlSetTexture(0);
+						Raylib::rlEnd();
+					} else if (cmd->type == PASS_CMD_MESH) {
+#if 1
+						Material material = createMaterial();
+						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
+						drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
+#else
+						Mesh *mesh = cmd->mesh;
+						Raylib::rlCheckRenderBatchLimit(mesh->indsNum);
+
+						Raylib::rlBegin(RL_TRIANGLES);
+
+						int a, r, g, b;
+						hexToArgb(cmd->meshTint, &a, &r, &g, &b);
+						Raylib::rlColor4ub(r, g, b, a);
+
+						for (int i = 0; i < mesh->indsNum; i++) {
+							MeshVertex *meshVert = &mesh->verts[mesh->inds[i]];
+							Vec3 position = cmd->meshMatrix * meshVert->position;
+							Raylib::rlTexCoord2f(meshVert->uv.x, meshVert->uv.y);
+							Raylib::rlNormal3f(meshVert->normal.x, meshVert->normal.y, meshVert->normal.z);
+							Raylib::rlVertex3f(position.x, position.y, position.z);
+						}
+						Raylib::rlEnd();
+#endif
+					}
+				}
+
+				end3d();
+			}
+
 			popTargetTexture();
-		}
 
-		{
-			RenderProps props = newRenderProps();
-			drawTexture(game->gameTexture, props); //@incomplete Make real ping pong switcher
-		}
+			{
+				Vec2 fxaaSize = game->size;
+				setShaderUniform(game->fxaaShader, game->fxaaResolutionLoc, &fxaaSize.x, SHADER_UNIFORM_VEC2, 1);
 
-		destroyPass(mainPass);
-	}
+				pushTargetTexture(game->finalTexture);
+				clearRenderer();
+				startShader(game->fxaaShader);
+				RenderProps props = newRenderProps();
+				drawTexture(game->gameTexture, props);
+				endShader();
+				popTargetTexture();
+			}
+
+			{
+				pushTargetTexture(game->gameTexture);
+				clearRenderer();
+				startShader(game->postShader);
+				RenderProps props = newRenderProps();
+				drawTexture(game->finalTexture, props);
+				endShader();
+				popTargetTexture();
+			}
+
+			{
+				RenderProps props = newRenderProps();
+				drawTexture(game->gameTexture, props); //@incomplete Make real ping pong switcher
+			}
+
+			destroyPass(mainPass);
+		}
+	} ///
 }
 
 Effect *createEffect(EffectType type) {
@@ -1777,6 +1799,7 @@ void updateAndDrawOverlay(float elapsed) {
 			ImGui::Checkbox("Show actor velo", &game->debugShowActorVelo);
 			ImGui::Checkbox("Is 2d", &game->is2d);
 			ImGui::Checkbox("Debug disable backface culling", &game->debugDisableBackfaceCulling);
+			ImGui::DragFloat3("sunPosition", &game->sunPosition.x);
 			if (ImGui::Button("Reset game")) game->shouldReset = true;
 			ImGui::SameLine();
 			if (ImGui::Button("Explore all")) {

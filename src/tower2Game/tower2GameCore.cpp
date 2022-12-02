@@ -302,6 +302,7 @@ struct GameData {
 
 	ActorType actorsToSpawn[ACTORS_MAX];
 	int actorsToSpawnNum;
+	int startingActorsToSpawnNum;
 	float timeTillNextSpawn;
 
 #define SELECTED_ACTORS_MAX 2048
@@ -325,6 +326,7 @@ struct Core {
 	int nextUpgradeId;
 
 	float manaToGain;
+	int enemiesAlive;
 
 	GameData data;
 
@@ -909,7 +911,7 @@ void stepGame(float elapsed) {
 	}
 
 	core->manaToGain = 1 * elapsed;
-	int enemiesAlive = 0;
+	core->enemiesAlive = 0;
 	{ /// Update actors
 		for (int i = 0; i < data->actorsNum; i++) {
 			Actor *actor = &data->actors[i];
@@ -1123,7 +1125,7 @@ void stepGame(float elapsed) {
 				core->manaToGain += (float)count * elapsed;
 			} else if (actor->type == ACTOR_MANA_CRYSTAL) {
 			} else if (actor->type >= ACTOR_ENEMY1 && actor->type <= ACTOR_ENEMY64) {
-				enemiesAlive++;
+				core->enemiesAlive++;
 
 				Vec2 dir = v2();
 				{ // getFlowDirForRect(Rect rect);
@@ -1434,7 +1436,7 @@ void stepGame(float elapsed) {
 			}
 		} ///
 
-		if (data->phaseTime > 1 && enemiesAlive == 0 && data->actorsToSpawnNum == 0) { /// End wave
+		if (data->phaseTime > 1 && core->enemiesAlive == 0 && data->actorsToSpawnNum == 0) { /// End wave
 			data->phase = PHASE_RESULTS;
 			core->presentedUpgradesNum = 0;
 
@@ -2262,6 +2264,8 @@ void startNextWave() {
 	if (data->wave == 25) {
 		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY14;
 	}
+
+	data->startingActorsToSpawnNum = data->actorsToSpawnNum;
 }
 
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
@@ -2329,7 +2333,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 21); // version
+	writeU32(stream, 22); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2355,6 +2359,7 @@ void saveState(char *path) {
 	writeU32(stream, data->phaseTime);
 	writeU32(stream, data->wave);
 
+	writeU32(stream, data->startingActorsToSpawnNum);
 	writeU32(stream, data->actorsToSpawnNum);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) writeU32(stream, data->actorsToSpawn[i]);
 	writeFloat(stream, data->timeTillNextSpawn);
@@ -2479,6 +2484,7 @@ void loadState(char *path) {
 	data->prevPhase = (Phase)readU32(stream);
 	data->phaseTime = readU32(stream);
 	data->wave = readU32(stream);
+	if (version >= 22) data->startingActorsToSpawnNum = readU32(stream);
 	data->actorsToSpawnNum = readU32(stream);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) data->actorsToSpawn[i] = (ActorType)readU32(stream);
 	data->timeTillNextSpawn = readFloat(stream);
