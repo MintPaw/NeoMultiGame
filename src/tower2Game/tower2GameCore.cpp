@@ -1128,7 +1128,7 @@ void stepGame(float elapsed) {
 					dir = normalize(dir);
 				}
 
-				actor->accel = dir * (actor->movementSpeed * elapsed) * 5;
+				actor->accel = dir * (actor->movementSpeed * 1/60.0) * 5;
 
 				Vec2i goal = v2i(CHUNK_SIZE/2, CHUNK_SIZE/2);
 				Rect goalRect = tileToWorldRect(goal);
