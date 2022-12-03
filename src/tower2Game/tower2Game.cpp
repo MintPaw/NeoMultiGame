@@ -5,8 +5,8 @@
 // Add the rest of the enemies
 
 // Graphics:
-// Different sun positions before/after the wave
 // Ground plane/fog
+// Damage slowmo effect
 
 // Upgrade ideas:
 // Tower has a small chance of freezing
@@ -71,6 +71,7 @@ struct NguiNamedStyleStack {
 
 struct Globals {
 	Vec3 cameraAngle;
+	float cameraBaseDistance;
 
 #define CUSTOM_STYLE_STACKS_MAX 64
 	NguiNamedStyleStack customStyleStacks[CUSTOM_STYLE_STACKS_MAX];
@@ -451,7 +452,8 @@ void drawGame(float elapsed) {
 			Matrix4 srcMatrix = mat4();
 			srcMatrix.TRANSLATE(cameraTarget);
 			srcMatrix.ROTATE_EULER(globals->cameraAngle);
-			srcMatrix.TRANSLATE(0, 0, 200);
+			globals->cameraBaseDistance = 200;
+			srcMatrix.TRANSLATE(0, 0, globals->cameraBaseDistance);
 			srcMatrix.TRANSLATE(0, 0, -data->cameraZoom * 64);
 			Vec3 cameraSrc = srcMatrix * v3();
 
@@ -462,16 +464,16 @@ void drawGame(float elapsed) {
 			mainPass->camera.fovy = 59;
 			mainPass->camera.isOrtho = false;
 			mainPass->camera.size = game->size;
-			mainPass->camera.nearCull = 0.01;
-			mainPass->camera.farCull = 1000;
+			mainPass->camera.nearCull = 0.1;
+			mainPass->camera.farCull = 500;
 			game->lastMainPassCamera = mainPass->camera;
 
 			screenPass->camera.position = v3(0, 0.0001, 2);
 			screenPass->camera.target = v3(0, 0, 0);
 			screenPass->camera.up = v3(0, 0, -1);
 			screenPass->camera.isOrtho = true;
-			screenPass->camera.nearCull = 0.01;
-			screenPass->camera.farCull = 1000;
+			screenPass->camera.nearCull = 0.1;
+			screenPass->camera.farCull = 500;
 			screenPass->camera.size = game->size;
 
 			screenPass->camera.position += v3(screenPass->camera.size/2, 0);
@@ -1498,6 +1500,8 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = frameSprintf("Saws pierce through %g more enemies", effect->value);
 		} else if (effect->type == UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC) {
 			line = frameSprintf("All tower start at a minimum of %g%% leveled up", effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_BULLET_SPEED_MULTI) {
+			line = frameSprintf("%s bullet speed %g%% faster", info->name, effect->value*100.0);
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}
@@ -1640,6 +1644,7 @@ void updateAndDrawOverlay(float elapsed) {
 				ImGui::SameLine();
 				if (ImGui::Button("Load")) loadGlobals();
 
+				ImGui::InputFloat("cameraBaseDistance", &globals->cameraBaseDistance);
 				ImGui::SliderFloat3("cameraAngle", &globals->cameraAngle.x, -M_PI/2, M_PI/2);
 
 				if (ImGui::TreeNode("Ngui style")) {
@@ -1872,6 +1877,9 @@ void updateAndDrawOverlay(float elapsed) {
 			}
 			ImGui::Separator();
 
+			static bool loadAtLowTimeScale = false;
+			ImGui::Checkbox("loadAtLowTimeScale", &loadAtLowTimeScale);
+
 			ImGui::InputText("New save state name", game->debugNewSaveStateName, PATH_MAX_LEN);
 			ImGui::SameLine();
 			if (ImGui::Button("Save")) {
@@ -1879,9 +1887,6 @@ void updateAndDrawOverlay(float elapsed) {
 				game->debugNewSaveStateName[0] = 0;
 				refreshAssetPaths();
 			}
-
-			static bool loadAtLowTimeScale = false;
-			ImGui::Checkbox("loadAtLowTimeScale", &loadAtLowTimeScale);
 
 			int pathCount = 0;
 			for (int i = 0; i < assetPathsNum; i++) {
@@ -1957,8 +1962,10 @@ void updateAndDrawOverlay(float elapsed) {
 		if (keyPressed('A')) moveDir.x--;
 		if (keyPressed('D')) moveDir.x++;
 
+		float oldCameraZoom = data->cameraZoom;
 		data->cameraZoom += platform->mouseWheel * 0.1;
 		data->cameraZoom = mathClamp(data->cameraZoom, 0.1, 3);
+		if (oldCameraZoom != data->cameraZoom) logf("Zoom: %g\n", data->cameraZoom);
 
 		data->cameraPosition += normalize(moveDir) * 20 / data->cameraZoom;
 
@@ -2226,9 +2233,10 @@ void saveGlobals() {
 	Globals *globals = &game->globals;
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 2); // version
+	writeU32(stream, 3); // version
 
 	writeVec3(stream, globals->cameraAngle);
+	writeFloat(stream, globals->cameraBaseDistance);
 
 	writeU32(stream, globals->customStyleStacksNum);
 	for (int i = 0; i < globals->customStyleStacksNum; i++) {
@@ -2249,8 +2257,8 @@ void loadGlobals() {
 
 	int version = readU32(stream);
 
-	if (version <= 1) readFloat(stream); // cameraAngleDeg
 	if (version >= 2) globals->cameraAngle = readVec3(stream);
+	if (version >= 3) globals->cameraBaseDistance = readFloat(stream);
 
 	if (version >= 1) {
 		globals->customStyleStacksNum = readU32(stream);

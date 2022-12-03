@@ -30,7 +30,7 @@ void main()
 		boneTrans += boneTransforms[int(vertexColor.w)] * vertexTangent.w;
 		vec3 modelPos = (vec4(vertexPosition, 1.0) * boneTrans).xyz;
 
-    fragPosition = vec3(matModel*vec4(modelPos, 1.0));
+    // fragPosition = vec3(matModel*vec4(modelPos, 1.0));
 
     fragPosition = vec3(matModel*vec4(vertexPosition, 1.0));
 

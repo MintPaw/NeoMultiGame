@@ -453,7 +453,7 @@ void initCore(MapGenMode mapGenMode) {
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR_TOWER];
 		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 10;
+		info->damage = 8;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 15;
 		info->shieldDamageMulti = 5;
@@ -2249,7 +2249,7 @@ void startNextWave() {
 		possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
 	}
 
-	int maxEnemies = data->wave * data->wave;
+	int maxEnemies = powf(data->wave, 1.5);
 	for (int i = 0; i < maxEnemies; i++) {
 		float value = rndFloat(0, 1);
 		value = tweenEase(value, QUAD_IN);
