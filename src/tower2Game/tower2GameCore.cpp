@@ -209,6 +209,9 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_EXTRA_SAW_PIERCE=40,
 	UPGRADE_EFFECT_MIN_TOWER_LEVEL_PERC=41,
 	UPGRADE_EFFECT_BULLET_SPEED_MULTI=42,
+	UPGRADE_EFFECT_MORE_POISON_TICKS=43,
+	UPGRADE_EFFECT_MORE_BURN_TICKS=44,
+	UPGRADE_EFFECT_MORE_BLEED_TICKS=45,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
 
@@ -305,6 +308,9 @@ struct GameData {
 	int startingActorsToSpawnNum;
 	float timeTillNextSpawn;
 
+	float timeTillNextDot;
+	int dotQuadrant;
+
 #define SELECTED_ACTORS_MAX 2048
 	int selectedActors[SELECTED_ACTORS_MAX];
 	int selectedActorsNum;
@@ -332,8 +338,6 @@ struct Core {
 
 	int presentedUpgrades[UPGRADES_MAX];
 	int presentedUpgradesNum;
-
-	float timeTillNextDot;
 
 #define CORE_EVENTS_MAX 1024
 	CoreEvent coreEvents[CORE_EVENTS_MAX];
@@ -871,6 +875,28 @@ void initCore(MapGenMode mapGenMode) {
 			effect->value = 2;
 			upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
 		}
+
+		{
+			for (int i = 0; i < 3; i++) {
+				UpgradeEffectType effectType;
+				if (i == 0) effectType = UPGRADE_EFFECT_MORE_POISON_TICKS;
+				else if (i == 1) effectType = UPGRADE_EFFECT_MORE_BURN_TICKS;
+				else effectType = UPGRADE_EFFECT_MORE_BLEED_TICKS;
+
+				int prevId = -1;
+				upgrade = createUpgrade();
+				effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = effectType;
+				effect->value = 1;
+				prevId = upgrade->id;
+
+				upgrade = createUpgrade();
+				effect = &upgrade->effects[upgrade->effectsNum++];
+				effect->type = effectType;
+				effect->value = 1;
+				upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
+			}
+		}
 	} ///
 
 	for (int i = 0; ; i++) {
@@ -1314,48 +1340,53 @@ void stepGame(float elapsed) {
 	} ///
 
 	{ /// Update Dot
-		core->timeTillNextDot -= elapsed;
-		if (core->timeTillNextDot < 0) {
-			core->timeTillNextDot = 1;
+		data->timeTillNextDot -= elapsed;
+		if (data->timeTillNextDot < 0) {
+			data->timeTillNextDot = 0.25;
+			data->dotQuadrant++;
+			if (data->dotQuadrant == 4) data->dotQuadrant = 0;
+
+			auto tickDot = [](Actor *actor, DotType dotType) {
+				for (int i = 0; i < actor->dotsNum; i++) {
+					Dot *dot = &actor->dots[i];
+					if (dot->type == dotType) {
+						float amountPerTick = 5;
+						dot->ticks--;
+						if (dot->type == DOT_POISON) {
+							dealDamage(actor, dot->src, amountPerTick, 2, 0.5, 1);
+						} else if (dot->type == DOT_BURN) {
+							dealDamage(actor, dot->src, amountPerTick, 0.5, 2, 1);
+						} else if (dot->type == DOT_BLEED) {
+							dealDamage(actor, dot->src, amountPerTick, 0.5, 0.5, 2);
+						} else {
+							logf("Unknown DotType %d\n", dot->type);
+						}
+
+						if (dot->ticks <= 0) {
+							arraySpliceIndex(actor->dots, actor->dotsNum, sizeof(Dot), i);
+							actor->dotsNum--;
+						}
+
+						break;
+					}
+				}
+			};
+
+			int poisonQuadrantsAllowed = 1;
+			int burnQuadrantsAllowed = 1;
+			int bleedQuadrantsAllowed = 1;
+
+			StartForEachUpgradeEffect;
+			if (effect->type == UPGRADE_EFFECT_MORE_POISON_TICKS) poisonQuadrantsAllowed += effect->value;
+			if (effect->type == UPGRADE_EFFECT_MORE_BURN_TICKS) burnQuadrantsAllowed += effect->value;
+			if (effect->type == UPGRADE_EFFECT_MORE_BLEED_TICKS) bleedQuadrantsAllowed += effect->value;
+			EndForEachUpgradeEffect;
+
 			for (int i = 0; i < data->actorsNum; i++) {
 				Actor *actor = &data->actors[i];
-				Dot *poison = NULL;
-				Dot *burn = NULL;
-				Dot *bleed = NULL;
-				for (int i = 0; i < actor->dotsNum; i++) {
-					Dot *dot = &actor->dots[i];
-					if (!poison && dot->type == DOT_POISON) poison = dot;
-					if (!burn && dot->type == DOT_BURN) burn = dot;
-					if (!bleed && dot->type == DOT_BLEED) bleed = dot;
-				}
-
-				auto tickDot = [](Actor *actor, Dot *dot) {
-					float amountPerTick = 5;
-					dot->ticks--;
-					if (dot->type == DOT_POISON) {
-						dealDamage(actor, dot->src, amountPerTick, 2, 0.5, 1);
-					} else if (dot->type == DOT_BURN) {
-						dealDamage(actor, dot->src, amountPerTick, 0.5, 2, 1);
-					} else if (dot->type == DOT_BLEED) {
-						dealDamage(actor, dot->src, amountPerTick, 0.5, 0.5, 2);
-					} else {
-						logf("Unknown DotType %d\n", dot->type);
-					}
-				};
-
-				if (poison) tickDot(actor, poison);
-				if (burn) tickDot(actor, burn);
-				if (bleed) tickDot(actor, bleed);
-
-				for (int i = 0; i < actor->dotsNum; i++) {
-					Dot *dot = &actor->dots[i];
-					if (dot->ticks <= 0) {
-						arraySpliceIndex(actor->dots, actor->dotsNum, sizeof(Dot), i);
-						actor->dotsNum--;
-						i--;
-						continue;
-					}
-				}
+				if (data->dotQuadrant < poisonQuadrantsAllowed) tickDot(actor, DOT_POISON);
+				if (data->dotQuadrant < burnQuadrantsAllowed) tickDot(actor, DOT_BURN);
+				if (data->dotQuadrant < bleedQuadrantsAllowed) tickDot(actor, DOT_BLEED);
 			}
 		}
 	} ///
@@ -2342,7 +2373,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 22); // version
+	writeU32(stream, 23); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2372,6 +2403,8 @@ void saveState(char *path) {
 	writeU32(stream, data->actorsToSpawnNum);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) writeU32(stream, data->actorsToSpawn[i]);
 	writeFloat(stream, data->timeTillNextSpawn);
+	writeFloat(stream, data->timeTillNextDot);
+	writeU32(stream, data->dotQuadrant);
 
 	writeU32(stream, data->selectedActorsNum);
 	for (int i = 0; i < data->selectedActorsNum; i++) writeU32(stream, data->selectedActors[i]);
@@ -2497,6 +2530,8 @@ void loadState(char *path) {
 	data->actorsToSpawnNum = readU32(stream);
 	for (int i = 0; i < data->actorsToSpawnNum; i++) data->actorsToSpawn[i] = (ActorType)readU32(stream);
 	data->timeTillNextSpawn = readFloat(stream);
+	if (version >= 23) data->timeTillNextDot = readFloat(stream);
+	if (version >= 23) data->dotQuadrant = readU32(stream);
 
 	data->selectedActorsNum = readU32(stream);
 	for (int i = 0; i < data->selectedActorsNum; i++) data->selectedActors[i] = readU32(stream);

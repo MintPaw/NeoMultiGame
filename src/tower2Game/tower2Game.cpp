@@ -1504,6 +1504,12 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = frameSprintf("All tower start at a minimum of %g%% leveled up", effect->value*100.0);
 		} else if (effect->type == UPGRADE_EFFECT_BULLET_SPEED_MULTI) {
 			line = frameSprintf("%s bullet speed %g%% faster", info->name, effect->value*100.0);
+		} else if (effect->type == UPGRADE_EFFECT_MORE_POISON_TICKS) {
+			line = frameSprintf("%g more ticks of poison damage", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_MORE_BURN_TICKS) {
+			line = frameSprintf("%g more ticks of burn damage", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_MORE_BLEED_TICKS) {
+			line = frameSprintf("%g more ticks of bleed damage", effect->value);
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}
