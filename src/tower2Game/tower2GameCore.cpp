@@ -387,6 +387,7 @@ Upgrade *createUpgrade();
 Upgrade *getUpgrade(int id);
 bool hasUpgrade(int id);
 bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType=ACTOR_NONE);
+bool hasPrereqs(int upgradeId);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
@@ -695,6 +696,7 @@ void initCore(MapGenMode mapGenMode) {
 		info->bulletSpeed = 20;
 
 		info = &core->actorTypeInfos[ACTOR_MORTAR];
+		strncpy(info->name, "Mortar", ACTOR_TYPE_NAME_MAX_LEN);
 		info->bulletSpeed = 1;
 		info->baseRange = 2 * TILE_SIZE;
 	} ///
@@ -857,12 +859,15 @@ void initCore(MapGenMode mapGenMode) {
 			upgrade = createUpgrade();
 			effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_BULLET_SPEED_MULTI;
+			effect->actorType = ACTOR_MORTAR;
 			effect->value = 2;
+			upgrade->prereqEffects[upgrade->prereqEffectsNum++] = UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER;
 			prevId = upgrade->id;
 
 			upgrade = createUpgrade();
 			effect = &upgrade->effects[upgrade->effectsNum++];
 			effect->type = UPGRADE_EFFECT_BULLET_SPEED_MULTI;
+			effect->actorType = ACTOR_MORTAR;
 			effect->value = 2;
 			upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
 		}
@@ -1448,14 +1453,7 @@ void stepGame(float elapsed) {
 					Upgrade *upgrade = &core->upgrades[i];
 					if (hasUpgrade(upgrade->id)) continue;
 
-					bool hasPrereqs = true;
-					for (int i = 0; i < upgrade->prereqUpgradesNum; i++) {
-						if (!hasUpgrade(upgrade->prereqUpgrades[i])) hasPrereqs = false;
-					}
-					for (int i = 0; i < upgrade->prereqEffectsNum; i++) {
-						if (!hasUpgradeEffect(upgrade->prereqEffects[i], ACTOR_NONE)) hasPrereqs = false;
-					}
-					if (!hasPrereqs) continue;
+					if (!hasPrereqs(upgrade->id)) continue;
 
 					possible[possibleNum++] = upgrade->id;
 				}
@@ -2057,7 +2055,7 @@ float getBulletSpeed(Actor *actor) {
 	float bulletSpeed = getInfo(actor)->bulletSpeed;
 
 	StartForEachUpgradeEffect;
-	if (effect->type == UPGRADE_EFFECT_BULLET_SPEED_MULTI) bulletSpeed *= effect->value;
+	if (effect->actorType == actor->type && effect->type == UPGRADE_EFFECT_BULLET_SPEED_MULTI) bulletSpeed *= effect->value;
 	EndForEachUpgradeEffect;
 
 	return bulletSpeed;
@@ -2195,6 +2193,17 @@ bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType) {
 	EndForEachUpgradeEffect;
 
 	return false;
+}
+
+bool hasPrereqs(int upgradeId) {
+	Upgrade *upgrade = getUpgrade(upgradeId);
+	for (int i = 0; i < upgrade->prereqUpgradesNum; i++) {
+		if (!hasUpgrade(upgrade->prereqUpgrades[i])) return false;
+	}
+	for (int i = 0; i < upgrade->prereqEffectsNum; i++) {
+		if (!hasUpgradeEffect(upgrade->prereqEffects[i], ACTOR_NONE)) return false;
+	}
+	return true;
 }
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {

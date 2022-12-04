@@ -1,3 +1,4 @@
+// Hp bar with tick marks
 // Allow map editor to regenerate perlin heightmap
 // Show info about the waves
 // Have the option to destroy portals
@@ -21,6 +22,7 @@
 // Dying enemies spawn a copy of the previous type
 // 8/10-split
 // Hyrda roulette
+// All towers do 80% of their damage as poison
 
 #define FROST_FALL_DISTANCE 64
 
@@ -1784,10 +1786,25 @@ void updateAndDrawOverlay(float elapsed) {
 					ImGui::PushID(i);
 
 					Upgrade *upgrade = &core->upgrades[i];
-					if (!hasUpgrade(upgrade->id)) {
-						if (ImGui::Button("Unlock")) data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
-						ImGui::SameLine();
+					if (hasUpgrade(upgrade->id)) {
+						if (ImGui::Button("Lock")) {
+							for (int i = 0; i < data->ownedUpgradesNum; i++) {
+								if (data->ownedUpgrades[i] == upgrade->id) {
+									arraySpliceIndex(data->ownedUpgrades, data->ownedUpgradesNum, sizeof(int), i);
+									data->ownedUpgradesNum--;
+									break;
+								}
+							}
+						}
+					} else {
+						if (hasPrereqs(upgrade->id)) {
+							if (ImGui::Button("Unlock")) data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+						} else {
+							ImGui::Text("[Missing prereqs]");
+						}
 					}
+					ImGui::SameLine();
+
 					ImGui::Text("%s", getUpgradeDescription(upgrade));
 					ImGui::Separator();
 
@@ -2029,7 +2046,7 @@ void updateAndDrawOverlay(float elapsed) {
 
 				ActorType *typesCanBuy = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
 				int typesCanBuyNum = 0;
-				typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
+				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_BALLISTA)) typesCanBuy[typesCanBuyNum++] = ACTOR_BALLISTA;
 				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_MORTAR_TOWER)) typesCanBuy[typesCanBuyNum++] = ACTOR_MORTAR_TOWER;
 				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_TESLA_COIL)) typesCanBuy[typesCanBuyNum++] = ACTOR_TESLA_COIL;
 				if (hasUpgradeEffect(UPGRADE_EFFECT_UNLOCK_FROST_KEEP)) typesCanBuy[typesCanBuyNum++] = ACTOR_FROST_KEEP;
