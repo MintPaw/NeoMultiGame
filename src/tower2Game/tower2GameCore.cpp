@@ -212,6 +212,7 @@ enum UpgradeEffectType {
 	UPGRADE_EFFECT_MORE_POISON_TICKS=43,
 	UPGRADE_EFFECT_MORE_BURN_TICKS=44,
 	UPGRADE_EFFECT_MORE_BLEED_TICKS=45,
+	UPGRADE_EFFECT_GAIN_MONEY=46,
 	UPGRADE_EFFECT_TYPES_MAX,
 };
 
@@ -389,6 +390,7 @@ int sumDotTicks(Actor *actor, DotType type);
 
 Upgrade *createUpgrade();
 Upgrade *getUpgrade(int id);
+void unlockUpgrade(Upgrade *upgrade);
 bool hasUpgrade(int id);
 bool hasUpgradeEffect(UpgradeEffectType effectType, ActorType actorType=ACTOR_NONE);
 bool hasPrereqs(int upgradeId);
@@ -712,7 +714,7 @@ void initCore(MapGenMode mapGenMode) {
 		upgrade = createUpgrade();
 		effect = &upgrade->effects[upgrade->effectsNum++];
 		effect->type = UPGRADE_EFFECT_UNLOCK_BALLISTA;
-		data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+		unlockUpgrade(upgrade);
 
 		upgrade = createUpgrade();
 		effect = &upgrade->effects[upgrade->effectsNum++];
@@ -896,6 +898,19 @@ void initCore(MapGenMode mapGenMode) {
 				effect->value = 1;
 				upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
 			}
+		}
+
+		{
+			upgrade = createUpgrade();
+			effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_GAIN_MONEY;
+			effect->value = 1000;
+
+			upgrade = createUpgrade();
+			effect = &upgrade->effects[upgrade->effectsNum++];
+			effect->type = UPGRADE_EFFECT_GAIN_MONEY;
+			effect->value = 5000;
+			upgrade->prereqEffects[upgrade->prereqEffectsNum++] = UPGRADE_EFFECT_GAIN_MONEY;
 		}
 	} ///
 
@@ -2208,6 +2223,15 @@ Upgrade *getUpgrade(int id) {
 
 	logf("No upgrade with id %d\n", id);
 	return NULL;
+}
+
+void unlockUpgrade(Upgrade *upgrade) {
+	data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+
+	for (int i = 0; i < upgrade->effectsNum; i++) {
+		UpgradeEffect *effect = &upgrade->effects[i];
+		if (effect->type == UPGRADE_EFFECT_GAIN_MONEY) data->money += effect->value;
+	}
 }
 
 bool hasUpgrade(int id) {

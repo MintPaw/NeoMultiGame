@@ -13,9 +13,6 @@
 // Tower has a small chance of freezing
 // Poison explosion
 // Fire spread
-// A bunch of money
-// All towers start at max level
-// Damage ticks go faster
 
 // Mode ideas:
 // A huge amount of starting money with few (1?) big waves
@@ -125,6 +122,7 @@ struct Game {
 
 	RenderTexture *gameTexture;
 	RenderTexture *finalTexture;
+	RenderTexture *sunTexture;
 
 	Shader *fxaaShader;
 	int fxaaResolutionLoc;
@@ -289,6 +287,9 @@ void updateGame() {
 
 		if (game->finalTexture) destroyTexture(game->finalTexture);
 		game->finalTexture = createRenderTexture(game->size.x, game->size.y);
+
+		if (game->sunTexture) destroyTexture(game->sunTexture);
+		game->sunTexture = createRenderTexture(game->size.x, game->size.y);
 	}
 
 	ngui->mouse = platform->mouse;
@@ -1333,6 +1334,35 @@ void drawGame(float elapsed) {
 		} else {
 			popPass();
 
+			{
+				pushTargetTexture(game->sunTexture);
+				clearRenderer();
+
+				Camera oldCamera = mainPass->camera;
+				mainPass->camera.position = game->sunPosition;
+				mainPass->camera.target = v3();
+
+				start3d(mainPass->camera);
+				setBlending(true);
+				setBackfaceCulling(true);
+				if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
+
+				for (int i = 0; i < mainPass->cmdsNum; i++) {
+					PassCmd *cmd = &mainPass->cmds[i];
+					if (cmd->type == PASS_CMD_MESH) {
+						Material material = createMaterial();
+						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
+						drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
+					}
+				}
+
+				end3d();
+
+				mainPass->camera = oldCamera;
+
+				popTargetTexture();
+			}
+
 			pushTargetTexture(game->gameTexture);
 			clearRenderer();
 
@@ -1442,6 +1472,13 @@ void drawGame(float elapsed) {
 				drawTexture(game->gameTexture, props); //@incomplete Make real ping pong switcher
 			}
 
+			{
+				RenderProps props = newRenderProps();
+				props.matrix.SCALE(0.25);
+				drawTexture(game->sunTexture, props);
+			}
+
+			destroyPass(screenPass);
 			destroyPass(mainPass);
 		}
 	} ///
@@ -1510,6 +1547,8 @@ char *getUpgradeDescription(Upgrade *upgrade) {
 			line = frameSprintf("%g more ticks of burn damage", effect->value);
 		} else if (effect->type == UPGRADE_EFFECT_MORE_BLEED_TICKS) {
 			line = frameSprintf("%g more ticks of bleed damage", effect->value);
+		} else if (effect->type == UPGRADE_EFFECT_GAIN_MONEY) {
+			line = frameSprintf("Gain %g money", effect->value);
 		} else {
 			line = frameSprintf("Unlabeled effect %d", effect->type);
 		}
@@ -1804,7 +1843,7 @@ void updateAndDrawOverlay(float elapsed) {
 						}
 					} else {
 						if (hasPrereqs(upgrade->id)) {
-							if (ImGui::Button("Unlock")) data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+							if (ImGui::Button("Unlock")) unlockUpgrade(upgrade);
 						} else {
 							ImGui::Text("[Missing prereqs]");
 						}
@@ -1816,6 +1855,8 @@ void updateAndDrawOverlay(float elapsed) {
 
 					ImGui::PopID();
 				}
+
+				ImGui::Text("Total: %d\n", core->upgradesNum);
 				ImGui::TreePop();
 			}
 
@@ -2163,7 +2204,7 @@ void updateAndDrawOverlay(float elapsed) {
 				char *label = getUpgradeDescription(upgrade);
 
 				if (nguiButton(label)) {
-					data->ownedUpgrades[data->ownedUpgradesNum++] = upgrade->id;
+					unlockUpgrade(upgrade);
 					data->phase = PHASE_PLANNING;
 				}
 			}
