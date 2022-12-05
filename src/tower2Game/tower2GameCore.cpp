@@ -447,7 +447,7 @@ void initCore(MapGenMode mapGenMode) {
 
 		info = &core->actorTypeInfos[ACTOR_BALLISTA];
 		strncpy(info->name, "Ballista", ACTOR_TYPE_NAME_MAX_LEN);
-		info->damage = 5;
+		info->damage = 3;
 		info->hpDamageMulti = 10;
 		info->armorDamageMulti = 5;
 		info->shieldDamageMulti = 5;
@@ -778,6 +778,7 @@ void initCore(MapGenMode mapGenMode) {
 				effect->type = UPGRADE_EFFECT_RANGE_MULTI;
 				effect->actorType = actorType;
 				effect->value = 1.5;
+				if (effect->actorType == ACTOR_TESLA_COIL) effect->value = 1.1;
 				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = unlockEffect;
 				prevUpgrade = upgrade;
@@ -790,6 +791,7 @@ void initCore(MapGenMode mapGenMode) {
 				effect->type = UPGRADE_EFFECT_RPM_MULTI;
 				effect->actorType = actorType;
 				effect->value = 1.5;
+				if (effect->actorType == ACTOR_TESLA_COIL) effect->value = 1.25;
 				if (prevUpgrade) upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevUpgrade->id;
 				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = unlockEffect;
 				prevUpgrade = upgrade;
@@ -885,18 +887,16 @@ void initCore(MapGenMode mapGenMode) {
 				else if (i == 1) effectType = UPGRADE_EFFECT_MORE_BURN_TICKS;
 				else effectType = UPGRADE_EFFECT_MORE_BLEED_TICKS;
 
-				int prevId = -1;
 				upgrade = createUpgrade();
 				effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = effectType;
 				effect->value = 1;
-				prevId = upgrade->id;
 
 				upgrade = createUpgrade();
 				effect = &upgrade->effects[upgrade->effectsNum++];
 				effect->type = effectType;
 				effect->value = 1;
-				upgrade->prereqUpgrades[upgrade->prereqUpgradesNum++] = prevId;
+				upgrade->prereqEffects[upgrade->prereqEffectsNum++] = effectType;
 			}
 		}
 
@@ -1041,9 +1041,8 @@ void stepGame(float elapsed) {
 						}
 					}
 
-					if (actor->level < getMaxLevel(actor->type)) {
-						actor->xp += XP_PER_SEC * elapsed;
-					}
+					if (actor->level < getMaxLevel(actor->type)) actor->xp += XP_PER_SEC * elapsed;
+					if (actor->level > getMaxLevel(actor->type)) actor->level = getMaxLevel(actor->type);
 				}
 
 				{
@@ -1504,7 +1503,7 @@ void stepGame(float elapsed) {
 					possible[possibleNum++] = upgrade->id;
 				}
 
-				int maxUpgradeCards = 3;
+				int maxUpgradeCards = 4;
 				StartForEachUpgradeEffect;
 				if (effect->type == UPGRADE_EFFECT_EXTRA_CARDS) maxUpgradeCards += effect->value;
 				EndForEachUpgradeEffect;
@@ -2108,7 +2107,7 @@ float getBulletSpeed(Actor *actor) {
 }
 
 int getMaxLevel(ActorType actorType) {
-	return 3;
+	return 2;
 }
 
 ActorTypeInfo *getInfo(Actor *actor) {
@@ -2313,7 +2312,7 @@ void startNextWave() {
 		possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
 	}
 
-	int maxEnemies = powf(data->wave, 1.5);
+	int maxEnemies = powf(data->wave, 1.2);
 	for (int i = 0; i < maxEnemies; i++) {
 		float value = rndFloat(0, 1);
 		value = tweenEase(value, QUAD_IN);
@@ -2328,6 +2327,14 @@ void startNextWave() {
 	if (data->wave == 25) {
 		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY14;
 	}
+
+	auto qsortActorsToSpawn = [](const void *a, const void *b)->int {
+		ActorTypeInfo *infoA = &core->actorTypeInfos[*(ActorType *) a];
+		ActorTypeInfo *infoB = &core->actorTypeInfos[*(ActorType *) b];
+		return infoA->enemySpawnStartingWave - infoB->enemySpawnStartingWave;
+	};
+
+	qsort(data->actorsToSpawn, data->actorsToSpawnNum, sizeof(ActorType), qsortActorsToSpawn);
 
 	data->startingActorsToSpawnNum = data->actorsToSpawnNum;
 }

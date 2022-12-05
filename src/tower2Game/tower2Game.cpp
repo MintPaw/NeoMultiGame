@@ -13,6 +13,7 @@
 // Tower has a small chance of freezing
 // Poison explosion
 // Fire spread
+// More levels
 
 // Mode ideas:
 // A huge amount of starting money with few (1?) big waves
@@ -1334,34 +1335,34 @@ void drawGame(float elapsed) {
 		} else {
 			popPass();
 
-			{
-				pushTargetTexture(game->sunTexture);
-				clearRenderer();
+			// {
+			// 	pushTargetTexture(game->sunTexture);
+			// 	clearRenderer();
 
-				Camera oldCamera = mainPass->camera;
-				mainPass->camera.position = game->sunPosition;
-				mainPass->camera.target = v3();
+			// 	Camera oldCamera = mainPass->camera;
+			// 	mainPass->camera.position = game->sunPosition;
+			// 	mainPass->camera.target = v3();
 
-				start3d(mainPass->camera);
-				setBlending(true);
-				setBackfaceCulling(true);
-				if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
+			// 	start3d(mainPass->camera);
+			// 	setBlending(true);
+			// 	setBackfaceCulling(true);
+			// 	if (game->debugDisableBackfaceCulling) setBackfaceCulling(false);
 
-				for (int i = 0; i < mainPass->cmdsNum; i++) {
-					PassCmd *cmd = &mainPass->cmds[i];
-					if (cmd->type == PASS_CMD_MESH) {
-						Material material = createMaterial();
-						material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
-						drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
-					}
-				}
+			// 	for (int i = 0; i < mainPass->cmdsNum; i++) {
+			// 		PassCmd *cmd = &mainPass->cmds[i];
+			// 		if (cmd->type == PASS_CMD_MESH) {
+			// 			Material material = createMaterial();
+			// 			material.values[Raylib::MATERIAL_MAP_DIFFUSE].color = hexToArgbFloat(cmd->meshTint);
+			// 			drawMesh(cmd->mesh, cmd->meshMatrix, NULL, material);
+			// 		}
+			// 	}
 
-				end3d();
+			// 	end3d();
 
-				mainPass->camera = oldCamera;
+			// 	mainPass->camera = oldCamera;
 
-				popTargetTexture();
-			}
+			// 	popTargetTexture();
+			// }
 
 			pushTargetTexture(game->gameTexture);
 			clearRenderer();
@@ -1472,11 +1473,11 @@ void drawGame(float elapsed) {
 				drawTexture(game->gameTexture, props); //@incomplete Make real ping pong switcher
 			}
 
-			{
-				RenderProps props = newRenderProps();
-				props.matrix.SCALE(0.25);
-				drawTexture(game->sunTexture, props);
-			}
+			// {
+			// 	RenderProps props = newRenderProps();
+			// 	props.matrix.SCALE(0.25);
+			// 	drawTexture(game->sunTexture, props);
+			// }
 
 			destroyPass(screenPass);
 			destroyPass(mainPass);
