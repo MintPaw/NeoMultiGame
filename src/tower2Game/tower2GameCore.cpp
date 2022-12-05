@@ -322,6 +322,10 @@ struct GameData {
 
 	Stats *actorTypeStats[ACTOR_TYPES_MAX];
 	int actorTypeStatsEach;
+
+	bool hasUsedPoison;
+	bool hasUsedBurn;
+	bool hasUsedBleed;
 };
 
 struct Core {
@@ -2185,6 +2189,10 @@ void dealDamage(Actor *dest, int srcId, float amount, float shieldDamageMulti, f
 }
 
 void createDot(Actor *src, Actor *dest, DotType type, int ticks) {
+	if (type == DOT_POISON) data->hasUsedPoison = true;
+	if (type == DOT_BURN) data->hasUsedBurn = true;
+	if (type == DOT_BLEED) data->hasUsedBleed = true;
+
 	if (dest->dotsNum > dest->dotsMax-1) {
 		dest->dots = (Dot *)resizeArray(dest->dots, sizeof(Dot), dest->dotsNum, dest->dotsMax+1);
 		dest->dotsMax += 1;
@@ -2256,6 +2264,13 @@ bool hasPrereqs(int upgradeId) {
 	}
 	for (int i = 0; i < upgrade->prereqEffectsNum; i++) {
 		if (!hasUpgradeEffect(upgrade->prereqEffects[i], ACTOR_NONE)) return false;
+	}
+
+	for (int i = 0; i < upgrade->effectsNum; i++) {
+		UpgradeEffect *effect = &upgrade->effects[i];
+		if (effect->type == UPGRADE_EFFECT_MORE_POISON_TICKS && !data->hasUsedPoison) return false;
+		if (effect->type == UPGRADE_EFFECT_MORE_BURN_TICKS && !data->hasUsedBurn) return false;
+		if (effect->type == UPGRADE_EFFECT_MORE_BLEED_TICKS && !data->hasUsedBleed) return false;
 	}
 	return true;
 }
@@ -2404,7 +2419,7 @@ void saveState(char *path) {
 	logf("Saving...\n");
 	DataStream *stream = newDataStream();
 
-	writeU32(stream, 23); // version
+	writeU32(stream, 24); // version
 	writeFloat(stream, lcgSeed);
 	writeString(stream, data->campaignName);
 	writeFloat(stream, data->time);
@@ -2451,6 +2466,10 @@ void saveState(char *path) {
 			writeStats(stream, actorStats[i]);
 		}
 	}
+
+	writeU8(stream, data->hasUsedPoison);
+	writeU8(stream, data->hasUsedBurn);
+	writeU8(stream, data->hasUsedBleed);
 
 	writeDataStream(path, stream);
 	destroyDataStream(stream);
@@ -2586,6 +2605,12 @@ void loadState(char *path) {
 		for (int i = 0; i < data->actorTypeStatsEach; i++) {
 			readStats(stream, &actorStats[i], version);
 		}
+	}
+
+	if (version >= 24) {
+		data->hasUsedPoison = readU8(stream);
+		data->hasUsedBurn = readU8(stream);
+		data->hasUsedBleed = readU8(stream);
 	}
 
 	destroyDataStream(stream);
