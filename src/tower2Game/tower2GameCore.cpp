@@ -401,14 +401,13 @@ bool hasPrereqs(int upgradeId);
 
 Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly);
 Actor **getActorsInRange(Tri2 range, int *outNum, bool enemiesOnly);
+ActorType *generateWave(int wave, int *outActorTypesNum);
 void startNextWave();
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation);
 
 void addShotStat(Actor *actor);
 void addDamageStat(Actor *actor, float shieldAmount, float armorAmount, float hpAmount);
 void addInvestmentStat(Actor *actor, int amount);
-
-CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL);
 
 void saveState(char *path);
 void writeStats(DataStream *stream, Stats stats);
@@ -2311,12 +2310,26 @@ void startNextWave() {
 	data->phase = PHASE_WAVE;
 	data->wave++;
 
+	int actorsToSpawnNum = 0;
+	ActorType *actorsToSpawn = generateWave(data->wave, &actorsToSpawnNum);
+	memcpy(data->actorsToSpawn, actorsToSpawn, sizeof(Actor) * actorsToSpawnNum);
+	data->actorsToSpawnNum = actorsToSpawnNum;
+
+	data->startingActorsToSpawnNum = data->actorsToSpawnNum;
+}
+
+ActorType *generateWave(int wave, int *outActorTypesNum) {
+	*outActorTypesNum = 0;
+
+	ActorType *actorsToSpawn = (ActorType *)frameMalloc(sizeof(ActorType) * ACTORS_MAX);
+	int actorsToSpawnNum = 0;
+
 	ActorType *possibleActors = (ActorType *)frameMalloc(sizeof(ActorType) * ACTOR_TYPES_MAX);
 	int possibleActorsNum = 0;
 
 	for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
 		ActorTypeInfo *info = &core->actorTypeInfos[i];
-		if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= data->wave) {
+		if (info->enemySpawnStartingWave != 0 && info->enemySpawnStartingWave <= wave) {
 			possibleActors[possibleActorsNum++] = (ActorType)i;
 		}
 	}
@@ -2326,7 +2339,7 @@ void startNextWave() {
 		possibleActors[possibleActorsNum++] = ACTOR_ENEMY1;
 	}
 
-	int maxEnemies = powf(data->wave, 1.2);
+	int maxEnemies = powf(wave, 1.2);
 #if 1
 	float *actorTypePerc = (float *)zalloc(sizeof(float) * possibleActorsNum);
 
@@ -2346,19 +2359,19 @@ void startNextWave() {
 		enemiesLeft -= toGive;
 		ActorType actorType = possibleActors[i];
 		for (int i = 0; i < toGive; i++) {
-			data->actorsToSpawn[data->actorsToSpawnNum++] = actorType;
+			actorsToSpawn[actorsToSpawnNum++] = actorType;
 		}
 
 		if (enemiesLeft < 0) break;
 	}
 
-	if (enemiesLeft > 0) data->actorsToSpawn[data->actorsToSpawnNum++] = possibleActors[0];
+	if (enemiesLeft > 0) actorsToSpawn[actorsToSpawnNum++] = possibleActors[0];
 #else
 	for (int i = 0; i < maxEnemies; i++) {
 		float value = rndFloat(0, 1);
 		value = tweenEase(value, QUAD_IN);
 		int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
-		data->actorsToSpawn[data->actorsToSpawnNum++] = possibleActors[index];
+		actorsToSpawn[actorsToSpawnNum++] = possibleActors[index];
 	}
 #endif
 
@@ -2368,18 +2381,18 @@ void startNextWave() {
 		return infoA->enemySpawnStartingWave - infoB->enemySpawnStartingWave;
 	};
 
-	qsort(data->actorsToSpawn, data->actorsToSpawnNum, sizeof(ActorType), qsortActorsToSpawn);
+	qsort(actorsToSpawn, actorsToSpawnNum, sizeof(ActorType), qsortActorsToSpawn);
 
-	if (data->wave == 15) {
-		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY8;
+	if (wave == 15) {
+		actorsToSpawn[actorsToSpawnNum++] = ACTOR_ENEMY8;
 	}
 
-	if (data->wave == 25) {
-		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY14;
+	if (wave == 25) {
+		actorsToSpawn[actorsToSpawnNum++] = ACTOR_ENEMY14;
 	}
 
-
-	data->startingActorsToSpawnNum = data->actorsToSpawnNum;
+	*outActorTypesNum = actorsToSpawnNum;
+	return actorsToSpawn;
 }
 
 Tri2 getAttackTri(Vec2 start, float range, float angle, float deviation) {
@@ -2428,19 +2441,6 @@ void addInvestmentStat(Actor *actor, int amount) {
 	actorWave->investment += amount;
 	typeAll->investment += amount;
 	typeWave->investment += amount;
-}
-
-CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
-	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
-		logf("Too many core events!!!\n");
-		core->coreEventsNum--;
-	}
-	CoreEvent *event = &core->coreEvents[core->coreEventsNum++];
-	memset(event, 0, sizeof(CoreEvent));
-	event->type = type;
-	if (src) event->srcId = src->id;
-	if (dest) event->destId = dest->id;
-	return event;
 }
 
 void saveState(char *path) {

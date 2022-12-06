@@ -146,6 +146,7 @@ struct Game {
 	int effectsNum;
 
 	bool uiUpgradeListOpened;
+	bool uiWavesListOpened;
 
 	bool isOnLastStep;
 
@@ -177,6 +178,7 @@ void updateGame();
 bool isMouseClicked();
 Vec2i getTileHovering();
 bool isHoveringActor(Actor *actor);
+CoreEvent *createCoreEvent(CoreEventType type, Actor *src=NULL, Actor *dest=NULL);
 #include "tower2GameCore.cpp"
 void drawGame(float elapsed);
 Effect *createEffect(EffectType type);
@@ -409,6 +411,19 @@ bool isHoveringActor(Actor *actor) {
 		Line3 line = makeLine3(game->mouseRayPos, game->mouseRayPos + game->mouseRayDir*100.0);
 		return overlaps(aabb, line);
 	}
+}
+
+CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
+	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
+		logf("Too many core events!!!\n");
+		core->coreEventsNum--;
+	}
+	CoreEvent *event = &core->coreEvents[core->coreEventsNum++];
+	memset(event, 0, sizeof(CoreEvent));
+	event->type = type;
+	if (src) event->srcId = src->id;
+	if (dest) event->destId = dest->id;
+	return event;
 }
 
 void drawGame(float elapsed) {
@@ -2140,6 +2155,52 @@ void updateAndDrawOverlay(float elapsed) {
 				if (nguiButton("Upgrades")) game->uiUpgradeListOpened = !game->uiUpgradeListOpened;
 				nguiEndWindow();
 				popGameStyleStack("Upgrade Expander");
+			} ///
+
+			{ /// Waves window
+				Vec2 nextWindowPosition = getPosition(ngui->lastWindowRect);
+				if (game->uiWavesListOpened) {
+					pushGameStyleStack("Waves List");
+					nguiStartWindow("Wave List Window", nextWindowPosition, v2(0, 1));
+
+					ActorType *actorsToSpawn = NULL;
+					int actorsToSpawnNum = 0;
+
+					if (data->phase == PHASE_PLANNING) { 
+						actorsToSpawn = generateWave(data->wave + 1, &actorsToSpawnNum);
+					} else {
+						actorsToSpawn = data->actorsToSpawn;
+						actorsToSpawnNum = data->actorsToSpawnNum;
+					}
+
+					for (int i = 0; i < ACTOR_TYPES_MAX; i++) {
+						ActorType actorType = (ActorType)i;
+						int count = 0;
+						for (int i = 0; i < actorsToSpawnNum; i++){
+							if (actorsToSpawn[i] == actorType) count++;
+						}
+						if (count == 0) continue;
+
+						ActorTypeInfo *info = &core->actorTypeInfos[actorType];
+						char *label = frameSprintf("%s[", info->name);
+						if (info->maxShield) label = frameSprintf("%sS:%g ", label, info->maxShield);
+						if (info->maxArmor) label = frameSprintf("%sA:%g ", label, info->maxArmor);
+						if (info->maxHp) label = frameSprintf("%sH:%g ", label, info->maxHp);
+						if (label[strlen(label)-1] == ' ') label[strlen(label)-1] = 0;
+						label = frameSprintf("%s] x%d", label, count);
+						nguiButton(label);
+					}
+					nguiEndWindow();
+					popGameStyleStack("Waves List");
+
+					nextWindowPosition = getPosition(ngui->lastWindowRect);
+				}
+
+				pushGameStyleStack("Waves Expander");
+				nguiStartWindow("Waves List Epander", nextWindowPosition, v2(0, 1));
+				if (nguiButton("Waves")) game->uiWavesListOpened = !game->uiWavesListOpened;
+				nguiEndWindow();
+				popGameStyleStack("Waves Expander");
 			} ///
 
 			{ /// Toggles window
