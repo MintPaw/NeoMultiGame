@@ -2283,7 +2283,6 @@ Actor **getActorsInRange(Circle range, int *outNum, bool enemiesOnly) {
 		ActorTypeInfo *otherInfo = &core->actorTypeInfos[actor->type];
 		if (enemiesOnly && !otherInfo->isEnemy) continue;
 
-		// if (contains(range, actor->position)) enemiesInRange[enemiesInRangeNum++] = actor;
 		if (contains(getRect(actor), range)) enemiesInRange[enemiesInRangeNum++] = actor;
 	}
 
@@ -2328,12 +2327,48 @@ void startNextWave() {
 	}
 
 	int maxEnemies = powf(data->wave, 1.2);
+#if 1
+	float *actorTypePerc = (float *)zalloc(sizeof(float) * possibleActorsNum);
+
+	float total = 0;
+	for (int i = 0; i < possibleActorsNum; i++) {
+		total += possibleActorsNum - i;
+		actorTypePerc[i] = possibleActorsNum - i;
+	}
+
+	for (int i = 0; i < possibleActorsNum; i++) actorTypePerc[i] /= total;
+
+	int enemiesLeft = maxEnemies;
+	for (int i = 0; i < possibleActorsNum; i++) {
+		int toGive = actorTypePerc[i] * maxEnemies;
+		if (toGive == 0) toGive = 1;
+
+		enemiesLeft -= toGive;
+		ActorType actorType = possibleActors[i];
+		for (int i = 0; i < toGive; i++) {
+			data->actorsToSpawn[data->actorsToSpawnNum++] = actorType;
+		}
+
+		if (enemiesLeft < 0) break;
+	}
+
+	if (enemiesLeft > 0) data->actorsToSpawn[data->actorsToSpawnNum++] = possibleActors[0];
+#else
 	for (int i = 0; i < maxEnemies; i++) {
 		float value = rndFloat(0, 1);
 		value = tweenEase(value, QUAD_IN);
 		int index = roundf(lerp(0, possibleActorsNum-1, value)); // Not perfect distribution
 		data->actorsToSpawn[data->actorsToSpawnNum++] = possibleActors[index];
 	}
+#endif
+
+	auto qsortActorsToSpawn = [](const void *a, const void *b)->int {
+		ActorTypeInfo *infoA = &core->actorTypeInfos[*(ActorType *) a];
+		ActorTypeInfo *infoB = &core->actorTypeInfos[*(ActorType *) b];
+		return infoA->enemySpawnStartingWave - infoB->enemySpawnStartingWave;
+	};
+
+	qsort(data->actorsToSpawn, data->actorsToSpawnNum, sizeof(ActorType), qsortActorsToSpawn);
 
 	if (data->wave == 15) {
 		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY8;
@@ -2343,13 +2378,6 @@ void startNextWave() {
 		data->actorsToSpawn[data->actorsToSpawnNum++] = ACTOR_ENEMY14;
 	}
 
-	auto qsortActorsToSpawn = [](const void *a, const void *b)->int {
-		ActorTypeInfo *infoA = &core->actorTypeInfos[*(ActorType *) a];
-		ActorTypeInfo *infoB = &core->actorTypeInfos[*(ActorType *) b];
-		return infoA->enemySpawnStartingWave - infoB->enemySpawnStartingWave;
-	};
-
-	qsort(data->actorsToSpawn, data->actorsToSpawnNum, sizeof(ActorType), qsortActorsToSpawn);
 
 	data->startingActorsToSpawnNum = data->actorsToSpawnNum;
 }

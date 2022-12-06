@@ -1,6 +1,6 @@
+// Show info about the waves
 // Hp bar with tick marks
 // Allow map editor to regenerate perlin heightmap
-// Show info about the waves
 // Have the option to destroy portals
 // Cumulative saves
 // Add the rest of the enemies
@@ -8,6 +8,7 @@
 // Graphics:
 // Ground plane/fog
 // Damage slowmo effect
+// Tower models and textures
 
 // Upgrade ideas:
 // Tower has a small chance of freezing
