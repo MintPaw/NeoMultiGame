@@ -241,6 +241,7 @@ enum CoreEventType {
 	CORE_EVENT_HIT,
 	CORE_EVENT_SHOW_GHOST,
 	CORE_EVENT_MORTAR_EXPLOSION,
+	CORE_EVENT_WAVE_OVER,
 };
 struct CoreEvent {
 	CoreEventType type;
@@ -1490,6 +1491,7 @@ void stepGame(float elapsed) {
 		} ///
 
 		if (data->phaseTime > 1 && core->enemiesAlive == 0 && data->actorsToSpawnNum == 0) { /// End wave
+			createCoreEvent(CORE_EVENT_WAVE_OVER);
 			data->phase = PHASE_RESULTS;
 			core->presentedUpgradesNum = 0;
 

@@ -414,6 +414,11 @@ bool isHoveringActor(Actor *actor) {
 }
 
 CoreEvent *createCoreEvent(CoreEventType type, Actor *src, Actor *dest) {
+	if (type == CORE_EVENT_WAVE_OVER) {
+		game->uiWavesListOpened = false;
+		return NULL;
+	}
+
 	if (core->coreEventsNum > CORE_EVENTS_MAX-1) {
 		logf("Too many core events!!!\n");
 		core->coreEventsNum--;
