@@ -1,4 +1,3 @@
-// Show info about the waves
 // Hp bar with tick marks
 // Allow map editor to regenerate perlin heightmap
 // Have the option to destroy portals
@@ -808,7 +807,7 @@ void drawGame(float elapsed) {
 				} else {
 					passMesh(cubeMesh, toMatrix(aabb), 0xFF008000);
 
-					{
+					{ /// Draw enemy ui
 						pushPass(screenPass);
 
 						Vec3 actorTop = to3d(actor->position);
@@ -816,36 +815,38 @@ void drawGame(float elapsed) {
 
 						Vec2 cursor = toScreenPass(actorTop);
 
-						Rect vitalityRect = {};
-						vitalityRect.width = 100 * ngui->uiScale;
-						vitalityRect.height = 8 * ngui->uiScale;
-						vitalityRect.x = cursor.x - vitalityRect.width/2;
-						vitalityRect.y = cursor.y;
-						cursor.y += vitalityRect.height;
 						{
-							float totalPoints = info->maxHp + info->maxArmor + info->maxShield;
+							float oldCursorX = cursor.x;
+							cursor.x -= 50 * ngui->uiScale;
+							auto drawPoints = [](Vec2 *cursor, float points, int color) {
+								Vec2 pipSize = v2(16, 16);
+								pipSize.x = clampMap(points, 200, 3000, 32, 6);
+								pipSize.y = clampMap(points, 1000, 5000, 8, 32);
+								int pointsPerPip = 100;
+								int pipCount = ceilf(points / (float)pointsPerPip);
 
-							float maxHpPerc = info->maxHp / totalPoints;
-							Rect hpRect = vitalityRect;
-							hpRect.width *= maxHpPerc;
-							hpRect.width *= actor->hp / info->maxHp;
-							Matrix3 matrix = toMatrix3(hpRect);
-							passTexture(renderer->whiteTexture, matrix, 0xFF00FF00);
+								for (int i = 0; i < pipCount; i++) {
+									Rect pipRect = makeRect(*cursor, pipSize);
+									if (i == pipCount-1) {
+										float pointsLeft = points - ((pipCount-1) * pointsPerPip);
+										float pipPercLeft = pointsLeft / (float)pointsPerPip;
+										pipRect.width *= pipPercLeft;
+									}
 
-							float maxArmorPerc = info->maxArmor / totalPoints;
-							Rect armorRect = vitalityRect;
-							armorRect.x += maxHpPerc * vitalityRect.width;
-							armorRect.width *= maxArmorPerc;
-							armorRect.width *= actor->armor / info->maxArmor;
-							passTexture(renderer->whiteTexture, toMatrix3(armorRect), 0xFFFFD66E);
+									passTexture(renderer->whiteTexture, toMatrix3(pipRect), color);
+									cursor->x += pipRect.width;
+									cursor->x += pipSize.x * 0.15;
+								}
+							};
 
-							float maxShieldPerc = info->maxShield / totalPoints;
-							Rect shieldRect = vitalityRect;
-							shieldRect.x += (maxHpPerc + maxArmorPerc) * vitalityRect.width;
-							shieldRect.width *= maxShieldPerc;
-							shieldRect.width *= actor->shield / info->maxShield;
-							passTexture(renderer->whiteTexture, toMatrix3(shieldRect), 0xFF718691);
+							drawPoints(&cursor, actor->hp, 0xFF00FF00);
+							drawPoints(&cursor, actor->armor, 0xFFFFD66E);
+							drawPoints(&cursor, actor->shield, 0xFF718691);
 
+							cursor.x = oldCursorX;
+						}
+
+						{
 							Rect baseTextRect = makeRect(v2(), v2(100, 100)*ngui->uiScale);
 							baseTextRect.x = cursor.x - baseTextRect.width/2;
 							baseTextRect.y = cursor.y;
@@ -876,7 +877,7 @@ void drawGame(float elapsed) {
 						}
 
 						popPass();
-					}
+					} ///
 				}
 			} else if (actor->type == ACTOR_ARROW) {
 				if (game->is2d) {
@@ -1282,7 +1283,7 @@ void drawGame(float elapsed) {
 					}
 
 					if (didExplore) {
-						if (data->hp > 0) {
+						if (data->hp > 0 && data->wave != 1) {
 							saveState("assets/states/autosave.save_state");
 							copyFile("assets/states/autosave.save_state", "assets/states/prevAutosave.save_state");
 						}
