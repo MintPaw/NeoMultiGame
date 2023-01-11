@@ -1,8 +1,14 @@
+ImVec4 guiGetImVec4Color(int color);
 bool guiInputRgb(const char *name, int *argb, bool showInputs=false);
 bool guiInputArgb(const char *name, int *argb, bool showInputs=false);
 void guiPushStyleColor(ImGuiCol style, int color);
 void guiPopStyleColor(int amount=1);
 int guiGetStyleColor(ImGuiCol style);
+
+ImVec4 guiGetImVec4Color(int color) {
+	Vec4 vecColor = hexToArgbFloat(color);
+	return ImVec4(vecColor.y, vecColor.z, vecColor.w, vecColor.x);
+}
 
 bool guiInputRgb(const char *name, int *argb, bool showInputs) {
 	int a;

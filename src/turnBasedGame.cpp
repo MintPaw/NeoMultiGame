@@ -8,7 +8,10 @@ enum TargetType {
 
 enum SpellType {
 	SPELL_NONE,
-	SPELL_ATTACK,
+	SPELL_HERO_ATTACK,
+	SPELL_SMALL_ATTACK,
+	SPELL_MEDIUM_ATTACK,
+	SPELL_LARGE_ATTACK,
 	SPELL_DEFEND,
 	SPELL_END_TURN,
 	SPELL_TYPES_MAX,
@@ -17,6 +20,8 @@ struct SpellTypeInfo {
 #define SPELL_TYPE_NAME_MAX_LEN 64
 	char name[SPELL_TYPE_NAME_MAX_LEN];
 	TargetType targetType;
+	int damage;
+
 	bool canTargetAllies;
 };
 struct Spell {
@@ -30,7 +35,9 @@ struct Spell {
 enum UnitType {
 	UNIT_PLAYER1,
 	UNIT_PLAYER2,
-	UNIT_ENEMY1,
+	UNIT_ENEMY_A,
+	UNIT_ENEMY_B,
+	UNIT_ENEMY_C,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -44,6 +51,9 @@ struct Unit {
 	UnitType type;
 	int id;
 	UnitTypeInfo *info;
+
+#define SCREEN_NAME_MAX_LEN 128
+	char screenName[SCREEN_NAME_MAX_LEN];
 
 	bool ally;
 	int hp;
@@ -134,8 +144,17 @@ void updateGame() {
 			info = &game->unitTypeInfos[UNIT_PLAYER2];
 			strcpy(info->name, "Player2");
 
-			info = &game->unitTypeInfos[UNIT_ENEMY1];
-			strcpy(info->name, "Enemy1");
+			info = &game->unitTypeInfos[UNIT_ENEMY_A];
+			info->maxHp = 5000;
+			strcpy(info->name, "Standard A");
+
+			info = &game->unitTypeInfos[UNIT_ENEMY_B];
+			info->maxHp = 10000;
+			strcpy(info->name, "Standard B");
+
+			info = &game->unitTypeInfos[UNIT_ENEMY_C];
+			info->maxHp = 20000;
+			strcpy(info->name, "Standard C");
 		}
 
 		{
@@ -143,13 +162,27 @@ void updateGame() {
 
 			for (int i = 0; i < SPELL_TYPES_MAX;i ++) {
 				SpellTypeInfo *info = &game->spellTypeInfos[i];
+				info->damage = 1000;
 			}
 
 			info = &game->spellTypeInfos[SPELL_NONE];
 			strcpy(info->name, "None");
 
-			info = &game->spellTypeInfos[SPELL_ATTACK];
-			strcpy(info->name, "Attack");
+			info = &game->spellTypeInfos[SPELL_HERO_ATTACK];
+			strcpy(info->name, "Hero Attack");
+			info->damage = 5000;
+
+			info = &game->spellTypeInfos[SPELL_SMALL_ATTACK];
+			strcpy(info->name, "Small attack");
+			info->damage = 500;
+
+			info = &game->spellTypeInfos[SPELL_MEDIUM_ATTACK];
+			strcpy(info->name, "Medium attack");
+			info->damage = 1000;
+
+			info = &game->spellTypeInfos[SPELL_LARGE_ATTACK];
+			strcpy(info->name, "Large attack");
+			info->damage = 2000;
 
 			info = &game->spellTypeInfos[SPELL_DEFEND];
 			info->targetType = TARGET_NONE;
@@ -174,8 +207,22 @@ void updateGame() {
 				unit->hp = unit->info->maxHp;
 				unit->mana = unit->info->maxMana;
 
-				unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ATTACK;
+				unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
 				unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
+
+				{
+					int existingCount = 0;
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->type == type) existingCount++;
+					}
+					if (existingCount == 1) {
+						strcpy(unit->screenName, unit->info->name);
+					} else {
+						strcpy(unit->screenName, frameSprintf("%s (%d)", unit->info->name, existingCount-1));
+					}
+				}
+
 				return unit;
 			};
 
@@ -187,25 +234,16 @@ void updateGame() {
 			unit = createUnit(UNIT_PLAYER2);
 			unit->ally = true;
 
-			unit = createUnit(UNIT_ENEMY1);
+			unit = createUnit(UNIT_ENEMY_A);
+			unit = createUnit(UNIT_ENEMY_B);
+			unit = createUnit(UNIT_ENEMY_C);
 		}
 
 		maximizeWindow();
 	}
 
-	if (game->turnQueueNum == 0) {
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->hp <= 0) continue;
-			game->turnQueue[game->turnQueueNum++] = unit->id;
-		}
-	}
-
 	Globals *globals = &game->globals;
 	float elapsed = platform->elapsed;
-
-	Unit *currentUnit = getUnit(game->turnQueue[0]);
-	if (!currentUnit && platform->frameCount%60 == 0) logf("No current unit");
 
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	if (game->inEditor) {
@@ -213,18 +251,23 @@ void updateGame() {
 		ImGui::End();
 	}
 
-	{
+	{ /// Display
 		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::Text("Turns: ");
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
+		for (int i = 0; i < game->turnQueueNum; i++) {
+			Unit *unit = getUnit(game->turnQueue[i]);
 			ImGui::SameLine();
-			ImGui::Text("(%s)", unit->info->name);
+			ImGui::Text("(%s)", unit->screenName);
 		}
 
 		auto guiShowUnit = [](Unit *unit) {
-			ImGui::Text("Type: %s", unit->info->name);
-			ImGui::Text("Hp: %d/%d", unit->hp, unit->info->maxHp);
+			int color = 0xFFFFFFFF;
+			if (game->turnQueueNum != 0 && game->turnQueue[0] == unit->id) color = lerpColor(color, 0xFF00FF00, 0.5);
+			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
+
+			ImVec4 imCol = guiGetImVec4Color(color);
+			ImGui::TextColored(imCol, "%s", unit->screenName);
+			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, unit->info->maxHp);
 			ImGui::Separator();
 		};
 
@@ -247,9 +290,20 @@ void updateGame() {
 		ImGui::EndChild();
 
 		ImGui::End();
-	}
+	} ///
 
-	{
+	{ /// Update turn
+		if (game->turnQueueNum == 0) {
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (unit->hp <= 0) continue;
+				game->turnQueue[game->turnQueueNum++] = unit->id;
+			}
+		}
+
+		Unit *currentUnit = getUnit(game->turnQueue[0]);
+		if (!currentUnit && platform->frameCount%60 == 0) logf("No current unit\n");
+
 		if (game->spellQueueNum == 0 && currentUnit) {
 			if (currentUnit->ally) {
 				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
@@ -272,7 +326,8 @@ void updateGame() {
 						for (int i = 0; i < game->unitsNum; i++) {
 							Unit *unit = &game->units[i];
 							if (unit->ally) continue;
-							if (ImGui::Button(frameSprintf("%d: %s", i, unit->info->name))) {
+							if (unit->hp <= 0) continue;
+							if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
 								castSpell(currentUnit, unit, game->currentSpellType);
 								castSpell(currentUnit, NULL, SPELL_END_TURN);
 								game->currentSpellType = SPELL_NONE;
@@ -290,9 +345,9 @@ void updateGame() {
 				aiTakeTurn(currentUnit);
 			}
 		}
-	}
+	} ///
 
-	{
+	{ /// Update spells
 		if (game->spellQueueNum > 0) {
 			Spell *spell = &game->spellQueue[0];
 			bool complete = false;
@@ -300,21 +355,30 @@ void updateGame() {
 			Unit *src = getUnit(spell->srcId);
 			Unit *dest = getUnit(spell->destId);
 
-			if (spell->type == SPELL_ATTACK) {
-				if (game->spellTime == 0) dealDamage(src, dest, 3000);
-				if (game->spellTime > 1) complete = true;
+			float baseSpellTime = 0.25;
+
+			if (
+				spell->type == SPELL_HERO_ATTACK ||
+				spell->type == SPELL_SMALL_ATTACK ||
+				spell->type == SPELL_MEDIUM_ATTACK ||
+				spell->type == SPELL_LARGE_ATTACK
+			) {
+				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
+				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DEFEND) {
 				if (game->spellTime == 0) logf("Defend?");
-				if (game->spellTime > 1) complete = true;
+				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_END_TURN) {
-				if (game->spellTime > 1) {
-					logf("Next turn\n");
+				if (game->spellTime > baseSpellTime) {
+					Unit *currentUnit = getUnit(game->turnQueue[0]);
+					logf("%s's turn is over\n", currentUnit->info->name);
+
 					arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), 0);
 					game->turnQueueNum--;
 					complete = true;
 				}
 			} else {
-				if (game->spellTime == 0) logf("Spell %d has no update loop\n", spell->type);
+				if (game->spellTime == 0) logf("%s (spellType %d) has no update loop\n", spell->info->name, spell->type);
 				if (game->spellTime > 3) complete = true;
 			}
 
@@ -326,7 +390,7 @@ void updateGame() {
 				game->spellTime = 0;
 			}
 		}
-	}
+	} ///
 
 	clearRenderer();
 
@@ -362,4 +426,15 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 void dealDamage(Unit *src, Unit *dest, int amount) {
 	logf("%s dealt %d damage to %s\n", src->info->name, amount, dest->info->name);
 	dest->hp -= amount;
+
+	if (dest->hp <= 0) {
+		for (int i = 0; i < game->turnQueueNum; i++) {
+			if (game->turnQueue[i] == dest->id) {
+				arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), i);
+				game->turnQueueNum--;
+				i--;
+				continue;
+			}
+		}
+	}
 }
