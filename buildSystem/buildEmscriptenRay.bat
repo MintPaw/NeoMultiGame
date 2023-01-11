@@ -34,6 +34,7 @@ if "%GAME_NAME%" == "rtsClient" set ASSETS_DIR="C:\Dropbox\rtsGame\rtsClientAsse
 if "%GAME_NAME%" == "horseGame" set ASSETS_DIR="C:\Dropbox\FallowCandy\HorseProjects\horseGameAssets"
 if "%GAME_NAME%" == "butt2GoGame" set ASSETS_DIR="C:\Dropbox\FallowCandy\Butt2Go\butt2GoGameAssets"
 if "%GAME_NAME%" == "concreteJungleGame" set ASSETS_DIR="C:\Dropbox\concreteJungle\concreteJungleGameAssets"
+if "%GAME_NAME%" == "gladiators2Game" set ASSETS_DIR="C:\Dropbox\MultiGame\multiGamePrivate\gladiators2GameAssets"
 
 if [%INTERNAL_MODE%]==[1] (
 	set COMPRESSION_LEVEL=0

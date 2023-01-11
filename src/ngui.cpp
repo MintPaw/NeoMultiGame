@@ -1377,5 +1377,3 @@ NguiStyleStack readNguiStyleStack(DataStream *stream) {
 
 	return styleStack;
 }
-
-

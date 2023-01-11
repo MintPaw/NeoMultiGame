@@ -450,6 +450,10 @@ NanoTime mainNano;
 # include "../../multiGamePrivate/src/remoteGame.cpp"
 #endif
 
+#if defined(PLAYING_turnBasedGame)
+# include "turnBasedGame.cpp"
+#endif
+
 #ifdef _WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else

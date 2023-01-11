@@ -718,7 +718,8 @@ void *readFile(const char *fileName, int *outSize) {
 	FILE *filePtr = fopen(realName, "rb");
 	if (!filePtr) {
 		logf("Cannot find file %s\n", realName);
-		Assert(0);
+		return NULL;
+		// Assert(0);
 	}
 
 	fseek(filePtr, 0, SEEK_END);

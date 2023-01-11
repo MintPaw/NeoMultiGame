@@ -645,7 +645,9 @@ void drawGame(float elapsed) {
 					line.end = line.start + radToVec2(actor->aimRads)*(TILE_SIZE/2);
 					drawLine(line, 4, 0xFFFF0000);
 				} else {
-					passMesh(cubeMesh, toMatrix(aabb), getInfo(actor)->primaryColor);
+					Matrix4 matrix = toMatrix(aabb);
+					// matrix.TRANSLATE(0, 0, timePhase(platform->time)*3);
+					passMesh(cubeMesh, matrix, getInfo(actor)->primaryColor);
 
 					{
 						Vec3 start = getCenter(aabb);
