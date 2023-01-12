@@ -646,9 +646,10 @@ void appendFile(const char *fileName, void *data, int length) {
 	strcat(realName, fileName);
 
 	FILE *filePtr = fopen(realName, "a");
+	if (!filePtr) filePtr = fopen(realName, "w");
+
 	if (!filePtr) {
-		FILE *filePtr = fopen(realName, "w");
-		logf("Cannot find file %s\n", realName);
+		logf("Cannot find or create file %s\n", realName);
 		Assert(0);
 	}
 

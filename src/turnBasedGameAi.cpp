@@ -16,13 +16,13 @@ Unit *getRandomOpponent(Unit *src) {
 }
 
 void aiTakeTurn(Unit *src) {
-	if (src->type == UNIT_ENEMY_A) {
+	if (src->type == UNIT_STANDARD_A) {
 		Unit *target = getRandomOpponent(src);
 		castSpell(src, target, SPELL_MEDIUM_ATTACK);
-	} else if (src->type == UNIT_ENEMY_B) {
+	} else if (src->type == UNIT_STANDARD_B) {
 		Unit *target = getRandomOpponent(src);
 		castSpell(src, target, SPELL_SMALL_ATTACK);
-	} else if (src->type == UNIT_ENEMY_C) {
+	} else if (src->type == UNIT_STANDARD_C) {
 		Unit *target = getRandomOpponent(src);
 		castSpell(src, target, SPELL_LARGE_ATTACK);
 	}

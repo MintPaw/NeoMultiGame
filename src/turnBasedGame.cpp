@@ -35,9 +35,9 @@ struct Spell {
 enum UnitType {
 	UNIT_PLAYER1,
 	UNIT_PLAYER2,
-	UNIT_ENEMY_A,
-	UNIT_ENEMY_B,
-	UNIT_ENEMY_C,
+	UNIT_STANDARD_A,
+	UNIT_STANDARD_B,
+	UNIT_STANDARD_C,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -82,6 +82,8 @@ struct Game {
 	int turnQueue[UNITS_MAX];
 	int turnQueueNum;
 
+	int wave;
+
 	SpellType currentSpellType;
 	float spellTime;
 
@@ -96,6 +98,8 @@ void updateGame();
 Unit *getUnit(int id);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount);
+Unit *createUnit(UnitType type);
+void nextWave();
 /// FUNCTIONS ^
 
 #include "turnBasedGameAi.cpp"
@@ -144,15 +148,15 @@ void updateGame() {
 			info = &game->unitTypeInfos[UNIT_PLAYER2];
 			strcpy(info->name, "Player2");
 
-			info = &game->unitTypeInfos[UNIT_ENEMY_A];
+			info = &game->unitTypeInfos[UNIT_STANDARD_A];
 			info->maxHp = 5000;
 			strcpy(info->name, "Standard A");
 
-			info = &game->unitTypeInfos[UNIT_ENEMY_B];
+			info = &game->unitTypeInfos[UNIT_STANDARD_B];
 			info->maxHp = 10000;
 			strcpy(info->name, "Standard B");
 
-			info = &game->unitTypeInfos[UNIT_ENEMY_C];
+			info = &game->unitTypeInfos[UNIT_STANDARD_C];
 			info->maxHp = 20000;
 			strcpy(info->name, "Standard C");
 		}
@@ -193,39 +197,6 @@ void updateGame() {
 		}
 
 		{
-			auto createUnit = [](UnitType type)->Unit * {
-				if (game->unitsNum > UNITS_MAX-1) {
-					logf("No more units!\n");
-					return NULL;
-				}
-
-				Unit *unit = &game->units[game->unitsNum++];
-				memset(unit, 0, sizeof(Unit));
-				unit->type = type;
-				unit->id = ++game->nextUnitId;
-				unit->info = &game->unitTypeInfos[unit->type];
-				unit->hp = unit->info->maxHp;
-				unit->mana = unit->info->maxMana;
-
-				unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
-				unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
-
-				{
-					int existingCount = 0;
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->type == type) existingCount++;
-					}
-					if (existingCount == 1) {
-						strcpy(unit->screenName, unit->info->name);
-					} else {
-						strcpy(unit->screenName, frameSprintf("%s (%d)", unit->info->name, existingCount-1));
-					}
-				}
-
-				return unit;
-			};
-
 			Unit *unit = NULL;
 
 			unit = createUnit(UNIT_PLAYER1);
@@ -234,9 +205,7 @@ void updateGame() {
 			unit = createUnit(UNIT_PLAYER2);
 			unit->ally = true;
 
-			unit = createUnit(UNIT_ENEMY_A);
-			unit = createUnit(UNIT_ENEMY_B);
-			unit = createUnit(UNIT_ENEMY_C);
+			nextWave();
 		}
 
 		maximizeWindow();
@@ -252,13 +221,18 @@ void updateGame() {
 	}
 
 	{ /// Display
-		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
+		ImGui::Begin("Turns", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::Text("Turns: ");
 		for (int i = 0; i < game->turnQueueNum; i++) {
 			Unit *unit = getUnit(game->turnQueue[i]);
 			ImGui::SameLine();
 			ImGui::Text("(%s)", unit->screenName);
 		}
+		ImGui::End();
+
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.80), ImGuiCond_Always, ImVec2(0.5, 1));
+		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		auto guiShowUnit = [](Unit *unit) {
 			int color = 0xFFFFFFFF;
@@ -304,45 +278,70 @@ void updateGame() {
 		Unit *currentUnit = getUnit(game->turnQueue[0]);
 		if (!currentUnit && platform->frameCount%60 == 0) logf("No current unit\n");
 
-		if (game->spellQueueNum == 0 && currentUnit) {
-			if (currentUnit->ally) {
-				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
-				ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-				if (game->currentSpellType == SPELL_NONE) {
-					for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
-						SpellType type = currentUnit->spellsAvailable[i];
-						SpellTypeInfo *info = &game->spellTypeInfos[type];
+		if (game->spellQueueNum == 0) {
+			int allyCount = 0;
+			int enemyCount = 0;
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (unit->hp <= 0) continue;
+				if (unit->ally) allyCount++;
+				if (!unit->ally) enemyCount++;
+			}
 
-						ImGui::PushID(i);
-						if (ImGui::Button(info->name)) {
-							game->currentSpellType = type;
-						}
-						ImGui::PopID();
-					}
-				} else {
-					SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
-					if (currentSpellInfo->targetType == TARGET_SINGLE) {
-						ImGui::Text("Target:");
-						for (int i = 0; i < game->unitsNum; i++) {
-							Unit *unit = &game->units[i];
-							if (unit->ally) continue;
-							if (unit->hp <= 0) continue;
-							if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
-								castSpell(currentUnit, unit, game->currentSpellType);
-								castSpell(currentUnit, NULL, SPELL_END_TURN);
-								game->currentSpellType = SPELL_NONE;
-							}
-						}
-						if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
-					} else if (currentSpellInfo->targetType == TARGET_NONE) {
-						castSpell(currentUnit, NULL, game->currentSpellType);
-						castSpell(currentUnit, NULL, SPELL_END_TURN);
-						game->currentSpellType = SPELL_NONE;
-					}
+			if (allyCount == 0) {
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+				ImGui::Begin("Game Over", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+				ImGui::Text("You lose");
+				if (ImGui::Button("Try again"));
+				ImGui::End();
+			} else if (enemyCount == 0) {
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+				ImGui::Begin("Game Over", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+				ImGui::Text("You win");
+				if (ImGui::Button("Continue")) {
+					nextWave();
 				}
 				ImGui::End();
-			} else {
-				aiTakeTurn(currentUnit);
+			} else if (currentUnit) {
+				if (currentUnit->ally) {
+					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+					ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+					if (game->currentSpellType == SPELL_NONE) {
+						for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
+							SpellType type = currentUnit->spellsAvailable[i];
+							SpellTypeInfo *info = &game->spellTypeInfos[type];
+
+							ImGui::PushID(i);
+							if (ImGui::Button(info->name)) {
+								game->currentSpellType = type;
+							}
+							ImGui::PopID();
+						}
+					} else {
+						SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
+						if (currentSpellInfo->targetType == TARGET_SINGLE) {
+							ImGui::Text("Target:");
+							for (int i = 0; i < game->unitsNum; i++) {
+								Unit *unit = &game->units[i];
+								if (unit->ally) continue;
+								if (unit->hp <= 0) continue;
+								if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
+									castSpell(currentUnit, unit, game->currentSpellType);
+									castSpell(currentUnit, NULL, SPELL_END_TURN);
+									game->currentSpellType = SPELL_NONE;
+								}
+							}
+							if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+						} else if (currentSpellInfo->targetType == TARGET_NONE) {
+							castSpell(currentUnit, NULL, game->currentSpellType);
+							castSpell(currentUnit, NULL, SPELL_END_TURN);
+							game->currentSpellType = SPELL_NONE;
+						}
+					}
+					ImGui::End();
+				} else {
+					aiTakeTurn(currentUnit);
+				}
 			}
 		}
 	} ///
@@ -366,7 +365,7 @@ void updateGame() {
 				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DEFEND) {
-				if (game->spellTime == 0) logf("Defend?");
+				if (game->spellTime == 0) logf("Defend?\n");
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_END_TURN) {
 				if (game->spellTime > baseSpellTime) {
@@ -391,6 +390,19 @@ void updateGame() {
 			}
 		}
 	} ///
+
+	if (game->spellQueueNum == 0) {
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->ally) continue;
+			if (unit->hp <= 0) {
+				arraySpliceIndex(game->units, game->unitsNum, sizeof(Unit), i);
+				game->unitsNum--;
+				i--;
+				continue;
+			}
+		}
+	}
 
 	clearRenderer();
 
@@ -436,5 +448,62 @@ void dealDamage(Unit *src, Unit *dest, int amount) {
 				continue;
 			}
 		}
+	}
+}
+
+Unit *createUnit(UnitType type) {
+	if (game->unitsNum > UNITS_MAX-1) {
+		logf("No more units!\n");
+		return NULL;
+	}
+
+	Unit *unit = &game->units[game->unitsNum++];
+	memset(unit, 0, sizeof(Unit));
+	unit->type = type;
+	unit->id = ++game->nextUnitId;
+	unit->info = &game->unitTypeInfos[unit->type];
+	unit->hp = unit->info->maxHp;
+	unit->mana = unit->info->maxMana;
+
+	unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
+	unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
+
+	{
+		int existingCount = 0;
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->type == type) existingCount++;
+		}
+		if (existingCount == 1) {
+			strcpy(unit->screenName, unit->info->name);
+		} else {
+			strcpy(unit->screenName, frameSprintf("%s (%d)", unit->info->name, existingCount-1));
+		}
+	}
+
+	return unit;
+};
+
+void nextWave() {
+	game->wave++;
+
+	Unit *unit = NULL;
+
+	if (game->wave == 1) {
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_B);
+	} else if (game->wave == 2) {
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_STANDARD_B);
+	} else if (game->wave == 3) {
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_STANDARD_A);
+	} else if (game->wave == 4) {
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_C);
+		unit = createUnit(UNIT_STANDARD_A);
+	} else if (game->wave == 5) {
+		logf("You win\n");
 	}
 }
