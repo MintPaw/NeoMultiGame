@@ -1,6 +1,25 @@
 struct Globals {
 };
 
+enum BuffType {
+	BUFF_NONE,
+	BUFF_COMBO,
+	BUFF_TYPES_MAX,
+};
+struct BuffTypeInfo {
+#define BUFF_NAME_MAX_LEN 64
+	char name[BUFF_NAME_MAX_LEN];
+};
+struct Buff {
+	int id;
+	BuffType type;
+	BuffTypeInfo *info;
+
+	int turns;
+
+	int intUserData;
+};
+
 enum TargetType {
 	TARGET_SINGLE,
 	TARGET_NONE,
@@ -8,12 +27,20 @@ enum TargetType {
 
 enum SpellType {
 	SPELL_NONE,
+
 	SPELL_HERO_ATTACK,
 	SPELL_SMALL_ATTACK,
 	SPELL_MEDIUM_ATTACK,
 	SPELL_LARGE_ATTACK,
+
+	SPELL_QUICK_ATTACK,
+	SPELL_WIDE_STRIKE,
+	SPELL_COMBO_ATTACK,
+
 	SPELL_DEFEND,
+
 	SPELL_END_TURN,
+
 	SPELL_TYPES_MAX,
 };
 struct SpellTypeInfo {
@@ -21,6 +48,7 @@ struct SpellTypeInfo {
 	char name[SPELL_TYPE_NAME_MAX_LEN];
 	TargetType targetType;
 	int damage;
+	int mp;
 
 	bool canTargetAllies;
 };
@@ -45,7 +73,7 @@ struct UnitTypeInfo {
 	char name[UNIT_TYPE_NAME_MAX_LEN];
 
 	int maxHp;
-	int maxMana;
+	int maxMp;
 };
 struct Unit {
 	UnitType type;
@@ -57,11 +85,15 @@ struct Unit {
 
 	bool ally;
 	int hp;
-	int mana;
+	int mp;
 
 #define SPELLS_AVAILABLE_MAX 128
 	SpellType spellsAvailable[SPELLS_AVAILABLE_MAX];
 	int spellsAvailableNum;
+
+#define BUFFS_MAX 64
+	Buff buffs[BUFFS_MAX];
+	int buffsNum;
 };
 
 struct Game {
@@ -79,12 +111,16 @@ struct Game {
 	int spellQueueNum;
 	int nextSpellId;
 
+	BuffTypeInfo buffTypeInfos[BUFF_TYPES_MAX];
+	int nextBuffId;
+
 	int turnQueue[UNITS_MAX];
 	int turnQueueNum;
 
 	int wave;
 
 	SpellType currentSpellType;
+	float prevSpellTime;
 	float spellTime;
 
 	bool inEditor;
@@ -98,6 +134,8 @@ void updateGame();
 Unit *getUnit(int id);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount);
+Buff *getBuff(Unit *unit, BuffType type);
+Buff *giveBuff(Unit *unit, BuffType type);
 Unit *createUnit(UnitType type);
 void nextWave();
 /// FUNCTIONS ^
@@ -139,7 +177,7 @@ void updateGame() {
 			for (int i = 0; i < UNIT_TYPES_MAX;i ++) {
 				UnitTypeInfo *info = &game->unitTypeInfos[i];
 				info->maxHp = 10000;
-				info->maxMana = 1000;
+				info->maxMp = 1000;
 			}
 
 			info = &game->unitTypeInfos[UNIT_PLAYER1];
@@ -177,16 +215,31 @@ void updateGame() {
 			info->damage = 5000;
 
 			info = &game->spellTypeInfos[SPELL_SMALL_ATTACK];
-			strcpy(info->name, "Small attack");
+			strcpy(info->name, "Small Attack");
 			info->damage = 500;
 
 			info = &game->spellTypeInfos[SPELL_MEDIUM_ATTACK];
-			strcpy(info->name, "Medium attack");
+			strcpy(info->name, "Medium Attack");
 			info->damage = 1000;
 
 			info = &game->spellTypeInfos[SPELL_LARGE_ATTACK];
-			strcpy(info->name, "Large attack");
+			strcpy(info->name, "Large Attack");
 			info->damage = 2000;
+
+			info = &game->spellTypeInfos[SPELL_QUICK_ATTACK];
+			strcpy(info->name, "Quick Attack");
+			info->damage = 4000;
+			info->mp = 20;
+
+			info = &game->spellTypeInfos[SPELL_WIDE_STRIKE];
+			strcpy(info->name, "Wide Strike");
+			info->damage = 1500;
+			info->mp = 20;
+
+			info = &game->spellTypeInfos[SPELL_COMBO_ATTACK];
+			strcpy(info->name, "Combo Attack");
+			info->damage = 2000;
+			info->mp = 20;
 
 			info = &game->spellTypeInfos[SPELL_DEFEND];
 			info->targetType = TARGET_NONE;
@@ -197,13 +250,34 @@ void updateGame() {
 		}
 
 		{
+			BuffTypeInfo *info = NULL;
+
+			for (int i = 0; i < BUFF_TYPES_MAX;i ++) {
+				BuffTypeInfo *info = &game->buffTypeInfos[i];
+			}
+
+			info = &game->buffTypeInfos[BUFF_NONE];
+			strcpy(info->name, "None");
+
+			info = &game->buffTypeInfos[BUFF_COMBO];
+			strcpy(info->name, "Combo");
+		}
+
+		{
 			Unit *unit = NULL;
 
 			unit = createUnit(UNIT_PLAYER1);
 			unit->ally = true;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_QUICK_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WIDE_STRIKE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_COMBO_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
 
 			unit = createUnit(UNIT_PLAYER2);
 			unit->ally = true;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
 
 			nextWave();
 		}
@@ -242,6 +316,17 @@ void updateGame() {
 			ImVec4 imCol = guiGetImVec4Color(color);
 			ImGui::TextColored(imCol, "%s", unit->screenName);
 			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, unit->info->maxHp);
+			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
+			if (unit->buffsNum > 0) {
+				for (int i = 0; i < unit->buffsNum; i++) {
+					Buff *buff = &unit->buffs[i];
+					if (buff->type == BUFF_COMBO) {
+						ImGui::Text("[%s (%d):%d]", buff->info->name, buff->intUserData, buff->turns);
+					} else {
+						ImGui::Text("[%s:%d]", buff->info->name, buff->turns);
+					}
+				}
+			}
 			ImGui::Separator();
 		};
 
@@ -307,14 +392,23 @@ void updateGame() {
 					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
 					ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 					if (game->currentSpellType == SPELL_NONE) {
+						int spellCount = 0;
 						for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
 							SpellType type = currentUnit->spellsAvailable[i];
 							SpellTypeInfo *info = &game->spellTypeInfos[type];
 
 							ImGui::PushID(i);
-							if (ImGui::Button(info->name)) {
-								game->currentSpellType = type;
+							char *label = info->name;
+							if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
+							if (spellCount % 5 != 0) ImGui::SameLine();
+							if (ImGui::Button(label)) {
+								if (currentUnit->mp < info->mp) {
+									logf("Not enough mp\n");
+								} else {
+									game->currentSpellType = type;
+								}
 							}
+							spellCount++;
 							ImGui::PopID();
 						}
 					} else {
@@ -351,6 +445,12 @@ void updateGame() {
 			Spell *spell = &game->spellQueue[0];
 			bool complete = false;
 
+			auto spellTimeJustPassed = [](float amount)->bool {
+				if (amount == 0) return game->spellTime == 0;
+				if (game->spellTime >= amount && game->prevSpellTime < amount) return true;
+				return false;
+			};
+
 			Unit *src = getUnit(spell->srcId);
 			Unit *dest = getUnit(spell->destId);
 
@@ -364,13 +464,59 @@ void updateGame() {
 			) {
 				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
 				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_QUICK_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
+				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_WIDE_STRIKE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					int destIndex = -1;
+					for (int i = 0; i < game->unitsNum; i++) {
+						if (&game->units[i] == dest) destIndex = i;
+					}
+					Unit *underDest = NULL;
+					if (destIndex > 0) {
+						underDest = &game->units[destIndex-1];
+						if (underDest->ally != dest->ally) underDest = NULL;
+					}
+					Unit *overDest = NULL;
+					if (destIndex < game->unitsNum-1) {
+						overDest = &game->units[destIndex+1];
+						if (overDest->ally != dest->ally) overDest = NULL;
+					}
+					dealDamage(src, dest, spell->info->damage);
+					if (underDest) dealDamage(src, underDest, spell->info->damage);
+					if (overDest) dealDamage(src, overDest, spell->info->damage);
+				}
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_COMBO_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					Buff *comboBuff = getBuff(dest, BUFF_COMBO);
+					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO);
+					comboBuff->turns++;
+					comboBuff->intUserData++;
+					dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
+				}
+				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DEFEND) {
 				if (game->spellTime == 0) logf("Defend?\n");
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_END_TURN) {
 				if (game->spellTime > baseSpellTime) {
-					Unit *currentUnit = getUnit(game->turnQueue[0]);
-					logf("%s's turn is over\n", currentUnit->info->name);
+					Unit *unit = getUnit(game->turnQueue[0]);
+
+					for (int i = 0; i < unit->buffsNum; i++) {
+						Buff *buff = &unit->buffs[i];
+						buff->turns--;
+						if (buff->turns == 0) {
+							arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), i);
+							unit->buffsNum--;
+							i--;
+							continue;
+						}
+					}
+
+					logf("%s's turn is over\n", unit->info->name);
 
 					arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), 0);
 					game->turnQueueNum--;
@@ -381,16 +527,19 @@ void updateGame() {
 				if (game->spellTime > 3) complete = true;
 			}
 
+			game->prevSpellTime = game->spellTime;
 			game->spellTime += elapsed;
 
 			if (complete) {
 				arraySpliceIndex(game->spellQueue, game->spellQueueNum, sizeof(Spell), 0);
 				game->spellQueueNum--;
 				game->spellTime = 0;
+				game->prevSpellTime = 0;
 			}
 		}
 	} ///
 
+	/// Remove dead units
 	if (game->spellQueueNum == 0) {
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
@@ -432,6 +581,9 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 	spell->info = &game->spellTypeInfos[spell->type];
 	if (src) spell->srcId = src->id;
 	if (dest) spell->destId = dest->id;
+
+	src->mp -= spell->info->mp;
+
 	return spell;
 }
 
@@ -451,6 +603,28 @@ void dealDamage(Unit *src, Unit *dest, int amount) {
 	}
 }
 
+Buff *getBuff(Unit *unit, BuffType type) {
+	for (int i = 0; i < unit->buffsNum; i++) {
+		Buff *buff = &unit->buffs[i];
+		if (buff->type == type) return buff;
+	}
+	return NULL;
+}
+
+Buff *giveBuff(Unit *unit, BuffType type) {
+	if (unit->buffsNum > BUFFS_MAX-1) {
+		logf("Too many buffs!\n");
+		unit->buffsNum--;
+	}
+
+	Buff *buff = &unit->buffs[unit->buffsNum++];
+	memset(buff, 0, sizeof(Buff));
+	buff->type = type;
+	buff->turns = 1;
+	buff->info = &game->buffTypeInfos[buff->type];
+	return buff;
+}
+
 Unit *createUnit(UnitType type) {
 	if (game->unitsNum > UNITS_MAX-1) {
 		logf("No more units!\n");
@@ -463,10 +637,7 @@ Unit *createUnit(UnitType type) {
 	unit->id = ++game->nextUnitId;
 	unit->info = &game->unitTypeInfos[unit->type];
 	unit->hp = unit->info->maxHp;
-	unit->mana = unit->info->maxMana;
-
-	unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
-	unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
+	unit->mp = unit->info->maxMp;
 
 	{
 		int existingCount = 0;
@@ -482,7 +653,7 @@ Unit *createUnit(UnitType type) {
 	}
 
 	return unit;
-};
+}
 
 void nextWave() {
 	game->wave++;
