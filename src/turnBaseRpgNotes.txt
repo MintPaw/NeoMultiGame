@@ -498,4 +498,9 @@ Players have 10000hp and 1000mp
 
 --- EFB notes:
 	- An enemy that interchanges between physical attacks and defense debuffs
+
+--- 2023 notes:
+	- Holding 2 weapons
+	- Player 2 can drink a coffee to prevent sleeping
+	- Player 2 mood
 #endif

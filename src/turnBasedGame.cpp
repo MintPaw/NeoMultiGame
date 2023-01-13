@@ -1,9 +1,35 @@
 struct Globals {
 };
 
+enum Weapon {
+	WEAPON_NONE,
+	WEAPON_DEFAULT,
+	WEAPON_VAMPIRE,
+	WEAPON_BIG_DAMAGE,
+	WEAPON_MAGIC_RESIST,
+	WEAPON_LOW_HP,
+	WEAPON_DODGE,
+	WEAPON_POISON,
+	WEAPON_GLASS,
+};
+char *weaponStrings[] = {
+	"None",
+	"Default",
+	"Vampire",
+	"Big damage",
+	"Magic resist",
+	"Low hp",
+	"Dodge",
+	"Poison",
+	"Glass",
+};
+
 enum BuffType {
 	BUFF_NONE,
 	BUFF_COMBO,
+	BUFF_QUAKED,
+	BUFF_PHYS_UP,
+	BUFF_BODY_BLOCKING,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -36,6 +62,18 @@ enum SpellType {
 	SPELL_QUICK_ATTACK,
 	SPELL_WIDE_STRIKE,
 	SPELL_COMBO_ATTACK,
+	SPELL_EARTHQUAKE,
+	SPELL_PHYS_UP,
+	SPELL_BODY_BLOCK,
+
+	SPELL_DRAW_DEFAULT,
+	SPELL_DRAW_VAMPIRE,
+	SPELL_DRAW_BIG_DAMAGE,
+	SPELL_DRAW_MAGIC_RESIST,
+	SPELL_DRAW_LOW_HP,
+	SPELL_DRAW_DODGE,
+	SPELL_DRAW_POISON,
+	SPELL_DRAW_GLASS,
 
 	SPELL_DEFEND,
 
@@ -79,6 +117,8 @@ struct Unit {
 	UnitType type;
 	int id;
 	UnitTypeInfo *info;
+
+	Weapon weapon;
 
 #define SCREEN_NAME_MAX_LEN 128
 	char screenName[SCREEN_NAME_MAX_LEN];
@@ -132,10 +172,11 @@ void runGame();
 void updateGame();
 
 Unit *getUnit(int id);
+Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
-void dealDamage(Unit *src, Unit *dest, int amount);
+void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
 Buff *getBuff(Unit *unit, BuffType type);
-Buff *giveBuff(Unit *unit, BuffType type);
+Buff *giveBuff(Unit *unit, BuffType type, int turns);
 Unit *createUnit(UnitType type);
 void nextWave();
 /// FUNCTIONS ^
@@ -204,7 +245,6 @@ void updateGame() {
 
 			for (int i = 0; i < SPELL_TYPES_MAX;i ++) {
 				SpellTypeInfo *info = &game->spellTypeInfos[i];
-				info->damage = 1000;
 			}
 
 			info = &game->spellTypeInfos[SPELL_NONE];
@@ -241,6 +281,54 @@ void updateGame() {
 			info->damage = 2000;
 			info->mp = 20;
 
+			info = &game->spellTypeInfos[SPELL_EARTHQUAKE];
+			strcpy(info->name, "Earthquake");
+			info->targetType = TARGET_NONE;
+			info->damage = 500;
+			info->mp = 100;
+
+			info = &game->spellTypeInfos[SPELL_PHYS_UP];
+			strcpy(info->name, "Phys Up");
+			info->targetType = TARGET_NONE;
+			info->damage = 0;
+			info->mp = 100;
+
+			info = &game->spellTypeInfos[SPELL_BODY_BLOCK];
+			strcpy(info->name, "Body Block");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_DEFAULT];
+			strcpy(info->name, "Draw Default");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_VAMPIRE];
+			strcpy(info->name, "Draw Vampire");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_BIG_DAMAGE];
+			strcpy(info->name, "Draw Big Damage");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_MAGIC_RESIST];
+			strcpy(info->name, "Draw Magic Resist");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_LOW_HP];
+			strcpy(info->name, "Draw Low Hp");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_DODGE];
+			strcpy(info->name, "Draw Dodge");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_POISON];
+			strcpy(info->name, "Draw Poison");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_DRAW_GLASS];
+			strcpy(info->name, "Draw Glass");
+			info->targetType = TARGET_NONE;
+
 			info = &game->spellTypeInfos[SPELL_DEFEND];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Defend");
@@ -261,6 +349,15 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_COMBO];
 			strcpy(info->name, "Combo");
+
+			info = &game->buffTypeInfos[BUFF_QUAKED];
+			strcpy(info->name, "Quaked");
+
+			info = &game->buffTypeInfos[BUFF_PHYS_UP];
+			strcpy(info->name, "Phys Up");
+
+			info = &game->buffTypeInfos[BUFF_BODY_BLOCKING];
+			strcpy(info->name, "Body Blocking");
 		}
 
 		{
@@ -268,10 +365,22 @@ void updateGame() {
 
 			unit = createUnit(UNIT_PLAYER1);
 			unit->ally = true;
+			unit->weapon = WEAPON_DEFAULT;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_QUICK_ATTACK;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WIDE_STRIKE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_COMBO_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_EARTHQUAKE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_PHYS_UP;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_BODY_BLOCK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_DEFAULT;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_VAMPIRE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_BIG_DAMAGE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_MAGIC_RESIST;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_LOW_HP;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_DODGE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_POISON;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_GLASS;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
 
 			unit = createUnit(UNIT_PLAYER2);
@@ -317,6 +426,7 @@ void updateGame() {
 			ImGui::TextColored(imCol, "%s", unit->screenName);
 			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, unit->info->maxHp);
 			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
+			if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
 			if (unit->buffsNum > 0) {
 				for (int i = 0; i < unit->buffsNum; i++) {
 					Buff *buff = &unit->buffs[i];
@@ -404,6 +514,16 @@ void updateGame() {
 							if (ImGui::Button(label)) {
 								if (currentUnit->mp < info->mp) {
 									logf("Not enough mp\n");
+								} else if (
+									(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
+									(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
+									(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
+									(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
+									(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
+									(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
+									(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
+								) {
+									logf("You already have that weapon\n");
 								} else {
 									game->currentSpellType = type;
 								}
@@ -492,11 +612,63 @@ void updateGame() {
 			} else if (spell->type == SPELL_COMBO_ATTACK) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					Buff *comboBuff = getBuff(dest, BUFF_COMBO);
-					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO);
-					comboBuff->turns++;
+					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO, 1);
 					comboBuff->intUserData++;
 					dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
 				}
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_EARTHQUAKE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally != src->ally) {
+							dealDamage(src, unit, spell->info->damage);
+							giveBuff(unit, BUFF_QUAKED, 2);
+						}
+					}
+				}
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_PHYS_UP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally == src->ally) {
+							giveBuff(unit, BUFF_PHYS_UP, 2);
+						}
+					}
+				}
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_BODY_BLOCK) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					giveBuff(src, BUFF_BODY_BLOCKING, 2);
+				}
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_DEFAULT) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DEFAULT;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_VAMPIRE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_VAMPIRE;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_MAGIC_RESIST) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_MAGIC_RESIST;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_LOW_HP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_LOW_HP;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_LOW_HP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_LOW_HP;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_DODGE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DODGE;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_POISON) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_POISON;
+				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_DRAW_GLASS) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_GLASS;
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DEFEND) {
 				if (game->spellTime == 0) logf("Defend?\n");
@@ -568,10 +740,26 @@ Unit *getUnit(int id) {
 	return NULL;
 }
 
+Unit *getUnitByType(UnitType type) {
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (unit->type == type) return unit;
+	}
+	return NULL;
+}
+
 Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 	if (game->spellQueueNum > SPELL_QUEUE_MAX-1) {
 		logf("Spell queue is full!\n");
 		game->spellQueueNum--;
+	}
+
+	if (src && dest && !src->ally && dest->type == UNIT_PLAYER2) {
+		Unit *p1 = getUnitByType(UNIT_PLAYER1);
+		if (getBuff(p1, BUFF_BODY_BLOCKING)) {
+			logf("Redirected!\n");
+			dest = p1;
+		}
 	}
 
 	Spell *spell = &game->spellQueue[game->spellQueueNum++];
@@ -587,7 +775,22 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 	return spell;
 }
 
-void dealDamage(Unit *src, Unit *dest, int amount) {
+void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
+	float damageMulti = 1;
+
+	for (int i = 0; i < src->buffsNum; i++) {
+		Buff *buff = &src->buffs[i];
+		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
+		if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
+	}
+
+	for (int i = 0; i < dest->buffsNum; i++) {
+		Buff *buff = &dest->buffs[i];
+		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 2;
+	}
+
+	amount *= damageMulti;
+
 	logf("%s dealt %d damage to %s\n", src->info->name, amount, dest->info->name);
 	dest->hp -= amount;
 
@@ -611,7 +814,7 @@ Buff *getBuff(Unit *unit, BuffType type) {
 	return NULL;
 }
 
-Buff *giveBuff(Unit *unit, BuffType type) {
+Buff *giveBuff(Unit *unit, BuffType type, int turns) {
 	if (unit->buffsNum > BUFFS_MAX-1) {
 		logf("Too many buffs!\n");
 		unit->buffsNum--;
@@ -620,7 +823,7 @@ Buff *giveBuff(Unit *unit, BuffType type) {
 	Buff *buff = &unit->buffs[unit->buffsNum++];
 	memset(buff, 0, sizeof(Buff));
 	buff->type = type;
-	buff->turns = 1;
+	buff->turns = turns;
 	buff->info = &game->buffTypeInfos[buff->type];
 	return buff;
 }
