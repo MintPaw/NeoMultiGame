@@ -27,7 +27,7 @@ Players have 10000hp and 1000mp
 		- ?, next attack reduce enemy physical and magical defense for 2 turns
 
 	? Hex, 10mp, deals 1 damage pure per turn forever (too OP because of shields)
-	- Poison, 70mp, deals 100 magic damage per turn for 10 turns
+	- Poison, 70mp, deals 100 magic damage per turn for 10 turns (How is this better than poison attack buff?)
 	? Create antidote, creates an antidote to poison (There's no poison on enemies yet)
 	- Heal, 100mp, gives 5000hp to a player
 	- Heal2, 300mp, gives 5000hp both players
@@ -504,4 +504,5 @@ Players have 10000hp and 1000mp
 	- Player 2 can drink a coffee to prevent sleeping
 	- Player 2 mood
 	- The difference between DoTs that derive damage multiplier based off current magic buffs, or the magic buffs when first cast
+	- P2 flash?
 #endif

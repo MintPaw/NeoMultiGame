@@ -38,6 +38,7 @@ enum BuffType {
 	BUFF_ADD_DEFENSE_REDUCTION,
 	BUFF_ATTACK_REDUCTION,
 	BUFF_DEFENSE_REDUCTION,
+	BUFF_RELIFE,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -89,6 +90,10 @@ enum SpellType {
 	SPELL_ADD_ATTACK_REDUCTION,
 	SPELL_ADD_DEFENSE_REDUCTION,
 
+	SPELL_HEAL,
+	SPELL_HEAL2,
+	SPELL_RESURRECT,
+
 	SPELL_WAIT,
 
 	SPELL_END_TURN,
@@ -103,6 +108,7 @@ struct SpellTypeInfo {
 	int mp;
 
 	bool canTargetAllies;
+	bool canTargetDead;
 };
 struct Spell {
 	SpellType type;
@@ -372,6 +378,26 @@ void updateGame() {
 			strcpy(info->name, "Add Defense Reduction");
 			info->targetType = TARGET_NONE;
 
+			info = &game->spellTypeInfos[SPELL_HEAL];
+			strcpy(info->name, "Heal");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->mp = 100;
+			info->damage = 5000;
+
+			info = &game->spellTypeInfos[SPELL_HEAL2];
+			strcpy(info->name, "Heal 2");
+			info->targetType = TARGET_NONE;
+			info->mp = 300;
+			info->damage = 5000;
+
+			info = &game->spellTypeInfos[SPELL_RESURRECT];
+			strcpy(info->name, "Resurrect");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->canTargetDead = true;
+			info->mp = 200;
+
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
@@ -425,6 +451,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_DEFENSE_REDUCTION];
 			strcpy(info->name, "Defense Reduction");
+
+			info = &game->buffTypeInfos[BUFF_RELIFE];
+			strcpy(info->name, "Relife");
 		}
 
 		{
@@ -458,6 +487,9 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_MANA_SIPHON;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_ATTACK_REDUCTION;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_DEFENSE_REDUCTION;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HEAL;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HEAL2;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_RESURRECT;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
@@ -638,12 +670,20 @@ void updateGame() {
 							ImGui::Text("Target:");
 							for (int i = 0; i < game->unitsNum; i++) {
 								Unit *unit = &game->units[i];
-								if (unit->ally) continue;
-								if (unit->hp <= 0) continue;
+								if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
+								if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
 								if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
-									castSpell(currentUnit, unit, game->currentSpellType);
-									castSpell(currentUnit, NULL, SPELL_END_TURN);
-									game->currentSpellType = SPELL_NONE;
+									bool canCast = true;
+									if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
+										canCast = false;
+										logf("It won't work\n");
+									}
+
+									if (canCast) {
+										castSpell(currentUnit, unit, game->currentSpellType);
+										castSpell(currentUnit, NULL, SPELL_END_TURN);
+										game->currentSpellType = SPELL_NONE;
+									}
 								}
 							}
 							if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
@@ -783,27 +823,16 @@ void updateGame() {
 					src->glassBroken = true;
 				}
 			} else if (spell->type == SPELL_SWIPE) {
-				auto performAllAddedBuffs = [](Unit *src, Unit *dest, int damage) {
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) {
-						giveBuff(dest, BUFF_POISON, 10);
-					}
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) {
-						gainMp(src, damage * 0.01);
-					}
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) {
-						giveBuff(dest, BUFF_ATTACK_REDUCTION, 3);
-					}
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) {
-						giveBuff(dest, BUFF_DEFENSE_REDUCTION, 3);
-					}
-				};
 				if (spellTimeJustPassed(baseSpellTime*0.3)) {
-					performAllAddedBuffs(src, dest, spell->info->damage/2);
 					dealDamage(src, dest, spell->info->damage/2);
 				}
 				if (spellTimeJustPassed(baseSpellTime*0.6)) {
-					performAllAddedBuffs(src, dest, spell->info->damage/2);
-					dealDamage(src, dest, spell->info->damage/2);
+					int damage = spell->info->damage/2;
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) giveBuff(dest, BUFF_POISON, 10);
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) gainMp(src, damage * 0.01);
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) giveBuff(dest, BUFF_ATTACK_REDUCTION, 3);
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) giveBuff(dest, BUFF_DEFENSE_REDUCTION, 3);
+					dealDamage(src, dest, damage);
 				}
 
 				if (spellTimeJustPassed(baseSpellTime*0.9)) {
@@ -820,6 +849,23 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_ATTACK_REDUCTION, -1);
 			} else if (spell->type == SPELL_ADD_DEFENSE_REDUCTION) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_DEFENSE_REDUCTION, -1);
+			} else if (spell->type == SPELL_HEAL) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(src, dest, spell->info->damage);
+			} else if (spell->type == SPELL_HEAL2) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally) gainHp(src, unit, spell->info->damage);
+					}
+				}
+			} else if (spell->type == SPELL_RESURRECT) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					if (dest->hp <= 0) {
+						dest->hp = dest->info->maxHp;
+					} else {
+						giveBuff(dest, BUFF_RELIFE, -1);
+					}
+				}
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -943,7 +989,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 			Buff *buff = &src->buffs[i];
 			if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
 			if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
-			if (buff->type == BUFF_ATTACK_REDUCTION) damageMulti *= 0.75;
+			if (buff->type == BUFF_ATTACK_REDUCTION) damageMulti *= 0.5;
 		}
 
 		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
@@ -969,7 +1015,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	for (int i = 0; i < dest->buffsNum; i++) {
 		Buff *buff = &dest->buffs[i];
 		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 2;
-		if (buff->type == BUFF_DEFENSE_REDUCTION) damageMulti *= 1.5;
+		if (buff->type == BUFF_DEFENSE_REDUCTION) damageMulti *= 2;
 	}
 
 	float dodgeChance = 0;
@@ -989,6 +1035,12 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 		logf("%d damage dealt to %s\n", amount, dest->info->name);
 	}
 	dest->hp -= amount;
+
+	if (dest->hp <= 0 && getBuff(dest, BUFF_RELIFE)) {
+		logf("Relifed\n");
+		dest->hp = dest->info->maxHp;
+		removeAllBuffsOfType(dest, BUFF_RELIFE);
+	}
 
 	if (dest->hp <= 0) {
 		for (int i = 0; i < game->turnQueueNum; i++) {
