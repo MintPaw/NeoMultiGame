@@ -30,6 +30,7 @@ enum BuffType {
 	BUFF_QUAKED,
 	BUFF_PHYS_UP,
 	BUFF_BODY_BLOCKING,
+	BUFF_BLEED,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -358,6 +359,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_BODY_BLOCKING];
 			strcpy(info->name, "Body Blocking");
+
+			info = &game->buffTypeInfos[BUFF_BLEED];
+			strcpy(info->name, "Bleed");
 		}
 
 		{
@@ -621,6 +625,7 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
 						if (unit->ally != src->ally) {
 							dealDamage(src, unit, spell->info->damage);
 							giveBuff(unit, BUFF_QUAKED, 2);
@@ -632,6 +637,7 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
 						if (unit->ally == src->ally) {
 							giveBuff(unit, BUFF_PHYS_UP, 2);
 						}
@@ -639,15 +645,20 @@ void updateGame() {
 				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_BODY_BLOCK) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					giveBuff(src, BUFF_BODY_BLOCKING, 2);
-				}
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_BODY_BLOCKING, 2);
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_DEFAULT) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DEFAULT;
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_VAMPIRE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_VAMPIRE;
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
+						giveBuff(unit, BUFF_BLEED, 3);
+					}
+					src->weapon = WEAPON_VAMPIRE;
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
@@ -680,6 +691,11 @@ void updateGame() {
 					for (int i = 0; i < unit->buffsNum; i++) {
 						Buff *buff = &unit->buffs[i];
 						buff->turns--;
+
+						if (buff->type == BUFF_BLEED) {
+							dealDamage(NULL, unit, 500, true);
+						}
+
 						if (buff->turns == 0) {
 							arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), i);
 							unit->buffsNum--;
@@ -778,10 +794,12 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	float damageMulti = 1;
 
-	for (int i = 0; i < src->buffsNum; i++) {
-		Buff *buff = &src->buffs[i];
-		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
-		if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
+	if (src) {
+		for (int i = 0; i < src->buffsNum; i++) {
+			Buff *buff = &src->buffs[i];
+			if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
+			if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
+		}
 	}
 
 	for (int i = 0; i < dest->buffsNum; i++) {
@@ -791,7 +809,11 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 
 	amount *= damageMulti;
 
-	logf("%s dealt %d damage to %s\n", src->info->name, amount, dest->info->name);
+	if (src) {
+		logf("%s dealt %d damage to %s\n", src->info->name, amount, dest->info->name);
+	} else {
+		logf("%d damage dealt to %s\n", amount, dest->info->name);
+	}
 	dest->hp -= amount;
 
 	if (dest->hp <= 0) {
