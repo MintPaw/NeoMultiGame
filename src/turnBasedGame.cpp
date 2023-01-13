@@ -32,6 +32,12 @@ enum BuffType {
 	BUFF_BODY_BLOCKING,
 	BUFF_BLEED,
 	BUFF_POISON,
+	BUFF_ADD_POISON,
+	BUFF_ADD_MANA_SIPHON,
+	BUFF_ADD_ATTACK_REDUCTION,
+	BUFF_ADD_DEFENSE_REDUCTION,
+	BUFF_ATTACK_REDUCTION,
+	BUFF_DEFENSE_REDUCTION,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -77,7 +83,13 @@ enum SpellType {
 	SPELL_DRAW_POISON,
 	SPELL_DRAW_GLASS,
 
-	SPELL_DEFEND,
+	SPELL_SWIPE,
+	SPELL_ADD_POISON,
+	SPELL_ADD_MANA_SIPHON,
+	SPELL_ADD_ATTACK_REDUCTION,
+	SPELL_ADD_DEFENSE_REDUCTION,
+
+	SPELL_WAIT,
 
 	SPELL_END_TURN,
 
@@ -167,6 +179,8 @@ struct Game {
 	float prevSpellTime;
 	float spellTime;
 
+	float baseSpellTime;
+
 	bool inEditor;
 };
 
@@ -179,9 +193,12 @@ Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
-void giveHp(Unit *src, Unit *dest, int amount);
+void gainHp(Unit *src, Unit *dest, int amount);
+void gainMp(Unit *unit, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
+int countBuffs(Unit *unit, BuffType type);
 Buff *giveBuff(Unit *unit, BuffType type, int turns);
+void removeAllBuffsOfType(Unit *unit, BuffType type);
 Unit *createUnit(UnitType type);
 void nextWave();
 /// FUNCTIONS ^
@@ -335,9 +352,29 @@ void updateGame() {
 			strcpy(info->name, "Draw Glass");
 			info->damage = 10000;
 
-			info = &game->spellTypeInfos[SPELL_DEFEND];
+			info = &game->spellTypeInfos[SPELL_SWIPE];
+			strcpy(info->name, "Swipe");
+			info->damage = 1500;
+
+			info = &game->spellTypeInfos[SPELL_ADD_POISON];
+			strcpy(info->name, "Add Poison");
 			info->targetType = TARGET_NONE;
-			strcpy(info->name, "Defend");
+
+			info = &game->spellTypeInfos[SPELL_ADD_MANA_SIPHON];
+			strcpy(info->name, "Add Mana Siphon");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_ADD_ATTACK_REDUCTION];
+			strcpy(info->name, "Add Attack Reduction");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_ADD_DEFENSE_REDUCTION];
+			strcpy(info->name, "Add Defense Reduction");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_WAIT];
+			info->targetType = TARGET_NONE;
+			strcpy(info->name, "Wait");
 
 			info = &game->spellTypeInfos[SPELL_END_TURN];
 			strcpy(info->name, "End Turn");
@@ -370,6 +407,24 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_POISON];
 			strcpy(info->name, "Poison");
+
+			info = &game->buffTypeInfos[BUFF_ADD_POISON];
+			strcpy(info->name, "Added Poison");
+
+			info = &game->buffTypeInfos[BUFF_ADD_MANA_SIPHON];
+			strcpy(info->name, "Added Mana Siphon");
+
+			info = &game->buffTypeInfos[BUFF_ADD_ATTACK_REDUCTION];
+			strcpy(info->name, "Added Attack Reduction");
+
+			info = &game->buffTypeInfos[BUFF_ADD_DEFENSE_REDUCTION];
+			strcpy(info->name, "Added Defense Reduction");
+
+			info = &game->buffTypeInfos[BUFF_ATTACK_REDUCTION];
+			strcpy(info->name, "Attack Reduction");
+
+			info = &game->buffTypeInfos[BUFF_DEFENSE_REDUCTION];
+			strcpy(info->name, "Defense Reduction");
 		}
 
 		{
@@ -393,15 +448,23 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_DODGE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_POISON;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DRAW_GLASS;
-			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
 			unit = createUnit(UNIT_PLAYER2);
 			unit->ally = true;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
-			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DEFEND;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SWIPE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_POISON;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_MANA_SIPHON;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_ATTACK_REDUCTION;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_DEFENSE_REDUCTION;
+
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
 			nextWave();
 		}
+
+		game->baseSpellTime = 1;
 
 		maximizeWindow();
 	}
@@ -412,6 +475,7 @@ void updateGame() {
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	if (game->inEditor) {
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::InputFloat("baseSpellTime", &game->baseSpellTime);
 		ImGui::End();
 	}
 
@@ -452,7 +516,9 @@ void updateGame() {
 			ImGui::Separator();
 		};
 
-		ImGui::BeginChild("AlliesChild", ImVec2(300, 300));
+		Vec2 childSize = v2(400, 400);
+
+		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y));
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (!unit->ally) continue;
@@ -462,7 +528,7 @@ void updateGame() {
 
 		ImGui::SameLine();
 
-		ImGui::BeginChild("EnemiesChild", ImVec2(300, 300));
+		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y));
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (unit->ally) continue;
@@ -609,7 +675,7 @@ void updateGame() {
 			Unit *src = getUnit(spell->srcId);
 			Unit *dest = getUnit(spell->destId);
 
-			float baseSpellTime = 1;
+			float baseSpellTime = game->baseSpellTime;
 
 			if (
 				spell->type == SPELL_HERO_ATTACK ||
@@ -618,11 +684,9 @@ void updateGame() {
 				spell->type == SPELL_LARGE_ATTACK
 			) {
 				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_QUICK_ATTACK) {
 				if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
 				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_WIDE_STRIKE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					int destIndex = -1;
@@ -643,7 +707,6 @@ void updateGame() {
 					if (underDest) dealDamage(src, underDest, spell->info->damage);
 					if (overDest) dealDamage(src, overDest, spell->info->damage);
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_COMBO_ATTACK) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					Buff *comboBuff = getBuff(dest, BUFF_COMBO);
@@ -651,7 +714,6 @@ void updateGame() {
 					comboBuff->intUserData++;
 					dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_EARTHQUAKE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
@@ -663,7 +725,6 @@ void updateGame() {
 						}
 					}
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_PHYS_UP) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
@@ -674,13 +735,10 @@ void updateGame() {
 						}
 					}
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_BODY_BLOCK) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_BODY_BLOCKING, 2);
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_DEFAULT) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DEFAULT;
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_VAMPIRE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					src->weapon = WEAPON_VAMPIRE;
@@ -690,29 +748,22 @@ void updateGame() {
 						giveBuff(unit, BUFF_BLEED, 3);
 					}
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_MAGIC_RESIST) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					src->weapon = WEAPON_MAGIC_RESIST;
 					Unit *p2 = getUnitByType(UNIT_PLAYER2);
 					p2->mp -= spell->info->mp;
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_LOW_HP) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					src->weapon = WEAPON_LOW_HP;
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
-						if (unit->ally) giveHp(src, unit, 100);
+						if (unit->ally) gainHp(src, unit, 100);
 					}
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
-			} else if (spell->type == SPELL_DRAW_LOW_HP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_LOW_HP;
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_DODGE) {
 				if (spellTimeJustPassed(baseSpellTime*0.3)) {
 					src->weapon = WEAPON_DODGE;
@@ -721,22 +772,56 @@ void updateGame() {
 				} else if (spellTimeJustPassed(baseSpellTime*0.9)) {
 					dealDamage(src, dest, spell->info->damage/2);
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_POISON) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					src->weapon = WEAPON_POISON;
 					giveBuff(src, BUFF_POISON, 3);
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_GLASS) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					dealDamage(src, dest, spell->info->damage);
 					src->glassBroken = true;
 				}
-				if (game->spellTime > baseSpellTime) complete = true;
-			} else if (spell->type == SPELL_DEFEND) {
-				if (game->spellTime == 0) logf("Defend?\n");
-				if (game->spellTime > baseSpellTime) complete = true;
+			} else if (spell->type == SPELL_SWIPE) {
+				auto performAllAddedBuffs = [](Unit *src, Unit *dest, int damage) {
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) {
+						giveBuff(dest, BUFF_POISON, 10);
+					}
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) {
+						gainMp(src, damage * 0.01);
+					}
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) {
+						giveBuff(dest, BUFF_ATTACK_REDUCTION, 3);
+					}
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) {
+						giveBuff(dest, BUFF_DEFENSE_REDUCTION, 3);
+					}
+				};
+				if (spellTimeJustPassed(baseSpellTime*0.3)) {
+					performAllAddedBuffs(src, dest, spell->info->damage/2);
+					dealDamage(src, dest, spell->info->damage/2);
+				}
+				if (spellTimeJustPassed(baseSpellTime*0.6)) {
+					performAllAddedBuffs(src, dest, spell->info->damage/2);
+					dealDamage(src, dest, spell->info->damage/2);
+				}
+
+				if (spellTimeJustPassed(baseSpellTime*0.9)) {
+					removeAllBuffsOfType(src, BUFF_ADD_POISON);
+					removeAllBuffsOfType(src, BUFF_ADD_MANA_SIPHON);
+					removeAllBuffsOfType(src, BUFF_ADD_ATTACK_REDUCTION);
+					removeAllBuffsOfType(src, BUFF_ADD_DEFENSE_REDUCTION);
+				}
+			} else if (spell->type == SPELL_ADD_POISON) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_POISON, -1);
+			} else if (spell->type == SPELL_ADD_MANA_SIPHON) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_MANA_SIPHON, -1);
+			} else if (spell->type == SPELL_ADD_ATTACK_REDUCTION) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_ATTACK_REDUCTION, -1);
+			} else if (spell->type == SPELL_ADD_DEFENSE_REDUCTION) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_DEFENSE_REDUCTION, -1);
+			} else if (spell->type == SPELL_WAIT) {
+				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
 				if (game->spellTime > baseSpellTime) {
 					Unit *unit = getUnit(game->turnQueue[0]);
@@ -771,6 +856,8 @@ void updateGame() {
 				if (game->spellTime == 0) logf("%s (spellType %d) has no update loop\n", spell->info->name, spell->type);
 				if (game->spellTime > 3) complete = true;
 			}
+
+			if (game->spellTime > baseSpellTime) complete = true;
 
 			game->prevSpellTime = game->spellTime;
 			game->spellTime += elapsed;
@@ -856,6 +943,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 			Buff *buff = &src->buffs[i];
 			if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
 			if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
+			if (buff->type == BUFF_ATTACK_REDUCTION) damageMulti *= 0.75;
 		}
 
 		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
@@ -881,6 +969,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	for (int i = 0; i < dest->buffsNum; i++) {
 		Buff *buff = &dest->buffs[i];
 		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 2;
+		if (buff->type == BUFF_DEFENSE_REDUCTION) damageMulti *= 1.5;
 	}
 
 	float dodgeChance = 0;
@@ -913,9 +1002,14 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	}
 }
 
-void giveHp(Unit *src, Unit *dest, int amount) {
+void gainHp(Unit *src, Unit *dest, int amount) {
 	dest->hp += amount;
 	if (dest->hp > dest->info->maxHp) dest->hp = dest->info->maxHp;
+}
+
+void gainMp(Unit *unit, int amount) {
+	unit->mp += amount;
+	if (unit->mp > unit->info->maxMp) unit->mp = unit->info->maxMp;
 }
 
 Buff *getBuff(Unit *unit, BuffType type) {
@@ -924,6 +1018,15 @@ Buff *getBuff(Unit *unit, BuffType type) {
 		if (buff->type == type) return buff;
 	}
 	return NULL;
+}
+
+int countBuffs(Unit *unit, BuffType type) {
+	int count = 0;
+	for (int i = 0; i < unit->buffsNum; i++) {
+		Buff *buff = &unit->buffs[i];
+		if (buff->type == type) count++;
+	}
+	return count;
 }
 
 Buff *giveBuff(Unit *unit, BuffType type, int turns) {
@@ -938,6 +1041,18 @@ Buff *giveBuff(Unit *unit, BuffType type, int turns) {
 	buff->turns = turns;
 	buff->info = &game->buffTypeInfos[buff->type];
 	return buff;
+}
+
+void removeAllBuffsOfType(Unit *unit, BuffType type) {
+	for (int i = 0; i < unit->buffsNum; i++) {
+		Buff *buff = &unit->buffs[i];
+		if (buff->type == type) {
+			arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), i);
+			unit->buffsNum--;
+			i--;
+			continue;
+		}
+	}
 }
 
 Unit *createUnit(UnitType type) {
