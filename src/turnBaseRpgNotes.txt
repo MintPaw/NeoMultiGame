@@ -12,7 +12,7 @@ Players have 10000hp and 1000mp
 		- Default, no stats
 		- Vampire, steals 1% hp, makes everyone bleed when drawn
 		- ?, can't be healed when holding, deals 2x physical damage
-		- ?, +25% magic resist for both players, drawing costs 100 mana for both players
+		- ?, 25% magic resist for both players, drawing costs 100 mana for both players
 		- ?, does more damage at lower hp, both players gain 100hp when drawn
 		- ?, gains +10% dodge chance, attacks for 1000 damage in 2 hits when draw
 		- ?, poisons enemy and costs 10mp every hit, become sick when drawn

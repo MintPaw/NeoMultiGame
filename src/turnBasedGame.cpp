@@ -31,6 +31,7 @@ enum BuffType {
 	BUFF_PHYS_UP,
 	BUFF_BODY_BLOCKING,
 	BUFF_BLEED,
+	BUFF_POISON,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -135,6 +136,8 @@ struct Unit {
 #define BUFFS_MAX 64
 	Buff buffs[BUFFS_MAX];
 	int buffsNum;
+
+	bool glassBroken;
 };
 
 struct Game {
@@ -176,6 +179,7 @@ Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
+void giveHp(Unit *src, Unit *dest, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
 Buff *giveBuff(Unit *unit, BuffType type, int turns);
 Unit *createUnit(UnitType type);
@@ -313,6 +317,7 @@ void updateGame() {
 			info = &game->spellTypeInfos[SPELL_DRAW_MAGIC_RESIST];
 			strcpy(info->name, "Draw Magic Resist");
 			info->targetType = TARGET_NONE;
+			info->mp = 100;
 
 			info = &game->spellTypeInfos[SPELL_DRAW_LOW_HP];
 			strcpy(info->name, "Draw Low Hp");
@@ -320,7 +325,7 @@ void updateGame() {
 
 			info = &game->spellTypeInfos[SPELL_DRAW_DODGE];
 			strcpy(info->name, "Draw Dodge");
-			info->targetType = TARGET_NONE;
+			info->damage = 4000;
 
 			info = &game->spellTypeInfos[SPELL_DRAW_POISON];
 			strcpy(info->name, "Draw Poison");
@@ -328,7 +333,7 @@ void updateGame() {
 
 			info = &game->spellTypeInfos[SPELL_DRAW_GLASS];
 			strcpy(info->name, "Draw Glass");
-			info->targetType = TARGET_NONE;
+			info->damage = 10000;
 
 			info = &game->spellTypeInfos[SPELL_DEFEND];
 			info->targetType = TARGET_NONE;
@@ -362,6 +367,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_BLEED];
 			strcpy(info->name, "Bleed");
+
+			info = &game->buffTypeInfos[BUFF_POISON];
+			strcpy(info->name, "Poison");
 		}
 
 		{
@@ -516,9 +524,14 @@ void updateGame() {
 							if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
 							if (spellCount % 5 != 0) ImGui::SameLine();
 							if (ImGui::Button(label)) {
+								bool canCast = true;
+
 								if (currentUnit->mp < info->mp) {
+									canCast = false;
 									logf("Not enough mp\n");
-								} else if (
+								}
+
+								if (
 									(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
 									(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
 									(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
@@ -527,10 +540,28 @@ void updateGame() {
 									(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
 									(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
 								) {
+									canCast = false;
 									logf("You already have that weapon\n");
-								} else {
-									game->currentSpellType = type;
 								}
+
+								if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
+									canCast = false;
+									logf("Broken.\n");
+								}
+
+								if (type == SPELL_DRAW_MAGIC_RESIST) {
+									Unit *p2 = getUnitByType(UNIT_PLAYER2);
+									if (p2->hp <= 0) {
+										canCast = false;
+										logf("%s is dead\n", p2->info->name);
+									}
+									if (p2->mp < info->mp) {
+										canCast = false;
+										logf("%s doesn't have enough mp\n", p2->info->name);
+									}
+								}
+
+								if (canCast) game->currentSpellType = type;
 							}
 							spellCount++;
 							ImGui::PopID();
@@ -578,7 +609,7 @@ void updateGame() {
 			Unit *src = getUnit(spell->srcId);
 			Unit *dest = getUnit(spell->destId);
 
-			float baseSpellTime = 0.25;
+			float baseSpellTime = 1;
 
 			if (
 				spell->type == SPELL_HERO_ATTACK ||
@@ -652,34 +683,56 @@ void updateGame() {
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_VAMPIRE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					src->weapon = WEAPON_VAMPIRE;
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
 						giveBuff(unit, BUFF_BLEED, 3);
 					}
-					src->weapon = WEAPON_VAMPIRE;
 				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_MAGIC_RESIST) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_MAGIC_RESIST;
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					src->weapon = WEAPON_MAGIC_RESIST;
+					Unit *p2 = getUnitByType(UNIT_PLAYER2);
+					p2->mp -= spell->info->mp;
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_LOW_HP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_LOW_HP;
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					src->weapon = WEAPON_LOW_HP;
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally) giveHp(src, unit, 100);
+					}
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_LOW_HP) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_LOW_HP;
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_DODGE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DODGE;
+				if (spellTimeJustPassed(baseSpellTime*0.3)) {
+					src->weapon = WEAPON_DODGE;
+				} else if (spellTimeJustPassed(baseSpellTime*0.6)) {
+					dealDamage(src, dest, spell->info->damage/2);
+				} else if (spellTimeJustPassed(baseSpellTime*0.9)) {
+					dealDamage(src, dest, spell->info->damage/2);
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_POISON) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_POISON;
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					src->weapon = WEAPON_POISON;
+					giveBuff(src, BUFF_POISON, 3);
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DRAW_GLASS) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_GLASS;
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					dealDamage(src, dest, spell->info->damage);
+					src->glassBroken = true;
+				}
 				if (game->spellTime > baseSpellTime) complete = true;
 			} else if (spell->type == SPELL_DEFEND) {
 				if (game->spellTime == 0) logf("Defend?\n");
@@ -694,6 +747,10 @@ void updateGame() {
 
 						if (buff->type == BUFF_BLEED) {
 							dealDamage(NULL, unit, 500, true);
+						}
+
+						if (buff->type == BUFF_POISON) {
+							dealDamage(NULL, unit, 100, true);
 						}
 
 						if (buff->turns == 0) {
@@ -800,11 +857,39 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 			if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
 			if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
 		}
+
+		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
+
+		if (src->ally && isMagic) {
+			Unit *p1 = getUnitByType(UNIT_PLAYER2);
+			if (p1->hp > 0 && p1->weapon == WEAPON_MAGIC_RESIST) damageMulti *= 0.75;
+		}
+
+		if (src->weapon == WEAPON_LOW_HP) {
+			int level = 1;
+			if (src->hp < src->info->maxHp*0.50) level = 2;
+			if (src->hp < src->info->maxHp*0.25) level = 3;
+			damageMulti *= level;
+		}
+
+		if (src->weapon == WEAPON_POISON && !isMagic) {
+			src->mp -= 10;
+			giveBuff(dest, BUFF_POISON, 10);
+		}
 	}
 
 	for (int i = 0; i < dest->buffsNum; i++) {
 		Buff *buff = &dest->buffs[i];
 		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 2;
+	}
+
+	float dodgeChance = 0;
+
+	if (dest->weapon == WEAPON_DODGE) dodgeChance += 0.1;
+
+	if (rndFloat(0, 1) < dodgeChance) {
+		damageMulti = 0;
+		logf("Dodged!\n");
 	}
 
 	amount *= damageMulti;
@@ -826,6 +911,11 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 			}
 		}
 	}
+}
+
+void giveHp(Unit *src, Unit *dest, int amount) {
+	dest->hp += amount;
+	if (dest->hp > dest->info->maxHp) dest->hp = dest->info->maxHp;
 }
 
 Buff *getBuff(Unit *unit, BuffType type) {
