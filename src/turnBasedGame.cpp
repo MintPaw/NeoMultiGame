@@ -39,6 +39,7 @@ enum BuffType {
 	BUFF_ATTACK_REDUCTION,
 	BUFF_DEFENSE_REDUCTION,
 	BUFF_RELIFE,
+	BUFF_ANTI_BUFF,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -93,6 +94,8 @@ enum SpellType {
 	SPELL_HEAL,
 	SPELL_HEAL2,
 	SPELL_RESURRECT,
+	SPELL_GIVE_MANA,
+	SPELL_ANTI_BUFF,
 
 	SPELL_WAIT,
 
@@ -156,6 +159,7 @@ struct Unit {
 	int buffsNum;
 
 	bool glassBroken;
+	int giveManaCastCount;
 };
 
 struct Game {
@@ -204,6 +208,7 @@ void gainMp(Unit *unit, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
 int countBuffs(Unit *unit, BuffType type);
 Buff *giveBuff(Unit *unit, BuffType type, int turns);
+void removeBuff(Unit *unit, Buff *buff);
 void removeAllBuffsOfType(Unit *unit, BuffType type);
 Unit *createUnit(UnitType type);
 void nextWave();
@@ -398,6 +403,18 @@ void updateGame() {
 			info->canTargetDead = true;
 			info->mp = 200;
 
+			info = &game->spellTypeInfos[SPELL_GIVE_MANA];
+			strcpy(info->name, "Give mana");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->mp = 0;
+
+			info = &game->spellTypeInfos[SPELL_ANTI_BUFF];
+			strcpy(info->name, "Anti buff");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->mp = 100;
+
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
@@ -454,6 +471,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_RELIFE];
 			strcpy(info->name, "Relife");
+
+			info = &game->buffTypeInfos[BUFF_ANTI_BUFF];
+			strcpy(info->name, "Anti Buff");
 		}
 
 		{
@@ -490,6 +510,8 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HEAL;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HEAL2;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_RESURRECT;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_GIVE_MANA;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ANTI_BUFF;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
@@ -751,8 +773,12 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					Buff *comboBuff = getBuff(dest, BUFF_COMBO);
 					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO, 1);
-					comboBuff->intUserData++;
-					dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
+					if (comboBuff) {
+						comboBuff->intUserData++;
+						dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
+					} else {
+						dealDamage(src, dest, spell->info->damage);
+					}
 				}
 			} else if (spell->type == SPELL_EARTHQUAKE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
@@ -866,6 +892,15 @@ void updateGame() {
 						giveBuff(dest, BUFF_RELIFE, -1);
 					}
 				}
+			} else if (spell->type == SPELL_GIVE_MANA) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					int mp = 512;
+					for (int i = 0; i < src->giveManaCastCount; i++) mp /= 2;
+					gainMp(dest, mp);
+					src->giveManaCastCount++;
+				}
+			} else if (spell->type == SPELL_ANTI_BUFF) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_ANTI_BUFF, 2);
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -1060,6 +1095,7 @@ void gainHp(Unit *src, Unit *dest, int amount) {
 }
 
 void gainMp(Unit *unit, int amount) {
+	logf("Gained %d\n", amount);
 	unit->mp += amount;
 	if (unit->mp > unit->info->maxMp) unit->mp = unit->info->maxMp;
 }
@@ -1087,12 +1123,34 @@ Buff *giveBuff(Unit *unit, BuffType type, int turns) {
 		unit->buffsNum--;
 	}
 
+	Buff *antiBuff = getBuff(unit, BUFF_ANTI_BUFF);
+	if (antiBuff) {
+		logf("Anti buff consumed %s\n", game->buffTypeInfos[type].name);
+		removeBuff(unit, antiBuff);
+		return NULL;
+	}
+
 	Buff *buff = &unit->buffs[unit->buffsNum++];
 	memset(buff, 0, sizeof(Buff));
 	buff->type = type;
 	buff->turns = turns;
 	buff->info = &game->buffTypeInfos[buff->type];
 	return buff;
+}
+
+void removeBuff(Unit *unit, Buff *buff) {
+	int buffIndex = -1;
+	for (int i = 0; i < unit->buffsNum; i++) {
+		Buff *otherBuff = &unit->buffs[i];
+		if (otherBuff == buff) buffIndex = i;
+	}
+
+	if (buffIndex == -1) {
+		logf("Couldn't find buff to remove???\n");
+		return;
+	}
+	arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), buffIndex);
+	unit->buffsNum--;
 }
 
 void removeAllBuffsOfType(Unit *unit, BuffType type) {
