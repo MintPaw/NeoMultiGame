@@ -34,8 +34,8 @@ Players have 10000hp and 1000mp
 	- Res, 200mp, gives re life to the living
 	- Give mana, 512mp, gives 512mp to player, halfes each cast
 	- Antibuff, 100mp, remove the next buff (could be op)
-	- Restore voice, 1mp, removes silence
 	- Moon strike, 150mp, jumps for one turn, arrives next turn to do 7000 damage (5 hits)
+	- Restore voice, 1mp, removes silence
 	- Lightning, 50mp, does 1000 damage to all enemies
 	- Ice, 100mp, stuns enemy and does 1000 damage
 	- Items:

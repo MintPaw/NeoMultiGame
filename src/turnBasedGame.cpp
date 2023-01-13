@@ -40,6 +40,7 @@ enum BuffType {
 	BUFF_DEFENSE_REDUCTION,
 	BUFF_RELIFE,
 	BUFF_ANTI_BUFF,
+	BUFF_AT_MOON,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -96,6 +97,8 @@ enum SpellType {
 	SPELL_RESURRECT,
 	SPELL_GIVE_MANA,
 	SPELL_ANTI_BUFF,
+	SPELL_MOON_STRIKE,
+	SPELL_MOON_STRIKE_RAID,
 
 	SPELL_WAIT,
 
@@ -203,6 +206,7 @@ Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
+bool isHidden(Unit *unit);
 void gainHp(Unit *src, Unit *dest, int amount);
 void gainMp(Unit *unit, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
@@ -248,7 +252,7 @@ void updateGame() {
 		{
 			UnitTypeInfo *info = NULL;
 
-			for (int i = 0; i < UNIT_TYPES_MAX;i ++) {
+			for (int i = 0; i < UNIT_TYPES_MAX; i++) {
 				UnitTypeInfo *info = &game->unitTypeInfos[i];
 				info->maxHp = 10000;
 				info->maxMp = 1000;
@@ -276,7 +280,7 @@ void updateGame() {
 		{
 			SpellTypeInfo *info = NULL;
 
-			for (int i = 0; i < SPELL_TYPES_MAX;i ++) {
+			for (int i = 0; i < SPELL_TYPES_MAX; i++) {
 				SpellTypeInfo *info = &game->spellTypeInfos[i];
 			}
 
@@ -404,16 +408,27 @@ void updateGame() {
 			info->mp = 200;
 
 			info = &game->spellTypeInfos[SPELL_GIVE_MANA];
-			strcpy(info->name, "Give mana");
+			strcpy(info->name, "Give Mana");
 			info->targetType = TARGET_SINGLE;
 			info->canTargetAllies = true;
 			info->mp = 0;
 
 			info = &game->spellTypeInfos[SPELL_ANTI_BUFF];
-			strcpy(info->name, "Anti buff");
+			strcpy(info->name, "Anti Buff");
 			info->targetType = TARGET_SINGLE;
 			info->canTargetAllies = true;
 			info->mp = 100;
+
+			info = &game->spellTypeInfos[SPELL_MOON_STRIKE];
+			strcpy(info->name, "Moon Strike");
+			info->targetType = TARGET_SINGLE;
+			info->mp = 150;
+			info->damage = 7000;
+
+			info = &game->spellTypeInfos[SPELL_MOON_STRIKE_RAID];
+			strcpy(info->name, "Moon Strike Raid");
+			info->targetType = TARGET_SINGLE;
+			info->damage = game->spellTypeInfos[SPELL_MOON_STRIKE].damage;
 
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
@@ -426,7 +441,7 @@ void updateGame() {
 		{
 			BuffTypeInfo *info = NULL;
 
-			for (int i = 0; i < BUFF_TYPES_MAX;i ++) {
+			for (int i = 0; i < BUFF_TYPES_MAX; i++) {
 				BuffTypeInfo *info = &game->buffTypeInfos[i];
 			}
 
@@ -474,6 +489,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_ANTI_BUFF];
 			strcpy(info->name, "Anti Buff");
+
+			info = &game->buffTypeInfos[BUFF_AT_MOON];
+			strcpy(info->name, "At Moon");
 		}
 
 		{
@@ -512,6 +530,7 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_RESURRECT;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_GIVE_MANA;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ANTI_BUFF;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_MOON_STRIKE;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
@@ -576,6 +595,7 @@ void updateGame() {
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (!unit->ally) continue;
+			if (isHidden(unit)) continue;
 			guiShowUnit(unit);
 		}
 		ImGui::EndChild();
@@ -586,6 +606,7 @@ void updateGame() {
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (unit->ally) continue;
+			if (isHidden(unit)) continue;
 			guiShowUnit(unit);
 		}
 		ImGui::EndChild();
@@ -630,6 +651,26 @@ void updateGame() {
 				}
 				ImGui::End();
 			} else if (currentUnit) {
+				Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
+				if (atMoon) {
+					Unit *target = getUnit(atMoon->intUserData);
+					if (!target) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *possibleTarget = &game->units[i];
+							if (possibleTarget->ally == currentUnit->ally) continue;
+							if (possibleTarget->hp <= 0) continue;
+							if (isHidden(possibleTarget)) continue;
+							target = possibleTarget;
+							break;
+						}
+					}
+					if (target) {
+						castSpell(currentUnit, target, SPELL_MOON_STRIKE_RAID);
+					} else {
+						logf("Graceful Touchdown\n");
+					}
+					removeBuff(currentUnit, atMoon);
+				}
 				if (currentUnit->ally) {
 					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
 					ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
@@ -694,6 +735,7 @@ void updateGame() {
 								Unit *unit = &game->units[i];
 								if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
 								if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
+								if (isHidden(unit)) continue;
 								if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
 									bool canCast = true;
 									if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
@@ -759,11 +801,13 @@ void updateGame() {
 					if (destIndex > 0) {
 						underDest = &game->units[destIndex-1];
 						if (underDest->ally != dest->ally) underDest = NULL;
+						if (isHidden(underDest)) underDest = NULL;
 					}
 					Unit *overDest = NULL;
 					if (destIndex < game->unitsNum-1) {
 						overDest = &game->units[destIndex+1];
 						if (overDest->ally != dest->ally) overDest = NULL;
+						if (isHidden(overDest)) overDest = NULL;
 					}
 					dealDamage(src, dest, spell->info->damage);
 					if (underDest) dealDamage(src, underDest, spell->info->damage);
@@ -785,10 +829,10 @@ void updateGame() {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
-						if (unit->ally != src->ally) {
-							dealDamage(src, unit, spell->info->damage);
-							giveBuff(unit, BUFF_QUAKED, 2);
-						}
+						if (isHidden(unit)) continue;
+						if (unit->ally == src->ally) continue;
+						dealDamage(src, unit, spell->info->damage);
+						giveBuff(unit, BUFF_QUAKED, 2);
 					}
 				}
 			} else if (spell->type == SPELL_PHYS_UP) {
@@ -796,6 +840,7 @@ void updateGame() {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
 						if (unit->ally == src->ally) {
 							giveBuff(unit, BUFF_PHYS_UP, 2);
 						}
@@ -811,6 +856,7 @@ void updateGame() {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
 						giveBuff(unit, BUFF_BLEED, 3);
 					}
 				}
@@ -827,6 +873,8 @@ void updateGame() {
 					src->weapon = WEAPON_LOW_HP;
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
 						if (unit->ally) gainHp(src, unit, 100);
 					}
 				}
@@ -881,6 +929,8 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
 						if (unit->ally) gainHp(src, unit, spell->info->damage);
 					}
 				}
@@ -901,6 +951,17 @@ void updateGame() {
 				}
 			} else if (spell->type == SPELL_ANTI_BUFF) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_ANTI_BUFF, 2);
+			} else if (spell->type == SPELL_MOON_STRIKE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					Buff *buff = giveBuff(src, BUFF_AT_MOON, -1);
+					if (buff) buff->intUserData = dest->id;
+				}
+			} else if (spell->type == SPELL_MOON_STRIKE_RAID) {
+				if (spellTimeJustPassed(baseSpellTime*0.4)) dealDamage(src, dest, spell->info->damage/5);
+				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/5);
+				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/5);
+				if (spellTimeJustPassed(baseSpellTime*0.7)) dealDamage(src, dest, spell->info->damage/5);
+				if (spellTimeJustPassed(baseSpellTime*0.8)) dealDamage(src, dest, spell->info->damage/5);
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -995,6 +1056,17 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 		game->spellQueueNum--;
 	}
 
+	if (dest && isHidden(dest)) {
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *possibleDest = &game->units[i];
+			if (possibleDest->ally != dest->ally) continue;
+			if (possibleDest->hp <= 0) continue;
+			if (isHidden(possibleDest)) continue;
+			dest = possibleDest;
+			break;
+		}
+	}
+
 	if (src && dest && !src->ally && dest->type == UNIT_PLAYER2) {
 		Unit *p1 = getUnitByType(UNIT_PLAYER1);
 		if (getBuff(p1, BUFF_BODY_BLOCKING)) {
@@ -1087,6 +1159,11 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 			}
 		}
 	}
+}
+
+bool isHidden(Unit *unit) {
+	if (getBuff(unit, BUFF_AT_MOON)) return true;
+	return false;
 }
 
 void gainHp(Unit *src, Unit *dest, int amount) {
