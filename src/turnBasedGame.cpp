@@ -41,6 +41,7 @@ enum BuffType {
 	BUFF_RELIFE,
 	BUFF_ANTI_BUFF,
 	BUFF_AT_MOON,
+	BUFF_FROZEN,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -99,6 +100,11 @@ enum SpellType {
 	SPELL_ANTI_BUFF,
 	SPELL_MOON_STRIKE,
 	SPELL_MOON_STRIKE_RAID,
+	SPELL_LIGHTNING,
+	SPELL_ICE,
+
+	SPELL_SMALL_ETHER,
+	SPELL_LARGE_ETHER,
 
 	SPELL_WAIT,
 
@@ -155,6 +161,7 @@ struct Unit {
 
 #define SPELLS_AVAILABLE_MAX 128
 	SpellType spellsAvailable[SPELLS_AVAILABLE_MAX];
+	int spellsAvailableAmounts[SPELLS_AVAILABLE_MAX];
 	int spellsAvailableNum;
 
 #define BUFFS_MAX 64
@@ -189,6 +196,7 @@ struct Game {
 	int wave;
 
 	SpellType currentSpellType;
+	int currentSpellAvailableIndex;
 	float prevSpellTime;
 	float spellTime;
 
@@ -430,6 +438,30 @@ void updateGame() {
 			info->targetType = TARGET_SINGLE;
 			info->damage = game->spellTypeInfos[SPELL_MOON_STRIKE].damage;
 
+			info = &game->spellTypeInfos[SPELL_LIGHTNING];
+			strcpy(info->name, "Lightning");
+			info->targetType = TARGET_NONE;
+			info->mp = 50;
+			info->damage = 1000;
+
+			info = &game->spellTypeInfos[SPELL_ICE];
+			strcpy(info->name, "Ice");
+			info->targetType = TARGET_SINGLE;
+			info->mp = 100;
+			info->damage = 1000;
+
+			info = &game->spellTypeInfos[SPELL_SMALL_ETHER];
+			strcpy(info->name, "Small Eather");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->damage = 500;
+
+			info = &game->spellTypeInfos[SPELL_LARGE_ETHER];
+			strcpy(info->name, "Large Eather");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+			info->damage = 1000;
+
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
@@ -492,6 +524,9 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_AT_MOON];
 			strcpy(info->name, "At Moon");
+
+			info = &game->buffTypeInfos[BUFF_FROZEN];
+			strcpy(info->name, "Frozen");
 		}
 
 		{
@@ -519,7 +554,6 @@ void updateGame() {
 
 			unit = createUnit(UNIT_PLAYER2);
 			unit->ally = true;
-			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SWIPE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_POISON;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ADD_MANA_SIPHON;
@@ -531,6 +565,13 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_GIVE_MANA;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ANTI_BUFF;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_MOON_STRIKE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_LIGHTNING;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ICE;
+
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SMALL_ETHER;
+			unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_LARGE_ETHER;
+			unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
 
@@ -627,6 +668,35 @@ void updateGame() {
 		if (!currentUnit && platform->frameCount%60 == 0) logf("No current unit\n");
 
 		if (game->spellQueueNum == 0) {
+			Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
+			if (atMoon) {
+				Unit *target = getUnit(atMoon->intUserData);
+				if (!target) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *possibleTarget = &game->units[i];
+						if (possibleTarget->ally == currentUnit->ally) continue;
+						if (possibleTarget->hp <= 0) continue;
+						if (isHidden(possibleTarget)) continue;
+						target = possibleTarget;
+						break;
+					}
+				}
+				if (target) {
+					castSpell(currentUnit, target, SPELL_MOON_STRIKE_RAID);
+				} else {
+					logf("Graceful Touchdown\n");
+				}
+				removeBuff(currentUnit, atMoon);
+			}
+
+			Buff *frozen = getBuff(currentUnit, BUFF_FROZEN);
+			if (frozen) {
+				logf("Frozen\n");
+				castSpell(currentUnit, NULL, SPELL_END_TURN);
+			}
+		}
+
+		if (game->spellQueueNum == 0) {
 			int allyCount = 0;
 			int enemyCount = 0;
 			for (int i = 0; i < game->unitsNum; i++) {
@@ -651,26 +721,6 @@ void updateGame() {
 				}
 				ImGui::End();
 			} else if (currentUnit) {
-				Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
-				if (atMoon) {
-					Unit *target = getUnit(atMoon->intUserData);
-					if (!target) {
-						for (int i = 0; i < game->unitsNum; i++) {
-							Unit *possibleTarget = &game->units[i];
-							if (possibleTarget->ally == currentUnit->ally) continue;
-							if (possibleTarget->hp <= 0) continue;
-							if (isHidden(possibleTarget)) continue;
-							target = possibleTarget;
-							break;
-						}
-					}
-					if (target) {
-						castSpell(currentUnit, target, SPELL_MOON_STRIKE_RAID);
-					} else {
-						logf("Graceful Touchdown\n");
-					}
-					removeBuff(currentUnit, atMoon);
-				}
 				if (currentUnit->ally) {
 					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
 					ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
@@ -679,10 +729,12 @@ void updateGame() {
 						for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
 							SpellType type = currentUnit->spellsAvailable[i];
 							SpellTypeInfo *info = &game->spellTypeInfos[type];
+							int spellAvailableIndex = i;
 
 							ImGui::PushID(i);
 							char *label = info->name;
 							if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
+							if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
 							if (spellCount % 5 != 0) ImGui::SameLine();
 							if (ImGui::Button(label)) {
 								bool canCast = true;
@@ -690,6 +742,11 @@ void updateGame() {
 								if (currentUnit->mp < info->mp) {
 									canCast = false;
 									logf("Not enough mp\n");
+								}
+
+								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
+									canCast = false;
+									logf("No more\n");
 								}
 
 								if (
@@ -722,7 +779,10 @@ void updateGame() {
 									}
 								}
 
-								if (canCast) game->currentSpellType = type;
+								if (canCast) {
+									game->currentSpellType = type;
+									game->currentSpellAvailableIndex = i;
+								}
 							}
 							spellCount++;
 							ImGui::PopID();
@@ -744,6 +804,7 @@ void updateGame() {
 									}
 
 									if (canCast) {
+										currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
 										castSpell(currentUnit, unit, game->currentSpellType);
 										castSpell(currentUnit, NULL, SPELL_END_TURN);
 										game->currentSpellType = SPELL_NONE;
@@ -752,6 +813,7 @@ void updateGame() {
 							}
 							if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
 						} else if (currentSpellInfo->targetType == TARGET_NONE) {
+							currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
 							castSpell(currentUnit, NULL, game->currentSpellType);
 							castSpell(currentUnit, NULL, SPELL_END_TURN);
 							game->currentSpellType = SPELL_NONE;
@@ -962,6 +1024,25 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/5);
 				if (spellTimeJustPassed(baseSpellTime*0.7)) dealDamage(src, dest, spell->info->damage/5);
 				if (spellTimeJustPassed(baseSpellTime*0.8)) dealDamage(src, dest, spell->info->damage/5);
+			} else if (spell->type == SPELL_LIGHTNING) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally) continue;
+						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
+						dealDamage(src, unit, spell->info->damage);
+					}
+				}
+			} else if (spell->type == SPELL_ICE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					giveBuff(dest, BUFF_FROZEN, 1);
+					dealDamage(src, dest, spell->info->damage);
+				}
+			} else if (spell->type == SPELL_SMALL_ETHER) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
+			} else if (spell->type == SPELL_LARGE_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -1255,6 +1336,10 @@ Unit *createUnit(UnitType type) {
 	unit->info = &game->unitTypeInfos[unit->type];
 	unit->hp = unit->info->maxHp;
 	unit->mp = unit->info->maxMp;
+
+	for (int i = 0; i < SPELLS_AVAILABLE_MAX; i++) {
+		unit->spellsAvailableAmounts[i] = -1;
+	}
 
 	{
 		int existingCount = 0;
