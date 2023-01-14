@@ -881,6 +881,7 @@ void updateGame() {
 					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO, 1);
 					if (comboBuff) {
 						comboBuff->intUserData++;
+						comboBuff->turns++;
 						dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
 					} else {
 						dealDamage(src, dest, spell->info->damage);
@@ -1243,6 +1244,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 }
 
 bool isHidden(Unit *unit) {
+	if (unit == NULL) return false;
 	if (getBuff(unit, BUFF_AT_MOON)) return true;
 	return false;
 }
@@ -1359,24 +1361,53 @@ Unit *createUnit(UnitType type) {
 
 void nextWave() {
 	game->wave++;
+	game->turnQueueNum = 0;
 
 	Unit *unit = NULL;
 
-	if (game->wave == 1) {
-		unit = createUnit(UNIT_STANDARD_A);
-		unit = createUnit(UNIT_STANDARD_B);
-	} else if (game->wave == 2) {
-		unit = createUnit(UNIT_STANDARD_B);
-		unit = createUnit(UNIT_STANDARD_B);
-	} else if (game->wave == 3) {
-		unit = createUnit(UNIT_STANDARD_A);
-		unit = createUnit(UNIT_STANDARD_B);
-		unit = createUnit(UNIT_STANDARD_A);
-	} else if (game->wave == 4) {
-		unit = createUnit(UNIT_STANDARD_A);
-		unit = createUnit(UNIT_STANDARD_C);
-		unit = createUnit(UNIT_STANDARD_A);
-	} else if (game->wave == 5) {
-		logf("You win\n");
-	}
+	int waveCheck = 0;
+
+#define StartWaveDef() waveCheck++; if (game->wave == waveCheck) {
+#define EndWaveDef() }
+#define NextWaveDef() EndWaveDef(); StartWaveDef();
+
+	StartWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_B);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_B);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_B);
+	unit = createUnit(UNIT_STANDARD_B);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_B);
+	unit = createUnit(UNIT_STANDARD_B);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_B);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_B);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_B);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_C);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_C);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	unit = createUnit(UNIT_STANDARD_A);
+	unit = createUnit(UNIT_STANDARD_C);
+	unit = createUnit(UNIT_STANDARD_A);
+	NextWaveDef();
+	logf("You win\n");
+	EndWaveDef();
 }
