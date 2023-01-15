@@ -193,6 +193,7 @@ struct Game {
 	int turnQueue[UNITS_MAX];
 	int turnQueueNum;
 
+	int level;
 	int wave;
 
 	SpellType currentSpellType;
@@ -273,15 +274,15 @@ void updateGame() {
 			strcpy(info->name, "Player2");
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_A];
-			info->maxHp = 5000;
+			info->maxHp = 10000;
 			strcpy(info->name, "Standard A");
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_B];
-			info->maxHp = 10000;
+			info->maxHp = 20000;
 			strcpy(info->name, "Standard B");
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_C];
-			info->maxHp = 20000;
+			info->maxHp = 40000;
 			strcpy(info->name, "Standard C");
 		}
 
@@ -323,7 +324,7 @@ void updateGame() {
 
 			info = &game->spellTypeInfos[SPELL_COMBO_ATTACK];
 			strcpy(info->name, "Combo Attack");
-			info->damage = 2000;
+			info->damage = 2500;
 			info->mp = 20;
 
 			info = &game->spellTypeInfos[SPELL_EARTHQUAKE];
@@ -529,6 +530,9 @@ void updateGame() {
 			strcpy(info->name, "Frozen");
 		}
 
+		game->baseSpellTime = 1;
+		game->level = 1;
+
 		{
 			Unit *unit = NULL;
 
@@ -577,8 +581,6 @@ void updateGame() {
 
 			nextWave();
 		}
-
-		game->baseSpellTime = 1;
 
 		maximizeWindow();
 	}
@@ -1371,43 +1373,36 @@ void nextWave() {
 #define EndWaveDef() }
 #define NextWaveDef() EndWaveDef(); StartWaveDef();
 
-	StartWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_B);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_B);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_B);
-	unit = createUnit(UNIT_STANDARD_B);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_B);
-	unit = createUnit(UNIT_STANDARD_B);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_B);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_B);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_B);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_C);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_C);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	unit = createUnit(UNIT_STANDARD_A);
-	unit = createUnit(UNIT_STANDARD_C);
-	unit = createUnit(UNIT_STANDARD_A);
-	NextWaveDef();
-	logf("You win\n");
-	EndWaveDef();
+	if (game->level == 1) {
+		StartWaveDef();
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_B);
+		NextWaveDef();
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_STANDARD_B);
+		NextWaveDef();
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_STANDARD_A);
+		NextWaveDef();
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_C);
+		unit = createUnit(UNIT_STANDARD_A);
+		NextWaveDef();
+		logf("You win\n");
+		EndWaveDef();
+	} else if (game->level == 2) {
+		StartWaveDef();
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_C);
+		unit = createUnit(UNIT_STANDARD_A);
+		NextWaveDef();
+		logf("You win\n");
+		EndWaveDef();
+	}
+
+	// - Easy mix
+	// - Swift vs standard
+	// - Standard mix
+	// - Swift rng
 }

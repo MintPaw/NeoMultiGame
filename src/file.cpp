@@ -630,12 +630,12 @@ bool writeFile(const char *fileName, void *data, int length) {
 	if (!filePtr) {
 		logf("Cannot find file %s\n", realName);
 		printf("Why: %s\n", strerror(errno));
-		Assert(0);
 		return false;
 	}
 
-	fwrite(data, length, 1, filePtr);
+	int written = fwrite(data, length, 1, filePtr);
 	fclose(filePtr);
+	if (written != length) return false;
 	return true;
 #endif
 }

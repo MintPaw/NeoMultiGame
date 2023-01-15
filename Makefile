@@ -59,6 +59,8 @@ endif
 PYTHON3=/c/Users/MintPaw/AppData/Local/Programs/Python/Python37-32/python.exe
 BLENDER="/c/Program Files/Blender Foundation/Blender 3.0/blender.exe"
 
+WIN_CMD=MSYS2_ARG_CONV_EXCL="*" cmd /c
+
 all:
 	@-rm -rf horseGameAssets gladiators2GameAssets interrogationGameAssets butt2GoGameAssets catsFirstGameAssets &
 	@-rm -rf pkGameAssets deskGameAssets zooBoundGameAssets remoteGameAssets &
@@ -67,7 +69,7 @@ all:
 
 ifneq (, $(findstring MSYS_NT, $(shell uname))) # -------------------------------------------------- Windows
 bdebugrel:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
@@ -78,7 +80,7 @@ bdebugrel:
 brel:
 ifeq ($(GAME_NAME), horseGame)
 	rsync -at "/c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets" "/c/Dropbox/MultiGame/multiGame/horseGameAssets"
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=0&& \
 		set FAST_CLANG_MODE=1&& \
@@ -92,7 +94,7 @@ ifeq ($(GAME_NAME), horseGame)
 	done;
 	
 else
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=0&& \
 		set INTERNAL_MODE=0&& \
@@ -108,7 +110,7 @@ rel:
 optiDebug:
 ifeq ($(GAME_NAME), horseGame)
 	cp -r "/c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets" "/c/Dropbox/MultiGame/multiGame/horseGameAssets"
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set FAST_CLANG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -118,7 +120,7 @@ ifeq ($(GAME_NAME), horseGame)
 		"
 	rm -rf "/c/Dropbox/MultiGame/multiGame/horseGameAssets/*"
 else
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set INTERNAL_MODE=1&& \
 		set DEBUG_MODE=1&& \
@@ -133,7 +135,7 @@ ray:
 	$(MAKE) r
 
 bray:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -142,7 +144,7 @@ bray:
 		"
 
 bwray:
-	-cmd /c "\
+	-$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -150,7 +152,7 @@ bwray:
 		buildSystem\$(EMSCRIPTEN_BUILD_BAT).bat\
 		"
 	
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		buildSystem\buildEmscriptenRay.bat\
 		"
@@ -172,7 +174,7 @@ else ifeq ($(GAME_NAME), zooBoundGame)
 else ifeq ($(GAME_NAME), concreteJungleGame)
 	rsync -at "/c/Dropbox/MultiGame/multiGame/commonAssets/assets/common" "/c/Dropbox/concreteJungle/concreteJungleGameAssets/assets" &
 endif
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -185,7 +187,7 @@ clang:
 	$(MAKE) r
 
 bclang:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -201,7 +203,7 @@ r:
 
 bwf:
 	echo $(GAME_NAME)
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -210,7 +212,7 @@ bwf:
 		"
 
 bw:
-	-cmd /c "\
+	-$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -218,7 +220,7 @@ bw:
 		"
 
 bwdebugrel:
-	-cmd /c "\
+	-$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
@@ -228,7 +230,7 @@ bwdebugrel:
 
 bwrel:
 	echo $(GAME_NAME)
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=0&& \
 		set INTERNAL_MODE=0&& \
@@ -237,15 +239,15 @@ bwrel:
 		"
 
 rw:
-	cmd /c "D:/_tools/chromium/chrome.exe 127.0.0.1/game"
+	$(WIN_CMD) "D:/_tools/chromium/chrome.exe 127.0.0.1/game"
 
 debugVs:
 	# $(MAKE) debugC
-	cmd /c "devenv C:/bin/$(GAME_NAME).exe"
+	$(WIN_CMD) "devenv C:/bin/$(GAME_NAME).exe"
 
 debugC:
-	-cmd /c "D:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
-	-cmd /c "C:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
+	-$(WIN_CMD) "D:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
+	-$(WIN_CMD) "C:\_tools\remedyBg\remedyBg.exe C:/bin/$(GAME_NAME).exe" &
 endif # ------------------------------------------------------------------------------------------ End Windows
 
 ifneq (, $(findstring Linux, $(shell uname))) # -------------------------------------------------- Linux
@@ -294,25 +296,25 @@ buildAssets:
 debugGl:
 	cd /c/bin; \
 	rm -f gl.trace; \
-	cmd /c "$(WIN_API_TRACE_DIR)/apitrace trace -o gl.trace -v --api gl $(GAME_NAME).exe"; \
-	cmd /c "$(WIN_API_TRACE_DIR)/qapitrace gl.trace"
+	$(WIN_CMD) "$(WIN_API_TRACE_DIR)/apitrace trace -o gl.trace -v --api gl $(GAME_NAME).exe"; \
+	$(WIN_CMD) "$(WIN_API_TRACE_DIR)/qapitrace gl.trace"
 
 runChromium:
-	cmd /c "D:/_tools/chromium/chrome.exe"
+	$(WIN_CMD) "D:/_tools/chromium/chrome.exe"
 
 debugGlChrome:
-	# cmd /c "D:/_tools/chromium/chrome.exe --no-sandbox --disable-gpu-watchdog --gpu-startup-dialog"
-	cmd /c "set RENDERDOC_HOOK_EGL=0 && D:/_tools/chromium/chrome.exe --disable-gpu-sandbox --gpu-startup-dialog"
+	# $(WIN_CMD) "D:/_tools/chromium/chrome.exe --no-sandbox --disable-gpu-watchdog --gpu-startup-dialog"
+	$(WIN_CMD) "set RENDERDOC_HOOK_EGL=0 && D:/_tools/chromium/chrome.exe --disable-gpu-sandbox --gpu-startup-dialog"
 
 mtune:
-	cmd /c "D:\_tools\mtuner\mtuner.exe C:\bin\$(GAME_NAME).exe" &
-	cmd /c "C:\_tools\mtuner\mtuner.exe C:\bin\$(GAME_NAME).exe" &
+	$(WIN_CMD) "D:\_tools\mtuner\mtuner.exe C:\bin\$(GAME_NAME).exe" &
+	$(WIN_CMD) "C:\_tools\mtuner\mtuner.exe C:\bin\$(GAME_NAME).exe" &
 
 debugGlGpuDemo:
 	cd /c/Dropbox/rtsGame/rtsClientAssets/assets/__raw/tools/iqm/demo/; \
 	rm -f gl.trace; \
-	cmd /c "$(WIN_API_TRACE_DIR32)/apitrace trace -o gl.trace -v --api gl gpu-demo.exe"; \
-	cmd /c "$(WIN_API_TRACE_DIR32)/qapitrace gl.trace"
+	$(WIN_CMD) "$(WIN_API_TRACE_DIR32)/apitrace trace -o gl.trace -v --api gl gpu-demo.exe"; \
+	$(WIN_CMD) "$(WIN_API_TRACE_DIR32)/qapitrace gl.trace"
 
 ctags:
 	ctags -R .tags src/$(GAME_NAME).cpp
@@ -355,7 +357,7 @@ reEncodeAllOggs:
 		find . -type f -name "*.wav" -delete
 
 shipFpsDesktop:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=fpsGame&& \
 		set DEBUG_MODE=0&& \
 		set INTERNAL_MODE=0&& \
@@ -397,7 +399,7 @@ countHorseGame:
 	cloc --by-file ../multiGamePrivate/src/horseGame.cpp ../multiGamePrivate/src/horseGame/
 
 pack: #@todo remove
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=0&& \
 		set INTERNAL_MODE=0&& \
@@ -422,7 +424,7 @@ pack: #@todo remove
 
 shipZooBoundToDropbox:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=zooBoundGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -439,7 +441,7 @@ shipZooBoundToDropbox:
 
 shipZooBoundToSelf:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=zooBoundGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
@@ -459,7 +461,7 @@ shipZooBoundToSelf:
 		cp /c/bin/*.pdb /c/bin/selfShip
 
 shipHorseGameToSelf:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=horseGame&& \
 		set DEBUG_MODE=0&& \
 		set FAST_CLANG_MODE=1&& \
@@ -502,7 +504,7 @@ encodeConcreteJungleGameAudio:
 	find /c/Dropbox/concreteJungle/concreteJungleGameAssets/assets/audio -type f -name "*.wav" -delete
 
 buildBhgOptimizedDebug:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=bulletHellGame&& \
 		set DEBUG_MODE=0&& \
 		set FAST_CLANG_MODE=0&& \
@@ -513,7 +515,7 @@ buildBhgOptimizedDebug:
 
 shipBulletHellGameToSelf:
 	make clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=bulletHellGame&& \
 		set DEBUG_MODE=0&& \
 		set FAST_CLANG_MODE=1&& \
@@ -632,7 +634,7 @@ watchStockGame:
 	ssh pi@192.168.2.21 -t 'watch -d -n 1 "cat stockGameBuildLog.txt | tail -n 25"'
 
 shipTestGameToSelf:
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=testGame&& \
 		set DEBUG_MODE=0&& \
 		set INTERNAL_MODE=0&& \
@@ -657,7 +659,7 @@ shipTestGameToSelf:
 
 shipCatsFirstGameToCat:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=catsFirstGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -674,7 +676,7 @@ shipCatsFirstGameToCat:
 
 shipInterrogationGameToCat:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=interrogationGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -692,7 +694,7 @@ shipInterrogationGameToCat:
 
 shipConcreteJungleGameToLen:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=concreteJungleGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
@@ -708,7 +710,7 @@ shipConcreteJungleGameToLen:
 
 devShipConcreteJungleGameToSelf:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=concreteJungleGame&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
@@ -731,7 +733,7 @@ devShipConcreteJungleGameToSelf:
 
 devShipTower2GameToSelf:
 	-$(MAKE) clean
-	cmd /c "\
+	$(WIN_CMD) "\
 		set GAME_NAME=tower2Game&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
