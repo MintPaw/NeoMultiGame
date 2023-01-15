@@ -505,4 +505,5 @@ Players have 10000hp and 1000mp
 	- Player 2 mood
 	- The difference between DoTs that derive damage multiplier based off current magic buffs, or the magic buffs when first cast
 	- P2 flash?
+	- Moon strike should apply additions?
 #endif

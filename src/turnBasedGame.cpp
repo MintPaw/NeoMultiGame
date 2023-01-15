@@ -136,6 +136,7 @@ enum UnitType {
 	UNIT_STANDARD_A,
 	UNIT_STANDARD_B,
 	UNIT_STANDARD_C,
+	UNIT_SWIFT,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -144,6 +145,7 @@ struct UnitTypeInfo {
 
 	int maxHp;
 	int maxMp;
+	float dodgeChance;
 };
 struct Unit {
 	UnitType type;
@@ -187,6 +189,8 @@ struct Game {
 	int spellQueueNum;
 	int nextSpellId;
 
+	bool spellImmNeverMisses;
+
 	BuffTypeInfo buffTypeInfos[BUFF_TYPES_MAX];
 	int nextBuffId;
 
@@ -216,7 +220,7 @@ Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
 bool isHidden(Unit *unit);
-void gainHp(Unit *src, Unit *dest, int amount);
+void gainHp(Unit *unit, int amount);
 void gainMp(Unit *unit, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
 int countBuffs(Unit *unit, BuffType type);
@@ -274,16 +278,21 @@ void updateGame() {
 			strcpy(info->name, "Player2");
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_A];
-			info->maxHp = 10000;
 			strcpy(info->name, "Standard A");
+			info->maxHp = 10000;
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_B];
-			info->maxHp = 20000;
 			strcpy(info->name, "Standard B");
+			info->maxHp = 20000;
 
 			info = &game->unitTypeInfos[UNIT_STANDARD_C];
-			info->maxHp = 40000;
 			strcpy(info->name, "Standard C");
+			info->maxHp = 40000;
+
+			info = &game->unitTypeInfos[UNIT_SWIFT];
+			strcpy(info->name, "Swift");
+			info->maxHp = 3500;
+			info->dodgeChance = 0.9;
 		}
 
 		{
@@ -314,7 +323,7 @@ void updateGame() {
 
 			info = &game->spellTypeInfos[SPELL_QUICK_ATTACK];
 			strcpy(info->name, "Quick Attack");
-			info->damage = 4000;
+			info->damage = 3000;
 			info->mp = 20;
 
 			info = &game->spellTypeInfos[SPELL_WIDE_STRIKE];
@@ -531,7 +540,8 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 1;
-		game->level = 1;
+		game->level = 2;
+		game->wave = 0;
 
 		{
 			Unit *unit = NULL;
@@ -786,6 +796,11 @@ void updateGame() {
 									game->currentSpellAvailableIndex = i;
 								}
 							}
+
+							if (ImGui::IsItemHovered()) {
+								if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
+							}
+
 							spellCount++;
 							ImGui::PopID();
 						}
@@ -853,8 +868,12 @@ void updateGame() {
 			) {
 				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
 			} else if (spell->type == SPELL_QUICK_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
-				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
+				bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
+				game->spellImmNeverMisses = true;
+				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.50)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+				game->spellImmNeverMisses = oldSpellImmNeverMisses;
 			} else if (spell->type == SPELL_WIDE_STRIKE) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					int destIndex = -1;
@@ -940,7 +959,7 @@ void updateGame() {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
 						if (isHidden(unit)) continue;
-						if (unit->ally) gainHp(src, unit, 100);
+						if (unit->ally) gainHp(unit, 100);
 					}
 				}
 			} else if (spell->type == SPELL_DRAW_DODGE) {
@@ -989,14 +1008,14 @@ void updateGame() {
 			} else if (spell->type == SPELL_ADD_DEFENSE_REDUCTION) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_DEFENSE_REDUCTION, -1);
 			} else if (spell->type == SPELL_HEAL) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(src, dest, spell->info->damage);
+				if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(dest, spell->info->damage);
 			} else if (spell->type == SPELL_HEAL2) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					for (int i = 0; i < game->unitsNum; i++) {
 						Unit *unit = &game->units[i];
 						if (unit->hp <= 0) continue;
 						if (isHidden(unit)) continue;
-						if (unit->ally) gainHp(src, unit, spell->info->damage);
+						if (unit->ally) gainHp(unit, spell->info->damage);
 					}
 				}
 			} else if (spell->type == SPELL_RESURRECT) {
@@ -1056,13 +1075,13 @@ void updateGame() {
 						Buff *buff = &unit->buffs[i];
 						buff->turns--;
 
-						if (buff->type == BUFF_BLEED) {
-							dealDamage(NULL, unit, 500, true);
-						}
+						bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
+						game->spellImmNeverMisses = true;
 
-						if (buff->type == BUFF_POISON) {
-							dealDamage(NULL, unit, 100, true);
-						}
+						if (buff->type == BUFF_BLEED) dealDamage(NULL, unit, 500, true);
+						if (buff->type == BUFF_POISON) dealDamage(NULL, unit, 100, true);
+
+						game->spellImmNeverMisses = oldSpellImmNeverMisses;
 
 						if (buff->turns == 0) {
 							arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), i);
@@ -1191,10 +1210,10 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 		}
 
 		if (src->weapon == WEAPON_LOW_HP) {
-			int level = 1;
-			if (src->hp < src->info->maxHp*0.50) level = 2;
-			if (src->hp < src->info->maxHp*0.25) level = 3;
-			damageMulti *= level;
+			int powerLevel = 1;
+			if (src->hp < src->info->maxHp*0.50) powerLevel = 2;
+			if (src->hp < src->info->maxHp*0.25) powerLevel = 3;
+			damageMulti *= powerLevel;
 		}
 
 		if (src->weapon == WEAPON_POISON && !isMagic) {
@@ -1209,9 +1228,11 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 		if (buff->type == BUFF_DEFENSE_REDUCTION) damageMulti *= 2;
 	}
 
-	float dodgeChance = 0;
+	float dodgeChance = dest->info->dodgeChance;
 
 	if (dest->weapon == WEAPON_DODGE) dodgeChance += 0.1;
+
+	if (game->spellImmNeverMisses) dodgeChance = 0;
 
 	if (rndFloat(0, 1) < dodgeChance) {
 		damageMulti = 0;
@@ -1227,6 +1248,8 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	}
 	dest->hp -= amount;
 
+	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, amount * 0.01);
+
 	if (dest->hp <= 0 && getBuff(dest, BUFF_RELIFE)) {
 		logf("Relifed\n");
 		dest->hp = dest->info->maxHp;
@@ -1234,7 +1257,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	}
 
 	if (dest->hp <= 0) {
-		for (int i = 0; i < game->turnQueueNum; i++) {
+		for (int i = 1; i < game->turnQueueNum; i++) {
 			if (game->turnQueue[i] == dest->id) {
 				arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), i);
 				game->turnQueueNum--;
@@ -1251,9 +1274,10 @@ bool isHidden(Unit *unit) {
 	return false;
 }
 
-void gainHp(Unit *src, Unit *dest, int amount) {
-	dest->hp += amount;
-	if (dest->hp > dest->info->maxHp) dest->hp = dest->info->maxHp;
+void gainHp(Unit *unit, int amount) {
+	if (unit->weapon == WEAPON_BIG_DAMAGE) amount = 0;
+	unit->hp += amount;
+	if (unit->hp > unit->info->maxHp) unit->hp = unit->info->maxHp;
 }
 
 void gainMp(Unit *unit, int amount) {
@@ -1362,15 +1386,14 @@ Unit *createUnit(UnitType type) {
 }
 
 void nextWave() {
-	game->wave++;
 	game->turnQueueNum = 0;
 
 	Unit *unit = NULL;
 
 	int waveCheck = 0;
 
-#define StartWaveDef() waveCheck++; if (game->wave == waveCheck) {
-#define EndWaveDef() }
+#define StartWaveDef() if (game->wave == waveCheck) {
+#define EndWaveDef() }; waveCheck++; 
 #define NextWaveDef() EndWaveDef(); StartWaveDef();
 
 	if (game->level == 1) {
@@ -1397,12 +1420,27 @@ void nextWave() {
 		unit = createUnit(UNIT_STANDARD_C);
 		unit = createUnit(UNIT_STANDARD_A);
 		NextWaveDef();
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_STANDARD_B);
+		NextWaveDef();
+		unit = createUnit(UNIT_STANDARD_B);
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_C);
+		unit = createUnit(UNIT_STANDARD_A);
+		unit = createUnit(UNIT_STANDARD_B);
+		NextWaveDef();
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_SWIFT);
+		unit = createUnit(UNIT_SWIFT);
+		NextWaveDef();
 		logf("You win\n");
 		EndWaveDef();
 	}
 
-	// - Easy mix
-	// - Swift vs standard
-	// - Standard mix
-	// - Swift rng
+	game->wave++;
 }
