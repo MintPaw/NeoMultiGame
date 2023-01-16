@@ -1,6 +1,4 @@
 //Change how turns work
-//Add sleep
-//Change spellsAvailable
 struct Globals {
 };
 
@@ -109,6 +107,8 @@ enum SpellType {
 	SPELL_MOON_STRIKE_RAID,
 	SPELL_LIGHTNING,
 	SPELL_ICE,
+	SPELL_SLEEP,
+	SPELL_WAKE_UP,
 
 	SPELL_SMALL_ETHER,
 	SPELL_LARGE_ETHER,
@@ -145,6 +145,9 @@ struct SpellTypeInfo {
 
 	bool canTargetAllies;
 	bool canTargetDead;
+
+	bool enabledWhileAwake;
+	bool enabledWhileAsleep;
 };
 struct Spell {
 	SpellType type;
@@ -205,6 +208,7 @@ struct Unit {
 
 	bool glassBroken;
 	int giveManaCastCount;
+	bool asleep;
 
 	int accelerationCount;
 };
@@ -372,6 +376,7 @@ void updateGame() {
 
 			for (int i = 0; i < SPELL_TYPES_MAX; i++) {
 				SpellTypeInfo *info = &game->spellTypeInfos[i];
+				info->enabledWhileAwake = true;
 			}
 
 			info = &game->spellTypeInfos[SPELL_NONE];
@@ -536,6 +541,16 @@ void updateGame() {
 			info->mp = 100;
 			info->damage = 1000;
 
+			info = &game->spellTypeInfos[SPELL_SLEEP];
+			strcpy(info->name, "Sleep");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_WAKE_UP];
+			strcpy(info->name, "Wake up");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileAsleep = true;
+
 			info = &game->spellTypeInfos[SPELL_SMALL_ETHER];
 			strcpy(info->name, "Small Ether");
 			info->targetType = TARGET_SINGLE;
@@ -612,6 +627,7 @@ void updateGame() {
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
+			info->enabledWhileAsleep = true;
 
 			info = &game->spellTypeInfos[SPELL_END_TURN];
 			strcpy(info->name, "End Turn");
@@ -724,6 +740,8 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_MOON_STRIKE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_LIGHTNING;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ICE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SLEEP;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAKE_UP;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SMALL_ETHER;
 			unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
@@ -896,6 +914,8 @@ void updateGame() {
 						for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
 							SpellType type = currentUnit->spellsAvailable[i];
 							SpellTypeInfo *info = &game->spellTypeInfos[type];
+							if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
+							if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
 							int spellAvailableIndex = i;
 
 							ImGui::PushID(i);
@@ -1217,6 +1237,10 @@ void updateGame() {
 					giveBuff(dest, BUFF_FROZEN, 1);
 					dealDamage(src, dest, spell->info->damage);
 				}
+			} else if (spell->type == SPELL_SLEEP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->asleep = true;
+			} else if (spell->type == SPELL_WAKE_UP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) src->asleep = false;
 			} else if (spell->type == SPELL_SMALL_ETHER) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
 			} else if (spell->type == SPELL_LARGE_ETHER) {
@@ -1498,6 +1522,8 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 		logf("%d damage dealt to %s\n", damageAmount, dest->info->name);
 	}
 	dest->hp -= damageAmount;
+
+	if (damageAmount) dest->asleep = false;
 
 	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, damageAmount * 0.01);
 
