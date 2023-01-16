@@ -1,3 +1,6 @@
+//Change how turns work
+//Add sleep
+//Change spellsAvailable
 struct Globals {
 };
 
@@ -121,6 +124,12 @@ enum SpellType {
 
 	SPELL_ACCELERATED_SLASH,
 
+	SPELL_STUDENT_ATTACK,
+	SPELL_TEACHER_ATTACK,
+	SPELL_TEACHER_TEACHER_ATTACK,
+	SPELL_CREATE_STUDENT,
+	SPELL_CREATE_TEACHER,
+
 	SPELL_WAIT,
 
 	SPELL_END_TURN,
@@ -158,6 +167,9 @@ enum UnitType {
 	UNIT_FAKE_SHIELDSTER,
 	UNIT_MANA_BRUISER,
 	UNIT_ACCELERATOR,
+	UNIT_STUDENT,
+	UNIT_TEACHER,
+	UNIT_TEACHER_TEACHER,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -341,6 +353,18 @@ void updateGame() {
 			info = &game->unitTypeInfos[UNIT_ACCELERATOR];
 			strcpy(info->name, "Accelerator");
 			info->maxHp = 20000;
+
+			info = &game->unitTypeInfos[UNIT_STUDENT];
+			strcpy(info->name, "Student");
+			info->maxHp = 3333;
+
+			info = &game->unitTypeInfos[UNIT_TEACHER];
+			strcpy(info->name, "Teacher");
+			info->maxHp = 10000;
+
+			info = &game->unitTypeInfos[UNIT_TEACHER_TEACHER];
+			strcpy(info->name, "Teacher Teacher");
+			info->maxHp = 30000;
 		}
 
 		{
@@ -562,6 +586,29 @@ void updateGame() {
 			info->targetType = TARGET_NONE;
 			info->damage = 1;
 
+			info = &game->spellTypeInfos[SPELL_STUDENT_ATTACK];
+			strcpy(info->name, "Student Attack");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 100;
+
+			info = &game->spellTypeInfos[SPELL_TEACHER_ATTACK];
+			strcpy(info->name, "Teacher Attack");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 300;
+
+			info = &game->spellTypeInfos[SPELL_TEACHER_TEACHER_ATTACK];
+			strcpy(info->name, "Teacher Teacher Attack");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 900;
+
+			info = &game->spellTypeInfos[SPELL_CREATE_STUDENT];
+			strcpy(info->name, "Create Student");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_CREATE_TEACHER];
+			strcpy(info->name, "Create Teacher");
+			info->targetType = TARGET_NONE;
+
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
@@ -636,8 +683,8 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 5;
-		game->wave = 0;
+		game->level = 6;
+		game->wave = 2;
 
 		{
 			Unit *unit = NULL;
@@ -1212,6 +1259,19 @@ void updateGame() {
 
 					src->accelerationCount++;
 				}
+			} else if (spell->type == SPELL_STUDENT_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
+				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
+			} else if (spell->type == SPELL_TEACHER_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
+			} else if (spell->type == SPELL_TEACHER_TEACHER_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+			} else if (spell->type == SPELL_CREATE_STUDENT) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_STUDENT);
+			} else if (spell->type == SPELL_CREATE_TEACHER) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_TEACHER);
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -1354,6 +1414,8 @@ bool isHidden(Unit *unit) {
 }
 
 void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
+	if (!dest) Panic("dealDamage with no dest");
+
 	float damageMulti = 1;
 
 	if (src) {
@@ -1736,33 +1798,33 @@ void nextWave() {
 		logf("End of waves\n");
 		EndWaveDef();
 	} else if (game->level == 6) {
-		// StartWaveDef();
-		// unit = createUnit(UNIT_STUDENT);
-		// unit = createUnit(UNIT_STUDENT);
-		// unit = createUnit(UNIT_STUDENT);
-		// unit = createUnit(UNIT_STUDENT);
-		// unit = createUnit(UNIT_STUDENT);
-		// NextWaveDef();
-		// unit = createUnit(UNIT_TEACHER);
-		// unit = createUnit(UNIT_TEACHER);
-		// NextWaveDef();
-		// unit = createUnit(UNIT_TEACHER);
+		StartWaveDef();
+		unit = createUnit(UNIT_STUDENT);
+		unit = createUnit(UNIT_STUDENT);
+		unit = createUnit(UNIT_STUDENT);
+		unit = createUnit(UNIT_STUDENT);
+		unit = createUnit(UNIT_STUDENT);
+		NextWaveDef();
+		unit = createUnit(UNIT_TEACHER);
+		unit = createUnit(UNIT_TEACHER);
+		NextWaveDef();
+		unit = createUnit(UNIT_TEACHER);
 		// unit = createUnit(UNIT_MULTIHITTER);
 		// unit = createUnit(UNIT_MULTIHITTER);
-		// unit = createUnit(UNIT_TEACHER);
-		// NextWaveDef();
-		// unit = createUnit(UNIT_TEACHER_TEACHER);
-		// unit = createUnit(UNIT_TEACHER);
-		// unit = createUnit(UNIT_STUDENT);
-		// NextWaveDef();
+		unit = createUnit(UNIT_TEACHER);
+		NextWaveDef();
+		unit = createUnit(UNIT_TEACHER_TEACHER);
+		unit = createUnit(UNIT_TEACHER);
+		unit = createUnit(UNIT_STUDENT);
+		NextWaveDef();
 		// unit = createUnit(UNIT_MULTIHITTER);
 		// unit = createUnit(UNIT_MULTIHITTER);
-		// unit = createUnit(UNIT_TEACHER_TEACHER);
+		unit = createUnit(UNIT_TEACHER_TEACHER);
 		// unit = createUnit(UNIT_MULTIHITTER);
 		// unit = createUnit(UNIT_MULTIHITTER);
-		// NextWaveDef();
-		// logf("End of waves\n");
-		// EndWaveDef();
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
 	}
 
 	game->wave++;

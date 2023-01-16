@@ -1,3 +1,4 @@
+Unit *getRandomOpponent(Unit *src);
 Unit *getRandomOpponent(Unit *src) {
 	Unit **possibleUnits = (Unit **)frameMalloc(sizeof(Unit *) * game->unitsNum);
 	int possibleUnitsNum = 0;
@@ -6,6 +7,7 @@ Unit *getRandomOpponent(Unit *src) {
 		Unit *unit = &game->units[i];
 		if (src->ally == unit->ally) continue;
 		if (unit->hp <= 0) continue;
+		if (isHidden(unit)) continue;
 		possibleUnits[possibleUnitsNum++] = unit;
 	}
 
@@ -15,6 +17,7 @@ Unit *getRandomOpponent(Unit *src) {
 	return chosenUnit;
 }
 
+Unit *getRandomFriend(Unit *src);
 Unit *getRandomFriend(Unit *src) {
 	Unit **possibleUnits = (Unit **)frameMalloc(sizeof(Unit *) * game->unitsNum);
 	int possibleUnitsNum = 0;
@@ -23,6 +26,7 @@ Unit *getRandomFriend(Unit *src) {
 		Unit *unit = &game->units[i];
 		if (src->ally != unit->ally) continue;
 		if (unit->hp <= 0) continue;
+		if (isHidden(unit)) continue;
 		possibleUnits[possibleUnitsNum++] = unit;
 	}
 
@@ -32,6 +36,20 @@ Unit *getRandomFriend(Unit *src) {
 	return chosenUnit;
 }
 
+int countFriends(Unit *src);
+int countFriends(Unit *src) {
+	int count = 0;
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (src->ally != unit->ally) continue;
+		if (unit->hp <= 0) continue;
+		if (unit == src) continue;
+		count++;
+	}
+	return count;
+}
+
+void aiTakeTurn(Unit *src);
 void aiTakeTurn(Unit *src) {
 	if (src->type == UNIT_STANDARD_A) {
 		Unit *target = getRandomOpponent(src);
@@ -87,6 +105,20 @@ void aiTakeTurn(Unit *src) {
 		}
 	} else if (src->type == UNIT_ACCELERATOR) {
 		castSpell(src, NULL, SPELL_ACCELERATED_SLASH);
+	} else if (src->type == UNIT_STUDENT) {
+		castSpell(src, getRandomOpponent(src), SPELL_STUDENT_ATTACK);
+	} else if (src->type == UNIT_TEACHER) {
+		if (rndPerc(0.5) && countFriends(src) < 4) {
+			castSpell(src, NULL, SPELL_CREATE_STUDENT);
+		} else {
+			castSpell(src, getRandomOpponent(src), SPELL_TEACHER_ATTACK);
+		}
+	} else if (src->type == UNIT_TEACHER_TEACHER) {
+		if (rndPerc(0.5) && countFriends(src) < 4) {
+			castSpell(src, NULL, SPELL_CREATE_TEACHER);
+		} else {
+			castSpell(src, getRandomOpponent(src), SPELL_TEACHER_TEACHER_ATTACK);
+		}
 	} else {
 		logf("%s has no ai\n", src->info->name);
 	}
