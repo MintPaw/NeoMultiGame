@@ -42,6 +42,8 @@ enum BuffType {
 	BUFF_ANTI_BUFF,
 	BUFF_AT_MOON,
 	BUFF_FROZEN,
+	BUFF_SHIELD,
+	BUFF_FAKE_SHIELD,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -56,6 +58,7 @@ struct Buff {
 	int turns;
 
 	int intUserData;
+	float time; // Just used for Fake Shield names right now
 };
 
 enum TargetType {
@@ -70,6 +73,7 @@ enum SpellType {
 	SPELL_SMALL_ATTACK,
 	SPELL_MEDIUM_ATTACK,
 	SPELL_LARGE_ATTACK,
+	SPELL_SUMMONER_ATTACK,
 
 	SPELL_QUICK_ATTACK,
 	SPELL_WIDE_STRIKE,
@@ -106,6 +110,17 @@ enum SpellType {
 	SPELL_SMALL_ETHER,
 	SPELL_LARGE_ETHER,
 
+	SPELL_CREATE_SHIELD,
+	SPELL_SHIELD_BLAST,
+	SPELL_CREATE_2_SHIELDS,
+	SPELL_SHIELD_BUMP,
+
+	SPELL_CREATE_FAKE_SHIELD,
+	SPELL_TAKE_MANA,
+	SPELL_TAKE_MANA_BIG,
+
+	SPELL_ACCELERATED_SLASH,
+
 	SPELL_WAIT,
 
 	SPELL_END_TURN,
@@ -137,6 +152,12 @@ enum UnitType {
 	UNIT_STANDARD_B,
 	UNIT_STANDARD_C,
 	UNIT_SWIFT,
+	UNIT_SMALL_SHIELDSTER,
+	UNIT_SUPER_SHIELDSTER,
+	UNIT_SHIELD_SUMMONER,
+	UNIT_FAKE_SHIELDSTER,
+	UNIT_MANA_BRUISER,
+	UNIT_ACCELERATOR,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -172,6 +193,8 @@ struct Unit {
 
 	bool glassBroken;
 	int giveManaCastCount;
+
+	int accelerationCount;
 };
 
 struct Game {
@@ -218,10 +241,11 @@ void updateGame();
 Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
-void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic=false);
 bool isHidden(Unit *unit);
+void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic=false);
 void gainHp(Unit *unit, int amount);
 void gainMp(Unit *unit, int amount);
+void loseMp(Unit *unit, int amount);
 Buff *getBuff(Unit *unit, BuffType type);
 int countBuffs(Unit *unit, BuffType type);
 Buff *giveBuff(Unit *unit, BuffType type, int turns);
@@ -293,6 +317,30 @@ void updateGame() {
 			strcpy(info->name, "Swift");
 			info->maxHp = 3500;
 			info->dodgeChance = 0.9;
+
+			info = &game->unitTypeInfos[UNIT_SMALL_SHIELDSTER];
+			strcpy(info->name, "Small Shieldster");
+			info->maxHp = 4000;
+
+			info = &game->unitTypeInfos[UNIT_SUPER_SHIELDSTER];
+			strcpy(info->name, "Super Shieldster");
+			info->maxHp = 10000;
+
+			info = &game->unitTypeInfos[UNIT_SHIELD_SUMMONER];
+			strcpy(info->name, "Shield Summoner");
+			info->maxHp = 5000;
+
+			info = &game->unitTypeInfos[UNIT_FAKE_SHIELDSTER];
+			strcpy(info->name, "Fake Shieldster");
+			info->maxHp = 5000;
+
+			info = &game->unitTypeInfos[UNIT_MANA_BRUISER];
+			strcpy(info->name, "Mana Bruiser");
+			info->maxHp = 10000;
+
+			info = &game->unitTypeInfos[UNIT_ACCELERATOR];
+			strcpy(info->name, "Accelerator");
+			info->maxHp = 20000;
 		}
 
 		{
@@ -320,6 +368,10 @@ void updateGame() {
 			info = &game->spellTypeInfos[SPELL_LARGE_ATTACK];
 			strcpy(info->name, "Large Attack");
 			info->damage = 2000;
+
+			info = &game->spellTypeInfos[SPELL_SUMMONER_ATTACK];
+			strcpy(info->name, "Summoner Attack");
+			info->damage = 3000;
 
 			info = &game->spellTypeInfos[SPELL_QUICK_ATTACK];
 			strcpy(info->name, "Quick Attack");
@@ -461,16 +513,54 @@ void updateGame() {
 			info->damage = 1000;
 
 			info = &game->spellTypeInfos[SPELL_SMALL_ETHER];
-			strcpy(info->name, "Small Eather");
+			strcpy(info->name, "Small Ether");
 			info->targetType = TARGET_SINGLE;
 			info->canTargetAllies = true;
 			info->damage = 500;
 
 			info = &game->spellTypeInfos[SPELL_LARGE_ETHER];
-			strcpy(info->name, "Large Eather");
+			strcpy(info->name, "Large Ether");
 			info->targetType = TARGET_SINGLE;
 			info->canTargetAllies = true;
 			info->damage = 1000;
+
+			info = &game->spellTypeInfos[SPELL_CREATE_SHIELD];
+			strcpy(info->name, "Create Shield");
+			info->targetType = TARGET_SINGLE;
+			info->canTargetAllies = true;
+
+			info = &game->spellTypeInfos[SPELL_SHIELD_BLAST];
+			strcpy(info->name, "Shield Blast");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 5000;
+
+			info = &game->spellTypeInfos[SPELL_CREATE_2_SHIELDS];
+			strcpy(info->name, "Create 2 Shields");
+			info->targetType = TARGET_SINGLE;
+
+			info = &game->spellTypeInfos[SPELL_SHIELD_BUMP];
+			strcpy(info->name, "Shield Bump");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 500;
+
+			info = &game->spellTypeInfos[SPELL_CREATE_FAKE_SHIELD];
+			strcpy(info->name, "Create Fake Shield");
+			info->targetType = TARGET_SINGLE;
+
+			info = &game->spellTypeInfos[SPELL_TAKE_MANA];
+			strcpy(info->name, "Take Mana");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 50;
+
+			info = &game->spellTypeInfos[SPELL_TAKE_MANA_BIG];
+			strcpy(info->name, "Take Mana Big");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 100;
+
+			info = &game->spellTypeInfos[SPELL_ACCELERATED_SLASH];
+			strcpy(info->name, "Accelerated Slash");
+			info->targetType = TARGET_NONE;
+			info->damage = 1;
 
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
@@ -537,10 +627,16 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_FROZEN];
 			strcpy(info->name, "Frozen");
+
+			info = &game->buffTypeInfos[BUFF_SHIELD];
+			strcpy(info->name, "Shield");
+
+			info = &game->buffTypeInfos[BUFF_FAKE_SHIELD];
+			strcpy(info->name, "Fake Shield");
 		}
 
-		game->baseSpellTime = 1;
-		game->level = 2;
+		game->baseSpellTime = 0.25;
+		game->level = 5;
 		game->wave = 0;
 
 		{
@@ -605,8 +701,17 @@ void updateGame() {
 		ImGui::End();
 	}
 
+	auto guiGetWindowRect = []()->Rect {
+		ImVec2 pos = ImGui::GetWindowPos();
+		ImVec2 size = ImGui::GetWindowSize();
+		Rect rect = makeRect(pos.x, pos.y, size.x, size.y);
+		return rect;
+	};
+
 	{ /// Display
-		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
+		Rect lastRect = makeRect();
+
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always, ImVec2(0.5, 0));
 		ImGui::Begin("Turns", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::Text("Turns: ");
 		for (int i = 0; i < game->turnQueueNum; i++) {
@@ -614,9 +719,10 @@ void updateGame() {
 			ImGui::SameLine();
 			ImGui::Text("(%s)", unit->screenName);
 		}
+		lastRect = guiGetWindowRect();
 		ImGui::End();
 
-		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.80), ImGuiCond_Always, ImVec2(0.5, 1));
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, lastRect.y + lastRect.height + platform->windowSize.y*0.01), ImGuiCond_Always, ImVec2(0.5, 0));
 		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		auto guiShowUnit = [](Unit *unit) {
@@ -632,19 +738,21 @@ void updateGame() {
 			if (unit->buffsNum > 0) {
 				for (int i = 0; i < unit->buffsNum; i++) {
 					Buff *buff = &unit->buffs[i];
+					char *buffName = buff->info->name;
+					if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
 					if (buff->type == BUFF_COMBO) {
-						ImGui::Text("[%s (%d):%d]", buff->info->name, buff->intUserData, buff->turns);
+						ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
 					} else {
-						ImGui::Text("[%s:%d]", buff->info->name, buff->turns);
+						ImGui::Text("[%s:%d]", buffName, buff->turns);
 					}
 				}
 			}
 			ImGui::Separator();
 		};
 
-		Vec2 childSize = v2(400, 400);
+		Vec2 childSize = v2(500, 800);
 
-		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y));
+		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (!unit->ally) continue;
@@ -655,7 +763,7 @@ void updateGame() {
 
 		ImGui::SameLine();
 
-		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y));
+		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (unit->ally) continue;
@@ -719,13 +827,13 @@ void updateGame() {
 			}
 
 			if (allyCount == 0) {
-				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight), ImGuiCond_Always, ImVec2(0.5, 1));
 				ImGui::Begin("Game Over", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 				ImGui::Text("You lose");
 				if (ImGui::Button("Try again"));
 				ImGui::End();
 			} else if (enemyCount == 0) {
-				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight), ImGuiCond_Always, ImVec2(0.5, 1));
 				ImGui::Begin("Game Over", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 				ImGui::Text("You win");
 				if (ImGui::Button("Continue")) {
@@ -734,7 +842,7 @@ void updateGame() {
 				ImGui::End();
 			} else if (currentUnit) {
 				if (currentUnit->ally) {
-					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.95), ImGuiCond_Always, ImVec2(0.5, 1));
+					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight), ImGuiCond_Always, ImVec2(0.5, 1));
 					ImGui::Begin("Spells", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 					if (game->currentSpellType == SPELL_NONE) {
 						int spellCount = 0;
@@ -864,7 +972,8 @@ void updateGame() {
 				spell->type == SPELL_HERO_ATTACK ||
 				spell->type == SPELL_SMALL_ATTACK ||
 				spell->type == SPELL_MEDIUM_ATTACK ||
-				spell->type == SPELL_LARGE_ATTACK
+				spell->type == SPELL_LARGE_ATTACK ||
+				spell->type == SPELL_SUMMONER_ATTACK
 			) {
 				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
 			} else if (spell->type == SPELL_QUICK_ATTACK) {
@@ -1063,8 +1172,46 @@ void updateGame() {
 				}
 			} else if (spell->type == SPELL_SMALL_ETHER) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_LARGE_ATTACK) {
+			} else if (spell->type == SPELL_LARGE_ETHER) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
+			} else if (spell->type == SPELL_CREATE_SHIELD) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SHIELD, -1);
+			} else if (spell->type == SPELL_SHIELD_BLAST) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					dealDamage(src, dest, spell->info->damage);
+					for (int i = 0; i < 5; i++) {
+						Buff *buff = getBuff(src, BUFF_SHIELD);
+						if (buff) removeBuff(src, buff);
+					}
+				}
+			} else if (spell->type == SPELL_CREATE_2_SHIELDS) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					giveBuff(dest, BUFF_SHIELD, -1);
+					giveBuff(dest, BUFF_SHIELD, -1);
+				}
+			} else if (spell->type == SPELL_SHIELD_BUMP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					int shields = countBuffs(src, BUFF_SHIELD);
+					dealDamage(src, dest, spell->info->damage * shields);
+				}
+			} else if (spell->type == SPELL_CREATE_FAKE_SHIELD) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_FAKE_SHIELD, -1);
+			} else if (spell->type == SPELL_TAKE_MANA) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
+			} else if (spell->type == SPELL_TAKE_MANA_BIG) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
+			} else if (spell->type == SPELL_ACCELERATED_SLASH) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->ally == src->ally) continue;
+						if (unit->hp <= 0) continue;
+						if (isHidden(unit)) continue;
+						dealDamage(src, unit, pow(2, src->accelerationCount));
+					}
+
+					src->accelerationCount++;
+				}
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -1130,6 +1277,15 @@ void updateGame() {
 		}
 	}
 
+	/// Unit frame loop
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		for (int i = 0; i < unit->buffsNum; i++) {
+			Buff *buff = &unit->buffs[i];
+			buff->time += elapsed;
+		}
+	}
+
 	clearRenderer();
 
 	drawOnScreenLog();
@@ -1191,7 +1347,13 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 	return spell;
 }
 
-void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
+bool isHidden(Unit *unit) {
+	if (unit == NULL) return false;
+	if (getBuff(unit, BUFF_AT_MOON)) return true;
+	return false;
+}
+
+void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 	float damageMulti = 1;
 
 	if (src) {
@@ -1205,7 +1367,7 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
 
 		if (src->ally && isMagic) {
-			Unit *p1 = getUnitByType(UNIT_PLAYER2);
+			Unit *p1 = getUnitByType(UNIT_PLAYER1);
 			if (p1->hp > 0 && p1->weapon == WEAPON_MAGIC_RESIST) damageMulti *= 0.75;
 		}
 
@@ -1239,16 +1401,43 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 		logf("Dodged!\n");
 	}
 
-	amount *= damageMulti;
+	damageAmount *= damageMulti;
+
+	if (damageAmount) {
+		Buff *shield = getBuff(dest, BUFF_SHIELD);
+		if (shield) {
+			removeBuff(dest, shield);
+			damageAmount = 0;
+		}
+
+		removeAllBuffsOfType(dest, BUFF_FAKE_SHIELD);
+	}
+
+	if (damageAmount) {
+		if (dest->type == UNIT_SHIELD_SUMMONER) {
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (unit->ally != dest->ally) continue;
+				if (isHidden(unit)) continue;
+
+				Buff *shield = getBuff(unit, BUFF_SHIELD);
+				if (shield) {
+					removeBuff(unit, shield);
+					damageAmount = 0;
+					break;
+				}
+			}
+		}
+	}
 
 	if (src) {
-		logf("%s dealt %d damage to %s\n", src->info->name, amount, dest->info->name);
+		logf("%s dealt %d damage to %s\n", src->info->name, damageAmount, dest->info->name);
 	} else {
-		logf("%d damage dealt to %s\n", amount, dest->info->name);
+		logf("%d damage dealt to %s\n", damageAmount, dest->info->name);
 	}
-	dest->hp -= amount;
+	dest->hp -= damageAmount;
 
-	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, amount * 0.01);
+	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, damageAmount * 0.01);
 
 	if (dest->hp <= 0 && getBuff(dest, BUFF_RELIFE)) {
 		logf("Relifed\n");
@@ -1268,12 +1457,6 @@ void dealDamage(Unit *src, Unit *dest, int amount, bool isMagic) {
 	}
 }
 
-bool isHidden(Unit *unit) {
-	if (unit == NULL) return false;
-	if (getBuff(unit, BUFF_AT_MOON)) return true;
-	return false;
-}
-
 void gainHp(Unit *unit, int amount) {
 	if (unit->weapon == WEAPON_BIG_DAMAGE) amount = 0;
 	unit->hp += amount;
@@ -1281,9 +1464,15 @@ void gainHp(Unit *unit, int amount) {
 }
 
 void gainMp(Unit *unit, int amount) {
-	logf("Gained %d\n", amount);
+	logf("Gained %dmp\n", amount);
 	unit->mp += amount;
 	if (unit->mp > unit->info->maxMp) unit->mp = unit->info->maxMp;
+}
+
+void loseMp(Unit *unit, int amount) {
+	logf("Lost %dmp\n", amount);
+	unit->mp -= amount;
+	if (unit->mp < 0) unit->mp = 0;
 }
 
 Buff *getBuff(Unit *unit, BuffType type) {
@@ -1364,9 +1553,23 @@ Unit *createUnit(UnitType type) {
 	unit->info = &game->unitTypeInfos[unit->type];
 	unit->hp = unit->info->maxHp;
 	unit->mp = unit->info->maxMp;
+	for (int i = 0; i < SPELLS_AVAILABLE_MAX; i++) unit->spellsAvailableAmounts[i] = -1;
 
-	for (int i = 0; i < SPELLS_AVAILABLE_MAX; i++) {
-		unit->spellsAvailableAmounts[i] = -1;
+	if (unit->type == UNIT_SMALL_SHIELDSTER) {
+		giveBuff(unit, BUFF_SHIELD, -1);
+	} else if (unit->type == UNIT_SUPER_SHIELDSTER) {
+		giveBuff(unit, BUFF_SHIELD, -1);
+		giveBuff(unit, BUFF_SHIELD, -1);
+	} else if (unit->type == UNIT_SHIELD_SUMMONER) {
+		giveBuff(unit, BUFF_SHIELD, -1);
+	} else if (unit->type == UNIT_FAKE_SHIELDSTER) {
+		for (int i = 0; i < 2; i++) {
+			if (rndPerc(0.5)) {
+				giveBuff(unit, BUFF_SHIELD, -1);
+			} else {
+				giveBuff(unit, BUFF_FAKE_SHIELD, -1);
+			}
+		}
 	}
 
 	{
@@ -1412,7 +1615,9 @@ void nextWave() {
 		unit = createUnit(UNIT_STANDARD_C);
 		unit = createUnit(UNIT_STANDARD_A);
 		NextWaveDef();
-		logf("You win\n");
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		NextWaveDef();
+		logf("End of waves\n");
 		EndWaveDef();
 	} else if (game->level == 2) {
 		StartWaveDef();
@@ -1438,8 +1643,126 @@ void nextWave() {
 		unit = createUnit(UNIT_SWIFT);
 		unit = createUnit(UNIT_SWIFT);
 		NextWaveDef();
-		logf("You win\n");
+		logf("End of waves\n");
 		EndWaveDef();
+	} else if (game->level == 3) {
+		StartWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SHIELD_SUMMONER);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 4) {
+		auto inputRandomness = []() {
+			Unit *unit = NULL;
+			unit = createUnit(UNIT_SMALL_SHIELDSTER);
+			unit = createUnit(UNIT_SMALL_SHIELDSTER);
+			unit = createUnit(UNIT_SUPER_SHIELDSTER);
+			unit = createUnit(UNIT_SMALL_SHIELDSTER);
+			unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		};
+		auto outputRandomness = []() {
+			Unit *unit = NULL;
+			unit = createUnit(UNIT_FAKE_SHIELDSTER);
+			unit = createUnit(UNIT_SUPER_SHIELDSTER);
+			unit = createUnit(UNIT_FAKE_SHIELDSTER);
+		};
+		auto rngManaLoss = []() {
+			Unit *unit = NULL;
+			unit = createUnit(UNIT_FAKE_SHIELDSTER);
+			unit = createUnit(UNIT_MANA_BRUISER);
+			unit = createUnit(UNIT_MANA_BRUISER);
+			unit = createUnit(UNIT_FAKE_SHIELDSTER);
+		};
+
+		StartWaveDef();
+		inputRandomness();
+		NextWaveDef();
+		outputRandomness();
+		NextWaveDef();
+		inputRandomness();
+		NextWaveDef();
+		outputRandomness();
+		NextWaveDef();
+		rngManaLoss();
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 5) {
+		StartWaveDef();
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		NextWaveDef();
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		NextWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		NextWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 6) {
+		// StartWaveDef();
+		// unit = createUnit(UNIT_STUDENT);
+		// unit = createUnit(UNIT_STUDENT);
+		// unit = createUnit(UNIT_STUDENT);
+		// unit = createUnit(UNIT_STUDENT);
+		// unit = createUnit(UNIT_STUDENT);
+		// NextWaveDef();
+		// unit = createUnit(UNIT_TEACHER);
+		// unit = createUnit(UNIT_TEACHER);
+		// NextWaveDef();
+		// unit = createUnit(UNIT_TEACHER);
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// unit = createUnit(UNIT_TEACHER);
+		// NextWaveDef();
+		// unit = createUnit(UNIT_TEACHER_TEACHER);
+		// unit = createUnit(UNIT_TEACHER);
+		// unit = createUnit(UNIT_STUDENT);
+		// NextWaveDef();
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// unit = createUnit(UNIT_TEACHER_TEACHER);
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// unit = createUnit(UNIT_MULTIHITTER);
+		// NextWaveDef();
+		// logf("End of waves\n");
+		// EndWaveDef();
 	}
 
 	game->wave++;

@@ -245,17 +245,17 @@ Players have 10000hp and 1000mp
 	- Accelerator
 
 - Odds of extra acceleration:
-	- Simple shieldster
+	- Small shieldster
 	- Accelerator
 	- Accelerator
 	- Accelerator
 
 - Odds of extra acceleration 2:
-	- Simple shieldster
+	- Small shieldster
 	- Accelerator
 	- Accelerator
 	- Accelerator
-	- Simple shieldster
+	- Small shieldster
 
 - Before school:
 	- Student
