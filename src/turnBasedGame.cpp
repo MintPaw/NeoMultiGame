@@ -196,6 +196,7 @@ struct Unit {
 	bool ally;
 	int hp;
 	int mp;
+	bool hasTurn;
 
 #define SPELLS_AVAILABLE_MAX 128
 	SpellType spellsAvailable[SPELLS_AVAILABLE_MAX];
@@ -1300,29 +1301,27 @@ void updateGame() {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
 				if (game->spellTime > baseSpellTime) {
-					Unit *unit = getUnit(game->turnQueue[0]);
-
-					for (int i = 0; i < unit->buffsNum; i++) {
-						Buff *buff = &unit->buffs[i];
+					for (int i = 0; i < src->buffsNum; i++) {
+						Buff *buff = &src->buffs[i];
 						buff->turns--;
 
 						bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
 						game->spellImmNeverMisses = true;
 
-						if (buff->type == BUFF_BLEED) dealDamage(NULL, unit, 500, true);
-						if (buff->type == BUFF_POISON) dealDamage(NULL, unit, 100, true);
+						if (buff->type == BUFF_BLEED) dealDamage(NULL, src, 500, true);
+						if (buff->type == BUFF_POISON) dealDamage(NULL, src, 100, true);
 
 						game->spellImmNeverMisses = oldSpellImmNeverMisses;
 
 						if (buff->turns == 0) {
-							arraySpliceIndex(unit->buffs, unit->buffsNum, sizeof(Buff), i);
-							unit->buffsNum--;
+							arraySpliceIndex(src->buffs, src->buffsNum, sizeof(Buff), i);
+							src->buffsNum--;
 							i--;
 							continue;
 						}
 					}
 
-					logf("%s's turn is over\n", unit->info->name);
+					logf("%s's turn is over\n", src->info->name);
 
 					arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), 0);
 					game->turnQueueNum--;

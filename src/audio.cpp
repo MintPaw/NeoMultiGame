@@ -10,6 +10,9 @@
 # define SAMPLE_BUFFER_LIMIT (4096)
 #endif
 
+// #define STORED_SAMPLES_MAX (SAMPLE_BUFFER_LIMIT*4)
+#define STORED_SAMPLES_MAX ((int)(SAMPLE_BUFFER_LIMIT*1.5))
+
 #define CHANNELS_MAX 512
 #define SOUNDS_MAX 4096
 #define SAMPLE_RATE 44100
@@ -83,7 +86,6 @@ struct Audio {
 	ALuint buffers[2];
 	ALuint source;
 
-#define STORED_SAMPLES_MAX (SAMPLE_BUFFER_LIMIT*4)
 	s16 storedSamples[STORED_SAMPLES_MAX];
 	int storedSamplesPosition;
 };
