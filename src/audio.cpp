@@ -4,14 +4,14 @@
 #include <AL/alc.h>
 #include <AL/alext.h>
 
-#ifdef __EMSCRIPTEN__
-# define SAMPLE_BUFFER_LIMIT (6144)
-#else
-# define SAMPLE_BUFFER_LIMIT (4096)
-#endif
+// #ifdef __EMSCRIPTEN__
+// # define SAMPLE_BUFFER_LIMIT (6144)
+// #else
+// # define SAMPLE_BUFFER_LIMIT (4096)
+// #endif
 
 // #define STORED_SAMPLES_MAX (SAMPLE_BUFFER_LIMIT*4)
-#define STORED_SAMPLES_MAX ((int)(SAMPLE_BUFFER_LIMIT*1.5))
+// #define STORED_SAMPLES_MAX ((int)(SAMPLE_BUFFER_LIMIT*1.5))
 
 #define CHANNELS_MAX 512
 #define SOUNDS_MAX 4096
@@ -86,8 +86,11 @@ struct Audio {
 	ALuint buffers[2];
 	ALuint source;
 
-	s16 storedSamples[STORED_SAMPLES_MAX];
+	s16 *storedSamples;
+	int storedSamplesMax;
 	int storedSamplesPosition;
+
+	int sampleBufferLimit;
 };
 
 Audio *audio = NULL;
@@ -118,6 +121,7 @@ void initAudio() {
 
 	audio = (Audio *)zalloc(sizeof(Audio));
 	audio->masterVolume = 1;
+	audio->sampleBufferLimit = 4096;
 
 	if (platform->isCommandLineOnly) {
 		audio->disabled = true;
@@ -280,7 +284,10 @@ void updateAudio(float elapsed) {
 #endif
 
 	int samplesToAdd = elapsed * SAMPLE_RATE * 2;
+	if (samplesToAdd > audio->sampleBufferLimit) samplesToAdd = audio->sampleBufferLimit;
 	mixSoundInToGlobalBuffer(samplesToAdd);
+
+	// logf("%d\n", samplesToAdd);
 
 	int toProcess;
 	alGetSourcei(audio->source, AL_BUFFERS_PROCESSED, &toProcess);
@@ -289,29 +296,32 @@ void updateAudio(float elapsed) {
 	for(int i = 0; i < toProcess; i++) {
 		requeued = true;
 
-		int missingSamples = SAMPLE_BUFFER_LIMIT - audio->storedSamplesPosition;
+		int newSampleBufferLimit = audio->sampleBufferLimit;
+		int missingSamples = audio->sampleBufferLimit - audio->storedSamplesPosition;
 		if (missingSamples > 0) {
 			// logf("Audio lag: %d\n", missingSamples);
 			mixSoundInToGlobalBuffer(missingSamples);
+			// newSampleBufferLimit = 
 		}
 
 		ALuint buffer;
 		alSourceUnqueueBuffers(audio->source, 1, &buffer);
 
-		// if (audio->storedSamplesPosition < SAMPLE_BUFFER_LIMIT) logf("Not enough stored samples (%d)\n", SAMPLE_BUFFER_LIMIT-audio->storedSamplesPosition);
-		// if (audio->storedSamplesPosition >= SAMPLE_BUFFER_LIMIT) logf("You're ahead by %d samples\n", audio->storedSamplesPosition-SAMPLE_BUFFER_LIMIT);
-		alBufferData(buffer, AL_FORMAT_STEREO16, audio->storedSamples, SAMPLE_BUFFER_LIMIT * sizeof(s16), SAMPLE_RATE);
+		// if (audio->storedSamplesPosition < audio->sampleBufferLimit) logf("Not enough stored samples (%d)\n", audio->sampleBufferLimit-audio->storedSamplesPosition);
+		// if (audio->storedSamplesPosition >= audio->sampleBufferLimit) logf("You're ahead by %d samples\n", audio->storedSamplesPosition-audio->sampleBufferLimit);
+		alBufferData(buffer, AL_FORMAT_STEREO16, audio->storedSamples, audio->sampleBufferLimit * sizeof(s16), SAMPLE_RATE);
 		CheckAudioError();
 
 		alSourceQueueBuffers(audio->source, 1, &buffer);
 		CheckAudioError();
 
-		int samplesLeftInStore = audio->storedSamplesPosition - SAMPLE_BUFFER_LIMIT;
-		if (samplesLeftInStore <= 0) {
+		int samplesLeftInStore = audio->storedSamplesPosition - audio->sampleBufferLimit;
+		if (samplesLeftInStore < 0) {
 			samplesLeftInStore = 0;
+			logf("How could this happen?\n");
 		} else {
-			memmove(audio->storedSamples, audio->storedSamples + SAMPLE_BUFFER_LIMIT, sizeof(s16) * samplesLeftInStore);
-			audio->storedSamplesPosition -= SAMPLE_BUFFER_LIMIT;
+			memmove(audio->storedSamples, audio->storedSamples + audio->sampleBufferLimit, sizeof(s16) * samplesLeftInStore);
+			audio->storedSamplesPosition -= audio->sampleBufferLimit;
 		}
 	}
 
@@ -441,10 +451,20 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 
 void mixSoundInToGlobalBuffer(int samplesToAdd) {
 	if (samplesToAdd % 2 == 1) samplesToAdd--;
+
+#if 1
+	int maxSamplesNeeded = audio->storedSamplesPosition + samplesToAdd;
+	if (maxSamplesNeeded > audio->storedSamplesMax) {
+		// logf("Resizing from %d to %d\n", audio->storedSamplesMax, maxSamplesNeeded);
+		audio->storedSamples = (s16 *)resizeArray(audio->storedSamples, sizeof(s16), audio->storedSamplesMax, maxSamplesNeeded);
+		audio->storedSamplesMax = maxSamplesNeeded;
+	}
+#else
 	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;
 	if (samplesToAdd > maxSamplesLeft) {
 		samplesToAdd = maxSamplesLeft;
 	}
+#endif
 
 	mixSound(audio->storedSamples + audio->storedSamplesPosition, samplesToAdd);
 	audio->storedSamplesPosition += samplesToAdd;
