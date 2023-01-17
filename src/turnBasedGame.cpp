@@ -234,9 +234,6 @@ struct Game {
 	BuffTypeInfo buffTypeInfos[BUFF_TYPES_MAX];
 	int nextBuffId;
 
-	int turnQueue[UNITS_MAX];
-	int turnQueueNum;
-
 	int level;
 	int wave;
 
@@ -255,6 +252,7 @@ Game *game = NULL;
 void runGame();
 void updateGame();
 
+Unit *getCurrentUnit();
 Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
@@ -777,23 +775,12 @@ void updateGame() {
 	{ /// Display
 		Rect lastRect = makeRect();
 
-		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always, ImVec2(0.5, 0));
-		ImGui::Begin("Turns", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-		ImGui::Text("Turns: ");
-		for (int i = 0; i < game->turnQueueNum; i++) {
-			Unit *unit = getUnit(game->turnQueue[i]);
-			ImGui::SameLine();
-			ImGui::Text("(%s)", unit->screenName);
-		}
-		lastRect = guiGetWindowRect();
-		ImGui::End();
-
 		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, lastRect.y + lastRect.height + platform->windowSize.y*0.01), ImGuiCond_Always, ImVec2(0.5, 0));
 		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		auto guiShowUnit = [](Unit *unit) {
 			int color = 0xFFFFFFFF;
-			if (game->turnQueueNum != 0 && game->turnQueue[0] == unit->id) color = lerpColor(color, 0xFF00FF00, 0.5);
+			if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
 			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
 
 			ImVec4 imCol = guiGetImVec4Color(color);
@@ -842,16 +829,7 @@ void updateGame() {
 	} ///
 
 	{ /// Update turn
-		if (game->turnQueueNum == 0) {
-			for (int i = 0; i < game->unitsNum; i++) {
-				Unit *unit = &game->units[i];
-				if (unit->hp <= 0) continue;
-				game->turnQueue[game->turnQueueNum++] = unit->id;
-			}
-		}
-
-		Unit *currentUnit = getUnit(game->turnQueue[0]);
-		if (!currentUnit && platform->frameCount%60 == 0) logf("No current unit\n");
+		Unit *currentUnit = getCurrentUnit();
 
 		if (game->spellQueueNum == 0) {
 			Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
@@ -1323,8 +1301,7 @@ void updateGame() {
 
 					logf("%s's turn is over\n", src->info->name);
 
-					arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), 0);
-					game->turnQueueNum--;
+					src->hasTurn = false;
 					complete = true;
 				}
 			} else {
@@ -1372,6 +1349,31 @@ void updateGame() {
 	clearRenderer();
 
 	drawOnScreenLog();
+}
+
+Unit *getCurrentUnit() {
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (unit->hp <= 0) continue;
+		if (!unit->hasTurn) continue;
+		return unit;
+	}
+
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (unit->hp <= 0) continue;
+		unit->hasTurn = true;
+	}
+
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (unit->hp <= 0) continue;
+		if (!unit->hasTurn) continue;
+		return unit;
+	}
+
+	logf("No current unit!\n");
+	return NULL;
 }
 
 Unit *getUnit(int id) {
@@ -1533,14 +1535,8 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 	}
 
 	if (dest->hp <= 0) {
-		for (int i = 1; i < game->turnQueueNum; i++) {
-			if (game->turnQueue[i] == dest->id) {
-				arraySpliceIndex(game->turnQueue, game->turnQueueNum, sizeof(int), i);
-				game->turnQueueNum--;
-				i--;
-				continue;
-			}
-		}
+		dest->buffsNum = 0;
+		dest->hasTurn = false;
 	}
 }
 
@@ -1676,8 +1672,6 @@ Unit *createUnit(UnitType type) {
 }
 
 void nextWave() {
-	game->turnQueueNum = 0;
-
 	Unit *unit = NULL;
 
 	int waveCheck = 0;
@@ -1850,6 +1844,11 @@ void nextWave() {
 		NextWaveDef();
 		logf("End of waves\n");
 		EndWaveDef();
+	}
+
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		unit->hasTurn = true;
 	}
 
 	game->wave++;
