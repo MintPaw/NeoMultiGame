@@ -119,6 +119,38 @@ void aiTakeTurn(Unit *src) {
 		} else {
 			castSpell(src, getRandomOpponent(src), SPELL_TEACHER_TEACHER_ATTACK);
 		}
+	} else if (src->type == UNIT_MULTIHITTER) {
+		if (rndPerc(0.5) && countBuffs(src, BUFF_SPUN_UP) < 2) {
+			castSpell(src, src, SPELL_MULTIHITTER_SPIN_UP);
+		} else {
+			castSpell(src, getRandomOpponent(src), SPELL_MULTIHITTER_HIT);
+		}
+	} else if (src->type == UNIT_STUNNER) {
+		if (rndPerc(0.5)) {
+			castSpell(src, getRandomOpponent(src), SPELL_STUNNER_ATTACK);
+		} else {
+			castSpell(src, getRandomOpponent(src), SPELL_STUN);
+		}
+	} else if (src->type == UNIT_TIME_TUNER) {
+		if (countBuffs(src, BUFF_TIME_TUNE_CHARGE) >= 3) {
+			castSpell(src, src, SPELL_TIME_TUNE);
+		} else {
+			castSpell(src, src, SPELL_GAIN_TIME_TUNE_CHARGE);
+		}
+	} else if (src->type == UNIT_SILENCER) {
+		if (rndPerc(0.5)) {
+			castSpell(src, getRandomOpponent(src), SPELL_MEDIUM_ATTACK);
+		} else {
+			castSpell(src, getRandomOpponent(src), SPELL_VOLUME_WARNING);
+		}
+	} else if (src->type == UNIT_LIFE_TAKER) {
+		if (rndPerc(0.5)) {
+			castSpell(src, getRandomOpponent(src), SPELL_TAKE_LIFE);
+		} else {
+			// Nothing...
+		}
+	} else if (src->type == UNIT_SPIKE) {
+		// Nothing...
 	} else {
 		logf("%s has no ai\n", src->info->name);
 	}

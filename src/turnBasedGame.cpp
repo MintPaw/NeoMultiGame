@@ -1,4 +1,3 @@
-//Change how turns work
 struct Globals {
 };
 
@@ -45,6 +44,12 @@ enum BuffType {
 	BUFF_FROZEN,
 	BUFF_SHIELD,
 	BUFF_FAKE_SHIELD,
+	BUFF_SPUN_UP,
+	BUFF_STUNNED,
+	BUFF_TIME_TUNE_CHARGE,
+	BUFF_VOLUME_WARNING,
+	BUFF_SILENCE,
+	BUFF_DAMAGE_SPRING,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -130,6 +135,15 @@ enum SpellType {
 	SPELL_CREATE_STUDENT,
 	SPELL_CREATE_TEACHER,
 
+	SPELL_MULTIHITTER_HIT,
+	SPELL_MULTIHITTER_SPIN_UP,
+	SPELL_STUNNER_ATTACK,
+	SPELL_STUN,
+	SPELL_GAIN_TIME_TUNE_CHARGE,
+	SPELL_TIME_TUNE,
+	SPELL_VOLUME_WARNING,
+	SPELL_TAKE_LIFE,
+
 	SPELL_WAIT,
 
 	SPELL_END_TURN,
@@ -174,6 +188,12 @@ enum UnitType {
 	UNIT_STUDENT,
 	UNIT_TEACHER,
 	UNIT_TEACHER_TEACHER,
+	UNIT_MULTIHITTER,
+	UNIT_STUNNER,
+	UNIT_TIME_TUNER,
+	UNIT_SILENCER,
+	UNIT_LIFE_TAKER,
+	UNIT_SPIKE,
 	UNIT_TYPES_MAX,
 };
 struct UnitTypeInfo {
@@ -197,7 +217,9 @@ struct Unit {
 	bool ally;
 	int hp;
 	int mp;
+
 	bool hasTurn;
+	int extraTurns;
 
 #define SPELLS_AVAILABLE_MAX 128
 	SpellType spellsAvailable[SPELLS_AVAILABLE_MAX];
@@ -213,6 +235,8 @@ struct Unit {
 	bool asleep;
 
 	int accelerationCount;
+
+	float maxHpReductionPerc;
 };
 
 struct Game {
@@ -371,6 +395,30 @@ void updateGame() {
 			info = &game->unitTypeInfos[UNIT_TEACHER_TEACHER];
 			strcpy(info->name, "Teacher Teacher");
 			info->maxHp = 30000;
+
+			info = &game->unitTypeInfos[UNIT_MULTIHITTER];
+			strcpy(info->name, "Multihitter");
+			info->maxHp = 3000;
+
+			info = &game->unitTypeInfos[UNIT_STUNNER];
+			strcpy(info->name, "Stunner");
+			info->maxHp = 3000;
+
+			info = &game->unitTypeInfos[UNIT_TIME_TUNER];
+			strcpy(info->name, "Time Tuner");
+			info->maxHp = 50000;
+
+			info = &game->unitTypeInfos[UNIT_SILENCER];
+			strcpy(info->name, "Silencer");
+			info->maxHp = 10000;
+
+			info = &game->unitTypeInfos[UNIT_LIFE_TAKER];
+			strcpy(info->name, "Life Taker");
+			info->maxHp = 20000;
+
+			info = &game->unitTypeInfos[UNIT_SPIKE];
+			strcpy(info->name, "Spike");
+			info->maxHp = 3000;
 		}
 
 		{
@@ -626,6 +674,40 @@ void updateGame() {
 			strcpy(info->name, "Create Teacher");
 			info->targetType = TARGET_NONE;
 
+			info = &game->spellTypeInfos[SPELL_MULTIHITTER_HIT];
+			strcpy(info->name, "Hit");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 300;
+
+			info = &game->spellTypeInfos[SPELL_MULTIHITTER_SPIN_UP];
+			strcpy(info->name, "Spin Up");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_STUNNER_ATTACK];
+			strcpy(info->name, "Stunner Attack");
+			info->targetType = TARGET_SINGLE;
+			info->damage = 100;
+
+			info = &game->spellTypeInfos[SPELL_STUN];
+			strcpy(info->name, "Stun");
+			info->targetType = TARGET_SINGLE;
+
+			info = &game->spellTypeInfos[SPELL_GAIN_TIME_TUNE_CHARGE];
+			strcpy(info->name, "Gain Time Tune Charge");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_TIME_TUNE];
+			strcpy(info->name, "Time Tune");
+			info->targetType = TARGET_NONE;
+
+			info = &game->spellTypeInfos[SPELL_VOLUME_WARNING];
+			strcpy(info->name, "Volume Warning");
+			info->targetType = TARGET_SINGLE;
+
+			info = &game->spellTypeInfos[SPELL_TAKE_LIFE];
+			strcpy(info->name, "Take Life");
+			info->targetType = TARGET_SINGLE;
+
 			info = &game->spellTypeInfos[SPELL_WAIT];
 			info->targetType = TARGET_NONE;
 			strcpy(info->name, "Wait");
@@ -698,11 +780,29 @@ void updateGame() {
 
 			info = &game->buffTypeInfos[BUFF_FAKE_SHIELD];
 			strcpy(info->name, "Fake Shield");
+
+			info = &game->buffTypeInfos[BUFF_SPUN_UP];
+			strcpy(info->name, "Spun Up");
+
+			info = &game->buffTypeInfos[BUFF_STUNNED];
+			strcpy(info->name, "Stunned");
+
+			info = &game->buffTypeInfos[BUFF_TIME_TUNE_CHARGE];
+			strcpy(info->name, "Time Tune Charge");
+
+			info = &game->buffTypeInfos[BUFF_VOLUME_WARNING];
+			strcpy(info->name, "Volume Warning");
+
+			info = &game->buffTypeInfos[BUFF_SILENCE];
+			strcpy(info->name, "Silence");
+
+			info = &game->buffTypeInfos[BUFF_DAMAGE_SPRING];
+			strcpy(info->name, "Damage Spring");
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 6;
-		game->wave = 2;
+		game->level = 8;
+		game->wave = 1;
 
 		{
 			Unit *unit = NULL;
@@ -784,9 +884,11 @@ void updateGame() {
 			if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
 			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
 
+			int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
+
 			ImVec4 imCol = guiGetImVec4Color(color);
 			ImGui::TextColored(imCol, "%s", unit->screenName);
-			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, unit->info->maxHp);
+			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
 			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
 			if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
 			if (unit->buffsNum > 0) {
@@ -854,9 +956,13 @@ void updateGame() {
 				removeBuff(currentUnit, atMoon);
 			}
 
-			Buff *frozen = getBuff(currentUnit, BUFF_FROZEN);
-			if (frozen) {
+			if (getBuff(currentUnit, BUFF_FROZEN)) {
 				logf("Frozen\n");
+				castSpell(currentUnit, NULL, SPELL_END_TURN);
+			}
+
+			if (getBuff(currentUnit, BUFF_STUNNED)) {
+				logf("Stunned\n");
 				castSpell(currentUnit, NULL, SPELL_END_TURN);
 			}
 		}
@@ -922,6 +1028,7 @@ void updateGame() {
 								if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
 								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
 								if (spellCount % 5 != 0) ImGui::SameLine();
+								if (type == SPELL_WAIT) ImGui::NewLine();
 								if (ImGui::Button(label)) {
 									bool canCast = true;
 
@@ -963,6 +1070,11 @@ void updateGame() {
 											canCast = false;
 											logf("%s doesn't have enough mp\n", p2->info->name);
 										}
+									}
+
+									if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
+										canCast = false;
+										logf("Silenced\n");
 									}
 
 									if (canCast) {
@@ -1126,7 +1238,7 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
 					src->weapon = WEAPON_MAGIC_RESIST;
 					Unit *p2 = getUnitByType(UNIT_PLAYER2);
-					p2->mp -= spell->info->mp;
+					loseMp(p2, spell->info->mp);
 				}
 			} else if (spell->type == SPELL_DRAW_LOW_HP) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) {
@@ -1296,6 +1408,36 @@ void updateGame() {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_STUDENT);
 			} else if (spell->type == SPELL_CREATE_TEACHER) {
 				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_TEACHER);
+			} else if (spell->type == SPELL_MULTIHITTER_HIT) {
+				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
+				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+			} else if (spell->type == SPELL_MULTIHITTER_SPIN_UP) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SPUN_UP, 3);
+			} else if (spell->type == SPELL_STUNNER_ATTACK) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
+			} else if (spell->type == SPELL_STUN) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_STUNNED, 1);
+			} else if (spell->type == SPELL_GAIN_TIME_TUNE_CHARGE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_TIME_TUNE_CHARGE, -1);
+			} else if (spell->type == SPELL_TIME_TUNE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					removeAllBuffsOfType(src, BUFF_TIME_TUNE_CHARGE);
+					for (int i = 0; i < game->unitsNum; i++) {
+						Unit *unit = &game->units[i];
+						if (unit->hp <= 0) continue;
+						if (unit->ally != src->ally) continue;
+						unit->extraTurns++;
+					}
+				}
+			} else if (spell->type == SPELL_VOLUME_WARNING) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_VOLUME_WARNING, 1);
+			} else if (spell->type == SPELL_TAKE_LIFE) {
+				if (spellTimeJustPassed(baseSpellTime*0.5)) {
+					dest->maxHpReductionPerc += 0.01;
+					int maxHp = dest->info->maxHp * (1 - dest->maxHpReductionPerc);
+					if (dest->hp > maxHp) dest->hp = maxHp;
+				}
 			} else if (spell->type == SPELL_WAIT) {
 				if (game->spellTime == 0) logf("Waiting...\n");
 			} else if (spell->type == SPELL_END_TURN) {
@@ -1376,24 +1518,35 @@ void updateGame() {
 Unit *getCurrentUnit() {
 	if (game->chosenAllyUnit != UNIT_NONE) return getUnit(game->chosenAllyUnit);
 
+	bool hasExtraTurns = false;
 	for (int i = 0; i < game->unitsNum; i++) {
 		Unit *unit = &game->units[i];
 		if (unit->hp <= 0) continue;
-		if (!unit->hasTurn) continue;
-		return unit;
+		if (unit->extraTurns > 0) hasExtraTurns = true;
+		if (unit->hasTurn) return unit;
+	}
+
+	if (hasExtraTurns) {
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->hp <= 0) continue;
+			if (unit->extraTurns > 0) {
+				unit->extraTurns--;
+				unit->hasTurn = true;
+			}
+		}
+	} else {
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->hp <= 0) continue;
+			unit->hasTurn = true;
+		}
 	}
 
 	for (int i = 0; i < game->unitsNum; i++) {
 		Unit *unit = &game->units[i];
 		if (unit->hp <= 0) continue;
-		unit->hasTurn = true;
-	}
-
-	for (int i = 0; i < game->unitsNum; i++) {
-		Unit *unit = &game->units[i];
-		if (unit->hp <= 0) continue;
-		if (!unit->hasTurn) continue;
-		return unit;
+		if (unit->hasTurn) return unit;
 	}
 
 	logf("No current unit!\n");
@@ -1451,7 +1604,7 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 	if (src) spell->srcId = src->id;
 	if (dest) spell->destId = dest->id;
 
-	src->mp -= spell->info->mp;
+	loseMp(src, spell->info->mp);
 
 	return spell;
 }
@@ -1466,6 +1619,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 	if (!dest) Panic("dealDamage with no dest");
 
 	float damageMulti = 1;
+	float damageAddition = 0;
 
 	if (src) {
 		for (int i = 0; i < src->buffsNum; i++) {
@@ -1473,6 +1627,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 			if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 0.5;
 			if (!isMagic && buff->type == BUFF_PHYS_UP) damageMulti *= 2;
 			if (buff->type == BUFF_ATTACK_REDUCTION) damageMulti *= 0.5;
+			if (!isMagic && buff->type == BUFF_SPUN_UP) damageAddition += 100;
 		}
 
 		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
@@ -1490,7 +1645,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 		}
 
 		if (src->weapon == WEAPON_POISON && !isMagic) {
-			src->mp -= 10;
+			loseMp(src, 10);
 			giveBuff(dest, BUFF_POISON, 10);
 		}
 	}
@@ -1512,6 +1667,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 		logf("Dodged!\n");
 	}
 
+	damageAmount += damageAddition;
 	damageAmount *= damageMulti;
 
 	if (damageAmount) {
@@ -1552,6 +1708,10 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 
 	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, damageAmount * 0.01);
 
+	if (getBuff(dest, BUFF_DAMAGE_SPRING)) {
+		if (src) dealDamage(dest, src, damageAmount*4);
+	}
+
 	if (dest->hp <= 0 && getBuff(dest, BUFF_RELIFE)) {
 		logf("Relifed\n");
 		dest->hp = dest->info->maxHp;
@@ -1567,7 +1727,9 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 void gainHp(Unit *unit, int amount) {
 	if (unit->weapon == WEAPON_BIG_DAMAGE) amount = 0;
 	unit->hp += amount;
-	if (unit->hp > unit->info->maxHp) unit->hp = unit->info->maxHp;
+
+	int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
+	if (unit->hp > maxHp) unit->hp = maxHp;
 }
 
 void gainMp(Unit *unit, int amount) {
@@ -1577,7 +1739,13 @@ void gainMp(Unit *unit, int amount) {
 }
 
 void loseMp(Unit *unit, int amount) {
-	logf("Lost %dmp\n", amount);
+	if (amount == 0) return;
+	Buff *volumeWarning = getBuff(unit, BUFF_VOLUME_WARNING);
+	if (volumeWarning) {
+		giveBuff(unit, BUFF_SILENCE, 3);
+		removeBuff(unit, volumeWarning);
+	}
+
 	unit->mp -= amount;
 	if (unit->mp < 0) unit->mp = 0;
 }
@@ -1677,6 +1845,12 @@ Unit *createUnit(UnitType type) {
 				giveBuff(unit, BUFF_FAKE_SHIELD, -1);
 			}
 		}
+	} else if (unit->type == UNIT_TIME_TUNER) {
+		giveBuff(unit, BUFF_TIME_TUNE_CHARGE, -1);
+		giveBuff(unit, BUFF_TIME_TUNE_CHARGE, -1);
+		giveBuff(unit, BUFF_TIME_TUNE_CHARGE, -1);
+	} else if (unit->type == UNIT_SPIKE) {
+		giveBuff(unit, BUFF_DAMAGE_SPRING, -1);
 	}
 
 	{
@@ -1852,19 +2026,100 @@ void nextWave() {
 		unit = createUnit(UNIT_TEACHER);
 		NextWaveDef();
 		unit = createUnit(UNIT_TEACHER);
-		// unit = createUnit(UNIT_MULTIHITTER);
-		// unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
 		unit = createUnit(UNIT_TEACHER);
 		NextWaveDef();
 		unit = createUnit(UNIT_TEACHER_TEACHER);
 		unit = createUnit(UNIT_TEACHER);
 		unit = createUnit(UNIT_STUDENT);
 		NextWaveDef();
-		// unit = createUnit(UNIT_MULTIHITTER);
-		// unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
 		unit = createUnit(UNIT_TEACHER_TEACHER);
-		// unit = createUnit(UNIT_MULTIHITTER);
-		// unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
+		unit = createUnit(UNIT_MULTIHITTER);
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 7) {
+		StartWaveDef();
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		NextWaveDef();
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_STUNNER);
+		NextWaveDef();
+		unit = createUnit(UNIT_TEACHER_TEACHER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_TEACHER);
+		NextWaveDef();
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_TEACHER_TEACHER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		unit = createUnit(UNIT_TIME_TUNER);
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 8) {
+		StartWaveDef();
+		unit = createUnit(UNIT_SILENCER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_SILENCER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SPIKE);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_SPIKE);
+		NextWaveDef();
+		unit = createUnit(UNIT_STUNNER);
+		unit = createUnit(UNIT_SILENCER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_SILENCER);
+		unit = createUnit(UNIT_STUNNER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SILENCER);
+		unit = createUnit(UNIT_SPIKE);
+		unit = createUnit(UNIT_SILENCER);
+		NextWaveDef();
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SHIELD_SUMMONER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
+		NextWaveDef();
+		logf("End of waves\n");
+		EndWaveDef();
+	} else if (game->level == 9) {
+		StartWaveDef();
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		NextWaveDef();
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_SPIKE);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		unit = createUnit(UNIT_LIFE_TAKER);
+		NextWaveDef();
+		unit = createUnit(UNIT_MANA_BRUISER);
+		unit = createUnit(UNIT_TEACHER_TEACHER);
+		NextWaveDef();
+		unit = createUnit(UNIT_TEACHER_TEACHER);
+		unit = createUnit(UNIT_TEACHER);
+		unit = createUnit(UNIT_STUDENT);
 		NextWaveDef();
 		logf("End of waves\n");
 		EndWaveDef();
@@ -1873,6 +2128,7 @@ void nextWave() {
 	for (int i = 0; i < game->unitsNum; i++) {
 		Unit *unit = &game->units[i];
 		unit->hasTurn = true;
+		unit->extraTurns = 0;
 	}
 
 	game->wave++;
