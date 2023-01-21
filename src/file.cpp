@@ -155,7 +155,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 		pathOffset = 0;
 	}
 	strcat(realRootDir, dirPath);
-	// logf("Root dir is %s\n", realRootDir);
+	// logf("Getting the directly list of %s(%s)\n", realRootDir, dirPath);
 
 	int fileNamesMax = 32;
 	char **fileNames = (char **)malloc(fileNamesMax * sizeof(char *));
@@ -181,7 +181,6 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 		}
 
 		for (;;) {
-	// char **fileNames = (char **)malloc(fileNamesMax * sizeof(char *));
 			if (fileNamesNum > fileNamesMax-2) {
 				fileNames = (char **)resizeArray(fileNames, sizeof(char *), fileNamesNum, fileNamesMax*2 + 1);
 				fileNamesMax = fileNamesMax*2 + 1;
@@ -223,6 +222,8 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 	dirNames[dirNamesNum++] = stringClone(realRootDir);
 
 	for (int i = 0; i < dirNamesNum; i++) {
+		logf("Getting index: %d/%d\n", i, dirNamesNum);
+		logf("Got: %s\n", dirNames[i]);
 		char realDirName[PATH_MAX] = {};
 		if (!stringStartsWith(dirNames[i], filePathPrefix)) strcpy(realDirName, filePathPrefix);
 		strcat(realDirName, dirNames[i]);
@@ -233,6 +234,11 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 		dirent *ent;
 
 		for (;;) {
+			if (fileNamesNum > fileNamesMax-2) {
+				fileNames = (char **)resizeArray(fileNames, sizeof(char *), fileNamesNum, fileNamesMax*2 + 1);
+				fileNamesMax = fileNamesMax*2 + 1;
+			}
+
 			ent = readdir(dir); 
 
 			if (!ent) break;
@@ -246,17 +252,26 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 				if (strContains(newDirName, "__") && !includingUnderscored) {
 					// logf("Skipping dir %s\n", newDirName);
 				} else {
-					if (!shallow) dirNames[dirNamesNum++] = stringClone(newDirName);
+					if (!shallow) {
+						logf("String cloned dir: %s\n", newDirName);
+						dirNames[dirNamesNum++] = stringClone(newDirName);
+						logf("Repeating: %s\n", dirNames[dirNamesNum-1]);
+					}
 					if (includeFolders) fileNames[fileNamesNum++] = newDirName;
 				}
 			} else {
 				char newFileName[PATH_MAX];
-				if (stringStartsWith(dirNames[i], filePathPrefix)) strcpy(newFileName, dirNames[i]+strlen(filePathPrefix));
-				else strcpy(newFileName, dirNames[i]);
+				if (stringStartsWith(dirNames[i], filePathPrefix)) {
+					// if (fileNamesNum > 2000) logf("%d: adding post prefix to %s\n", fileNamesNum, filePathPrefix);
+					strcpy(newFileName, dirNames[i]+strlen(filePathPrefix));
+				} else {
+					strcpy(newFileName, dirNames[i]);
+				}
 				strcat(newFileName, "/");
 				strcat(newFileName, ent->d_name);
 
 				fileNames[fileNamesNum++] = stringClone(newFileName);
+				// logf("(fpp: %s) Added %s\n", filePathPrefix, fileNames[fileNamesNum-1]);
 			}
 		}
 	}

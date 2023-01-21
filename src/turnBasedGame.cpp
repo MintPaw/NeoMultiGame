@@ -271,6 +271,10 @@ struct Game {
 
 	float baseSpellTime;
 
+	bool nnPlaying;
+	float prevAllyAdvantage;
+	float prevAllyAdvantageGain;
+
 	bool inEditor;
 };
 
@@ -518,7 +522,7 @@ void updateGame() {
 
 			info = &game->spellTypeInfos[SPELL_SWIPE];
 			strcpy(info->name, "Swipe");
-			info->damage = 1500;
+			info->damage = 2000;
 
 			info = &game->spellTypeInfos[SPELL_ADD_POISON];
 			strcpy(info->name, "Add Poison");
@@ -583,7 +587,7 @@ void updateGame() {
 			strcpy(info->name, "Lightning");
 			info->targetType = TARGET_NONE;
 			info->mp = 50;
-			info->damage = 1000;
+			info->damage = 2000;
 
 			info = &game->spellTypeInfos[SPELL_ICE];
 			strcpy(info->name, "Ice");
@@ -801,8 +805,8 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 8;
-		game->wave = 1;
+		game->level = 1;
+		game->wave = 3;
 
 		{
 			Unit *unit = NULL;
@@ -865,6 +869,11 @@ void updateGame() {
 	if (game->inEditor) {
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 		ImGui::InputFloat("baseSpellTime", &game->baseSpellTime);
+		ImGui::Checkbox("nnPlaying", &game->nnPlaying);
+
+		ImGui::Separator();
+		ImGui::Text("allyAdvantage: %f", getAllyAdvantage());
+		ImGui::Text("allyAdvantageGain: %f", game->prevAllyAdvantageGain);
 		ImGui::End();
 	}
 
@@ -989,139 +998,144 @@ void updateGame() {
 				if (ImGui::Button("Continue")) nextWave();
 			} else if (currentUnit) {
 				if (currentUnit->ally) {
-					if (!game->chosenAllyUnit) {
-						Unit *choices[] = {
-							getUnitByType(UNIT_PLAYER1),
-							getUnitByType(UNIT_PLAYER2),
-						};
+					if (!game->nnPlaying) {
+						if (!game->chosenAllyUnit) {
+							Unit *choices[] = {
+								getUnitByType(UNIT_PLAYER1),
+								getUnitByType(UNIT_PLAYER2),
+							};
 
-						bool onlyOneUnitHasATurn = true;
-						Unit *unitWithATurn = NULL;
-						for (int i = 0; i < ArrayLength(choices); i++) {
-							Unit *unit = choices[i];
-							if (unit->hasTurn) {
-								if (unitWithATurn) onlyOneUnitHasATurn = false;
-								unitWithATurn = unit;
+							bool onlyOneUnitHasATurn = true;
+							Unit *unitWithATurn = NULL;
+							for (int i = 0; i < ArrayLength(choices); i++) {
+								Unit *unit = choices[i];
+								if (unit->hasTurn) {
+									if (unitWithATurn) onlyOneUnitHasATurn = false;
+									unitWithATurn = unit;
+								}
 							}
-						}
 
-						if (onlyOneUnitHasATurn && unitWithATurn) game->chosenAllyUnit = unitWithATurn->id;
+							if (onlyOneUnitHasATurn && unitWithATurn) game->chosenAllyUnit = unitWithATurn->id;
 
-						for (int i = 0; i < ArrayLength(choices); i++) {
-							Unit *unit = choices[i];
-							if (unit->hp <= 0) continue;
-							if (!unit->hasTurn) continue;
-							if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
-						}
-					} else {
-						if (game->currentSpellType == SPELL_NONE) {
-							int spellCount = 0;
-							for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
-								SpellType type = currentUnit->spellsAvailable[i];
-								SpellTypeInfo *info = &game->spellTypeInfos[type];
-								if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
-								if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
-								int spellAvailableIndex = i;
-
-								ImGui::PushID(i);
-								char *label = info->name;
-								if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
-								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
-								if (spellCount % 5 != 0) ImGui::SameLine();
-								if (type == SPELL_WAIT) ImGui::NewLine();
-								if (ImGui::Button(label)) {
-									bool canCast = true;
-
-									if (currentUnit->mp < info->mp) {
-										canCast = false;
-										logf("Not enough mp\n");
-									}
-
-									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
-										canCast = false;
-										logf("No more\n");
-									}
-
-									if (
-										(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
-										(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
-										(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
-										(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
-										(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
-										(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
-										(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
-									) {
-										canCast = false;
-										logf("You already have that weapon\n");
-									}
-
-									if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
-										canCast = false;
-										logf("Broken.\n");
-									}
-
-									if (type == SPELL_DRAW_MAGIC_RESIST) {
-										Unit *p2 = getUnitByType(UNIT_PLAYER2);
-										if (p2->hp <= 0) {
-											canCast = false;
-											logf("%s is dead\n", p2->info->name);
-										}
-										if (p2->mp < info->mp) {
-											canCast = false;
-											logf("%s doesn't have enough mp\n", p2->info->name);
-										}
-									}
-
-									if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
-										canCast = false;
-										logf("Silenced\n");
-									}
-
-									if (canCast) {
-										game->currentSpellType = type;
-										game->currentSpellAvailableIndex = i;
-									}
-								}
-
-								if (ImGui::IsItemHovered()) {
-									if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
-								}
-
-								spellCount++;
-								ImGui::PopID();
+							for (int i = 0; i < ArrayLength(choices); i++) {
+								Unit *unit = choices[i];
+								if (unit->hp <= 0) continue;
+								if (!unit->hasTurn) continue;
+								if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
 							}
 						} else {
-							SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
-							if (currentSpellInfo->targetType == TARGET_SINGLE) {
-								ImGui::Text("Target:");
-								for (int i = 0; i < game->unitsNum; i++) {
-									Unit *unit = &game->units[i];
-									if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
-									if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
-									if (isHidden(unit)) continue;
-									if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
+							if (game->currentSpellType == SPELL_NONE) {
+								int spellCount = 0;
+								for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
+									SpellType type = currentUnit->spellsAvailable[i];
+									SpellTypeInfo *info = &game->spellTypeInfos[type];
+									if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
+									if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
+									int spellAvailableIndex = i;
+
+									ImGui::PushID(i);
+									char *label = info->name;
+									if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
+									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
+									if (spellCount % 5 != 0) ImGui::SameLine();
+									if (type == SPELL_WAIT) ImGui::NewLine();
+									if (ImGui::Button(label)) {
 										bool canCast = true;
-										if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
+
+										if (currentUnit->mp < info->mp) {
 											canCast = false;
-											logf("It won't work\n");
+											logf("Not enough mp\n");
+										}
+
+										if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
+											canCast = false;
+											logf("No more\n");
+										}
+
+										if (
+											(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
+											(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
+											(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
+											(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
+											(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
+											(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
+											(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
+										) {
+											canCast = false;
+											logf("You already have that weapon\n");
+										}
+
+										if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
+											canCast = false;
+											logf("Broken.\n");
+										}
+
+										if (type == SPELL_DRAW_MAGIC_RESIST) {
+											Unit *p2 = getUnitByType(UNIT_PLAYER2);
+											if (p2->hp <= 0) {
+												canCast = false;
+												logf("%s is dead\n", p2->info->name);
+											}
+											if (p2->mp < info->mp) {
+												canCast = false;
+												logf("%s doesn't have enough mp\n", p2->info->name);
+											}
+										}
+
+										if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
+											canCast = false;
+											logf("Silenced\n");
 										}
 
 										if (canCast) {
-											currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-											castSpell(currentUnit, unit, game->currentSpellType);
-											castSpell(currentUnit, NULL, SPELL_END_TURN);
-											game->currentSpellType = SPELL_NONE;
+											game->currentSpellType = type;
+											game->currentSpellAvailableIndex = i;
 										}
 									}
+
+									if (ImGui::IsItemHovered()) {
+										if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
+									}
+
+									spellCount++;
+									ImGui::PopID();
 								}
-								if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
-							} else if (currentSpellInfo->targetType == TARGET_NONE) {
-								currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-								castSpell(currentUnit, NULL, game->currentSpellType);
-								castSpell(currentUnit, NULL, SPELL_END_TURN);
-								game->currentSpellType = SPELL_NONE;
+								if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
+							} else {
+								SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
+								if (currentSpellInfo->targetType == TARGET_SINGLE) {
+									ImGui::Text("Target:");
+									for (int i = 0; i < game->unitsNum; i++) {
+										Unit *unit = &game->units[i];
+										if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
+										if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
+										if (isHidden(unit)) continue;
+										if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
+											bool canCast = true;
+											if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
+												canCast = false;
+												logf("It won't work\n");
+											}
+
+											if (canCast) {
+												currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+												castSpell(currentUnit, unit, game->currentSpellType);
+												castSpell(currentUnit, NULL, SPELL_END_TURN);
+												game->currentSpellType = SPELL_NONE;
+											}
+										}
+									}
+									if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+								} else if (currentSpellInfo->targetType == TARGET_NONE) {
+									currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+									castSpell(currentUnit, NULL, game->currentSpellType);
+									castSpell(currentUnit, NULL, SPELL_END_TURN);
+									game->currentSpellType = SPELL_NONE;
+								}
 							}
 						}
+					} else {
+						nnTakeTurn(currentUnit);
 					}
 				} else {
 					aiTakeTurn(currentUnit);
@@ -1276,8 +1290,8 @@ void updateGame() {
 					int damage = spell->info->damage/2;
 					for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) giveBuff(dest, BUFF_POISON, 10);
 					for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) gainMp(src, damage * 0.01);
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) giveBuff(dest, BUFF_ATTACK_REDUCTION, 3);
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) giveBuff(dest, BUFF_DEFENSE_REDUCTION, 3);
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) giveBuff(dest, BUFF_ATTACK_REDUCTION, 2);
+					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) giveBuff(dest, BUFF_DEFENSE_REDUCTION, 2);
 					dealDamage(src, dest, damage);
 				}
 
@@ -1536,6 +1550,9 @@ Unit *getCurrentUnit() {
 			}
 		}
 	} else {
+		// Round ends here
+		game->prevAllyAdvantageGain = (getAllyAdvantage() - game->prevAllyAdvantage) / game->prevAllyAdvantage;
+		game->prevAllyAdvantage = getAllyAdvantage();
 		for (int i = 0; i < game->unitsNum; i++) {
 			Unit *unit = &game->units[i];
 			if (unit->hp <= 0) continue;
@@ -2132,4 +2149,5 @@ void nextWave() {
 	}
 
 	game->wave++;
+	game->prevAllyAdvantage = getAllyAdvantage();
 }

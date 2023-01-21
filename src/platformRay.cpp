@@ -33,6 +33,7 @@ struct Platform {
 
 	bool running;
 
+	Vec2i originalWindowSize;
 	int windowWidth;
 	int windowHeight;
 	Vec2i windowSize;
@@ -157,6 +158,7 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 #endif
 
 	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
+	platform->originalWindowSize = platform->windowSize;
 
 #ifdef _WIN32
 	platform->processHandle = GetCurrentProcess();
@@ -237,6 +239,22 @@ void platformUpdate() {
 
 	platform->windowWidth = Raylib::GetScreenWidth();
 	platform->windowHeight = Raylib::GetScreenHeight();
+
+#ifdef __EMSCRIPTEN__
+		// float windowScaling = emscripten_get_device_pixel_ratio();
+		// platform->windowWidth *= windowScaling;
+		// platform->windowHeight *= windowScaling;
+		// if (platform->windowSize.x != platform->windowWidth || platform->windowSize.y != platform->windowHeight) {
+		// 	EM_ASM({
+		// 		let newWidth = $0;
+		// 		let newHeight = $1;
+		// 		let canvasElement = document.getElementById("canvas");
+		// 		canvasElement.width = newWidth;
+		// 		canvasElement.height = newHeight;
+		// 	}, platform->windowWidth, platform->windowHeight);
+		// }
+#endif
+
 	platform->windowSize = v2i(platform->windowWidth, platform->windowHeight);
 
 	{ /// Events

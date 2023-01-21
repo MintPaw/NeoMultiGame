@@ -931,6 +931,7 @@ bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
 void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
+int getFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 Rect getFrameBounds(SwfSprite *sprite, int frameIndex);
 void destroySwf(Swf *swf);
 /// FUNCTIONS ^
@@ -2430,6 +2431,8 @@ int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
 
 	return -1;
 }
+
+int getFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) { return getSpriteFrameForLabel(sprite, label, afterFrame); }
 
 Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
 	if (frameIndex < 0 || frameIndex > sprite->framesNum-1) return makeRect();

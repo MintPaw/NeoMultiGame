@@ -48,6 +48,7 @@ Players have 10000hp and 1000mp
 		- Wish for safety (gives both players x2 defence phys/magic, for 3 turn)
 		- Wish for power (gives both player gain x2 attack for 1 turn)
 	- Dream, gains 1000hp
+		- Haste, only if visualized, wake up instantly, 50% dodge chance for 2 turns
 		? Deep dream, 2000hp
 		- Visualize, power up, 2x damage for 2 turns
 		? Stealth, hide for 1 turn
@@ -505,3 +506,5 @@ Players have 10000hp and 1000mp
 	- The difference between DoTs that derive damage multiplier based off current magic buffs, or the magic buffs when first cast
 	- P2 flash?
 	- Moon strike should apply additions?
+	- P2 Ice bolt, freezed everything 400mp?
+	- Wake cancel

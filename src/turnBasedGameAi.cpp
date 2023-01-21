@@ -49,6 +49,19 @@ int countFriends(Unit *src) {
 	return count;
 }
 
+int countOpponents(Unit *src);
+int countOpponents(Unit *src) {
+	int count = 0;
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (src->ally == unit->ally) continue;
+		if (unit->hp <= 0) continue;
+		if (unit == src) continue;
+		count++;
+	}
+	return count;
+}
+
 void aiTakeTurn(Unit *src);
 void aiTakeTurn(Unit *src) {
 	if (src->type == UNIT_STANDARD_A) {
@@ -156,4 +169,100 @@ void aiTakeTurn(Unit *src) {
 	}
 
 	castSpell(src, NULL, SPELL_END_TURN);
+}
+
+void nnTakeTurn(Unit *src);
+void nnTakeTurn(Unit *src) {
+	int destIndex = -1;
+	SpellType spellType = SPELL_NONE;
+
+	destIndex = rndInt(0, countOpponents(src)-1);
+
+	if (src->type == UNIT_PLAYER1) {
+		spellType = SPELL_HERO_ATTACK;
+	} else if (src->type == UNIT_PLAYER2) {
+		spellType = SPELL_SWIPE;
+	} else {
+		logf("No nn for %s?\n", src->info->name);
+	}
+
+	if (destIndex == -1) {
+		logf("Missing nn destIndex?\n");
+		return;
+	}
+
+	if (destIndex > countOpponents(src)-1) {
+		logf("Nn destIndex out of range?\n");
+		return;
+	}
+
+	if (spellType == SPELL_NONE) {
+		logf("No nn spell?\n");
+		return;
+	}
+
+	Unit *dest = NULL;
+	{ // getEnemyByIndex
+		int index = 0;
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->hp <= 0) continue;
+			if (unit->ally == src->ally) continue;
+			if (index == destIndex) {
+				dest = unit;
+				break;
+			}
+			index++;
+		}
+	}
+
+	if (!dest) {
+		logf("getEnemyByIndex failed???\n");
+		return;
+	}
+
+	castSpell(src, dest, spellType);
+	castSpell(src, NULL, SPELL_END_TURN);
+
+#if 0
+	inputs:
+		p1type p1hp p1mp
+		p2type p2hp p2mp
+		e1type e1hp 0
+		e2type e2hp 0
+		e3type e3hp 0
+		e4type e4hp 0
+		e5type e5hp 0
+
+	outputs:
+		p1first
+		p1spell
+		p1target
+		p2spell
+		p2target
+
+	goal:
+		float enemyAdvantage = 0;
+		enemyAdvantage -= allAllyHp;
+		enemyAdvantage -= allAllyMp*0.5;
+		enemyAdvantage += allEnemyHp;
+
+#endif
+}
+
+float getAllyAdvantage();
+float getAllyAdvantage() {
+	float adv = 0;
+	for (int i = 0; i < game->unitsNum; i++) {
+		Unit *unit = &game->units[i];
+		if (unit->hp <= 0) continue;
+
+		if (unit->ally) {
+			adv += unit->hp;
+			adv += unit->mp * 0.5;
+		} else {
+			adv -= unit->hp;
+		}
+	}
+	return adv;
 }

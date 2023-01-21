@@ -1,16 +1,11 @@
-REM call C:\emsdk\emsdk_env.bat
-REM set PATH=%PATH%;C:\emsdk;
-REM set PATH=%PATH%;C:\emsdk\upstream\emscripten;
-REM set PATH=%PATH%;C:\emsdk\node\14.15.5_64bit\bin;
-REM set EMSDK=C:/emsdk
-REM set EM_CONFIG=C:\emsdk\.emscripten
-REM set EMSDK_NODE=C:\emsdk\node\14.15.5_64bit\bin\node.exe
-REM set EMSDK_PYTHON=C:\emsdk\python\3.9.2-1_64bit\python.exe
 set PATH=%PATH%;c:\emsdk
 set PATH=%PATH%;c:\emsdk\upstream\emscripten
 set PATH=%PATH%;c:\emsdk\node\12.18.1_64bit\bin
 set PATH=%PATH%;c:\emsdk\python\3.7.4-pywin32_64bit
 set PATH=%PATH%;c:\emsdk\java\8.152_64bit\bin
+REM set PATH=%PATH%;C:\emsdk
+REM set PATH=%PATH%;C:\emsdk\node\14.18.2_64bit\bin
+REM set PATH=%PATH%;C:\emsdk\upstream\emscripten
 
 set EMSDK=c:/emsdk
 set EM_CONFIG=c:\emsdk\.emscripten
@@ -18,6 +13,10 @@ set EMSDK_NODE=c:\emsdk\node\12.18.1_64bit\bin\node.exe
 set EMSDK_PYTHON=c:\emsdk\python\3.7.4-pywin32_64bit\python.exe
 set JAVA_HOME=c:\emsdk\java\8.152_64bit
 set EM_CACHE=c:/emsdk/upstream/emscripten\cache
+REM set EMSDK=C:/emsdk
+REM set EMSDK_NODE=C:\emsdk\node\14.18.2_64bit\bin\node.exe
+REM set EMSDK_PYTHON=C:\emsdk\python\3.9.2-nuget_64bit\python.exe
+REM set JAVA_HOME=C:\emsdk\java\8.152_64bit
 
 cd /d "%~dp0.."
 
@@ -56,7 +55,7 @@ if [%CODE_ONLY%]==[1] (
 
 	mkdir %BIN_DIR%\assetPacks\preloader
 
-	robocopy %BIN_DIR%\assets %BIN_DIR%\assetPacks\preloader\assets /MIR /W:1 /njh /njs /ndl /nc /ns
+	robocopy %BIN_DIR%\assets %BIN_DIR%\assetPacks\preloader\assets /MIR /W:1 /njh /njs /ndl /nc /ns /nfl
 
 	mkdir %BIN_DIR%\assetPacks\main\assets
 

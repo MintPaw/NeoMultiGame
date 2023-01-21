@@ -35,6 +35,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ELEMENT_SPEED=33,
 	NGUI_STYLE_ICON_TINT=34,
 	NGUI_STYLE_Y_POSITION_TINT=35,
+	NGUI_STYLE_SLIDER_SNAP_INTERVAL=36,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -245,218 +246,224 @@ void nguiInit() {
 	info->enumName = "NGUI_STYLE_WINDOW_POSITION";
 	info->name = "Window position";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_PIVOT];
 	info->enumName = "NGUI_STYLE_WINDOW_PIVOT";
 	info->name = "Window pivot";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_SIZE];
 	info->enumName = "NGUI_STYLE_WINDOW_SIZE";
 	info->name = "Window size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_PADDING];
 	info->enumName = "NGUI_STYLE_WINDOW_PADDING";
 	info->name = "Window padding";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_LERP_SPEED];
 	info->enumName = "NGUI_STYLE_WINDOW_LERP_SPEED";
 	info->name = "Window lerp speed";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED, 0.2);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DISABLED];
 	info->enumName = "NGUI_STYLE_ELEMENT_DISABLED";
 	info->name = "Element disabled";
 	info->dataType = NGUI_DATA_TYPE_INT;
+	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DISABLED_TINT];
 	info->enumName = "NGUI_STYLE_ELEMENT_DISABLED_TINT";
 	info->name = "Element disabled tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x80000000);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_PADDING];
 	info->enumName = "NGUI_STYLE_ELEMENT_PADDING";
 	info->name = "Element padding";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENTS_IN_ROW];
 	info->enumName = "NGUI_STYLE_ELEMENTS_IN_ROW";
 	info->name = "Elements in row";
 	info->dataType = NGUI_DATA_TYPE_INT;
+	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_SIZE];
 	info->enumName = "NGUI_STYLE_ELEMENT_SIZE";
-	info->name = "Button size";
+	info->name = "Element size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_GRAVITY];
 	info->enumName = "NGUI_STYLE_LABEL_GRAVITY";
-	info->name = "Button label gravity";
+	info->name = "Label gravity";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_LABEL_GRAVITY, v2(0, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_HOVER_OFFSET];
 	info->enumName = "NGUI_STYLE_BUTTON_HOVER_OFFSET";
 	info->name = "Hover button offset";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(20, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_WINDOW_BG_COLOR];
 	info->enumName = "NGUI_STYLE_WINDOW_BG_COLOR";
 	info->name = "Window bg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BG_COLOR];
 	info->enumName = "NGUI_STYLE_BG_COLOR";
 	info->name = "Bg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_BG_COLOR, 0xFF202020);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_FG_COLOR];
 	info->enumName = "NGUI_STYLE_FG_COLOR";
 	info->name = "Fg color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF404040);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_TINT];
 	info->enumName = "NGUI_STYLE_HOVER_TINT";
 	info->name = "Hover tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_TINT];
 	info->enumName = "NGUI_STYLE_ACTIVE_TINT";
 	info->name = "Active tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS];
 	info->enumName = "NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS";
 	info->name = "Active flash brightness";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_TEXT_COLOR];
 	info->enumName = "NGUI_STYLE_TEXT_COLOR";
 	info->name = "Text color";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_INDENT];
 	info->enumName = "NGUI_STYLE_INDENT";
 	info->name = "Indent";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_PTR];
 	info->enumName = "NGUI_STYLE_ICON_PTR";
 	info->name = "Icon pointer";
 	info->dataType = NGUI_DATA_TYPE_PTR;
+	nguiPushStylePtr(NGUI_STYLE_ICON_PTR, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ROTATION];
 	info->enumName = "NGUI_STYLE_ICON_ROTATION";
 	info->name = "Icon rotation";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_SCALE];
 	info->enumName = "NGUI_STYLE_ICON_SCALE";
 	info->name = "Icon scale";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, v2(1, 1));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_TRANSLATION];
 	info->enumName = "NGUI_STYLE_ICON_TRANSLATION";
 	info->name = "Icon translation";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, v2(0, 0));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_ALPHA];
 	info->enumName = "NGUI_STYLE_ICON_ALPHA";
 	info->name = "Icon alpha";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_GRAVITY];
 	info->enumName = "NGUI_STYLE_ICON_GRAVITY";
 	info->name = "Icon gravity";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_HIGHLIGHT_TINT];
 	info->enumName = "NGUI_STYLE_HIGHLIGHT_TINT";
 	info->name = "Highlight tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x5C000000);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_HIGHLIGHT_CRUSH];
 	info->enumName = "NGUI_STYLE_HIGHLIGHT_CRUSH";
 	info->name = "Highlight crush";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_HOVER_SOUND_PATH_PTR];
 	info->enumName = "NGUI_STYLE_HOVER_SOUND_PATH_PTR";
 	info->name = "Hover sound path";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ACTIVE_SOUND_PATH_PTR];
 	info->enumName = "NGUI_STYLE_ACTIVE_SOUND_PATH_PTR";
 	info->name = "Active sound path";
 	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_BUTTON_HOVER_SCALE];
 	info->enumName = "NGUI_STYLE_BUTTON_HOVER_SCALE";
 	info->name = "Button hover scale";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_SLIDER_IS_VERTICAL];
 	info->enumName = "NGUI_STYLE_SLIDER_IS_VERTICAL";
 	info->name = "Slider is vertical";
 	info->dataType = NGUI_DATA_TYPE_INT;
+	nguiPushStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_SIZE];
 	info->enumName = "NGUI_STYLE_LABEL_SIZE";
 	info->name = "Label size";
 	info->dataType = NGUI_DATA_TYPE_VEC2;
+	nguiPushStyleVec2(NGUI_STYLE_LABEL_SIZE, v2(1, 1));
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_SPEED];
 	info->enumName = "ELEMENT_SPEED";
 	info->name = "Element speed";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_SPEED, 1);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_ICON_TINT];
 	info->enumName = "NGUI_STYLE_ICON_TINT";
 	info->name = "Icon tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
+	nguiPushStyleColorInt(NGUI_STYLE_ICON_TINT, 0xFFFFFFFF);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_Y_POSITION_TINT];
 	info->enumName = "NGUI_STYLE_Y_POSITION_TINT";
 	info->name = "Y position tint";
 	info->dataType = NGUI_DATA_TYPE_COLOR_INT;
-
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_POSITION, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PIVOT, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_SIZE, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_WINDOW_PADDING, v2(2, 2));
-	nguiPushStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED, 0.2);
-	nguiPushStyleInt(NGUI_STYLE_ELEMENT_DISABLED, 0);
-	nguiPushStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT, 0x80000000);
-	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_PADDING, v2(5, 5));
-	nguiPushStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW, 1);
-	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(250, 80));
-	nguiPushStyleVec2(NGUI_STYLE_LABEL_GRAVITY, v2(0, 0));
-	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET, v2(20, 0));
-	nguiPushStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR, 0xA0202020);
-	nguiPushStyleColorInt(NGUI_STYLE_BG_COLOR, 0xFF202020);
-	nguiPushStyleColorInt(NGUI_STYLE_FG_COLOR, 0xFF404040);
-	nguiPushStyleColorInt(NGUI_STYLE_HOVER_TINT, 0x40FFFFFF);
-	nguiPushStyleColorInt(NGUI_STYLE_ACTIVE_TINT, 0xA0FFFFFF);
-	nguiPushStyleFloat(NGUI_STYLE_ACTIVE_FLASH_BRIGHTNESS, 0);
-	nguiPushStyleColorInt(NGUI_STYLE_TEXT_COLOR, 0xFFECECEC);
-	nguiPushStyleFloat(NGUI_STYLE_INDENT, 0);
-	nguiPushStylePtr(NGUI_STYLE_ICON_PTR, 0);
-	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
-	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, v2(1, 1));
-	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, v2(0, 0));
-	nguiPushStyleFloat(NGUI_STYLE_ICON_ALPHA, 0.25);
-	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(1, 0.5));
-	nguiPushStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT, 0x5C000000);
-	nguiPushStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH, 3.5);
-	nguiPushStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR, "assets/common/audio/tickEffect.ogg");
-	nguiPushStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR, "assets/common/audio/clickEffect.ogg");
-	nguiPushStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE, v2(1.01, 1.01));
-	nguiPushStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL, 0);
-	nguiPushStyleVec2(NGUI_STYLE_LABEL_SIZE, v2(1, 1));
-	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_SPEED, 1);
-	nguiPushStyleColorInt(NGUI_STYLE_ICON_TINT, 0xFFFFFFFF);
 	nguiPushStyleColorInt(NGUI_STYLE_Y_POSITION_TINT, 0x30000000);
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_SLIDER_SNAP_INTERVAL];
+	info->enumName = "NGUI_STYLE_SLIDER_SNAP_INTERVAL";
+	info->name = "Slider snapping interval";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL, 0);
+
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -722,8 +729,8 @@ void nguiDraw(float elapsed) {
 
 				Vec2 elementPadding = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_PADDING) * ngui->uiScale;
 
-				elementsInRow++;
 				if (!skipCursorBump) {
+					elementsInRow++;
 					prevCursor = cursor;
 					if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
 						cursor.x += elementSize.x + elementPadding.x;
@@ -772,7 +779,7 @@ void nguiDraw(float elapsed) {
 			if (!isZero(clippingRect)) {
 				if (contains(windowRect, ngui->mouse)) {
 					mouseInClipRect = true;
-					window->scroll.y -= platform->mouseWheel * 0.04 * ngui->uiScale;
+					window->scroll.y -= (platform->mouseWheel * ngui->uiScale / childrenSize.y) * 40;
 				} else {
 					mouseInClipRect = false;
 				}
@@ -991,13 +998,37 @@ void nguiDraw(float elapsed) {
 						drawTextInRect(label, props, textRect, labelGravity);
 					}
 
+					int snapInterval = nguiGetStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL);
+
 					Rect barRect;
 					if (vertical) {
 						barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 1), v2(0.5, 0.5));
 					} else {
 						barRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.2), v2(0.5, 0.8));
 					}
-					drawRect(barRect, child->fgColor);
+
+					if (snapInterval > 0) {
+						float range = child->valueMax - child->valueMin;
+						Rect chunkRect = barRect;
+						Vec2 chunkStep = v2();
+						if (vertical) {
+							chunkStep.y = barRect.height / range;
+							chunkRect.height = chunkStep.y;
+						} else {
+							chunkStep.x = barRect.width / range;
+							chunkRect.width = chunkStep.x;
+						}
+
+						for (int i = 0; i < range; i++) {
+							int color = child->fgColor;
+							if (i % 2) color = lerpColor(color, 0xFF000000, 0.3);
+							drawRect(chunkRect, color);
+							chunkRect.x += chunkStep.x;
+							chunkRect.y += chunkStep.y;
+						}
+					} else {
+						drawRect(barRect, child->fgColor);
+					}
 
 					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
 					Rect buttonRect;
@@ -1033,7 +1064,12 @@ void nguiDraw(float elapsed) {
 						} else {
 							newPerc = Clamp01(norm(barRect.x, barRect.x + barRect.width, ngui->mouse.x));
 						}
-						*(float *)child->valuePtr = lerp(child->valueMin, child->valueMax, newPerc);
+
+						float value = lerp(child->valueMin, child->valueMax, newPerc);
+
+						if (snapInterval > 0) value = roundToNearest(value, snapInterval);
+
+						*(float *)child->valuePtr = value;
 					}
 				}
 
