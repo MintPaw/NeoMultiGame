@@ -31,7 +31,18 @@ set PROJECT_DIR="%~dp0.."
 set INCLUDE_DIR=%PROJECT_DIR%\include
 set LIB_DIR=%PROJECT_DIR%\lib
 set SRC_DIR=%PROJECT_DIR%\src
-set ASSETS_DIR=%PROJECT_DIR%\%GAME_NAME%Assets
+
+if "%GAME_NAME%" == "catCardGame" (
+	set ASSETS_ARE_PRIVATE=1
+) else (
+	set ASSETS_ARE_PRIVATE=0
+)
+
+if [%ASSETS_ARE_PRIVATE%]==[1] (
+	set ASSETS_DIR=..\multiGamePrivate\%GAME_NAME%Assets
+) else (
+	set ASSETS_DIR=%PROJECT_DIR%\%GAME_NAME%Assets
+)
 
 robocopy commonAssets\assets\common %ASSETS_DIR%\assets\common /MIR /W:5 /njh /njs /ndl /nc /ns /XO
 
