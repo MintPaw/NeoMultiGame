@@ -42,6 +42,8 @@ if [%INTERNAL_MODE%]==[1] (
 )
 if exist "C:\Program Files\7-Zip\7z.exe" set SEVEN_ZIP="C:\Program Files\7-Zip\7z.exe"
 
+del /s /q C:\bin\webgl\index.html
+
 if [%CODE_ONLY%]==[1] (
 	echo Building code only
 ) else (

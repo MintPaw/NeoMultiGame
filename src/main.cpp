@@ -454,6 +454,10 @@ NanoTime mainNano;
 # include "turnBasedGame.cpp"
 #endif
 
+#if defined(PLAYING_catCardGame)
+# include "../../multiGamePrivate/src/catCardGame.cpp"
+#endif
+
 #ifdef _WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else

@@ -7,7 +7,6 @@ enum GameState {
 };
 struct Game {
 	Font *defaultFont;
-	// Font *hugeFont;
 	RenderTexture *gameTexture;
 
 	Globals globals;
@@ -19,13 +18,6 @@ struct Game {
 	Vec2 mouse;
 
 	Vec2 screenOverlayOffset;
-	Vec2 screenOverlaySize;
-
-	GameState state;
-	GameState prevState;
-	GameState nextState;
-	float stateTransition_t;
-	float stateTime;
 
 	/// Editor/debug
 	bool debugShowFrameTimes;
@@ -76,9 +68,8 @@ void updateGame() {
 	Globals *globals = &game->globals;
 
 	float elapsed = platform->elapsed * game->timeScale;
-	float secondPhase = (sin(game->time*M_PI*2-M_PI*0.5)/2)+0.5;
 
-	game->mouse = (platform->mouse - game->screenOverlayOffset) * (game->size/game->screenOverlaySize);
+	game->mouse = (platform->mouse - game->screenOverlayOffset);
 
 	{ /// Resizing
 		Vec2 ratio = v2(1600.0, 900.0);
@@ -91,7 +82,6 @@ void updateGame() {
 			if (game->gameTexture) destroyTexture(game->gameTexture);
 			game->gameTexture = NULL;
 
-			game->screenOverlaySize = game->size;
 			game->screenOverlayOffset.x = (float)platform->windowWidth/2 - game->size.x/2;
 			game->screenOverlayOffset.y = (float)platform->windowHeight/2 - game->size.y/2;
 		}
@@ -104,30 +94,8 @@ void updateGame() {
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	// platform->disableGui = !game->inEditor;
 
-	if (game->state != game->nextState) {
-		game->stateTransition_t += 0.05;
-		if (game->stateTransition_t >= 1) game->state = game->nextState;
-	} else {
-		game->stateTransition_t -= 0.05;
-	}
-	game->stateTransition_t = Clamp01(game->stateTransition_t);
+	drawRect(0, 0, 100, 100, 0xFFFF0000);
 
-	if (game->prevState != game->state) {
-		game->prevState = game->state;
-		game->stateTime = 0;
-	}
-
-	if (game->state == GAME_NONE) {
-		if (game->stateTime == 0) {
-			game->nextState = GAME_PLAY;
-		}
-	} else if (game->state == GAME_PLAY) {
-		drawRect(0, 0, 100, 100, 0xFFFF0000);
-	}
-
-	game->stateTime += elapsed;
-
-	drawRect(makeRect(v2(0, 0), game->size), lerpColor(0x00000000, 0xFF000000, game->stateTransition_t));
 	popTargetTexture(); // game->gameTexture
 
 	clearRenderer();
@@ -136,7 +104,7 @@ void updateGame() {
 		RenderTexture *texture = game->gameTexture;
 		Matrix3 matrix = mat3();
 		matrix.TRANSLATE(game->screenOverlayOffset);
-		matrix.SCALE(game->screenOverlaySize);
+		matrix.SCALE(game->size);
 
 		drawSimpleTexture(texture, matrix);
 	}
