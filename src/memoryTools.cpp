@@ -35,6 +35,19 @@ struct MemoryArena {
 	int blockSize;
 };
 
+struct TextTag {
+#define TEXT_TAG_NAME_MAX_LEN 64
+	char name[TEXT_TAG_NAME_MAX_LEN];
+	int startIndex;
+	int endIndex;
+};
+struct TaggedText {
+	char *text;
+#define TAGGED_TEXT_TAGS_MAX 128
+	TextTag tags[TAGGED_TEXT_TAGS_MAX];
+	int tagsNum;
+};
+
 void *zalloc(u32 size);
 char *stringClone(const char *str);
 bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
@@ -812,6 +825,78 @@ void destroyMemoryArena(MemoryArena *arena) {
 	free(arena);
 }
 
+TaggedText *parseTaggedText(char *inText);
+TaggedText *parseTaggedText(char *inText) {
+	TaggedText *taggedText = (TaggedText *)zalloc(sizeof(TaggedText));
+
+	StringBuilder builder = createStringBuilder();
+
+	int tokenMaxLen = TEXT_TAG_NAME_MAX_LEN;
+	char *token = (char *)frameMalloc(TEXT_TAG_NAME_MAX_LEN);
+	char *inTextStart = inText;
+	for (;;) {
+		char *inTextEnd = strchr(inTextStart, '[');
+		bool shouldBreak = false;
+		if (!inTextEnd) {
+			inTextEnd = &inTextStart[strlen(inTextStart)];
+			shouldBreak = true;
+		}
+
+		int charsToCopy = inTextEnd - inTextStart;
+		addText(&builder, inTextStart, charsToCopy);
+		if (shouldBreak) break;
+
+		char *tokenStart = inTextEnd+1;
+		char *tokenEnd = strchr(tokenStart, ']');
+		if (!tokenEnd) {
+			logf("Couldn't find ']'\n");
+			break;
+		}
+
+		int tokenLen = tokenEnd - tokenStart;
+		if (tokenLen > TEXT_TAG_NAME_MAX_LEN) {
+			logf("Tag too long!\n"); break;
+		}
+
+		strncpy(token, tokenStart, tokenLen);
+		token[tokenLen] = 0;
+
+		if (taggedText->tagsNum > TAGGED_TEXT_TAGS_MAX-1) {
+			logf("Too many tags!\n");
+			break;
+		}
+
+		if (token[0] == '/') {
+			TextTag *tag = &taggedText->tags[taggedText->tagsNum-1];
+			if (tag->endIndex != -1) logf("Double ending %s tag???\n", tag->name);
+			tag->endIndex = builder.count;
+		} else {
+			TextTag *tag = &taggedText->tags[taggedText->tagsNum++];
+			strcpy(tag->name, token);
+			tag->startIndex = builder.count;
+			tag->endIndex = -1;
+		}
+
+		inTextStart = tokenEnd+1;
+	}
+
+	taggedText->text = stringClone(builder.string);
+	destroy(builder);
+	return taggedText;
+}
+
+bool inTextTag(TaggedText *taggedText, char *tagName, int index);
+bool inTextTag(TaggedText *taggedText, char *tagName, int index) {
+	for (int i = 0; i < taggedText->tagsNum; i++) {
+		TextTag *tag = &taggedText->tags[i];
+		if (tag->startIndex > index) continue;
+		if (tag->endIndex < index) continue;
+		if (!streq(tag->name, tagName)) continue;
+		return true;
+	}
+
+	return false;
+}
 
 /// Dynamic array
 

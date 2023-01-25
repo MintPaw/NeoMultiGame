@@ -19,7 +19,7 @@ struct TextProps {
 	Font *font;
 	char *string;
 	Vec2 position;
-	int color;
+	int color; // This probably doesn't need to exist
 	float maxWidth;
 
 	int index;
@@ -337,8 +337,6 @@ Vec2 drawText(const char *text, DrawTextProps drawTextProps) {
 		return v2(1, 1);
 	}
 
-	Vec2 textSize = v2();
-
 	TextProps textProps = startText(text, drawTextProps.position);
 	textProps.font = drawTextProps.font;
 	textProps.maxWidth = drawTextProps.maxWidth;
@@ -348,6 +346,7 @@ Vec2 drawText(const char *text, DrawTextProps drawTextProps) {
 	Matrix3 charMatrix;
 	Matrix3 charUvMatrix;
 	bool charDisabled;
+	Vec2 textSize = v2();
 	while (nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) {
 		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
 		if (drawTextProps.skipDraw || charDisabled) continue;
@@ -361,7 +360,7 @@ Vec2 drawText(const char *text, DrawTextProps drawTextProps) {
 		drawTexture(textProps.font->texture, props);
 	}
 
-	textSize.y = textProps.cursor.y + textProps.font->lineSpacing * drawTextProps.scale.y;
+	textSize.y = textProps.cursor.y + textProps.font->lineSpacing * textProps.scale.y;
 	return textSize - drawTextProps.position;
 }
 

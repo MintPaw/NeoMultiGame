@@ -1,10 +1,6 @@
 struct Globals {
 };
 
-enum GameState {
-	GAME_NONE,
-	GAME_PLAY,
-};
 struct Game {
 	Font *defaultFont;
 	RenderTexture *gameTexture;
@@ -110,10 +106,7 @@ void updateGame() {
 	}
 
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
-	if (game->debugShowFrameTimes) {
-		char *str = frameSprintf("%.1fms", platform->frameTimeAvg);
-		drawText(game->defaultFont, str, v2(300, 0), 0xFF808080);
-	}
+	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
 	guiDraw();
 	drawOnScreenLog();

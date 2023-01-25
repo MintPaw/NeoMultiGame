@@ -51,6 +51,7 @@ int rndInt(int min, int max) {
 }
 bool rndBool() { return rndFloat(0, 1) > 0.5; }
 bool rndPerc(float perc) { return rndFloat(0, 1) < perc; }
+Vec2 rndVec2(float min, float max) { return v2(rndFloat(min, max), rndFloat(min, max)); }
 
 int rndPick(int *weights, int weightsNum) {
 	int totalItems = 0;
