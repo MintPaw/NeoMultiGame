@@ -889,8 +889,8 @@ bool inTextTag(TaggedText *taggedText, char *tagName, int index);
 bool inTextTag(TaggedText *taggedText, char *tagName, int index) {
 	for (int i = 0; i < taggedText->tagsNum; i++) {
 		TextTag *tag = &taggedText->tags[i];
-		if (tag->startIndex > index) continue;
-		if (tag->endIndex < index) continue;
+		if (index < tag->startIndex) continue;
+		if (index > tag->endIndex-1) continue;
 		if (!streq(tag->name, tagName)) continue;
 		return true;
 	}

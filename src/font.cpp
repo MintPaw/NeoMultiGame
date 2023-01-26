@@ -371,9 +371,10 @@ void passText(char *text, DrawTextProps drawTextProps) {
 		logf("Tried to draw text '%s' with no font\n", text);
 		return;
 	}
+	Pass *pass = getCurrentPass();
 
 	bool oldYIsUp = fontSys->yIsUp;
-	fontSys->yIsUp = true;
+	fontSys->yIsUp = pass->yIsUp;
 
 	Vec2 textSize = v2();
 

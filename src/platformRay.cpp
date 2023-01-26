@@ -584,6 +584,7 @@ static int lightsCount = 0;
 struct Renderer {
 	bool in3dPass;
 	bool disabled;
+	bool inPass;
 	int maxTextureUnits; // Does nothing
 
 	bool lastBackfaceCull;
@@ -1355,6 +1356,9 @@ void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors) {
 }
 
 void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
+	if (renderer->inPass) {
+		logf("Drawing while pass is pushed!\n");
+	}
 	if (renderer->currentDrawCount > renderer->maxDrawCallsPerBatch-10) processBatchDraws(); // Magic -10 :/
 	renderer->currentDrawCount++;
 
