@@ -28,6 +28,7 @@ Vec2 readVec2(DataStream *stream);
 Vec2i readVec2i(DataStream *stream);
 
 DataStream *newDataStream(int startSize=8);
+DataStream *createDataStream(int startSize=8) { return newDataStream(startSize); }
 void destroyDataStream(DataStream *stream);
 
 void writeBytes(DataStream *stream, void *ptr, int size);

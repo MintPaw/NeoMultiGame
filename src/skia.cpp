@@ -487,6 +487,15 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 }
 
 void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse, VDrawCommandsList *cmdList, bool isNested) {
+	if (streq(sprite->name, "__VDRAW_CMD_LIST__")) {
+		VDrawCommandsList *newList = (VDrawCommandsList *)sprite->controlTags;
+		for (int i = 0; i < newList->cmdsNum; i++) {
+			VDrawCommand *newCmd = createCommand(cmdList, VDRAW_SET_MATRIX);
+			*newCmd = newList->cmds[i];
+		}
+		return;
+	}
+
 	int startingCmdIndex = cmdList->cmdsNum;
 	Matrix3 localMatrix = mat3();
 	SpriteTransform *matchingTransform = NULL;

@@ -182,10 +182,10 @@ char *frameMalloc(int size) {
 
 	if (shouldUseChunk) {
 		if (memSys->frameChunksNum >= FRAME_CHUNKS_MAX) {
-			printf("No more frame memory\n");
+			printf("No more frame memory, will leak\n");
 
 			DecMutex(&memSys->_frameMemoryMutex);
-			return NULL;
+			return (char *)zalloc(size);
 		}
 
 		MemoryChunk *chunk = &memSys->frameChunks[memSys->frameChunksNum++];
@@ -459,20 +459,23 @@ StringBuilder createStringBuilder(int startingMaxLen) {
 void addText(StringBuilder *builder, char *string, int count) {
 	if (count == -1) count = strlen(string);
 
-	int charsLeft = builder->maxLen - builder->count - 1;
+	for (;;) {
+		int charsLeft = builder->maxLen - builder->count - 1;
+		int extraNeeded = count - charsLeft;
+		if (extraNeeded <= 0) break;
 
-	int extraNeeded = count - charsLeft;
-	if (extraNeeded > 0) {
-		char *newString = (char *)zalloc(builder->maxLen + extraNeeded);
-		builder->maxLen += extraNeeded;
+		char *newString = (char *)zalloc((builder->maxLen+1) * 2);
+		builder->maxLen = (builder->maxLen+1) * 2;
 
 		strncpy(newString, builder->string, builder->count);
 		free(builder->string);
 		builder->string = newString;
 	}
 
-	strncat(builder->string, string, count);
+	strncpy(&builder->string[builder->count], string, count);
+	// strncat(builder->string, string, count);
 	builder->count += count;
+	builder->string[builder->count+1] = 0;
 }
 
 void destroy(StringBuilder builder) {

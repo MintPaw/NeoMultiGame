@@ -14,7 +14,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=horseGame
 # GAME_NAME=tower2Game
 # GAME_NAME=gladiators2Game
-# GAME_NAME=minGame
+# GAME_NAME=deskGame
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=turnBasedGame
