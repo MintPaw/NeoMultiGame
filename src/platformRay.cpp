@@ -584,7 +584,6 @@ static int lightsCount = 0;
 struct Renderer {
 	bool in3dPass;
 	bool disabled;
-	bool inPass;
 	int maxTextureUnits; // Does nothing
 
 	bool lastBackfaceCull;
@@ -635,8 +634,13 @@ struct Renderer {
 	void *tempTextureRowBuffer;
 	int tempTextureRowBufferSize;
 };
+
 Renderer *renderer = NULL;
 bool skip3dShaders = false;
+
+#define PASS_HEADER
+#include "pass.cpp"
+#include "pass.cpp"
 
 Raylib::Color toRaylibColor(int color) { return Raylib::GetColor(argbToRgba(color)); }
 Raylib::Vector3 toRaylib(Vec3 vec) { return {vec.x, vec.y, vec.z}; }
@@ -646,7 +650,6 @@ Raylib::Matrix toRaylib(Matrix4 matrix) {
 	memcpy(&raylibMatrix.m0, matrix.transpose().data, sizeof(float) * 16);
 	return raylibMatrix;
 }
-
 
 void initRenderer(int width, int height);
 void clearRenderer(int color=0);
@@ -1356,9 +1359,33 @@ void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors) {
 }
 
 void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
-	if (renderer->inPass) {
-		logf("Drawing while pass is pushed!\n");
+	Pass *pass = getCurrentPass();
+	if (pass) {
+		PassCmd *cmd = createPassCmd(pass);
+		if (!cmd) {
+			logf("Pass redirect overflow!\n");
+			pass->cmdsNum--;
+			cmd = createPassCmd(pass);
+		}
+
+		cmd->type = PASS_CMD_QUAD;
+		cmd->textureId = textureId;
+		cmd->verts[0] = verts[0];
+		cmd->verts[1] = verts[1];
+		cmd->verts[2] = verts[2];
+		cmd->verts[3] = verts[3];
+		cmd->uvs[0] = uvs[0];
+		cmd->uvs[1] = uvs[1];
+		cmd->uvs[2] = uvs[2];
+		cmd->uvs[3] = uvs[3];
+		cmd->colors[0] = colors[0];
+		cmd->colors[1] = colors[1];
+		cmd->colors[2] = colors[2];
+		cmd->colors[3] = colors[3];
+
+		return;
 	}
+
 	if (renderer->currentDrawCount > renderer->maxDrawCallsPerBatch-10) processBatchDraws(); // Magic -10 :/
 	renderer->currentDrawCount++;
 
@@ -1390,6 +1417,7 @@ void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
 
 void pushTargetTexture(RenderTexture *renderTexture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");
+	if (getCurrentPass()) logf("Pushing target texture while in pass!\n");
 
 	renderer->targetTextureStack[renderer->targetTextureStackNum++] = renderTexture;
 
@@ -1397,6 +1425,8 @@ void pushTargetTexture(RenderTexture *renderTexture) {
 }
 
 void popTargetTexture() {
+	if (getCurrentPass()) logf("Popping target texture while in pass!\n");
+
 	renderer->targetTextureStackNum--;
 
 	if (renderer->targetTextureStackNum > 0) {
@@ -1438,10 +1468,12 @@ void refreshGlobalMatrices() {
 }
 
 void setScissor(Rect rect) { //@todo Untested
+	if (getCurrentPass()) logf("Setting scissor while in pass!\n");
 	Raylib::BeginScissorMode(rect.x, rect.y, rect.width, rect.height);
 }
 
 void clearScissor() {
+	if (getCurrentPass()) logf("Clearing scissor while in pass!\n");
 	Raylib::EndScissorMode();
 }
 

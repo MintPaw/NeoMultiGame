@@ -1,3 +1,6 @@
+#ifdef PASS_HEADER
+#undef PASS_HEADER
+
 enum PassCmdType {
 	PASS_CMD_CLEAR,
 	PASS_CMD_QUAD,
@@ -5,12 +8,14 @@ enum PassCmdType {
 	PASS_CMD_MESH,
 };
 
+struct Mesh;
 struct PassCmd {
 	PassCmdType type;
 	Vec3 verts[4];
 	Vec2 uvs[4];
 	int colors[4];
 	Texture *texture;
+	int textureId;
 
 	Mesh *mesh;
 	Matrix4 meshMatrix;
@@ -62,6 +67,8 @@ Pass *getCurrentPass();
 PassCmd *createPassCmd(Pass *pass);
 /// FUNCTIONS ^
 
+#else
+
 void initPassSystem() {
 	passSys = (PassSystem *)zalloc(sizeof(PassSystem));
 	logf("PassSystem is %.1fmb\n", (float)sizeof(PassSystem) / (float)sizeof(Megabytes(1)));
@@ -92,7 +99,6 @@ void pushPass(Pass *pass) {
 		passSys->passStackNum--;
 	}
 
-	renderer->inPass = true;
 	passSys->passStack[passSys->passStackNum++] = pass;
 }
 
@@ -103,8 +109,6 @@ void popPass() {
 	}
 
 	passSys->passStackNum--;
-
-	if (passSys->passStackNum == 0) renderer->inPass = false;
 }
 
 void passPushCamera2d(Matrix3 matrix) {
@@ -145,10 +149,11 @@ PassCmd *passTexture(Texture *texture, Matrix3 matrix, int color, Vec2 uv0, Vec2
 	if (getAofArgb(color) == 0) return NULL;
 	Pass *pass = getCurrentPass();
 	PassCmd *cmd = createPassCmd(pass);
-	cmd->type = PASS_CMD_QUAD;
 	if (!cmd) return NULL;
+	cmd->type = PASS_CMD_QUAD;
 
 	cmd->texture = texture;
+	cmd->textureId = texture->raylibTexture.id;
 
 	matrix = pass->currentCamera2dMatrix * matrix;
 	cmd->verts[0] = matrix * v3(0, 0, 1);
@@ -225,3 +230,4 @@ PassCmd *createPassCmd(Pass *pass) {
 	memset(cmd, 0, sizeof(PassCmd));
 	return cmd;
 }
+#endif
