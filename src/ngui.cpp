@@ -36,6 +36,7 @@ enum NguiStyleType {
 	NGUI_STYLE_ICON_TINT=34,
 	NGUI_STYLE_Y_POSITION_TINT=35,
 	NGUI_STYLE_SLIDER_SNAP_INTERVAL=36,
+	NGUI_STYLE_JUSTIFY_TEXT=37,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -90,6 +91,7 @@ struct NguiElement {
 	int orderIndex;
 	NguiStyleStack styleStack;
 	char *subText;
+
 	void *valuePtr;
 	float valueMin;
 	float valueMax;
@@ -464,6 +466,12 @@ void nguiInit() {
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 	nguiPushStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL, 0);
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_JUSTIFY_TEXT];
+	info->enumName = "NGUI_STYLE_JUSTIFY_TEXT";
+	info->name = "Justify Text";
+	info->dataType = NGUI_DATA_TYPE_INT;
+	nguiPushStyleInt(NGUI_STYLE_JUSTIFY_TEXT, 0);
+
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -656,9 +664,9 @@ void nguiDraw(float elapsed) {
 		elementsLeft[elementsLeftNum++] = element;
 	}
 
-	int lastLeftNum = elementsLeftNum;
-	for (;;) {
+	for (int i = 0; ; i++) {
 		if (elementsLeftNum == 0) break;
+		int lastLeftNum = elementsLeftNum;
 		for (int i = 0; i < elementsLeftNum; i++) {
 			int windowIndex = i;
 			NguiElement *window = elementsLeft[windowIndex];
@@ -847,6 +855,7 @@ void nguiDraw(float elapsed) {
 				int labelTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 				bool disabled = nguiGetStyleInt(NGUI_STYLE_ELEMENT_DISABLED);
 				int disabledTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT);
+				bool justify = nguiGetStyleInt(NGUI_STYLE_JUSTIFY_TEXT);
 
 				if (disabled) {
 					bgColor = tintColor(bgColor, disabledTint);
@@ -975,7 +984,7 @@ void nguiDraw(float elapsed) {
 						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*labelSize, labelGravity);
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
-						drawTextInRect(label, props, textRect, labelGravity);
+						drawTextInRect(label, props, textRect, labelGravity, justify);
 					}
 
 					if (child->subText[0]) {
@@ -984,7 +993,7 @@ void nguiDraw(float elapsed) {
 
 						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
-						drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
+						drawTextInRect(child->subText, props, subTextRect, v2(1, 1), justify);
 					}
 				} else if (child->type == NGUI_ELEMENT_SLIDER) {
 					Rect graphicsRect = childRect;
@@ -995,7 +1004,7 @@ void nguiDraw(float elapsed) {
 					{
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.6), v2(0, 0));
 						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
-						drawTextInRect(label, props, textRect, labelGravity);
+						drawTextInRect(label, props, textRect, labelGravity, justify);
 					}
 
 					int snapInterval = nguiGetStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL);
@@ -1070,6 +1079,27 @@ void nguiDraw(float elapsed) {
 						if (snapInterval > 0) value = roundToNearest(value, snapInterval);
 
 						*(float *)child->valuePtr = value;
+					} else {
+
+						if (mouseInClipRect && contains(childRect, ngui->mouse) && !disabled) {
+							if (child->hoveringTime == 0) playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+
+							child->bgColor = tintColor(child->bgColor, hoverTint);
+
+							if (platform->mouseJustDown) {
+								playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
+								child->bgColor = tintColor(child->bgColor, activeTint);
+
+								child->justActive = true;
+							}
+
+							// graphicsXform.translation = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_OFFSET) * ngui->uiScale;
+							// graphicsXform.scale = nguiGetStyleVec2(NGUI_STYLE_BUTTON_HOVER_SCALE);
+							child->hoveringTime += elapsed;
+						} else {
+							child->hoveringTime = 0;
+						}
+
 					}
 				}
 

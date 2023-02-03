@@ -212,6 +212,7 @@ PassCmd *passMesh(Mesh *mesh, Matrix4 matrix, int color) {
 }
 
 Pass *getCurrentPass() {
+	if (!passSys) initPassSystem();
 	if (passSys->passStackNum <= 0) return NULL;
 
 	return passSys->passStack[passSys->passStackNum-1];

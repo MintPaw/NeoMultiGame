@@ -69,7 +69,7 @@ StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
 
 char **mallocSplitString(char *str, char *delim, int *outStringsNum);
-char **frameSplitString(char *str, char *delim, int *outStrings);
+char **frameSplitString(char *str, char *delim, int *outStringsNum);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);

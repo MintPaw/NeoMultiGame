@@ -53,7 +53,7 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(Font *font, const char *string, float maxWidth=9999);
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color=0xFF000000, float maxWidth=9999, bool skipDraw=false, Vec2 scale=v2(1, 1));
-void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
+void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5), bool justify=false);
 void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
 
 DrawTextProps newDrawTextProps();
@@ -95,16 +95,12 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 	*outMatrix = mat3();
 	*outDisabled = false;
 
+	if (textProps->index == strlen(textProps->string)) return false;
+
 	if (textProps->index == 0) {
 		if (!textProps->font && fontSys->defaultFont) textProps->font = fontSys->defaultFont;
 		textProps->cursor = textProps->position;
 	}
-
-	if (textProps->index == strlen(textProps->string)) {
-		return false;
-	}
-
-	char curChar = textProps->string[textProps->index];
 
 	const char *breakableChars = " -";
 	bool canLineBreakHere = false;
@@ -140,6 +136,8 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 		}
 	}
 
+	char curChar = textProps->string[textProps->index];
+
 	if (curChar == '\n') {
 		textProps->cursor.x = textProps->position.x;
 		if (fontSys->yIsUp) {
@@ -148,7 +146,7 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 			textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
 		}
 		*outDisabled = true;
-	} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) {
+	} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) { // Para holdover?
 		*outDisabled = true;
 	} else {
 		stbtt_packedchar *charData = &textProps->font->charData[curChar];
@@ -161,8 +159,7 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 			charDataOff.y -= charData->yoff;
 			charDataOff.y -= textProps->font->ascent;
 		} else {
-			charDataOff.y = charData->yoff;
-			charDataOff.y += textProps->font->ascent;
+			charDataOff.y = charData->yoff + textProps->font->ascent;
 		}
 		outMatrix->TRANSLATE(textProps->cursor + charDataOff * textProps->scale);
 
@@ -296,7 +293,8 @@ Font *createFont(const char *ttfPath, int fontSize) {
 }
 
 Vec2 getTextSize(char *string, DrawTextProps props) {
-	return drawText(props.font, string, v2(), 0xFFFFFFFF, props.maxWidth, true);
+	props.skipDraw = true;
+	return drawText(string, props);
 }
 
 Vec2 getTextSize(Font *font, const char *string, float maxWidth) {
@@ -402,15 +400,39 @@ void passText(char *text, DrawTextProps drawTextProps) {
 	fontSys->yIsUp = oldYIsUp;
 }
 
-void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
+void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity, bool justify) {
 	Vec2 size = getTextSize(props.font, text);
-
 	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
+	Vec2 textScale = getSize(textRect) / size;
 
-	props.scale.x = textRect.width / size.x;
-	props.scale.y = textRect.height / size.y;
+	props.scale = textScale;
 	props.position = getPosition(textRect);
-	drawText(text, props);
+
+	if (!justify) {
+		drawText(text, props);
+		return;
+	}
+
+	int linesNum = 0;
+	char **lines = frameSplitString(text, "\n", &linesNum);
+	Vec2 *lineSize = (Vec2 *)frameMalloc(sizeof(Vec2) * linesNum);
+
+	float widestLine = 0;
+	for (int i = 0; i < linesNum; i++) {
+		char *line = lines[i];
+		lineSize[i] = getTextSize(line, props);
+		if (widestLine < lineSize[i].x) widestLine = lineSize[i].x;
+	}
+
+	for (int i = 0; i < linesNum; i++) {
+		char *line = lines[i];
+
+		DrawTextProps lineProps = props;
+		lineProps.position.x += (widestLine - lineSize[i].x)/2;
+		drawText(line, lineProps);
+
+		props.position.y += lineSize[i].y;
+	}
 }
 
 void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {

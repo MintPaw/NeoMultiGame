@@ -121,7 +121,11 @@ void initAudio() {
 
 	audio = (Audio *)zalloc(sizeof(Audio));
 	audio->masterVolume = 1;
+	// audio->sampleBufferLimit = 8192;
 	audio->sampleBufferLimit = 4096;
+	// audio->sampleBufferLimit = 2048;
+	// audio->sampleBufferLimit = 1470;
+	// audio->sampleBufferLimit = 1024;
 
 	if (platform->isCommandLineOnly) {
 		audio->disabled = true;
@@ -283,6 +287,7 @@ void updateAudio(float elapsed) {
 	}
 #endif
 
+	if (elapsed > 1/60.0) elapsed = 1/60.0;
 	int samplesToAdd = elapsed * SAMPLE_RATE * 2;
 	if (samplesToAdd > audio->sampleBufferLimit) samplesToAdd = audio->sampleBufferLimit;
 	mixSoundInToGlobalBuffer(samplesToAdd);
