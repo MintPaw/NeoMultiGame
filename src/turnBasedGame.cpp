@@ -294,7 +294,6 @@ struct Game {
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
 
-	bool nnPlaying;
 	float prevAllyAdvantage;
 	float prevAllyAdvantageGain;
 
@@ -917,7 +916,6 @@ void updateGame() {
 		ImGui::DragFloat2("characterCardSize", &globals->characterCardSize.x);
 		ImGui::Separator();
 		ImGui::InputFloat("baseSpellTime", &game->baseSpellTime);
-		ImGui::Checkbox("nnPlaying", &game->nnPlaying);
 
 		ImGui::Separator();
 		ImGui::Text("allyAdvantage: %f", getAllyAdvantage());
@@ -931,6 +929,10 @@ void updateGame() {
 		Rect rect = makeRect(pos.x, pos.y, size.x, size.y);
 		return rect;
 	};
+
+	Pass *mainPass = createPass();
+	mainPass->yIsUp = false;
+	pushPass(mainPass);
 
 	{ /// Update turn
 		Unit *currentUnit = getCurrentUnit();
@@ -990,150 +992,256 @@ void updateGame() {
 				if (ImGui::Button("Continue")) nextWave();
 			} else if (currentUnit) {
 				if (currentUnit->ally) {
-					if (!game->nnPlaying) {
-						if (!game->chosenAllyUnit) {
-							Unit *choices[] = {
-								getUnitByType(UNIT_PLAYER1),
-								getUnitByType(UNIT_PLAYER2),
-							};
+					if (!game->chosenAllyUnit) {
+						Unit *choices[] = {
+							getUnitByType(UNIT_PLAYER1),
+							getUnitByType(UNIT_PLAYER2),
+						};
 
-							bool onlyOneUnitHasATurn = true;
-							Unit *unitWithATurn = NULL;
-							for (int i = 0; i < ArrayLength(choices); i++) {
-								Unit *unit = choices[i];
-								if (unit->hasTurn) {
-									if (unitWithATurn) onlyOneUnitHasATurn = false;
-									unitWithATurn = unit;
+						bool onlyOneUnitHasATurn = true;
+						Unit *unitWithATurn = NULL;
+						for (int i = 0; i < ArrayLength(choices); i++) {
+							Unit *unit = choices[i];
+							if (unit->hasTurn) {
+								if (unitWithATurn) onlyOneUnitHasATurn = false;
+								unitWithATurn = unit;
+							}
+						}
+
+						if (onlyOneUnitHasATurn && unitWithATurn) game->chosenAllyUnit = unitWithATurn->id;
+
+						for (int i = 0; i < ArrayLength(choices); i++) {
+							Unit *unit = choices[i];
+							if (unit->hp <= 0) continue;
+							if (!unit->hasTurn) continue;
+							if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
+						}
+					} else {
+						if (game->currentSpellType == SPELL_NONE) {
+							int spellCount = 0;
+							for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
+								SpellType type = currentUnit->spellsAvailable[i];
+								SpellTypeInfo *info = &game->spellTypeInfos[type];
+								if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
+								if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
+								int spellAvailableIndex = i;
+
+								ImGui::PushID(i);
+								char *label = info->name;
+								if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
+								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
+								if (spellCount % 5 != 0) ImGui::SameLine();
+								if (type == SPELL_WAIT) ImGui::NewLine();
+								if (ImGui::Button(label)) {
+									bool canCast = true;
+
+									if (currentUnit->mp < info->mp) {
+										canCast = false;
+										logf("Not enough mp\n");
+									}
+
+									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
+										canCast = false;
+										logf("No more\n");
+									}
+
+									if (
+										(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
+										(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
+										(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
+										(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
+										(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
+										(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
+										(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
+									) {
+										canCast = false;
+										logf("You already have that weapon\n");
+									}
+
+									if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
+										canCast = false;
+										logf("Broken.\n");
+									}
+
+									if (type == SPELL_DRAW_MAGIC_RESIST) {
+										Unit *p2 = getUnitByType(UNIT_PLAYER2);
+										if (p2->hp <= 0) {
+											canCast = false;
+											logf("%s is dead\n", p2->info->name);
+										}
+										if (p2->mp < info->mp) {
+											canCast = false;
+											logf("%s doesn't have enough mp\n", p2->info->name);
+										}
+									}
+
+									if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
+										canCast = false;
+										logf("Silenced\n");
+									}
+
+									if (canCast) {
+										game->currentSpellType = type;
+										game->currentSpellAvailableIndex = i;
+									}
 								}
-							}
 
-							if (onlyOneUnitHasATurn && unitWithATurn) game->chosenAllyUnit = unitWithATurn->id;
+								if (ImGui::IsItemHovered()) {
+									if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
+								}
 
-							for (int i = 0; i < ArrayLength(choices); i++) {
-								Unit *unit = choices[i];
-								if (unit->hp <= 0) continue;
-								if (!unit->hasTurn) continue;
-								if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
+								spellCount++;
+								ImGui::PopID();
 							}
+							if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
 						} else {
-							if (game->currentSpellType == SPELL_NONE) {
-								int spellCount = 0;
-								for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
-									SpellType type = currentUnit->spellsAvailable[i];
-									SpellTypeInfo *info = &game->spellTypeInfos[type];
-									if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
-									if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
-									int spellAvailableIndex = i;
-
-									ImGui::PushID(i);
-									char *label = info->name;
-									if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
-									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
-									if (spellCount % 5 != 0) ImGui::SameLine();
-									if (type == SPELL_WAIT) ImGui::NewLine();
-									if (ImGui::Button(label)) {
+							SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
+							if (currentSpellInfo->targetType == TARGET_SINGLE) {
+								ImGui::Text("Target:");
+								for (int i = 0; i < game->unitsNum; i++) {
+									Unit *unit = &game->units[i];
+									if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
+									if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
+									if (isHidden(unit)) continue;
+									if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
 										bool canCast = true;
-
-										if (currentUnit->mp < info->mp) {
+										if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
 											canCast = false;
-											logf("Not enough mp\n");
-										}
-
-										if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
-											canCast = false;
-											logf("No more\n");
-										}
-
-										if (
-											(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
-											(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
-											(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
-											(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
-											(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
-											(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
-											(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
-										) {
-											canCast = false;
-											logf("You already have that weapon\n");
-										}
-
-										if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
-											canCast = false;
-											logf("Broken.\n");
-										}
-
-										if (type == SPELL_DRAW_MAGIC_RESIST) {
-											Unit *p2 = getUnitByType(UNIT_PLAYER2);
-											if (p2->hp <= 0) {
-												canCast = false;
-												logf("%s is dead\n", p2->info->name);
-											}
-											if (p2->mp < info->mp) {
-												canCast = false;
-												logf("%s doesn't have enough mp\n", p2->info->name);
-											}
-										}
-
-										if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
-											canCast = false;
-											logf("Silenced\n");
+											logf("It won't work\n");
 										}
 
 										if (canCast) {
-											game->currentSpellType = type;
-											game->currentSpellAvailableIndex = i;
+											currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+											castSpell(currentUnit, unit, game->currentSpellType);
+											castSpell(currentUnit, NULL, SPELL_END_TURN);
+											game->currentSpellType = SPELL_NONE;
 										}
 									}
-
-									if (ImGui::IsItemHovered()) {
-										if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
-									}
-
-									spellCount++;
-									ImGui::PopID();
 								}
-								if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
-							} else {
-								SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
-								if (currentSpellInfo->targetType == TARGET_SINGLE) {
-									ImGui::Text("Target:");
-									for (int i = 0; i < game->unitsNum; i++) {
-										Unit *unit = &game->units[i];
-										if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
-										if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
-										if (isHidden(unit)) continue;
-										if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
-											bool canCast = true;
-											if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
-												canCast = false;
-												logf("It won't work\n");
-											}
-
-											if (canCast) {
-												currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-												castSpell(currentUnit, unit, game->currentSpellType);
-												castSpell(currentUnit, NULL, SPELL_END_TURN);
-												game->currentSpellType = SPELL_NONE;
-											}
-										}
-									}
-									if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
-								} else if (currentSpellInfo->targetType == TARGET_NONE) {
-									currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-									castSpell(currentUnit, NULL, game->currentSpellType);
-									castSpell(currentUnit, NULL, SPELL_END_TURN);
-									game->currentSpellType = SPELL_NONE;
-								}
+								if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+							} else if (currentSpellInfo->targetType == TARGET_NONE) {
+								currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+								castSpell(currentUnit, NULL, game->currentSpellType);
+								castSpell(currentUnit, NULL, SPELL_END_TURN);
+								game->currentSpellType = SPELL_NONE;
 							}
 						}
-					} else {
-						nnTakeTurn(currentUnit);
 					}
 				} else {
 					aiTakeTurn(currentUnit);
 				}
 			}
 			ImGui::End();
+		}
+	} ///
+
+	{ /// Display
+		if (game->inEditor) {
+			ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
+			ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+			auto guiShowUnit = [](Unit *unit) {
+				int color = 0xFFFFFFFF;
+				if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
+				if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
+
+				int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
+
+				ImVec4 imCol = guiGetImVec4Color(color);
+				ImGui::TextColored(imCol, "%s", unit->screenName);
+				ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
+				if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
+				if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
+				if (unit->buffsNum > 0) {
+					for (int i = 0; i < unit->buffsNum; i++) {
+						Buff *buff = &unit->buffs[i];
+						char *buffName = buff->info->name;
+						if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
+						if (buff->type == BUFF_COMBO) {
+							ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
+						} else {
+							ImGui::Text("[%s:%d]", buffName, buff->turns);
+						}
+					}
+				}
+				for (int i = 0; i < game->effectsNum; i++) {
+					Effect *effect = &game->effects[i];
+					if (effect->unitId != unit->id) continue;
+
+					if (effect->type == EFFECT_DAMAGE) {
+						ImGui::TextColored(guiGetImVec4Color(0xFFFF3030), "-%d", effect->intValue);
+					} else if (effect->type == EFFECT_GAIN_HP) {
+						ImGui::TextColored(guiGetImVec4Color(0xFF30FF30), "+%d", effect->intValue);
+					} else if (effect->type == EFFECT_LOSE_MP) {
+						ImGui::TextColored(guiGetImVec4Color(0xFF3030FF), "-%d", effect->intValue);
+					} else if (effect->type == EFFECT_GAIN_MP) {
+						ImGui::TextColored(guiGetImVec4Color(0xFF303080), "+%d", effect->intValue);
+					} else if (effect->type == EFFECT_DODGE) {
+						ImGui::TextColored(guiGetImVec4Color(0xFF808080), "Dodged");
+					}
+				}
+				ImGui::Separator();
+			};
+
+			Vec2 childSize = v2(500, 800);
+
+			ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (!unit->ally) continue;
+				if (isHidden(unit)) continue;
+				guiShowUnit(unit);
+			}
+			ImGui::EndChild();
+
+			ImGui::SameLine();
+
+			ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (unit->ally) continue;
+				if (isHidden(unit)) continue;
+				guiShowUnit(unit);
+			}
+			ImGui::EndChild();
+
+			ImGui::End();
+		}
+	} ///
+
+	{ /// 2d display
+		int totalAllies = 0;
+		int totalEnemies = 0;
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->ally) totalAllies++;
+			else totalEnemies++;
+		}
+
+		float cardPadding = 5;
+		float allyWidth = totalAllies * (globals->characterCardSize.x + cardPadding);
+		float enemyWidth = totalEnemies * (globals->characterCardSize.x + cardPadding);
+
+		Vec2 allyCursor = v2();
+		allyCursor.x = game->size.x/2 - allyWidth/2;
+		allyCursor.y = game->size.y - globals->characterCardSize.y;
+
+		Vec2 enemyCursor = v2();
+		enemyCursor.x = game->size.x/2 - enemyWidth/2;
+		enemyCursor.y = 0;
+
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (isHidden(unit)) continue;
+
+			Vec2 *cursor = NULL;
+			if (unit->ally) cursor = &allyCursor;
+			else cursor = &enemyCursor;
+
+			Rect cardRect = makeRect(*cursor, globals->characterCardSize);
+			drawRect(cardRect, 0xFFFF0000);
+
+			cursor->x += globals->characterCardSize.x + cardPadding;
 		}
 	} ///
 
@@ -1516,117 +1624,6 @@ void updateGame() {
 		}
 	}
 
-	{ /// Display
-		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
-		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
-		auto guiShowUnit = [](Unit *unit) {
-			int color = 0xFFFFFFFF;
-			if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
-			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
-
-			int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
-
-			ImVec4 imCol = guiGetImVec4Color(color);
-			ImGui::TextColored(imCol, "%s", unit->screenName);
-			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
-			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
-			if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
-			if (unit->buffsNum > 0) {
-				for (int i = 0; i < unit->buffsNum; i++) {
-					Buff *buff = &unit->buffs[i];
-					char *buffName = buff->info->name;
-					if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
-					if (buff->type == BUFF_COMBO) {
-						ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
-					} else {
-						ImGui::Text("[%s:%d]", buffName, buff->turns);
-					}
-				}
-			}
-			for (int i = 0; i < game->effectsNum; i++) {
-				Effect *effect = &game->effects[i];
-				if (effect->unitId != unit->id) continue;
-
-				if (effect->type == EFFECT_DAMAGE) {
-					ImGui::TextColored(guiGetImVec4Color(0xFFFF3030), "-%d", effect->intValue);
-				} else if (effect->type == EFFECT_GAIN_HP) {
-					ImGui::TextColored(guiGetImVec4Color(0xFF30FF30), "+%d", effect->intValue);
-				} else if (effect->type == EFFECT_LOSE_MP) {
-					ImGui::TextColored(guiGetImVec4Color(0xFF3030FF), "-%d", effect->intValue);
-				} else if (effect->type == EFFECT_GAIN_MP) {
-					ImGui::TextColored(guiGetImVec4Color(0xFF303080), "+%d", effect->intValue);
-				} else if (effect->type == EFFECT_DODGE) {
-					ImGui::TextColored(guiGetImVec4Color(0xFF808080), "Dodged");
-				}
-			}
-			ImGui::Separator();
-		};
-
-		Vec2 childSize = v2(500, 800);
-
-		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (!unit->ally) continue;
-			if (isHidden(unit)) continue;
-			guiShowUnit(unit);
-		}
-		ImGui::EndChild();
-
-		ImGui::SameLine();
-
-		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->ally) continue;
-			if (isHidden(unit)) continue;
-			guiShowUnit(unit);
-		}
-		ImGui::EndChild();
-
-		ImGui::End();
-	} ///
-
-	Pass *mainPass = createPass();
-	mainPass->yIsUp = false;
-	pushPass(mainPass);
-
-	{ /// 2d display
-		int totalAllies = 0;
-		int totalEnemies = 0;
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->ally) totalAllies++;
-			else totalEnemies++;
-		}
-
-		float cardPadding = 5;
-		float allyWidth = totalAllies * (globals->characterCardSize.x + cardPadding);
-		float enemyWidth = totalEnemies * (globals->characterCardSize.x + cardPadding);
-
-		Vec2 allyCursor = v2();
-		allyCursor.x = game->size.x/2 - allyWidth/2;
-		allyCursor.y = game->size.y - globals->characterCardSize.y;
-
-		Vec2 enemyCursor = v2();
-		enemyCursor.x = game->size.x/2 - enemyWidth/2;
-		enemyCursor.y = 0;
-
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (isHidden(unit)) continue;
-
-			Vec2 *cursor = NULL;
-			if (unit->ally) cursor = &allyCursor;
-			else cursor = &enemyCursor;
-
-			Rect cardRect = makeRect(*cursor, globals->characterCardSize);
-			drawRect(cardRect, 0xFFFF0000);
-
-			cursor->x += globals->characterCardSize.x + cardPadding;
-		}
-	} ///
 
 	{ /// Update effects
 		for (int i = 0; i < game->effectsNum; i++) {
