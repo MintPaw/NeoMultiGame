@@ -26,12 +26,6 @@ if %errorlevel% neq 0 (
 	call %VS_CMD_PATH% -arch=amd64 -host_arch=amd64 -vcvars_ver=14.2
 )
 
-if "%GAME_NAME%"=="deskGame" (
-	set USES_CURL=1
-) else (
-	set USES_CURL=
-)
-
 cls
 
 pushd .
@@ -43,11 +37,19 @@ set INCLUDE_DIR=%PROJECT_DIR%\include
 set LIB_DIR=%PROJECT_DIR%\lib
 set SRC_DIR=%PROJECT_DIR%\src
 
+set ASSETS_ARE_PRIVATE=0
+set USES_CURL=0
 if "%GAME_NAME%" == "catCardGame" (
 	set ASSETS_ARE_PRIVATE=1
-) else (
-	set ASSETS_ARE_PRIVATE=0
 )
+if "%GAME_NAME%" == "destinyGame" (
+	set ASSETS_ARE_PRIVATE=1
+	set USES_CURL=1
+)
+if "%GAME_NAME%"=="deskGame" (
+	set USES_CURL=1
+)
+
 
 if [%ASSETS_ARE_PRIVATE%]==[1] (
 	set ASSETS_DIR=..\multiGamePrivate\%GAME_NAME%Assets

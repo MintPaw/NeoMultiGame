@@ -235,7 +235,7 @@ void nguiInit() {
 	ngui->defaultFont = createFont("assets/common/arial.ttf", 80);
 	ngui->uiScale = platform->windowScaling;
 
-	ngui->elementsMax = 512;
+	ngui->elementsMax = 4096;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
 
 	ngui->globalStyleStack.varsMax = 1;
@@ -957,13 +957,13 @@ void nguiDraw(float elapsed) {
 					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
 					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
-						Rect iconRect = getInnerRectOfAspect(graphicsRect, getSize(iconTexture), iconGravity);
+						Rect iconRect = getInnerRectOfAspect(graphicsRect, getSize(iconTexture) * nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE), iconGravity);
 						// setScissor(iconRect);
 
 						Matrix3 matrix = mat3();
 						matrix.TRANSLATE(iconRect.x, iconRect.y);
 						matrix.TRANSLATE(getSize(iconRect)/2);
-						matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE));
+						// matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE)); // Scale calculated in rect
 						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
 						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
 						matrix.TRANSLATE(-getSize(iconRect)/2);

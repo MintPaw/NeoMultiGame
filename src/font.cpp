@@ -41,6 +41,8 @@ struct DrawTextProps {
 	int color;
 	float maxWidth;
 	Vec2 scale;
+
+	float lineSpacingScale;
 };
 
 FontSystem *fontSys = NULL;
@@ -58,6 +60,8 @@ void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2
 
 DrawTextProps newDrawTextProps();
 DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
+DrawTextProps createDrawTextProps() { return newDrawTextProps(); }
+DrawTextProps createDrawTextProps(Font *font, int color, Vec2 position=v2()) { return newDrawTextProps(font, color, position); }
 Vec2 drawText(const char *text, DrawTextProps props);
 void passText(char *text, DrawTextProps drawTextProps);
 
@@ -113,7 +117,6 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 		if (nextBreakPtr) nextBreakIndex = nextBreakPtr - textProps->string;
 		else nextBreakIndex = strlen(textProps->string);
 
-		int prevWordChar = -1;
 		float wordWidth = 0;
 		// printf("Going from %d to %d\n", i, nextBreakIndex);
 		for (int i = textProps->index; i < nextBreakIndex; i++) {
@@ -123,7 +126,6 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 			int charWidth = charData->xadvance; //@todo Kerning support for wordwrap would go here, if we used kerning at all...
 
 			wordWidth += charWidth;
-			prevWordChar = curWordChar;
 		}
 
 		if (textProps->cursor.x - textProps->position.x + wordWidth > textProps->maxWidth) {
@@ -307,6 +309,7 @@ Vec2 drawText(Font *font, const char *text, Vec2 position, int color, float maxW
 	props.scale = scale;
 	props.skipDraw = skipDraw;
 	props.scale = scale;
+	props.lineSpacingScale = 1;
 	return drawText(text, props);
 }
 

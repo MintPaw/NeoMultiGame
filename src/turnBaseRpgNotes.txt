@@ -504,7 +504,8 @@ Players have 10000hp and 1000mp
 	- Holding 2 weapons
 	- P2 can drink a coffee to prevent sleeping
 	- The difference between DoTs that derive damage multiplier based off current magic buffs, or the magic buffs when first cast
-	- P2 flash?
+	- P2 flash? Blinds enemies
 	- Moon strike should apply additions?
 	- P2 Ice bolt, freezed everything 400mp?
 	- Wake cancel
+	- P2 ice storm, small random damage

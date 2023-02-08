@@ -2446,7 +2446,8 @@ Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
 		if (drawable->type == SWF_DRAWABLE_SHAPE) {
 			newBounds = toRect(drawable->shape->shapeBounds);
 		} else if (drawable->type == SWF_DRAWABLE_SPRITE) {
-			newBounds = drawable->sprite->bounds;
+			// newBounds = drawable->sprite->bounds;
+			newBounds = getFrameBounds(drawable->sprite, 0);
 		}
 
 		if (!isZero(newBounds)) {

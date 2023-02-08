@@ -87,6 +87,7 @@ namespace Raylib {
 #include <io.h>
 #include <psapi.h>
 #include <direct.h>
+#define timegm _mkgmtime
 #elif defined(__EMSCRIPTEN__)
 # include <emscripten.h>
 # include <emscripten/html5.h>
@@ -158,6 +159,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #endif
 
 #include "utils.cpp"
+#include "saveLoadVersioning.cpp"
 
 #else // !RAYLIB_MODE
 
@@ -455,6 +457,10 @@ NanoTime mainNano;
 
 #if defined(PLAYING_catCardGame)
 # include "../../multiGamePrivate/src/catCardGame.cpp"
+#endif
+
+#if defined(PLAYING_destinyGame)
+# include "../../multiGamePrivate/src/destinyGame.cpp"
 #endif
 
 #ifdef _WIN32

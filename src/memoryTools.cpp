@@ -353,8 +353,8 @@ int countChar(const char *src, char value) {
 	int total = 0;
 
 	for (int i = 0; ; i++) {
-		if (src[i] == value) total++;
 		if (src[i] == 0) break;
+		if (src[i] == value) total++;
 	}
 
 	return total;
@@ -749,6 +749,27 @@ void *resizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount) 
 	if (currentCount != 0) {
 		memcpy(newArray, array, copySize);
 		free(array);
+	}
+
+	return newArray;
+}
+
+void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount);
+void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount) {
+	if (newCount == 0) {
+		logf("Called frameResizeArray with a newCount of 0\n");
+		return NULL;
+	}
+
+	u64 currentSize = elementSize * currentCount;
+	u64 newSize = elementSize * newCount;
+
+	u64 copySize = currentSize < newSize ? currentSize : newSize;
+
+	void *newArray = frameMalloc(newSize);
+
+	if (currentCount != 0) {
+		memcpy(newArray, array, copySize);
 	}
 
 	return newArray;

@@ -1,4 +1,5 @@
 struct Globals {
+	Vec2 characterCardSize;
 };
 
 enum Weapon {
@@ -239,8 +240,26 @@ struct Unit {
 	float maxHpReductionPerc;
 };
 
+enum EffectType {
+	EFFECT_DAMAGE,
+	EFFECT_GAIN_HP,
+	EFFECT_LOSE_MP,
+	EFFECT_GAIN_MP,
+	EFFECT_DODGE,
+};
+struct Effect {
+	EffectType type;
+	int unitId;
+	int intValue;
+
+	float time;
+};
 struct Game {
 	Globals globals;
+	Vec2 realSize;
+	Vec2 size;
+	Vec2 sizeScale;
+	Font *defaultFont;
 
 	UnitTypeInfo unitTypeInfos[UNIT_TYPES_MAX];
 #define UNITS_MAX 128
@@ -271,6 +290,10 @@ struct Game {
 
 	float baseSpellTime;
 
+#define EFFECTS_MAX 128
+	Effect effects[EFFECTS_MAX];
+	int effectsNum;
+
 	bool nnPlaying;
 	float prevAllyAdvantage;
 	float prevAllyAdvantageGain;
@@ -282,23 +305,31 @@ Game *game = NULL;
 
 void runGame();
 void updateGame();
+void drawPass(Pass *pass);
 
 Unit *getCurrentUnit();
 Unit *getUnit(int id);
 Unit *getUnitByType(UnitType type);
 Spell *castSpell(Unit *src, Unit *dest, SpellType type);
 bool isHidden(Unit *unit);
+
 void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic=false);
 void gainHp(Unit *unit, int amount);
 void gainMp(Unit *unit, int amount);
 void loseMp(Unit *unit, int amount);
+
 Buff *getBuff(Unit *unit, BuffType type);
 int countBuffs(Unit *unit, BuffType type);
 Buff *giveBuff(Unit *unit, BuffType type, int turns);
 void removeBuff(Unit *unit, Buff *buff);
 void removeAllBuffsOfType(Unit *unit, BuffType type);
+
+Effect *createEffect(EffectType type);
+
 Unit *createUnit(UnitType type);
 void nextWave();
+
+void saveLoadGlobals(bool save);
 /// FUNCTIONS ^
 
 #include "turnBasedGameAi.cpp"
@@ -805,8 +836,8 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 1;
-		game->wave = 3;
+		game->level = 2;
+		game->wave = 0;
 
 		{
 			Unit *unit = NULL;
@@ -859,15 +890,32 @@ void updateGame() {
 			nextWave();
 		}
 
+		saveLoadGlobals(false);
+
 		maximizeWindow();
 	}
 
 	Globals *globals = &game->globals;
 	float elapsed = platform->elapsed;
 
+	if (!equal(game->realSize, v2(platform->windowSize))) {
+		game->size = v2(1920, 1080);
+		game->realSize = v2(platform->windowSize);
+		game->sizeScale = game->realSize / game->size;
+
+		if (game->defaultFont) destroyFont(game->defaultFont);
+		game->defaultFont = NULL;
+	}
+	if (!game->defaultFont) game->defaultFont = createFont("assets/common/arial.ttf", (int)(42 * game->sizeScale.y));
+
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	if (game->inEditor) {
 		ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		if (ImGui::Button("Save Globals")) saveLoadGlobals(true);
+		ImGui::SameLine();
+		if (ImGui::Button("Load Globals")) saveLoadGlobals(false);
+		ImGui::DragFloat2("characterCardSize", &globals->characterCardSize.x);
+		ImGui::Separator();
 		ImGui::InputFloat("baseSpellTime", &game->baseSpellTime);
 		ImGui::Checkbox("nnPlaying", &game->nnPlaying);
 
@@ -883,62 +931,6 @@ void updateGame() {
 		Rect rect = makeRect(pos.x, pos.y, size.x, size.y);
 		return rect;
 	};
-
-	{ /// Display
-		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
-		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
-		auto guiShowUnit = [](Unit *unit) {
-			int color = 0xFFFFFFFF;
-			if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
-			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
-
-			int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
-
-			ImVec4 imCol = guiGetImVec4Color(color);
-			ImGui::TextColored(imCol, "%s", unit->screenName);
-			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
-			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
-			if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
-			if (unit->buffsNum > 0) {
-				for (int i = 0; i < unit->buffsNum; i++) {
-					Buff *buff = &unit->buffs[i];
-					char *buffName = buff->info->name;
-					if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
-					if (buff->type == BUFF_COMBO) {
-						ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
-					} else {
-						ImGui::Text("[%s:%d]", buffName, buff->turns);
-					}
-				}
-			}
-			ImGui::Separator();
-		};
-
-		Vec2 childSize = v2(500, 800);
-
-		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (!unit->ally) continue;
-			if (isHidden(unit)) continue;
-			guiShowUnit(unit);
-		}
-		ImGui::EndChild();
-
-		ImGui::SameLine();
-
-		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->ally) continue;
-			if (isHidden(unit)) continue;
-			guiShowUnit(unit);
-		}
-		ImGui::EndChild();
-
-		ImGui::End();
-	} ///
 
 	{ /// Update turn
 		Unit *currentUnit = getCurrentUnit();
@@ -1524,9 +1516,188 @@ void updateGame() {
 		}
 	}
 
+	{ /// Display
+		ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
+		ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+		auto guiShowUnit = [](Unit *unit) {
+			int color = 0xFFFFFFFF;
+			if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
+			if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
+
+			int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
+
+			ImVec4 imCol = guiGetImVec4Color(color);
+			ImGui::TextColored(imCol, "%s", unit->screenName);
+			ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
+			if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
+			if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
+			if (unit->buffsNum > 0) {
+				for (int i = 0; i < unit->buffsNum; i++) {
+					Buff *buff = &unit->buffs[i];
+					char *buffName = buff->info->name;
+					if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
+					if (buff->type == BUFF_COMBO) {
+						ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
+					} else {
+						ImGui::Text("[%s:%d]", buffName, buff->turns);
+					}
+				}
+			}
+			for (int i = 0; i < game->effectsNum; i++) {
+				Effect *effect = &game->effects[i];
+				if (effect->unitId != unit->id) continue;
+
+				if (effect->type == EFFECT_DAMAGE) {
+					ImGui::TextColored(guiGetImVec4Color(0xFFFF3030), "-%d", effect->intValue);
+				} else if (effect->type == EFFECT_GAIN_HP) {
+					ImGui::TextColored(guiGetImVec4Color(0xFF30FF30), "+%d", effect->intValue);
+				} else if (effect->type == EFFECT_LOSE_MP) {
+					ImGui::TextColored(guiGetImVec4Color(0xFF3030FF), "-%d", effect->intValue);
+				} else if (effect->type == EFFECT_GAIN_MP) {
+					ImGui::TextColored(guiGetImVec4Color(0xFF303080), "+%d", effect->intValue);
+				} else if (effect->type == EFFECT_DODGE) {
+					ImGui::TextColored(guiGetImVec4Color(0xFF808080), "Dodged");
+				}
+			}
+			ImGui::Separator();
+		};
+
+		Vec2 childSize = v2(500, 800);
+
+		ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (!unit->ally) continue;
+			if (isHidden(unit)) continue;
+			guiShowUnit(unit);
+		}
+		ImGui::EndChild();
+
+		ImGui::SameLine();
+
+		ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->ally) continue;
+			if (isHidden(unit)) continue;
+			guiShowUnit(unit);
+		}
+		ImGui::EndChild();
+
+		ImGui::End();
+	} ///
+
+	Pass *mainPass = createPass();
+	mainPass->yIsUp = false;
+	pushPass(mainPass);
+
+	{ /// 2d display
+		int totalAllies = 0;
+		int totalEnemies = 0;
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (unit->ally) totalAllies++;
+			else totalEnemies++;
+		}
+
+		float cardPadding = 5;
+		float allyWidth = totalAllies * (globals->characterCardSize.x + cardPadding);
+		float enemyWidth = totalEnemies * (globals->characterCardSize.x + cardPadding);
+
+		Vec2 allyCursor = v2();
+		allyCursor.x = game->size.x/2 - allyWidth/2;
+		allyCursor.y = game->size.y - globals->characterCardSize.y;
+
+		Vec2 enemyCursor = v2();
+		enemyCursor.x = game->size.x/2 - enemyWidth/2;
+		enemyCursor.y = 0;
+
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			if (isHidden(unit)) continue;
+
+			Vec2 *cursor = NULL;
+			if (unit->ally) cursor = &allyCursor;
+			else cursor = &enemyCursor;
+
+			Rect cardRect = makeRect(*cursor, globals->characterCardSize);
+			drawRect(cardRect, 0xFFFF0000);
+
+			cursor->x += globals->characterCardSize.x + cardPadding;
+		}
+	} ///
+
+	{ /// Update effects
+		for (int i = 0; i < game->effectsNum; i++) {
+			Effect *effect = &game->effects[i];
+
+			bool complete = false;
+			float maxTime = 3;
+
+			if (effect->type == EFFECT_DAMAGE) {
+			} else if (effect->type == EFFECT_LOSE_MP) {
+			} else if (effect->type == EFFECT_DODGE) {
+			}
+
+			effect->time += elapsed;
+			if (effect->time > maxTime) complete = true;
+
+			if (complete) {
+				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+				game->effectsNum--;
+				i--;
+				continue;
+			}
+		}
+	} ///
+
 	clearRenderer();
+
+	popPass();
+	drawPass(mainPass);
+	destroyPass(mainPass);
+
 	guiDraw();
 	drawOnScreenLog();
+}
+
+void drawPass(Pass *pass) {
+	{ /// Scale pass
+		for (int i = 0; i < pass->cmdsNum; i++) {
+			PassCmd *cmd = &pass->cmds[i];
+			if (cmd->type == PASS_CMD_QUAD) {
+				for (int i = 0; i < 4; i++) {
+					Vec3 *vert = &cmd->verts[i];
+					vert->x = map(vert->x, 0, game->size.x, 0, game->realSize.x);
+					vert->y = map(vert->y, 0, game->size.y, 0, game->realSize.y);
+				}
+			}
+		}
+	} ///
+
+	{ /// Draw pass
+		for (int i = 0; i < pass->cmdsNum; i++) {
+			PassCmd *cmd = &pass->cmds[i];
+			if (cmd->type == PASS_CMD_QUAD) {
+				Vec2 verts[4] = {};
+				verts[0] = v2(cmd->verts[0]);
+				verts[1] = v2(cmd->verts[1]);
+				verts[2] = v2(cmd->verts[2]);
+				verts[3] = v2(cmd->verts[3]);
+
+				// Matrix3 flipMatrix = {
+				// 	1,  0,  0,
+				// 	0, -1,  0,
+				// 	0,  1,  1
+				// };
+				// for (int i = 0; i < 4; i++) cmd->uvs[i] = flipMatrix * cmd->uvs[i];
+				drawTexturedQuad(cmd->textureId, verts, cmd->uvs, cmd->colors);
+			} else {
+				logf("Bad pass cmd type\n");
+			}
+		}
+	} ///
 }
 
 Unit *getCurrentUnit() {
@@ -1647,7 +1818,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 			if (!isMagic && buff->type == BUFF_SPUN_UP) damageAddition += 100;
 		}
 
-		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 3;
+		if (src->weapon == WEAPON_BIG_DAMAGE) damageMulti *= 2;
 
 		if (src->ally && isMagic) {
 			Unit *p1 = getUnitByType(UNIT_PLAYER1);
@@ -1681,7 +1852,8 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 
 	if (rndFloat(0, 1) < dodgeChance) {
 		damageMulti = 0;
-		logf("Dodged!\n");
+		Effect *effect = createEffect(EFFECT_DODGE);
+		effect->unitId = dest->id;
 	}
 
 	damageAmount += damageAddition;
@@ -1720,10 +1892,13 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 		logf("%d damage dealt to %s\n", damageAmount, dest->info->name);
 	}
 	dest->hp -= damageAmount;
+	Effect *effect = createEffect(EFFECT_DAMAGE);
+	effect->unitId = dest->id;
+	effect->intValue = damageAmount;
 
 	if (damageAmount) dest->asleep = false;
 
-	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, damageAmount * 0.01);
+	if (src && src->weapon == WEAPON_VAMPIRE) gainHp(src, damageAmount * 0.02);
 
 	if (getBuff(dest, BUFF_DAMAGE_SPRING)) {
 		if (src) dealDamage(dest, src, damageAmount*4);
@@ -1745,14 +1920,21 @@ void gainHp(Unit *unit, int amount) {
 	if (unit->weapon == WEAPON_BIG_DAMAGE) amount = 0;
 	unit->hp += amount;
 
+	Effect *effect = createEffect(EFFECT_GAIN_HP);
+	effect->unitId = unit->id;
+	effect->intValue = amount;
+
 	int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
 	if (unit->hp > maxHp) unit->hp = maxHp;
 }
 
 void gainMp(Unit *unit, int amount) {
-	logf("Gained %dmp\n", amount);
 	unit->mp += amount;
 	if (unit->mp > unit->info->maxMp) unit->mp = unit->info->maxMp;
+
+	Effect *effect = createEffect(EFFECT_GAIN_MP);
+	effect->unitId = unit->id;
+	effect->intValue = amount;
 }
 
 void loseMp(Unit *unit, int amount) {
@@ -1765,6 +1947,10 @@ void loseMp(Unit *unit, int amount) {
 
 	unit->mp -= amount;
 	if (unit->mp < 0) unit->mp = 0;
+
+	Effect *effect = createEffect(EFFECT_LOSE_MP);
+	effect->unitId = unit->id;
+	effect->intValue = amount;
 }
 
 Buff *getBuff(Unit *unit, BuffType type) {
@@ -1830,6 +2016,18 @@ void removeAllBuffsOfType(Unit *unit, BuffType type) {
 			continue;
 		}
 	}
+}
+
+Effect *createEffect(EffectType type) {
+	if (game->effectsNum > EFFECTS_MAX-1) {
+		logf("Too many effects!\n");
+		game->effectsNum--;
+	}
+
+	Effect *effect = &game->effects[game->effectsNum++];
+	memset(effect, 0, sizeof(Effect));
+	effect->type = type;
+	return effect;
 }
 
 Unit *createUnit(UnitType type) {
@@ -2150,4 +2348,28 @@ void nextWave() {
 
 	game->wave++;
 	game->prevAllyAdvantage = getAllyAdvantage();
+}
+
+void saveLoadGlobals(bool save) {
+	Globals *globals = &game->globals;
+	char *path = "assets/info/globals.bin";
+
+	int version = 1;
+
+	DataStream *stream;
+	if (save) {
+		stream = newDataStream();
+	} else {
+		stream = loadDataStream(path);
+		if (!stream) return;
+	}
+
+	versionSaveLoadInt(stream, save, version, &version, 0, 999);
+	globals->characterCardSize = v2(100, 200);
+	versionSaveLoadVec2(stream, save, version, &globals->characterCardSize, 1, 999);
+
+	if (save) writeDataStream(path, stream);
+	destroyDataStream(stream);
+
+	if (save) logf("Done.\n");
 }
