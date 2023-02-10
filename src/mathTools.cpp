@@ -857,6 +857,7 @@ Matrix4 toMatrix(Xform xform);
 Vec4 quaternionBetween(Vec3 start, Vec3 end, Vec3 axis={1, 0, 0});
 Rect insert(Rect rect, Vec2 point);
 Rect insert(Rect rect, Rect other);
+Rect offset(Rect rect, Vec2 point);
 bool isZero(Rect rect);
 
 
@@ -1486,6 +1487,12 @@ Rect insert(Rect rect, Rect other) { //@speed This could probably be faster
 		rect = insert(rect, verts[i]);
 	}
 
+	return rect;
+}
+
+Rect offset(Rect rect, Vec2 point) {
+	rect.x += point.x;
+	rect.y += point.y;
 	return rect;
 }
 

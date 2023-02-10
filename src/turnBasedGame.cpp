@@ -1,5 +1,9 @@
 struct Globals {
 	Vec2 characterCardSize;
+
+#define CUSTOM_STYLE_STACKS_MAX 64
+	NguiNamedStyleStack customStyleStacks[CUSTOM_STYLE_STACKS_MAX];
+	int customStyleStacksNum;
 };
 
 enum Weapon {
@@ -238,6 +242,9 @@ struct Unit {
 	int accelerationCount;
 
 	float maxHpReductionPerc;
+
+	Rect cardRect;
+	bool couldBeTargettedThisFrame;
 };
 
 enum EffectType {
@@ -249,6 +256,8 @@ enum EffectType {
 };
 struct Effect {
 	EffectType type;
+	Vec2 position;
+
 	int unitId;
 	int intValue;
 
@@ -260,6 +269,8 @@ struct Game {
 	Vec2 size;
 	Vec2 sizeScale;
 	Font *defaultFont;
+	Font *hudFont;
+	Vec2 mouse;
 
 	UnitTypeInfo unitTypeInfos[UNIT_TYPES_MAX];
 #define UNITS_MAX 128
@@ -283,6 +294,7 @@ struct Game {
 	int level;
 	int wave;
 
+	int targetedUnit;
 	SpellType currentSpellType;
 	int currentSpellAvailableIndex;
 	float prevSpellTime;
@@ -293,6 +305,9 @@ struct Game {
 #define EFFECTS_MAX 128
 	Effect effects[EFFECTS_MAX];
 	int effectsNum;
+
+	char *tooltip;
+	float winLossTime;
 
 	float prevAllyAdvantage;
 	float prevAllyAdvantageGain;
@@ -323,12 +338,17 @@ Buff *giveBuff(Unit *unit, BuffType type, int turns);
 void removeBuff(Unit *unit, Buff *buff);
 void removeAllBuffsOfType(Unit *unit, BuffType type);
 
-Effect *createEffect(EffectType type);
+Effect *createEffect(EffectType type, Unit *unit);
 
 Unit *createUnit(UnitType type);
 void nextWave();
 
 void saveLoadGlobals(bool save);
+
+void nguiShowImGuiStylesEditor(NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax);
+void versionSaveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax, int minVersion, int maxVersion);
+void pushGameStyleStack(char *name);
+void popGameStyleStack(char *name);
 /// FUNCTIONS ^
 
 #include "turnBasedGameAi.cpp"
@@ -354,6 +374,7 @@ void runGame() {
 	initSkeleton();
 	initFonts();
 	initTextureSystem();
+	nguiInit();
 
 	platformUpdateLoop(updateGame);
 }
@@ -616,7 +637,7 @@ void updateGame() {
 			info = &game->spellTypeInfos[SPELL_LIGHTNING];
 			strcpy(info->name, "Lightning");
 			info->targetType = TARGET_NONE;
-			info->mp = 50;
+			info->mp = 100;
 			info->damage = 2000;
 
 			info = &game->spellTypeInfos[SPELL_ICE];
@@ -835,7 +856,7 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 2;
+		game->level = 4;
 		game->wave = 0;
 
 		{
@@ -904,8 +925,17 @@ void updateGame() {
 
 		if (game->defaultFont) destroyFont(game->defaultFont);
 		game->defaultFont = NULL;
+		if (game->hudFont) destroyFont(game->hudFont);
+		game->hudFont = NULL;
 	}
 	if (!game->defaultFont) game->defaultFont = createFont("assets/common/arial.ttf", (int)(42 * game->sizeScale.y));
+	if (!game->hudFont) game->hudFont = createFont("assets/common/arial.ttf", (int)(14 * game->sizeScale.y));
+
+	game->mouse = platform->mouse / game->sizeScale;
+
+	ngui->mouse = platform->mouse;
+	ngui->uiScale = game->sizeScale;
+	ngui->screenSize = game->realSize;
 
 	if (keyJustPressed(KEY_BACKTICK)) game->inEditor = !game->inEditor;
 	if (game->inEditor) {
@@ -916,6 +946,11 @@ void updateGame() {
 		ImGui::DragFloat2("characterCardSize", &globals->characterCardSize.x);
 		ImGui::Separator();
 		ImGui::InputFloat("baseSpellTime", &game->baseSpellTime);
+
+		if (ImGui::TreeNode("Ngui Styles")) {
+			nguiShowImGuiStylesEditor(globals->customStyleStacks, &globals->customStyleStacksNum, CUSTOM_STYLE_STACKS_MAX);
+			ImGui::TreePop();
+		}
 
 		ImGui::Separator();
 		ImGui::Text("allyAdvantage: %f", getAllyAdvantage());
@@ -932,8 +967,12 @@ void updateGame() {
 
 	Pass *mainPass = createPass();
 	mainPass->yIsUp = false;
+	Pass *overlayPass = createPass();
+	overlayPass->yIsUp = false;
+
 	pushPass(mainPass);
 
+	bool choosingAlly = false;
 	{ /// Update turn
 		Unit *currentUnit = getCurrentUnit();
 
@@ -980,45 +1019,55 @@ void updateGame() {
 				if (!unit->ally) enemyCount++;
 			}
 
-			ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.98), ImGuiCond_Always, ImVec2(0.5, 1.0));
-			ImGui::SetNextWindowSize(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always);
-			ImGui::Begin("Spells", NULL, 0);
+			if (game->inEditor) {
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.98), ImGuiCond_Always, ImVec2(0.5, 1.0));
+				ImGui::SetNextWindowSize(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always);
+				ImGui::Begin("Spells", NULL, 0);
+			}
 
 			if (allyCount == 0) {
-				ImGui::Text("You lose");
-				if (ImGui::Button("Try again")) logf("You can't\n");
+				if (game->inEditor) {
+					ImGui::Text("You lose");
+					if (ImGui::Button("Try again")) logf("You can't\n");
+				}
+				game->winLossTime += elapsed;
 			} else if (enemyCount == 0) {
-				ImGui::Text("You win");
-				if (ImGui::Button("Continue")) nextWave();
+				if (game->inEditor) {
+					ImGui::Text("You win");
+					if (ImGui::Button("Continue")) nextWave();
+				}
+				if (game->winLossTime >= 3) nextWave();
+				game->winLossTime += elapsed;
 			} else if (currentUnit) {
+				game->winLossTime = 0;
+
 				if (currentUnit->ally) {
 					if (!game->chosenAllyUnit) {
-						Unit *choices[] = {
-							getUnitByType(UNIT_PLAYER1),
-							getUnitByType(UNIT_PLAYER2),
-						};
+						Unit *p1 = getUnitByType(UNIT_PLAYER1);
+						Unit *p2 = getUnitByType(UNIT_PLAYER2);
+						Unit *choices[2] = {};
+						int choicesNum = 0;
+						if (p1->hasTurn) choices[choicesNum++] = p1;
+						if (p2->hasTurn) choices[choicesNum++] = p2;
 
-						bool onlyOneUnitHasATurn = true;
-						Unit *unitWithATurn = NULL;
-						for (int i = 0; i < ArrayLength(choices); i++) {
-							Unit *unit = choices[i];
-							if (unit->hasTurn) {
-								if (unitWithATurn) onlyOneUnitHasATurn = false;
-								unitWithATurn = unit;
+						if (choicesNum == 1) game->chosenAllyUnit = choices[0]->id;
+						if (choicesNum == 2) choosingAlly = true;
+
+						if (choosingAlly) {
+							for (int i = 0; i < choicesNum; i++) {
+								Unit *unit = choices[i];
+								if (unit->hp <= 0) continue;
+								if (!unit->hasTurn) continue;
+								if (game->inEditor) {
+									if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
+								}
 							}
-						}
-
-						if (onlyOneUnitHasATurn && unitWithATurn) game->chosenAllyUnit = unitWithATurn->id;
-
-						for (int i = 0; i < ArrayLength(choices); i++) {
-							Unit *unit = choices[i];
-							if (unit->hp <= 0) continue;
-							if (!unit->hasTurn) continue;
-							if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
 						}
 					} else {
 						if (game->currentSpellType == SPELL_NONE) {
 							int spellCount = 0;
+							pushGameStyleStack("Spell Window Style");
+							nguiStartWindow("SpellWindow", game->realSize, v2(1, 1));
 							for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
 								SpellType type = currentUnit->spellsAvailable[i];
 								SpellTypeInfo *info = &game->spellTypeInfos[type];
@@ -1026,13 +1075,27 @@ void updateGame() {
 								if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
 								int spellAvailableIndex = i;
 
-								ImGui::PushID(i);
 								char *label = info->name;
 								if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
 								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
-								if (spellCount % 5 != 0) ImGui::SameLine();
-								if (type == SPELL_WAIT) ImGui::NewLine();
-								if (ImGui::Button(label)) {
+
+								bool clickedSpell = false;
+								char *tooltipString = frameSprintf("Base damage: %d", info->damage);
+								if (game->inEditor) {
+									ImGui::PushID(i);
+									if (spellCount % 5 != 0) ImGui::SameLine();
+									if (type == SPELL_WAIT) ImGui::NewLine();
+									if (ImGui::Button(label)) clickedSpell = true;
+									if (ImGui::IsItemHovered()) {
+										if (info->damage) ImGui::SetTooltip(tooltipString);
+									}
+									ImGui::PopID();
+								}
+
+								if (nguiButton(label)) clickedSpell = true;
+								if (ngui->lastElement->hoveringTime) game->tooltip = tooltipString;
+
+								if (clickedSpell) {
 									bool canCast = true;
 
 									if (currentUnit->mp < info->mp) {
@@ -1086,24 +1149,33 @@ void updateGame() {
 									}
 								}
 
-								if (ImGui::IsItemHovered()) {
-									if (info->damage) ImGui::SetTooltip("Base damage: %d", info->damage);
-								}
-
 								spellCount++;
-								ImGui::PopID();
 							}
-							if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
+
+							if (game->inEditor) {
+								if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
+							}
+
+							nguiEndWindow();
+							popGameStyleStack("Spell Window Style");
 						} else {
 							SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
 							if (currentSpellInfo->targetType == TARGET_SINGLE) {
-								ImGui::Text("Target:");
+								if (game->inEditor) {
+									ImGui::Text("Target:");
+								}
 								for (int i = 0; i < game->unitsNum; i++) {
 									Unit *unit = &game->units[i];
 									if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
 									if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
 									if (isHidden(unit)) continue;
-									if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) {
+
+									if (game->inEditor) {
+										if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) game->targetedUnit = unit->id;
+									}
+									unit->couldBeTargettedThisFrame = true;
+
+									if (unit->id == game->targetedUnit) {
 										bool canCast = true;
 										if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
 											canCast = false;
@@ -1115,10 +1187,16 @@ void updateGame() {
 											castSpell(currentUnit, unit, game->currentSpellType);
 											castSpell(currentUnit, NULL, SPELL_END_TURN);
 											game->currentSpellType = SPELL_NONE;
+											game->targetedUnit = 0;
 										}
 									}
 								}
-								if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+
+								if (platform->rightMouseJustDown || keyJustPressed(KEY_ESC)) game->currentSpellType = SPELL_NONE;
+
+								if (game->inEditor) {
+									if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+								}
 							} else if (currentSpellInfo->targetType == TARGET_NONE) {
 								currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
 								castSpell(currentUnit, NULL, game->currentSpellType);
@@ -1131,7 +1209,10 @@ void updateGame() {
 					aiTakeTurn(currentUnit);
 				}
 			}
-			ImGui::End();
+
+			if (game->inEditor) {
+				ImGui::End();
+			}
 		}
 	} ///
 
@@ -1209,7 +1290,7 @@ void updateGame() {
 		}
 	} ///
 
-	{ /// 2d display
+	{ /// Display 2d
 		int totalAllies = 0;
 		int totalEnemies = 0;
 		for (int i = 0; i < game->unitsNum; i++) {
@@ -1226,6 +1307,11 @@ void updateGame() {
 		allyCursor.x = game->size.x/2 - allyWidth/2;
 		allyCursor.y = game->size.y - globals->characterCardSize.y;
 
+		Unit *currentUnit = getCurrentUnit();
+		if (currentUnit->ally && game->chosenAllyUnit && game->currentSpellType == SPELL_NONE && game->spellQueueNum == 0) {
+			allyCursor.x = cardPadding;
+		}
+
 		Vec2 enemyCursor = v2();
 		enemyCursor.x = game->size.x/2 - enemyWidth/2;
 		enemyCursor.y = 0;
@@ -1235,14 +1321,172 @@ void updateGame() {
 			if (isHidden(unit)) continue;
 
 			Vec2 *cursor = NULL;
-			if (unit->ally) cursor = &allyCursor;
-			else cursor = &enemyCursor;
+			Vec2 forward = v2();
+			if (unit->ally) {
+				cursor = &allyCursor;
+				forward = v2(0, -1);
+			} else {
+				cursor = &enemyCursor;
+				forward = v2(0, 1);
+			}
 
+			int cardBgColor = 0xFF202020;
 			Rect cardRect = makeRect(*cursor, globals->characterCardSize);
-			drawRect(cardRect, 0xFFFF0000);
 
+			bool couldBeSelected = false;
+			if (unit->ally) couldBeSelected = true;
+			if (unit->hp <= 0) couldBeSelected = false;
+			if (!unit->hasTurn) couldBeSelected = false;
+
+			if (couldBeSelected) {
+				if (choosingAlly) cardBgColor = lerpColor(cardBgColor, 0xFFFFFFFF, timePhase(platform->time * 3) * 0.1);
+			}
+
+			if (unit->couldBeTargettedThisFrame) {
+				cardBgColor = lerpColor(cardBgColor, 0xFFFF0000, 0.1);
+			}
+
+			if (unit == currentUnit && !couldBeSelected) {
+				cardBgColor = lerpColor(cardBgColor, 0xFFFFFF00, timePhase(platform->time * 1) * 0.1);
+				cardRect = offset(cardRect, forward * 20);
+			}
+
+			bool hoveringCard = contains(cardRect, game->mouse);
+			if (hoveringCard) {
+				if (platform->mouseJustDown) {
+					if (couldBeSelected) game->chosenAllyUnit = unit->id;
+					if (unit->couldBeTargettedThisFrame) game->targetedUnit = unit->id;
+				}
+			}
+
+			unit->cardRect.x = lerp(unit->cardRect.x, cardRect.x, 0.2);
+			unit->cardRect.y = lerp(unit->cardRect.y, cardRect.y, 0.2);
+			unit->cardRect.width = cardRect.width;
+			unit->cardRect.height = cardRect.height;
+			cardRect = unit->cardRect;
+
+			drawRect(cardRect, cardBgColor);
+
+			Rect topRect = cardRect;
+			{
+				topRect.height *= 0.6;
+				// drawRect(topRect, 0xFF00FF00);
+
+				Rect profilePicRect = makeCenteredSquare(getCenter(topRect), topRect.height);
+				if (unit->buffsNum > 0) profilePicRect.x = topRect.x;
+				drawRect(profilePicRect, 0xFF300000);
+				// drawCircle(getCenter(profilePicRect), profilePicRect.width/2, 0xFFFF0000);
+
+				Rect buffRect = makeRect();
+				buffRect.x = profilePicRect.x + profilePicRect.width;
+				buffRect.y = profilePicRect.y;
+				buffRect.width = (topRect.width - profilePicRect.width)/2;
+				buffRect.height = buffRect.width;
+				for (int i = 0; i < unit->buffsNum; i++) {
+					Buff *buff = &unit->buffs[i];
+					if (i%2 == 0 && i != 0) {
+						buffRect.x = profilePicRect.x + profilePicRect.width;
+						buffRect.y += buffRect.height;
+					}
+
+					if (contains(buffRect, game->mouse)) {
+						game->tooltip = frameSprintf("%s", buff->info->name);
+						if (buff->turns > 0) game->tooltip = frameSprintf("%s\n%d turns left", game->tooltip, buff->turns);
+					}
+
+					drawRect(inflatePerc(buffRect, -0.1), 0xFF008000);
+					drawTextInRect(buff->info->name, newDrawTextProps(game->defaultFont, 0xFF000000), buffRect, v2(0.5, 0.5));
+
+					buffRect.x += buffRect.width;
+				}
+
+				Rect nameRect = topRect;
+				nameRect.height *= 0.5;
+				nameRect.y += nameRect.height;
+				drawTextInRect(unit->screenName, newDrawTextProps(game->defaultFont, 0x80FFFFFF), nameRect, v2(0.5, 1));
+			}
+
+			Rect bottomRect = cardRect;
+			{
+				bottomRect.y = topRect.y + topRect.height;
+				bottomRect.height = cardRect.height - topRect.height;
+
+				auto drawBarRect = [](Rect barRegion, char *text, float perc, int barColor, int textColor) {
+					Rect hpBarRect = inflatePerc(barRegion, v2(-0.3, -0.5));
+					Rect hpRect = hpBarRect;
+					hpRect.width *= perc;
+					drawRect(hpRect, barColor);
+					drawRectOutline(hpBarRect, 2, 0xFF000000);
+
+					Rect textRect = barRegion;
+					textRect.height *= 0.5;
+					textRect.y += textRect.height;
+					drawTextInRect(text, newDrawTextProps(game->defaultFont, textColor), textRect, v2(1, 0.5));
+				};
+
+				Rect hpRegion = bottomRect;
+				hpRegion.height *= 0.5;
+				drawBarRect(hpRegion, frameSprintf("%dhp", unit->hp), unit->hp / (float)unit->info->maxHp, 0xFF008000, 0x90FFFFFF);
+
+				Rect mpRegion = hpRegion;
+				mpRegion.y += mpRegion.height;
+				drawBarRect(mpRegion, frameSprintf("%dmp", unit->mp), unit->mp / (float)unit->info->maxMp, 0xFF000080, 0x90FFFFFF);
+			}
+
+			unit->couldBeTargettedThisFrame = false;
 			cursor->x += globals->characterCardSize.x + cardPadding;
 		}
+
+		{ /// Effects 2d
+			for (int i = 0; i < game->effectsNum; i++) {
+				Effect *effect = &game->effects[i];
+
+				char *text = NULL;
+				int color = 0xFFFFFFFF;
+				bool bounceText = false;
+				bool slideText = false;;
+				if (effect->type == EFFECT_DAMAGE) {
+					text = frameSprintf("-%d", effect->intValue);
+					color = 0xFFFF3030;
+					bounceText = true;
+				} else if (effect->type == EFFECT_GAIN_HP) {
+					text = frameSprintf("+%d", effect->intValue);
+					color = 0xFF30FF30;
+					slideText = true;
+				} else if (effect->type == EFFECT_LOSE_MP) {
+					text = frameSprintf("-%d", effect->intValue);
+					color = 0xFF3030FF;
+					slideText = true;
+				} else if (effect->type == EFFECT_GAIN_MP) {
+					text = frameSprintf("+%d", effect->intValue);
+					color = 0xFF303080;
+					slideText = true;
+				} else if (effect->type == EFFECT_DODGE) {
+					text = frameSprintf("Dodged");
+					color = 0xFF808080;
+					slideText = true;
+				}
+
+				if (text) {
+					Unit *unit = getUnit(effect->unitId);
+
+					Vec2 position = v2();
+					Vec2 size = getTextSize(game->defaultFont, text);
+					position = effect->position - size/2;
+
+					Vec2 forward = unit->ally ? v2(0, -1) : v2(0, 1);
+					position += forward * globals->characterCardSize*0.5;
+
+					if (bounceText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, BOUNCE_OUT);
+					if (slideText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, QUAD_OUT);
+
+					if (unit) position += getCenter(unit->cardRect); 
+
+					drawRect(makeRect(position, size), 0x20000000);
+					drawText(text, newDrawTextProps(game->defaultFont, color, position));
+				}
+			}
+		} ///
 	} ///
 
 	{ /// Update spells
@@ -1601,29 +1845,30 @@ void updateGame() {
 		}
 	} ///
 
-	/// Remove dead units
-	if (game->spellQueueNum == 0) {
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->ally) continue;
-			if (unit->hp <= 0) {
-				arraySpliceIndex(game->units, game->unitsNum, sizeof(Unit), i);
-				game->unitsNum--;
-				i--;
-				continue;
+	{ /// Remove dead units
+		if (game->spellQueueNum == 0) {
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (unit->ally) continue;
+				if (unit->hp <= 0) {
+					arraySpliceIndex(game->units, game->unitsNum, sizeof(Unit), i);
+					game->unitsNum--;
+					i--;
+					continue;
+				}
 			}
 		}
-	}
+	} ///
 
-	/// Unit frame loop
-	for (int i = 0; i < game->unitsNum; i++) {
-		Unit *unit = &game->units[i];
-		for (int i = 0; i < unit->buffsNum; i++) {
-			Buff *buff = &unit->buffs[i];
-			buff->time += elapsed;
+	{ /// Unit frame loop
+		for (int i = 0; i < game->unitsNum; i++) {
+			Unit *unit = &game->units[i];
+			for (int i = 0; i < unit->buffsNum; i++) {
+				Buff *buff = &unit->buffs[i];
+				buff->time += elapsed;
+			}
 		}
-	}
-
+	} ///
 
 	{ /// Update effects
 		for (int i = 0; i < game->effectsNum; i++) {
@@ -1649,11 +1894,31 @@ void updateGame() {
 		}
 	} ///
 
+	{ /// Tooltip
+		pushPass(overlayPass);
+		if (game->tooltip) {
+			DrawTextProps props = newDrawTextProps(game->defaultFont, 0xFFFFFFFF);
+			Vec2 size = getTextSize(game->tooltip, props);
+			props.position.x = game->mouse.x;
+			props.position.y = game->mouse.y - size.y;
+			drawRect(makeRect(props.position, size), 0xC0000000);
+			drawText(game->tooltip, props);
+			game->tooltip = NULL;
+		}
+		popPass();
+	} ///
+
 	clearRenderer();
 
 	popPass();
+
 	drawPass(mainPass);
 	destroyPass(mainPass);
+
+	nguiDraw(elapsed);
+
+	drawPass(overlayPass);
+	destroyPass(overlayPass);
 
 	guiDraw();
 	drawOnScreenLog();
@@ -1849,8 +2114,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 
 	if (rndFloat(0, 1) < dodgeChance) {
 		damageMulti = 0;
-		Effect *effect = createEffect(EFFECT_DODGE);
-		effect->unitId = dest->id;
+		createEffect(EFFECT_DODGE, dest);
 	}
 
 	damageAmount += damageAddition;
@@ -1889,8 +2153,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 		logf("%d damage dealt to %s\n", damageAmount, dest->info->name);
 	}
 	dest->hp -= damageAmount;
-	Effect *effect = createEffect(EFFECT_DAMAGE);
-	effect->unitId = dest->id;
+	Effect *effect = createEffect(EFFECT_DAMAGE, dest);
 	effect->intValue = damageAmount;
 
 	if (damageAmount) dest->asleep = false;
@@ -1917,8 +2180,7 @@ void gainHp(Unit *unit, int amount) {
 	if (unit->weapon == WEAPON_BIG_DAMAGE) amount = 0;
 	unit->hp += amount;
 
-	Effect *effect = createEffect(EFFECT_GAIN_HP);
-	effect->unitId = unit->id;
+	Effect *effect = createEffect(EFFECT_GAIN_HP, unit);
 	effect->intValue = amount;
 
 	int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
@@ -1929,8 +2191,7 @@ void gainMp(Unit *unit, int amount) {
 	unit->mp += amount;
 	if (unit->mp > unit->info->maxMp) unit->mp = unit->info->maxMp;
 
-	Effect *effect = createEffect(EFFECT_GAIN_MP);
-	effect->unitId = unit->id;
+	Effect *effect = createEffect(EFFECT_GAIN_MP, unit);
 	effect->intValue = amount;
 }
 
@@ -1945,8 +2206,7 @@ void loseMp(Unit *unit, int amount) {
 	unit->mp -= amount;
 	if (unit->mp < 0) unit->mp = 0;
 
-	Effect *effect = createEffect(EFFECT_LOSE_MP);
-	effect->unitId = unit->id;
+	Effect *effect = createEffect(EFFECT_LOSE_MP, unit);
 	effect->intValue = amount;
 }
 
@@ -2015,7 +2275,7 @@ void removeAllBuffsOfType(Unit *unit, BuffType type) {
 	}
 }
 
-Effect *createEffect(EffectType type) {
+Effect *createEffect(EffectType type, Unit *unit) {
 	if (game->effectsNum > EFFECTS_MAX-1) {
 		logf("Too many effects!\n");
 		game->effectsNum--;
@@ -2024,6 +2284,12 @@ Effect *createEffect(EffectType type) {
 	Effect *effect = &game->effects[game->effectsNum++];
 	memset(effect, 0, sizeof(Effect));
 	effect->type = type;
+
+	if (unit) {
+		effect->unitId = unit->id;
+		effect->position = rndVec2(-50, 50);
+	}
+
 	return effect;
 }
 
@@ -2351,7 +2617,7 @@ void saveLoadGlobals(bool save) {
 	Globals *globals = &game->globals;
 	char *path = "assets/info/globals.bin";
 
-	int version = 1;
+	int version = 2;
 
 	DataStream *stream;
 	if (save) {
@@ -2362,11 +2628,106 @@ void saveLoadGlobals(bool save) {
 	}
 
 	versionSaveLoadInt(stream, save, version, &version, 0, 999);
-	globals->characterCardSize = v2(100, 200);
 	versionSaveLoadVec2(stream, save, version, &globals->characterCardSize, 1, 999);
+
+	versionSaveLoadNamedStyleStacks(stream, save, version, globals->customStyleStacks, &globals->customStyleStacksNum, CUSTOM_STYLE_STACKS_MAX, 2, 999);
 
 	if (save) writeDataStream(path, stream);
 	destroyDataStream(stream);
 
 	if (save) logf("Done.\n");
+}
+
+void nguiShowImGuiStylesEditor(NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax) {
+	for (int i = 0; i < *styleStacksNum; i++) {
+		ImGui::PushID(i);
+
+		bool shouldSpliceStack = false;
+		guiPushStyleColor(ImGuiCol_Button, 0xFF900000);
+		if (ImGui::Button("X")) shouldSpliceStack = true;
+		guiPopStyleColor();
+
+		ImGui::SameLine();
+		if (ImGui::ArrowButton("moveUp", ImGuiDir_Up)) {
+			if (i > 0) {
+				arraySwap(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i, i-1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::ArrowButton("moveDown", ImGuiDir_Down)) {
+			if (i < *styleStacksNum-1) {
+				arraySwap(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i, i+1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+
+		ImGui::SameLine();
+		NguiNamedStyleStack *namedStyle = &styleStacks[i];
+		if (ImGui::TreeNode(frameSprintf("%d: %s###styleNode%d", i, namedStyle->name, i))) {
+			ImGui::InputText("Name", namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN);
+			nguiShowImGuiStyleEditor(&namedStyle->style);
+			ImGui::TreePop();
+		}
+
+		ImGui::PopID();
+
+		if (shouldSpliceStack) {
+			arraySpliceIndex(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i);
+			*styleStacksNum = *styleStacksNum - 1;
+			i--;
+		}
+	}
+
+	if (ImGui::Button("Create custom style")) {
+		if (*styleStacksNum > styleStacksMax-1) {
+			logf("Too many custom style stacks!\n");
+		} else {
+			NguiNamedStyleStack *namedStyle = &styleStacks[*styleStacksNum];
+			*styleStacksNum = *styleStacksNum + 1;
+			memset(namedStyle, 0, sizeof(NguiNamedStyleStack));
+		}
+	}
+}
+
+void versionSaveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax, int minVersion, int maxVersion) {
+	versionSaveLoadInt(stream, save, version, styleStacksNum, minVersion, maxVersion);
+	for (int i = 0; i < *styleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &styleStacks[i];
+		if (save) { 
+			writeString(stream, namedStyle->name);
+			writeNguiStyleStack(stream, namedStyle->style);
+		} else {
+			readStringInto(stream, namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN);
+			namedStyle->style = readNguiStyleStack(stream);
+		}
+	}
+}
+
+void pushGameStyleStack(char *name) {
+	Globals *globals = &game->globals;
+	for (int i = 0; i < globals->customStyleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+		if (streq(namedStyle->name, name)) {
+			nguiPushStyleStack(&namedStyle->style);
+			return;
+		}
+	}
+
+	logf("Couldn't find style stack %s\n", name);
+}
+
+void popGameStyleStack(char *name) {
+	Globals *globals = &game->globals;
+	for (int i = 0; i < globals->customStyleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &globals->customStyleStacks[i];
+		if (streq(namedStyle->name, name)) {
+			nguiPopStyleStack(&namedStyle->style);
+			return;
+		}
+	}
+
+	logf("Couldn't find style stack %s\n", name);
 }

@@ -74,6 +74,12 @@ struct NguiStyleStack {
 	int varsMax;
 };
 
+struct NguiNamedStyleStack {
+#define NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN 64
+	char name[NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN];
+	NguiStyleStack style;
+};
+
 enum NguiElementType {
 	NGUI_ELEMENT_WINDOW,
 	NGUI_ELEMENT_BUTTON,
@@ -134,7 +140,7 @@ struct Ngui {
 
 	int draggingId;
 
-	float uiScale;
+	Vec2 uiScale;
 
 	NguiStyleTypeInfo styleTypeInfos[NGUI_STYLE_TYPES_MAX];
 
@@ -214,7 +220,6 @@ void nguiDraw(float elapsed);
 NguiElement *getAndReviveNguiElement(char *name);
 NguiElement *getNguiElementById(int id);
 
-void nguiSetNextWindowSize(Vec2 size);
 void nguiStartWindow(char *windowName, Vec2 position=v2(), Vec2 pivot=v2());
 NguiElement *nguiEndWindow();
 bool nguiButton(char *name, char *subText="");
@@ -233,7 +238,7 @@ NguiStyleStack readNguiStyleStack(DataStream *stream);
 void nguiInit() {
 	ngui = (Ngui *)zalloc(sizeof(Ngui));
 	ngui->defaultFont = createFont("assets/common/arial.ttf", 80);
-	ngui->uiScale = platform->windowScaling;
+	ngui->uiScale = v2(platform->windowScaling, platform->windowScaling);
 
 	ngui->elementsMax = 4096;
 	ngui->elements = (NguiElement *)zalloc(sizeof(NguiElement) * ngui->elementsMax);
@@ -728,7 +733,7 @@ void nguiDraw(float elapsed) {
 
 				if (child->alive == 1) child->position = lerp(child->position, position, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
 				Rect childRect = makeRect(child->position, elementSize) * ngui->uiScale;
-				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale;
+				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale.x;
 
 				child->childRect = childRect;
 
@@ -787,7 +792,7 @@ void nguiDraw(float elapsed) {
 			if (!isZero(clippingRect)) {
 				if (contains(windowRect, ngui->mouse)) {
 					mouseInClipRect = true;
-					window->scroll.y -= (platform->mouseWheel * ngui->uiScale / childrenSize.y) * 40;
+					window->scroll.y -= (platform->mouseWheel * ngui->uiScale.y / childrenSize.y) * 40;
 				} else {
 					mouseInClipRect = false;
 				}

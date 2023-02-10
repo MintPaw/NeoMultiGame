@@ -63,12 +63,6 @@ struct WorldChannel {
 	Vec3 position;
 };
 
-struct NguiNamedStyleStack {
-#define NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN 64
-	char name[NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN];
-	NguiStyleStack style;
-};
-
 struct Globals {
 	Vec3 cameraAngle;
 	float cameraBaseDistance;
@@ -297,7 +291,7 @@ void updateGame() {
 
 	ngui->mouse = platform->mouse;
 	ngui->screenSize = game->size;
-	ngui->uiScale = game->size.y / 2160;
+	ngui->uiScale = v2(game->size.y / 2160, game->size.y / 2160);
 
 	if (game->prevState != game->state) {
 		game->prevState = game->state;
