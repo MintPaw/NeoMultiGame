@@ -922,6 +922,19 @@ bool inTextTag(TaggedText *taggedText, char *tagName, int index) {
 	return false;
 }
 
+#define NV_STRING_JOIN2(arg1, arg2) NV_DO_STRING_JOIN2(arg1, arg2)
+#define NV_DO_STRING_JOIN2(arg1, arg2) arg1 ## arg2
+
+#define ForEach(_itDecl, _array) \
+					for (int NV_STRING_JOIN2(i, __LINE__) = 0; NV_STRING_JOIN2(i, __LINE__) < (_array)->count; NV_STRING_JOIN2(i, __LINE__)++) \
+						if (int i = NV_STRING_JOIN2(i, __LINE__)) \
+							if (_itDecl = (*(_array))[i])
+
+#define Each(_array) \
+					for (int NV_STRING_JOIN2(i, __LINE__) = 0; NV_STRING_JOIN2(i, __LINE__) < (_array)->count; NV_STRING_JOIN2(i, __LINE__)++) \
+						if (int i = NV_STRING_JOIN2(i, __LINE__)) \
+							if (auto it = (*(_array))[i])
+
 /// Dynamic array
 
 template <typename T>
@@ -929,15 +942,15 @@ struct Array {
 	T *elements;
 	int count;
 	int max;
+	bool doNotMemsetNewElements;
 
-	T *operator [](int i) {
-		return &this->elements[i];
+	T *operator [](int index) {
+		return &this->elements[index];
 	}
 
 	T *get(int index) {
 		return &this->elements[index];
 	}
-
 };
 
 template <typename T>
@@ -948,9 +961,73 @@ void resizeArray(Array<T> *array, int newMax) {
 }
 
 template <typename T>
-T *getNewElement(Array<T> *array) {
+T *push(Array<T> *array, T element) {
+	T *nextElement = next(array);
+	if (nextElement) *nextElement = element;
+	return nextElement;
+}
+
+template <typename T>
+T *next(Array<T> *array) {
 	if (array->count > array->max-1) {
 		resizeArray(array, (array->max*1.5)+1);
+	}
+
+	T *element = array->get(array->count);
+	array->count++;
+	if (!array->doNotMemsetNewElements) memset(element, 0, sizeof(T));
+	return element;
+}
+
+template <typename T>
+void spliceIndex(Array<T> *array, int index) {
+	arraySpliceIndex(array->elements, array->count, sizeof(T), index);
+	array->count--;
+}
+
+/// /Dynamic array
+
+/// Static Array
+template <typename T, int N>
+struct StaticArray {
+	T elements[N];
+	int count;
+	int max = N;
+
+	bool noLogOnOverflow;
+	bool noDeleteLastOnOverFlow;
+
+	T *operator [](int index) {
+		return &this->elements[index];
+	}
+
+	T *get(int index) {
+		return &this->elements[index];
+	}
+};
+
+template <typename T, int N>
+StaticArray<T, N> *frameMallocStaticArray() {
+	StaticArray<T, N> array = frameMalloc(sizeof(StaticArray<T, N>));
+	return array;
+}
+
+template <typename T, int N>
+T *push(StaticArray<T, N> *array, T element) {
+	T *nextElement = next(array);
+	if (nextElement) *nextElement = element;
+	return nextElement;
+}
+
+template <typename T, int N>
+T *next(StaticArray<T, N> *array) {
+	if (array->count > N-1) {
+		if (!array->noLogOnOverflow) logf("Static array overflow\n");
+		if (array->noDeleteLastOnOverFlow) {
+			return NULL;
+		} else {
+			array->count--;
+		}
 	}
 
 	T *element = array->get(array->count);
@@ -958,4 +1035,10 @@ T *getNewElement(Array<T> *array) {
 	return element;
 }
 
-/// /Dynamic array
+template <typename T, int N>
+void spliceIndex(StaticArray<T, N> *array, int index) {
+	arraySpliceIndex(array->elements, array->count, sizeof(T), index);
+	array->count--;
+}
+
+/// /Static Array

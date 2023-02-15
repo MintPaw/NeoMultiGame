@@ -55,6 +55,10 @@ enum BuffType {
 	BUFF_VOLUME_WARNING,
 	BUFF_SILENCE,
 	BUFF_DAMAGE_SPRING,
+	BUFF_FOCUS,
+	BUFF_VISUALIZE,
+	BUFF_STEALTHED,
+	BUFF_MARKED,
 	BUFF_TYPES_MAX,
 };
 struct BuffTypeInfo {
@@ -86,6 +90,7 @@ enum SpellType {
 	SPELL_LARGE_ATTACK,
 	SPELL_SUMMONER_ATTACK,
 
+	SPELL_STORM_ATTACK,
 	SPELL_QUICK_ATTACK,
 	SPELL_WIDE_STRIKE,
 	SPELL_COMBO_ATTACK,
@@ -117,8 +122,18 @@ enum SpellType {
 	SPELL_MOON_STRIKE_RAID,
 	SPELL_LIGHTNING,
 	SPELL_ICE,
+
 	SPELL_SLEEP,
 	SPELL_WAKE_UP,
+	SPELL_FOCUS,
+	SPELL_DREAM,
+	SPELL_VISUALIZE,
+	SPELL_STEALTH,
+	SPELL_RE_STEALTH,
+	SPELL_STEALTH_WEAPON_SWITCH,
+	SPELL_STEALTH_REFILL,
+	SPELL_STEALTH_MARK,
+	SPELL_STEALTH_SNIPE,
 
 	SPELL_SMALL_ETHER,
 	SPELL_LARGE_ETHER,
@@ -167,6 +182,7 @@ struct SpellTypeInfo {
 
 	bool enabledWhileAwake;
 	bool enabledWhileAsleep;
+	bool enabledWhileStealthed;
 };
 struct Spell {
 	SpellType type;
@@ -263,6 +279,12 @@ struct Effect {
 
 	float time;
 };
+
+enum GameState {
+	GAME_STATE_MENU,
+	GAME_STATE_PLAY,
+};
+
 struct Game {
 	Globals globals;
 	Vec2 realSize;
@@ -271,6 +293,10 @@ struct Game {
 	Font *defaultFont;
 	Font *hudFont;
 	Vec2 mouse;
+
+	GameState state;
+	GameState prevState;
+	float stateTime;
 
 	UnitTypeInfo unitTypeInfos[UNIT_TYPES_MAX];
 #define UNITS_MAX 128
@@ -293,6 +319,7 @@ struct Game {
 
 	int level;
 	int wave;
+	int startingWave;
 
 	int targetedUnit;
 	SpellType currentSpellType;
@@ -331,6 +358,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic=false);
 void gainHp(Unit *unit, int amount);
 void gainMp(Unit *unit, int amount);
 void loseMp(Unit *unit, int amount);
+void refillFlasks(Unit *unit);
 
 Buff *getBuff(Unit *unit, BuffType type);
 int countBuffs(Unit *unit, BuffType type);
@@ -512,6 +540,11 @@ void updateGame() {
 			info->damage = 3000;
 			info->mp = 20;
 
+			info = &game->spellTypeInfos[SPELL_STORM_ATTACK];
+			strcpy(info->name, "Storm Attack");
+			info->damage = 1500;
+			info->mp = 20;
+
 			info = &game->spellTypeInfos[SPELL_WIDE_STRIKE];
 			strcpy(info->name, "Wide Strike");
 			info->damage = 1500;
@@ -655,6 +688,61 @@ void updateGame() {
 			info->targetType = TARGET_NONE;
 			info->enabledWhileAwake = false;
 			info->enabledWhileAsleep = true;
+
+			info = &game->spellTypeInfos[SPELL_FOCUS];
+			strcpy(info->name, "Focus");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileAsleep = true;
+
+			info = &game->spellTypeInfos[SPELL_DREAM];
+			strcpy(info->name, "Dream");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileAsleep = true;
+
+			info = &game->spellTypeInfos[SPELL_VISUALIZE];
+			strcpy(info->name, "Visualize");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileAsleep = true;
+
+			info = &game->spellTypeInfos[SPELL_STEALTH];
+			strcpy(info->name, "Stealth");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileAsleep = true;
+
+			info = &game->spellTypeInfos[SPELL_RE_STEALTH];
+			strcpy(info->name, "Re-Stealth");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileStealthed = true;
+
+			info = &game->spellTypeInfos[SPELL_STEALTH_WEAPON_SWITCH];
+			strcpy(info->name, "Quick Weapon Switch");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileStealthed = true;
+
+			info = &game->spellTypeInfos[SPELL_STEALTH_REFILL];
+			strcpy(info->name, "Refill");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileStealthed = true;
+
+			info = &game->spellTypeInfos[SPELL_STEALTH_MARK];
+			strcpy(info->name, "Mark");
+			info->targetType = TARGET_NONE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileStealthed = true;
+
+			info = &game->spellTypeInfos[SPELL_STEALTH_SNIPE];
+			strcpy(info->name, "Snipe");
+			info->targetType = TARGET_SINGLE;
+			info->enabledWhileAwake = false;
+			info->enabledWhileStealthed = true;
+			info->damage = 20000;
 
 			info = &game->spellTypeInfos[SPELL_SMALL_ETHER];
 			strcpy(info->name, "Small Ether");
@@ -856,8 +944,6 @@ void updateGame() {
 		}
 
 		game->baseSpellTime = 0.25;
-		game->level = 4;
-		game->wave = 0;
 
 		{
 			Unit *unit = NULL;
@@ -866,6 +952,7 @@ void updateGame() {
 			unit->ally = true;
 			unit->weapon = WEAPON_DEFAULT;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_HERO_ATTACK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STORM_ATTACK;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_QUICK_ATTACK;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WIDE_STRIKE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_COMBO_ATTACK;
@@ -898,16 +985,21 @@ void updateGame() {
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_LIGHTNING;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_ICE;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SLEEP;
-			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAKE_UP;
+			// unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAKE_UP;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_FOCUS;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_DREAM;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_VISUALIZE;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STEALTH;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_RE_STEALTH;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STEALTH_WEAPON_SWITCH;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STEALTH_REFILL;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STEALTH_MARK;
+			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_STEALTH_SNIPE;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_SMALL_ETHER;
-			unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_LARGE_ETHER;
-			unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
 
 			unit->spellsAvailable[unit->spellsAvailableNum++] = SPELL_WAIT;
-
-			nextWave();
 		}
 
 		saveLoadGlobals(false);
@@ -953,17 +1045,11 @@ void updateGame() {
 		}
 
 		ImGui::Separator();
+		ImGui::InputInt("Starting wave", &game->startingWave);
 		ImGui::Text("allyAdvantage: %f", getAllyAdvantage());
 		ImGui::Text("allyAdvantageGain: %f", game->prevAllyAdvantageGain);
 		ImGui::End();
 	}
-
-	auto guiGetWindowRect = []()->Rect {
-		ImVec2 pos = ImGui::GetWindowPos();
-		ImVec2 size = ImGui::GetWindowSize();
-		Rect rect = makeRect(pos.x, pos.y, size.x, size.y);
-		return rect;
-	};
 
 	Pass *mainPass = createPass();
 	mainPass->yIsUp = false;
@@ -972,927 +1058,991 @@ void updateGame() {
 
 	pushPass(mainPass);
 
-	bool choosingAlly = false;
-	{ /// Update turn
-		Unit *currentUnit = getCurrentUnit();
+	if (game->prevState != game->state) {
+		game->prevState = game->state;
+		game->stateTime = 0;
+	}
 
-		if (game->spellQueueNum == 0) {
-			Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
-			if (atMoon) {
-				Unit *target = getUnit(atMoon->intUserData);
-				if (!target) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *possibleTarget = &game->units[i];
-						if (possibleTarget->ally == currentUnit->ally) continue;
-						if (possibleTarget->hp <= 0) continue;
-						if (isHidden(possibleTarget)) continue;
-						target = possibleTarget;
-						break;
-					}
-				}
-				if (target) {
-					castSpell(currentUnit, target, SPELL_MOON_STRIKE_RAID);
-				} else {
-					logf("Graceful Touchdown\n");
-				}
-				removeBuff(currentUnit, atMoon);
-			}
-
-			if (getBuff(currentUnit, BUFF_FROZEN)) {
-				logf("Frozen\n");
-				castSpell(currentUnit, NULL, SPELL_END_TURN);
-			}
-
-			if (getBuff(currentUnit, BUFF_STUNNED)) {
-				logf("Stunned\n");
-				castSpell(currentUnit, NULL, SPELL_END_TURN);
+	if (game->state == GAME_STATE_MENU) {
+		nguiStartWindow("Main Menu Window", game->realSize*0.5, v2(0.5, 0.5));
+		for (int i = 1; i < 9+1; i++) {
+			if (nguiButton(frameSprintf("Level %d", i))) {
+				game->level = i;
+				game->wave = game->startingWave;
+				game->state = GAME_STATE_PLAY;
 			}
 		}
+		nguiEndWindow();
+	} else if (game->state == GAME_STATE_PLAY) {
+		if (game->stateTime == 0) nextWave();
 
-		if (game->spellQueueNum == 0) {
-			int allyCount = 0;
-			int enemyCount = 0;
-			for (int i = 0; i < game->unitsNum; i++) {
-				Unit *unit = &game->units[i];
-				if (unit->hp <= 0) continue;
-				if (unit->ally) allyCount++;
-				if (!unit->ally) enemyCount++;
-			}
+		bool choosingAlly = false;
+		{ /// Update turn
+			Unit *currentUnit = getCurrentUnit();
 
-			if (game->inEditor) {
-				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.98), ImGuiCond_Always, ImVec2(0.5, 1.0));
-				ImGui::SetNextWindowSize(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always);
-				ImGui::Begin("Spells", NULL, 0);
-			}
-
-			if (allyCount == 0) {
-				if (game->inEditor) {
-					ImGui::Text("You lose");
-					if (ImGui::Button("Try again")) logf("You can't\n");
-				}
-				game->winLossTime += elapsed;
-			} else if (enemyCount == 0) {
-				if (game->inEditor) {
-					ImGui::Text("You win");
-					if (ImGui::Button("Continue")) nextWave();
-				}
-				if (game->winLossTime >= 3) nextWave();
-				game->winLossTime += elapsed;
-			} else if (currentUnit) {
-				game->winLossTime = 0;
-
-				if (currentUnit->ally) {
-					if (!game->chosenAllyUnit) {
-						Unit *p1 = getUnitByType(UNIT_PLAYER1);
-						Unit *p2 = getUnitByType(UNIT_PLAYER2);
-						Unit *choices[2] = {};
-						int choicesNum = 0;
-						if (p1->hasTurn) choices[choicesNum++] = p1;
-						if (p2->hasTurn) choices[choicesNum++] = p2;
-
-						if (choicesNum == 1) game->chosenAllyUnit = choices[0]->id;
-						if (choicesNum == 2) choosingAlly = true;
-
-						if (choosingAlly) {
-							for (int i = 0; i < choicesNum; i++) {
-								Unit *unit = choices[i];
-								if (unit->hp <= 0) continue;
-								if (!unit->hasTurn) continue;
-								if (game->inEditor) {
-									if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
-								}
-							}
+			if (game->spellQueueNum == 0) {
+				Buff *atMoon = getBuff(currentUnit, BUFF_AT_MOON);
+				if (atMoon) {
+					Unit *target = getUnit(atMoon->intUserData);
+					if (!target) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *possibleTarget = &game->units[i];
+							if (possibleTarget->ally == currentUnit->ally) continue;
+							if (possibleTarget->hp <= 0) continue;
+							if (isHidden(possibleTarget)) continue;
+							target = possibleTarget;
+							break;
 						}
+					}
+					if (target) {
+						castSpell(currentUnit, target, SPELL_MOON_STRIKE_RAID);
 					} else {
-						if (game->currentSpellType == SPELL_NONE) {
-							int spellCount = 0;
-							pushGameStyleStack("Spell Window Style");
-							nguiStartWindow("SpellWindow", game->realSize, v2(1, 1));
-							for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
-								SpellType type = currentUnit->spellsAvailable[i];
-								SpellTypeInfo *info = &game->spellTypeInfos[type];
-								if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
-								if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
-								int spellAvailableIndex = i;
+						logf("Graceful Touchdown\n");
+					}
+					removeBuff(currentUnit, atMoon);
+				}
 
-								char *label = info->name;
-								if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
-								if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
+				if (getBuff(currentUnit, BUFF_FROZEN)) {
+					logf("Frozen\n");
+					castSpell(currentUnit, NULL, SPELL_END_TURN);
+				}
 
-								bool clickedSpell = false;
-								char *tooltipString = frameSprintf("Base damage: %d", info->damage);
-								if (game->inEditor) {
-									ImGui::PushID(i);
-									if (spellCount % 5 != 0) ImGui::SameLine();
-									if (type == SPELL_WAIT) ImGui::NewLine();
-									if (ImGui::Button(label)) clickedSpell = true;
-									if (ImGui::IsItemHovered()) {
-										if (info->damage) ImGui::SetTooltip(tooltipString);
-									}
-									ImGui::PopID();
-								}
+				if (getBuff(currentUnit, BUFF_STUNNED)) {
+					logf("Stunned\n");
+					castSpell(currentUnit, NULL, SPELL_END_TURN);
+				}
+			}
 
-								if (nguiButton(label)) clickedSpell = true;
-								if (ngui->lastElement->hoveringTime) game->tooltip = tooltipString;
+			if (game->spellQueueNum == 0) {
+				int allyCount = 0;
+				int enemyCount = 0;
+				for (int i = 0; i < game->unitsNum; i++) {
+					Unit *unit = &game->units[i];
+					if (unit->hp <= 0) continue;
+					if (unit->ally) allyCount++;
+					if (!unit->ally) enemyCount++;
+				}
 
-								if (clickedSpell) {
-									bool canCast = true;
+				if (game->inEditor) {
+					ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.98), ImGuiCond_Always, ImVec2(0.5, 1.0));
+					ImGui::SetNextWindowSize(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.2), ImGuiCond_Always);
+					ImGui::Begin("Spells", NULL, 0);
+				}
 
-									if (currentUnit->mp < info->mp) {
-										canCast = false;
-										logf("Not enough mp\n");
-									}
+				if (allyCount == 0) {
+					if (game->inEditor) {
+						ImGui::Text("You lose");
+						if (ImGui::Button("Try again")) logf("You can't\n");
+					}
+					game->winLossTime += elapsed;
+				} else if (enemyCount == 0) {
+					if (game->inEditor) {
+						ImGui::Text("You win");
+						if (ImGui::Button("Continue")) nextWave();
+					}
+					if (game->winLossTime >= 3) nextWave();
+					game->winLossTime += elapsed;
+				} else if (currentUnit) {
+					game->winLossTime = 0;
 
-									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
-										canCast = false;
-										logf("No more\n");
-									}
+					if (currentUnit->ally) {
+						if (!game->chosenAllyUnit) {
+							Unit *p1 = getUnitByType(UNIT_PLAYER1);
+							Unit *p2 = getUnitByType(UNIT_PLAYER2);
+							Unit *choices[2] = {};
+							int choicesNum = 0;
+							if (p1->hasTurn) choices[choicesNum++] = p1;
+							if (p2->hasTurn) choices[choicesNum++] = p2;
 
-									if (
-										(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
-										(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
-										(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
-										(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
-										(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
-										(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
-										(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
-									) {
-										canCast = false;
-										logf("You already have that weapon\n");
-									}
+							if (choicesNum == 1) game->chosenAllyUnit = choices[0]->id;
+							if (choicesNum == 2) choosingAlly = true;
 
-									if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
-										canCast = false;
-										logf("Broken.\n");
-									}
-
-									if (type == SPELL_DRAW_MAGIC_RESIST) {
-										Unit *p2 = getUnitByType(UNIT_PLAYER2);
-										if (p2->hp <= 0) {
-											canCast = false;
-											logf("%s is dead\n", p2->info->name);
-										}
-										if (p2->mp < info->mp) {
-											canCast = false;
-											logf("%s doesn't have enough mp\n", p2->info->name);
-										}
-									}
-
-									if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
-										canCast = false;
-										logf("Silenced\n");
-									}
-
-									if (canCast) {
-										game->currentSpellType = type;
-										game->currentSpellAvailableIndex = i;
-									}
-								}
-
-								spellCount++;
-							}
-
-							if (game->inEditor) {
-								if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
-							}
-
-							nguiEndWindow();
-							popGameStyleStack("Spell Window Style");
-						} else {
-							SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
-							if (currentSpellInfo->targetType == TARGET_SINGLE) {
-								if (game->inEditor) {
-									ImGui::Text("Target:");
-								}
-								for (int i = 0; i < game->unitsNum; i++) {
-									Unit *unit = &game->units[i];
-									if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
-									if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
-									if (isHidden(unit)) continue;
-
+							if (choosingAlly) {
+								for (int i = 0; i < choicesNum; i++) {
+									Unit *unit = choices[i];
+									if (unit->hp <= 0) continue;
+									if (!unit->hasTurn) continue;
 									if (game->inEditor) {
-										if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) game->targetedUnit = unit->id;
+										if (ImGui::Button(unit->info->name)) game->chosenAllyUnit = unit->id;
 									}
-									unit->couldBeTargettedThisFrame = true;
+								}
+							}
+						} else {
+							if (game->currentSpellType == SPELL_NONE) {
+								int spellCount = 0;
+								pushGameStyleStack("Spell Window Style");
+								nguiStartWindow("SpellWindow", game->realSize, v2(1, 1));
+								for (int i = 0; i < currentUnit->spellsAvailableNum; i++) {
+									SpellType type = currentUnit->spellsAvailable[i];
+									SpellTypeInfo *info = &game->spellTypeInfos[type];
+									if (!info->enabledWhileAwake && !currentUnit->asleep) continue;
+									if (!info->enabledWhileAsleep && currentUnit->asleep) continue;
+									if (!info->enabledWhileStealthed && getBuff(currentUnit, BUFF_STEALTHED)) continue;
+									int spellAvailableIndex = i;
 
-									if (unit->id == game->targetedUnit) {
+									char *label = info->name;
+									if (info->mp > 0) label = frameSprintf("%s (%dmp)", label, info->mp);
+									if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] > -1) label = frameSprintf("%s x%d", label, currentUnit->spellsAvailableAmounts[spellAvailableIndex]);
+
+									bool clickedSpell = false;
+									char *tooltipString = frameSprintf("Base damage: %d", info->damage);
+									if (game->inEditor) {
+										ImGui::PushID(i);
+										if (spellCount % 5 != 0) ImGui::SameLine();
+										if (type == SPELL_WAIT) ImGui::NewLine();
+										if (ImGui::Button(label)) clickedSpell = true;
+										if (ImGui::IsItemHovered()) {
+											if (info->damage) ImGui::SetTooltip(tooltipString);
+										}
+										ImGui::PopID();
+									}
+
+									if (nguiButton(label)) clickedSpell = true;
+									if (ngui->lastElement->hoveringTime) game->tooltip = tooltipString;
+
+									if (clickedSpell) {
 										bool canCast = true;
-										if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
+
+										if (currentUnit->mp < info->mp) {
 											canCast = false;
-											logf("It won't work\n");
+											logf("Not enough mp\n");
+										}
+
+										if (currentUnit->spellsAvailableAmounts[spellAvailableIndex] == 0) {
+											canCast = false;
+											logf("No more\n");
+										}
+
+										if (
+											(type == SPELL_DRAW_DEFAULT && currentUnit->weapon == WEAPON_DEFAULT) ||
+											(type == SPELL_DRAW_VAMPIRE && currentUnit->weapon == WEAPON_VAMPIRE) ||
+											(type == SPELL_DRAW_MAGIC_RESIST && currentUnit->weapon == WEAPON_MAGIC_RESIST) ||
+											(type == SPELL_DRAW_LOW_HP && currentUnit->weapon == WEAPON_LOW_HP) ||
+											(type == SPELL_DRAW_DODGE && currentUnit->weapon == WEAPON_DODGE) ||
+											(type == SPELL_DRAW_POISON && currentUnit->weapon == WEAPON_POISON) ||
+											(type == SPELL_DRAW_GLASS && currentUnit->weapon == WEAPON_GLASS)
+										) {
+											canCast = false;
+											logf("You already have that weapon\n");
+										}
+
+										if (type == SPELL_DRAW_GLASS && currentUnit->glassBroken) {
+											canCast = false;
+											logf("Broken.\n");
+										}
+
+										if (type == SPELL_DRAW_MAGIC_RESIST) {
+											Unit *p2 = getUnitByType(UNIT_PLAYER2);
+											if (p2->hp <= 0) {
+												canCast = false;
+												logf("%s is dead\n", p2->info->name);
+											}
+											if (p2->mp < info->mp) {
+												canCast = false;
+												logf("%s doesn't have enough mp\n", p2->info->name);
+											}
+										}
+
+										if (info->mp && getBuff(currentUnit, BUFF_SILENCE)) {
+											canCast = false;
+											logf("Silenced\n");
 										}
 
 										if (canCast) {
-											currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-											castSpell(currentUnit, unit, game->currentSpellType);
-											castSpell(currentUnit, NULL, SPELL_END_TURN);
-											game->currentSpellType = SPELL_NONE;
-											game->targetedUnit = 0;
+											game->currentSpellType = type;
+											game->currentSpellAvailableIndex = i;
 										}
 									}
-								}
 
-								if (platform->rightMouseJustDown || keyJustPressed(KEY_ESC)) game->currentSpellType = SPELL_NONE;
+									spellCount++;
+								}
 
 								if (game->inEditor) {
-									if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+									if (ImGui::Button("Cancel")) game->chosenAllyUnit = 0;
 								}
-							} else if (currentSpellInfo->targetType == TARGET_NONE) {
-								currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
-								castSpell(currentUnit, NULL, game->currentSpellType);
-								castSpell(currentUnit, NULL, SPELL_END_TURN);
-								game->currentSpellType = SPELL_NONE;
+
+								nguiEndWindow();
+								popGameStyleStack("Spell Window Style");
+							} else {
+								SpellTypeInfo *currentSpellInfo = &game->spellTypeInfos[game->currentSpellType];
+								if (currentSpellInfo->targetType == TARGET_SINGLE) {
+									if (game->inEditor) {
+										ImGui::Text("Target:");
+									}
+									for (int i = 0; i < game->unitsNum; i++) {
+										Unit *unit = &game->units[i];
+										if (unit->ally && !currentSpellInfo->canTargetAllies) continue;
+										if (unit->hp <= 0 && !currentSpellInfo->canTargetDead) continue;
+										if (isHidden(unit)) continue;
+
+										if (game->inEditor) {
+											if (ImGui::Button(frameSprintf("%d: %s", i, unit->screenName))) game->targetedUnit = unit->id;
+										}
+										unit->couldBeTargettedThisFrame = true;
+
+										if (unit->id == game->targetedUnit) {
+											bool canCast = true;
+											if (game->currentSpellType == SPELL_RESURRECT && getBuff(unit, BUFF_RELIFE)) {
+												canCast = false;
+												logf("It won't work\n");
+											}
+
+											if (canCast) {
+												currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+												castSpell(currentUnit, unit, game->currentSpellType);
+												castSpell(currentUnit, NULL, SPELL_END_TURN);
+												game->currentSpellType = SPELL_NONE;
+												game->targetedUnit = 0;
+											}
+										}
+									}
+
+									if (platform->rightMouseJustDown || keyJustPressed(KEY_ESC)) game->currentSpellType = SPELL_NONE;
+
+									if (game->inEditor) {
+										if (ImGui::Button("Cancel")) game->currentSpellType = SPELL_NONE;
+									}
+								} else if (currentSpellInfo->targetType == TARGET_NONE) {
+									currentUnit->spellsAvailableAmounts[game->currentSpellAvailableIndex]--;
+									castSpell(currentUnit, NULL, game->currentSpellType);
+									castSpell(currentUnit, NULL, SPELL_END_TURN);
+									game->currentSpellType = SPELL_NONE;
+								}
 							}
 						}
-					}
-				} else {
-					aiTakeTurn(currentUnit);
-				}
-			}
-
-			if (game->inEditor) {
-				ImGui::End();
-			}
-		}
-	} ///
-
-	{ /// Display
-		if (game->inEditor) {
-			ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
-			ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
-			auto guiShowUnit = [](Unit *unit) {
-				int color = 0xFFFFFFFF;
-				if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
-				if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
-
-				int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
-
-				ImVec4 imCol = guiGetImVec4Color(color);
-				ImGui::TextColored(imCol, "%s", unit->screenName);
-				ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
-				if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
-				if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
-				if (unit->buffsNum > 0) {
-					for (int i = 0; i < unit->buffsNum; i++) {
-						Buff *buff = &unit->buffs[i];
-						char *buffName = buff->info->name;
-						if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
-						if (buff->type == BUFF_COMBO) {
-							ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
-						} else {
-							ImGui::Text("[%s:%d]", buffName, buff->turns);
-						}
+					} else {
+						aiTakeTurn(currentUnit);
 					}
 				}
-				for (int i = 0; i < game->effectsNum; i++) {
-					Effect *effect = &game->effects[i];
-					if (effect->unitId != unit->id) continue;
 
-					if (effect->type == EFFECT_DAMAGE) {
-						ImGui::TextColored(guiGetImVec4Color(0xFFFF3030), "-%d", effect->intValue);
-					} else if (effect->type == EFFECT_GAIN_HP) {
-						ImGui::TextColored(guiGetImVec4Color(0xFF30FF30), "+%d", effect->intValue);
-					} else if (effect->type == EFFECT_LOSE_MP) {
-						ImGui::TextColored(guiGetImVec4Color(0xFF3030FF), "-%d", effect->intValue);
-					} else if (effect->type == EFFECT_GAIN_MP) {
-						ImGui::TextColored(guiGetImVec4Color(0xFF303080), "+%d", effect->intValue);
-					} else if (effect->type == EFFECT_DODGE) {
-						ImGui::TextColored(guiGetImVec4Color(0xFF808080), "Dodged");
-					}
-				}
-				ImGui::Separator();
-			};
-
-			Vec2 childSize = v2(500, 800);
-
-			ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
-			for (int i = 0; i < game->unitsNum; i++) {
-				Unit *unit = &game->units[i];
-				if (!unit->ally) continue;
-				if (isHidden(unit)) continue;
-				guiShowUnit(unit);
-			}
-			ImGui::EndChild();
-
-			ImGui::SameLine();
-
-			ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
-			for (int i = 0; i < game->unitsNum; i++) {
-				Unit *unit = &game->units[i];
-				if (unit->ally) continue;
-				if (isHidden(unit)) continue;
-				guiShowUnit(unit);
-			}
-			ImGui::EndChild();
-
-			ImGui::End();
-		}
-	} ///
-
-	{ /// Display 2d
-		int totalAllies = 0;
-		int totalEnemies = 0;
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (unit->ally) totalAllies++;
-			else totalEnemies++;
-		}
-
-		float cardPadding = 5;
-		float allyWidth = totalAllies * (globals->characterCardSize.x + cardPadding);
-		float enemyWidth = totalEnemies * (globals->characterCardSize.x + cardPadding);
-
-		Vec2 allyCursor = v2();
-		allyCursor.x = game->size.x/2 - allyWidth/2;
-		allyCursor.y = game->size.y - globals->characterCardSize.y;
-
-		Unit *currentUnit = getCurrentUnit();
-		if (currentUnit->ally && game->chosenAllyUnit && game->currentSpellType == SPELL_NONE && game->spellQueueNum == 0) {
-			allyCursor.x = cardPadding;
-		}
-
-		Vec2 enemyCursor = v2();
-		enemyCursor.x = game->size.x/2 - enemyWidth/2;
-		enemyCursor.y = 0;
-
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			if (isHidden(unit)) continue;
-
-			Vec2 *cursor = NULL;
-			Vec2 forward = v2();
-			if (unit->ally) {
-				cursor = &allyCursor;
-				forward = v2(0, -1);
-			} else {
-				cursor = &enemyCursor;
-				forward = v2(0, 1);
-			}
-
-			int cardBgColor = 0xFF202020;
-			Rect cardRect = makeRect(*cursor, globals->characterCardSize);
-
-			bool couldBeSelected = false;
-			if (unit->ally) couldBeSelected = true;
-			if (unit->hp <= 0) couldBeSelected = false;
-			if (!unit->hasTurn) couldBeSelected = false;
-
-			if (couldBeSelected) {
-				if (choosingAlly) cardBgColor = lerpColor(cardBgColor, 0xFFFFFFFF, timePhase(platform->time * 3) * 0.1);
-			}
-
-			if (unit->couldBeTargettedThisFrame) {
-				cardBgColor = lerpColor(cardBgColor, 0xFFFF0000, 0.1);
-			}
-
-			if (unit == currentUnit && !couldBeSelected) {
-				cardBgColor = lerpColor(cardBgColor, 0xFFFFFF00, timePhase(platform->time * 1) * 0.1);
-				cardRect = offset(cardRect, forward * 20);
-			}
-
-			bool hoveringCard = contains(cardRect, game->mouse);
-			if (hoveringCard) {
-				if (platform->mouseJustDown) {
-					if (couldBeSelected) game->chosenAllyUnit = unit->id;
-					if (unit->couldBeTargettedThisFrame) game->targetedUnit = unit->id;
-				}
-			}
-
-			unit->cardRect.x = lerp(unit->cardRect.x, cardRect.x, 0.2);
-			unit->cardRect.y = lerp(unit->cardRect.y, cardRect.y, 0.2);
-			unit->cardRect.width = cardRect.width;
-			unit->cardRect.height = cardRect.height;
-			cardRect = unit->cardRect;
-
-			drawRect(cardRect, cardBgColor);
-
-			Rect topRect = cardRect;
-			{
-				topRect.height *= 0.6;
-				// drawRect(topRect, 0xFF00FF00);
-
-				Rect profilePicRect = makeCenteredSquare(getCenter(topRect), topRect.height);
-				if (unit->buffsNum > 0) profilePicRect.x = topRect.x;
-				drawRect(profilePicRect, 0xFF300000);
-				// drawCircle(getCenter(profilePicRect), profilePicRect.width/2, 0xFFFF0000);
-
-				Rect buffRect = makeRect();
-				buffRect.x = profilePicRect.x + profilePicRect.width;
-				buffRect.y = profilePicRect.y;
-				buffRect.width = (topRect.width - profilePicRect.width)/2;
-				buffRect.height = buffRect.width;
-				for (int i = 0; i < unit->buffsNum; i++) {
-					Buff *buff = &unit->buffs[i];
-					if (i%2 == 0 && i != 0) {
-						buffRect.x = profilePicRect.x + profilePicRect.width;
-						buffRect.y += buffRect.height;
-					}
-
-					if (contains(buffRect, game->mouse)) {
-						game->tooltip = frameSprintf("%s", buff->info->name);
-						if (buff->turns > 0) game->tooltip = frameSprintf("%s\n%d turns left", game->tooltip, buff->turns);
-					}
-
-					drawRect(inflatePerc(buffRect, -0.1), 0xFF008000);
-					drawTextInRect(buff->info->name, newDrawTextProps(game->defaultFont, 0xFF000000), buffRect, v2(0.5, 0.5));
-
-					buffRect.x += buffRect.width;
-				}
-
-				Rect nameRect = topRect;
-				nameRect.height *= 0.5;
-				nameRect.y += nameRect.height;
-				drawTextInRect(unit->screenName, newDrawTextProps(game->defaultFont, 0x80FFFFFF), nameRect, v2(0.5, 1));
-			}
-
-			Rect bottomRect = cardRect;
-			{
-				bottomRect.y = topRect.y + topRect.height;
-				bottomRect.height = cardRect.height - topRect.height;
-
-				auto drawBarRect = [](Rect barRegion, char *text, float perc, int barColor, int textColor) {
-					Rect hpBarRect = inflatePerc(barRegion, v2(-0.3, -0.5));
-					Rect hpRect = hpBarRect;
-					hpRect.width *= perc;
-					drawRect(hpRect, barColor);
-					drawRectOutline(hpBarRect, 2, 0xFF000000);
-
-					Rect textRect = barRegion;
-					textRect.height *= 0.5;
-					textRect.y += textRect.height;
-					drawTextInRect(text, newDrawTextProps(game->defaultFont, textColor), textRect, v2(1, 0.5));
-				};
-
-				Rect hpRegion = bottomRect;
-				hpRegion.height *= 0.5;
-				drawBarRect(hpRegion, frameSprintf("%dhp", unit->hp), unit->hp / (float)unit->info->maxHp, 0xFF008000, 0x90FFFFFF);
-
-				Rect mpRegion = hpRegion;
-				mpRegion.y += mpRegion.height;
-				drawBarRect(mpRegion, frameSprintf("%dmp", unit->mp), unit->mp / (float)unit->info->maxMp, 0xFF000080, 0x90FFFFFF);
-			}
-
-			unit->couldBeTargettedThisFrame = false;
-			cursor->x += globals->characterCardSize.x + cardPadding;
-		}
-
-		{ /// Effects 2d
-			for (int i = 0; i < game->effectsNum; i++) {
-				Effect *effect = &game->effects[i];
-
-				char *text = NULL;
-				int color = 0xFFFFFFFF;
-				bool bounceText = false;
-				bool slideText = false;;
-				if (effect->type == EFFECT_DAMAGE) {
-					text = frameSprintf("-%d", effect->intValue);
-					color = 0xFFFF3030;
-					bounceText = true;
-				} else if (effect->type == EFFECT_GAIN_HP) {
-					text = frameSprintf("+%d", effect->intValue);
-					color = 0xFF30FF30;
-					slideText = true;
-				} else if (effect->type == EFFECT_LOSE_MP) {
-					text = frameSprintf("-%d", effect->intValue);
-					color = 0xFF3030FF;
-					slideText = true;
-				} else if (effect->type == EFFECT_GAIN_MP) {
-					text = frameSprintf("+%d", effect->intValue);
-					color = 0xFF303080;
-					slideText = true;
-				} else if (effect->type == EFFECT_DODGE) {
-					text = frameSprintf("Dodged");
-					color = 0xFF808080;
-					slideText = true;
-				}
-
-				if (text) {
-					Unit *unit = getUnit(effect->unitId);
-
-					Vec2 position = v2();
-					Vec2 size = getTextSize(game->defaultFont, text);
-					position = effect->position - size/2;
-
-					Vec2 forward = unit->ally ? v2(0, -1) : v2(0, 1);
-					position += forward * globals->characterCardSize*0.5;
-
-					if (bounceText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, BOUNCE_OUT);
-					if (slideText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, QUAD_OUT);
-
-					if (unit) position += getCenter(unit->cardRect); 
-
-					drawRect(makeRect(position, size), 0x20000000);
-					drawText(text, newDrawTextProps(game->defaultFont, color, position));
+				if (game->inEditor) {
+					ImGui::End();
 				}
 			}
 		} ///
-	} ///
 
-	{ /// Update spells
-		if (game->spellQueueNum > 0) {
-			Spell *spell = &game->spellQueue[0];
-			bool complete = false;
+		{ /// Display
+			if (game->inEditor) {
+				ImGui::SetNextWindowPos(ImVec2(platform->windowWidth*0.5, platform->windowHeight*0.5), ImGuiCond_Always, ImVec2(0.5, 0.5));
+				ImGui::Begin("Game", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-			auto spellTimeJustPassed = [](float amount)->bool {
-				if (amount == 0) return game->spellTime == 0;
-				if (game->spellTime >= amount && game->prevSpellTime < amount) return true;
-				return false;
-			};
+				auto guiShowUnit = [](Unit *unit) {
+					int color = 0xFFFFFFFF;
+					if (unit == getCurrentUnit()) color = lerpColor(color, 0xFF00FF00, 0.5);
+					if (game->spellQueueNum != 0 && game->spellQueue[0].destId == unit->id) color = lerpColor(color, 0xFFFF0000, 0.5);
 
-			Unit *src = getUnit(spell->srcId);
-			Unit *dest = getUnit(spell->destId);
+					int maxHp = unit->info->maxHp * (1 - unit->maxHpReductionPerc);
 
-			float baseSpellTime = game->baseSpellTime;
-
-			if (
-				spell->type == SPELL_HERO_ATTACK ||
-				spell->type == SPELL_SMALL_ATTACK ||
-				spell->type == SPELL_MEDIUM_ATTACK ||
-				spell->type == SPELL_LARGE_ATTACK ||
-				spell->type == SPELL_SUMMONER_ATTACK
-			) {
-				if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
-			} else if (spell->type == SPELL_QUICK_ATTACK) {
-				bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
-				game->spellImmNeverMisses = true;
-				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.50)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
-				game->spellImmNeverMisses = oldSpellImmNeverMisses;
-			} else if (spell->type == SPELL_WIDE_STRIKE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					int destIndex = -1;
-					for (int i = 0; i < game->unitsNum; i++) {
-						if (&game->units[i] == dest) destIndex = i;
-					}
-					Unit *underDest = NULL;
-					if (destIndex > 0) {
-						underDest = &game->units[destIndex-1];
-						if (underDest->ally != dest->ally) underDest = NULL;
-						if (isHidden(underDest)) underDest = NULL;
-					}
-					Unit *overDest = NULL;
-					if (destIndex < game->unitsNum-1) {
-						overDest = &game->units[destIndex+1];
-						if (overDest->ally != dest->ally) overDest = NULL;
-						if (isHidden(overDest)) overDest = NULL;
-					}
-					dealDamage(src, dest, spell->info->damage);
-					if (underDest) dealDamage(src, underDest, spell->info->damage);
-					if (overDest) dealDamage(src, overDest, spell->info->damage);
-				}
-			} else if (spell->type == SPELL_COMBO_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					Buff *comboBuff = getBuff(dest, BUFF_COMBO);
-					if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO, 1);
-					if (comboBuff) {
-						comboBuff->intUserData++;
-						comboBuff->turns++;
-						dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
-					} else {
-						dealDamage(src, dest, spell->info->damage);
-					}
-				}
-			} else if (spell->type == SPELL_EARTHQUAKE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						if (unit->ally == src->ally) continue;
-						dealDamage(src, unit, spell->info->damage);
-						giveBuff(unit, BUFF_QUAKED, 2);
-					}
-				}
-			} else if (spell->type == SPELL_PHYS_UP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						if (unit->ally == src->ally) {
-							giveBuff(unit, BUFF_PHYS_UP, 2);
+					ImVec4 imCol = guiGetImVec4Color(color);
+					ImGui::TextColored(imCol, "%s", unit->screenName);
+					ImGui::TextColored(imCol, "Hp: %d/%d", unit->hp, maxHp);
+					if (unit->ally) ImGui::TextColored(imCol, "Mp: %d/%d", unit->mp, unit->info->maxMp);
+					if (unit->weapon) ImGui::TextColored(imCol, "Weapon: %s", weaponStrings[unit->weapon]);
+					if (unit->buffsNum > 0) {
+						for (int i = 0; i < unit->buffsNum; i++) {
+							Buff *buff = &unit->buffs[i];
+							char *buffName = buff->info->name;
+							if (buff->type == BUFF_FAKE_SHIELD && buff->time > 15) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
+							if (buff->type == BUFF_COMBO) {
+								ImGui::Text("[%s (%d):%d]", buffName, buff->intUserData, buff->turns);
+							} else {
+								ImGui::Text("[%s:%d]", buffName, buff->turns);
+							}
 						}
 					}
-				}
-			} else if (spell->type == SPELL_BODY_BLOCK) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_BODY_BLOCKING, 2);
-			} else if (spell->type == SPELL_DRAW_DEFAULT) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DEFAULT;
-			} else if (spell->type == SPELL_DRAW_VAMPIRE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					src->weapon = WEAPON_VAMPIRE;
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						giveBuff(unit, BUFF_BLEED, 3);
-					}
-				}
-			} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
-			} else if (spell->type == SPELL_DRAW_MAGIC_RESIST) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					src->weapon = WEAPON_MAGIC_RESIST;
-					Unit *p2 = getUnitByType(UNIT_PLAYER2);
-					loseMp(p2, spell->info->mp);
-				}
-			} else if (spell->type == SPELL_DRAW_LOW_HP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					src->weapon = WEAPON_LOW_HP;
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						if (unit->ally) gainHp(unit, 100);
-					}
-				}
-			} else if (spell->type == SPELL_DRAW_DODGE) {
-				if (spellTimeJustPassed(baseSpellTime*0.3)) {
-					src->weapon = WEAPON_DODGE;
-				} else if (spellTimeJustPassed(baseSpellTime*0.6)) {
-					dealDamage(src, dest, spell->info->damage/2);
-				} else if (spellTimeJustPassed(baseSpellTime*0.9)) {
-					dealDamage(src, dest, spell->info->damage/2);
-				}
-			} else if (spell->type == SPELL_DRAW_POISON) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					src->weapon = WEAPON_POISON;
-					giveBuff(src, BUFF_POISON, 3);
-				}
-			} else if (spell->type == SPELL_DRAW_GLASS) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					dealDamage(src, dest, spell->info->damage);
-					src->glassBroken = true;
-				}
-			} else if (spell->type == SPELL_SWIPE) {
-				if (spellTimeJustPassed(baseSpellTime*0.3)) {
-					dealDamage(src, dest, spell->info->damage/2);
-				}
-				if (spellTimeJustPassed(baseSpellTime*0.6)) {
-					int damage = spell->info->damage/2;
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) giveBuff(dest, BUFF_POISON, 10);
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) gainMp(src, damage * 0.01);
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) giveBuff(dest, BUFF_ATTACK_REDUCTION, 2);
-					for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) giveBuff(dest, BUFF_DEFENSE_REDUCTION, 2);
-					dealDamage(src, dest, damage);
-				}
+					for (int i = 0; i < game->effectsNum; i++) {
+						Effect *effect = &game->effects[i];
+						if (effect->unitId != unit->id) continue;
 
-				if (spellTimeJustPassed(baseSpellTime*0.9)) {
-					removeAllBuffsOfType(src, BUFF_ADD_POISON);
-					removeAllBuffsOfType(src, BUFF_ADD_MANA_SIPHON);
-					removeAllBuffsOfType(src, BUFF_ADD_ATTACK_REDUCTION);
-					removeAllBuffsOfType(src, BUFF_ADD_DEFENSE_REDUCTION);
-				}
-			} else if (spell->type == SPELL_ADD_POISON) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_POISON, -1);
-			} else if (spell->type == SPELL_ADD_MANA_SIPHON) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_MANA_SIPHON, -1);
-			} else if (spell->type == SPELL_ADD_ATTACK_REDUCTION) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_ATTACK_REDUCTION, -1);
-			} else if (spell->type == SPELL_ADD_DEFENSE_REDUCTION) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_DEFENSE_REDUCTION, -1);
-			} else if (spell->type == SPELL_HEAL) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_HEAL2) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						if (unit->ally) gainHp(unit, spell->info->damage);
-					}
-				}
-			} else if (spell->type == SPELL_RESURRECT) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					if (dest->hp <= 0) {
-						dest->hp = dest->info->maxHp;
-					} else {
-						giveBuff(dest, BUFF_RELIFE, -1);
-					}
-				}
-			} else if (spell->type == SPELL_GIVE_MANA) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					int mp = 512;
-					for (int i = 0; i < src->giveManaCastCount; i++) mp /= 2;
-					gainMp(dest, mp);
-					src->giveManaCastCount++;
-				}
-			} else if (spell->type == SPELL_ANTI_BUFF) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_ANTI_BUFF, 2);
-			} else if (spell->type == SPELL_MOON_STRIKE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					Buff *buff = giveBuff(src, BUFF_AT_MOON, -1);
-					if (buff) buff->intUserData = dest->id;
-				}
-			} else if (spell->type == SPELL_MOON_STRIKE_RAID) {
-				if (spellTimeJustPassed(baseSpellTime*0.4)) dealDamage(src, dest, spell->info->damage/5);
-				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/5);
-				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/5);
-				if (spellTimeJustPassed(baseSpellTime*0.7)) dealDamage(src, dest, spell->info->damage/5);
-				if (spellTimeJustPassed(baseSpellTime*0.8)) dealDamage(src, dest, spell->info->damage/5);
-			} else if (spell->type == SPELL_LIGHTNING) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->ally) continue;
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						dealDamage(src, unit, spell->info->damage);
-					}
-				}
-			} else if (spell->type == SPELL_ICE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					giveBuff(dest, BUFF_FROZEN, 1);
-					dealDamage(src, dest, spell->info->damage);
-				}
-			} else if (spell->type == SPELL_SLEEP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->asleep = true;
-			} else if (spell->type == SPELL_WAKE_UP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) src->asleep = false;
-			} else if (spell->type == SPELL_SMALL_ETHER) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_LARGE_ETHER) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_CREATE_SHIELD) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SHIELD, -1);
-			} else if (spell->type == SPELL_SHIELD_BLAST) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					dealDamage(src, dest, spell->info->damage);
-					for (int i = 0; i < 5; i++) {
-						Buff *buff = getBuff(src, BUFF_SHIELD);
-						if (buff) removeBuff(src, buff);
-					}
-				}
-			} else if (spell->type == SPELL_CREATE_2_SHIELDS) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					giveBuff(dest, BUFF_SHIELD, -1);
-					giveBuff(dest, BUFF_SHIELD, -1);
-				}
-			} else if (spell->type == SPELL_SHIELD_BUMP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					int shields = countBuffs(src, BUFF_SHIELD);
-					dealDamage(src, dest, spell->info->damage * shields);
-				}
-			} else if (spell->type == SPELL_CREATE_FAKE_SHIELD) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_FAKE_SHIELD, -1);
-			} else if (spell->type == SPELL_TAKE_MANA) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_TAKE_MANA_BIG) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
-			} else if (spell->type == SPELL_ACCELERATED_SLASH) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->ally == src->ally) continue;
-						if (unit->hp <= 0) continue;
-						if (isHidden(unit)) continue;
-						dealDamage(src, unit, pow(2, src->accelerationCount));
-					}
-
-					src->accelerationCount++;
-				}
-			} else if (spell->type == SPELL_STUDENT_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
-				if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
-			} else if (spell->type == SPELL_TEACHER_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
-			} else if (spell->type == SPELL_TEACHER_TEACHER_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
-			} else if (spell->type == SPELL_CREATE_STUDENT) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_STUDENT);
-			} else if (spell->type == SPELL_CREATE_TEACHER) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_TEACHER);
-			} else if (spell->type == SPELL_MULTIHITTER_HIT) {
-				if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
-				if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
-			} else if (spell->type == SPELL_MULTIHITTER_SPIN_UP) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SPUN_UP, 3);
-			} else if (spell->type == SPELL_STUNNER_ATTACK) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
-			} else if (spell->type == SPELL_STUN) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_STUNNED, 1);
-			} else if (spell->type == SPELL_GAIN_TIME_TUNE_CHARGE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_TIME_TUNE_CHARGE, -1);
-			} else if (spell->type == SPELL_TIME_TUNE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					removeAllBuffsOfType(src, BUFF_TIME_TUNE_CHARGE);
-					for (int i = 0; i < game->unitsNum; i++) {
-						Unit *unit = &game->units[i];
-						if (unit->hp <= 0) continue;
-						if (unit->ally != src->ally) continue;
-						unit->extraTurns++;
-					}
-				}
-			} else if (spell->type == SPELL_VOLUME_WARNING) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_VOLUME_WARNING, 1);
-			} else if (spell->type == SPELL_TAKE_LIFE) {
-				if (spellTimeJustPassed(baseSpellTime*0.5)) {
-					dest->maxHpReductionPerc += 0.01;
-					int maxHp = dest->info->maxHp * (1 - dest->maxHpReductionPerc);
-					if (dest->hp > maxHp) dest->hp = maxHp;
-				}
-			} else if (spell->type == SPELL_WAIT) {
-				if (game->spellTime == 0) logf("Waiting...\n");
-			} else if (spell->type == SPELL_END_TURN) {
-				if (game->spellTime > baseSpellTime) {
-					for (int i = 0; i < src->buffsNum; i++) {
-						Buff *buff = &src->buffs[i];
-						buff->turns--;
-
-						bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
-						game->spellImmNeverMisses = true;
-
-						if (buff->type == BUFF_BLEED) dealDamage(NULL, src, 500, true);
-						if (buff->type == BUFF_POISON) dealDamage(NULL, src, 100, true);
-
-						game->spellImmNeverMisses = oldSpellImmNeverMisses;
-
-						if (buff->turns == 0) {
-							arraySpliceIndex(src->buffs, src->buffsNum, sizeof(Buff), i);
-							src->buffsNum--;
-							i--;
-							continue;
+						if (effect->type == EFFECT_DAMAGE) {
+							ImGui::TextColored(guiGetImVec4Color(0xFFFF3030), "-%d", effect->intValue);
+						} else if (effect->type == EFFECT_GAIN_HP) {
+							ImGui::TextColored(guiGetImVec4Color(0xFF30FF30), "+%d", effect->intValue);
+						} else if (effect->type == EFFECT_LOSE_MP) {
+							ImGui::TextColored(guiGetImVec4Color(0xFF3030FF), "-%d", effect->intValue);
+						} else if (effect->type == EFFECT_GAIN_MP) {
+							ImGui::TextColored(guiGetImVec4Color(0xFF303080), "+%d", effect->intValue);
+						} else if (effect->type == EFFECT_DODGE) {
+							ImGui::TextColored(guiGetImVec4Color(0xFF808080), "Dodged");
 						}
 					}
+					ImGui::Separator();
+				};
 
-					logf("%s's turn is over\n", src->info->name);
+				Vec2 childSize = v2(500, 800);
 
-					src->hasTurn = false;
-					game->chosenAllyUnit = 0;
-					complete = true;
+				ImGui::BeginChild("AlliesChild", ImVec2(childSize.x, childSize.y), false);
+				for (int i = 0; i < game->unitsNum; i++) {
+					Unit *unit = &game->units[i];
+					if (!unit->ally) continue;
+					if (isHidden(unit)) continue;
+					guiShowUnit(unit);
 				}
-			} else {
-				if (game->spellTime == 0) logf("%s (spellType %d) has no update loop\n", spell->info->name, spell->type);
-				if (game->spellTime > 3) complete = true;
+				ImGui::EndChild();
+
+				ImGui::SameLine();
+
+				ImGui::BeginChild("EnemiesChild", ImVec2(childSize.x, childSize.y), false);
+				for (int i = 0; i < game->unitsNum; i++) {
+					Unit *unit = &game->units[i];
+					if (unit->ally) continue;
+					if (isHidden(unit)) continue;
+					guiShowUnit(unit);
+				}
+				ImGui::EndChild();
+
+				ImGui::End();
 			}
+		} ///
 
-			if (game->spellTime > baseSpellTime) complete = true;
-
-			game->prevSpellTime = game->spellTime;
-			game->spellTime += elapsed;
-
-			if (complete) {
-				arraySpliceIndex(game->spellQueue, game->spellQueueNum, sizeof(Spell), 0);
-				game->spellQueueNum--;
-				game->spellTime = 0;
-				game->prevSpellTime = 0;
-			}
-		}
-	} ///
-
-	{ /// Remove dead units
-		if (game->spellQueueNum == 0) {
+		{ /// Display 2d
+			int totalAllies = 0;
+			int totalEnemies = 0;
 			for (int i = 0; i < game->unitsNum; i++) {
 				Unit *unit = &game->units[i];
-				if (unit->ally) continue;
-				if (unit->hp <= 0) {
-					arraySpliceIndex(game->units, game->unitsNum, sizeof(Unit), i);
-					game->unitsNum--;
+				if (unit->ally) totalAllies++;
+				else totalEnemies++;
+			}
+
+			float cardPadding = 5;
+			float allyWidth = totalAllies * (globals->characterCardSize.x + cardPadding);
+			float enemyWidth = totalEnemies * (globals->characterCardSize.x + cardPadding);
+
+			Vec2 allyCursor = v2();
+			allyCursor.x = game->size.x/2 - allyWidth/2;
+			allyCursor.y = game->size.y - globals->characterCardSize.y;
+
+			Unit *currentUnit = getCurrentUnit();
+			if (currentUnit->ally && game->chosenAllyUnit && game->currentSpellType == SPELL_NONE && game->spellQueueNum == 0) {
+				allyCursor.x = cardPadding;
+			}
+
+			Vec2 enemyCursor = v2();
+			enemyCursor.x = game->size.x/2 - enemyWidth/2;
+			enemyCursor.y = 0;
+
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				if (isHidden(unit)) continue;
+
+				Vec2 *cursor = NULL;
+				Vec2 forward = v2();
+				if (unit->ally) {
+					cursor = &allyCursor;
+					forward = v2(0, -1);
+				} else {
+					cursor = &enemyCursor;
+					forward = v2(0, 1);
+				}
+
+				int cardBgColor = 0xFF202020;
+				Rect cardRect = makeRect(*cursor, globals->characterCardSize);
+
+				bool couldBeSelected = false;
+				if (unit->ally) couldBeSelected = true;
+				if (unit->hp <= 0) couldBeSelected = false;
+				if (!unit->hasTurn) couldBeSelected = false;
+				if (unit->couldBeTargettedThisFrame) couldBeSelected = false;
+
+				if (couldBeSelected) {
+					if (choosingAlly) cardBgColor = lerpColor(cardBgColor, 0xFFFFFFFF, timePhase(platform->time * 3) * 0.1);
+				}
+
+				if (unit->couldBeTargettedThisFrame) {
+					cardBgColor = lerpColor(cardBgColor, 0xFFFF0000, 0.1);
+				}
+
+				if (unit == currentUnit && !couldBeSelected) {
+					cardBgColor = lerpColor(cardBgColor, 0xFFFFFF00, timePhase(platform->time * 1) * 0.1);
+					cardRect = offset(cardRect, forward * 20);
+				}
+
+				bool hoveringCard = contains(cardRect, game->mouse);
+				if (hoveringCard) {
+					if (platform->mouseJustDown) {
+						if (couldBeSelected) game->chosenAllyUnit = unit->id;
+						if (unit->couldBeTargettedThisFrame) game->targetedUnit = unit->id;
+					}
+				}
+
+				unit->cardRect.x = lerp(unit->cardRect.x, cardRect.x, 0.2);
+				unit->cardRect.y = lerp(unit->cardRect.y, cardRect.y, 0.2);
+				unit->cardRect.width = cardRect.width;
+				unit->cardRect.height = cardRect.height;
+				cardRect = unit->cardRect;
+
+				drawRect(cardRect, cardBgColor);
+
+				Rect topRect = cardRect;
+				{
+					topRect.height *= 0.6;
+					// drawRect(topRect, 0xFF00FF00);
+
+					Rect profilePicRect = makeCenteredSquare(getCenter(topRect), topRect.height);
+					if (unit->buffsNum > 0) profilePicRect.x = topRect.x;
+					drawRect(profilePicRect, 0xFF300000);
+					// drawCircle(getCenter(profilePicRect), profilePicRect.width/2, 0xFFFF0000);
+
+					Rect buffRect = makeRect();
+					buffRect.x = profilePicRect.x + profilePicRect.width;
+					buffRect.y = profilePicRect.y;
+					buffRect.width = (topRect.width - profilePicRect.width)/2;
+					buffRect.height = buffRect.width;
+					for (int i = 0; i < unit->buffsNum; i++) {
+						Buff *buff = &unit->buffs[i];
+						if (i%2 == 0 && i != 0) {
+							buffRect.x = profilePicRect.x + profilePicRect.width;
+							buffRect.y += buffRect.height;
+						}
+
+						if (contains(buffRect, game->mouse)) {
+							game->tooltip = frameSprintf("%s", buff->info->name);
+							if (buff->turns > 0) game->tooltip = frameSprintf("%s\n%d turns left", game->tooltip, buff->turns);
+						}
+
+						drawRect(inflatePerc(buffRect, -0.1), 0xFF008000);
+						drawTextInRect(buff->info->name, newDrawTextProps(game->defaultFont, 0xFF000000), buffRect, v2(0.5, 0.5));
+
+						buffRect.x += buffRect.width;
+					}
+
+					Rect nameRect = topRect;
+					nameRect.height *= 0.5;
+					nameRect.y += nameRect.height;
+					drawTextInRect(unit->screenName, newDrawTextProps(game->defaultFont, 0x80FFFFFF), nameRect, v2(0.5, 1));
+				}
+
+				Rect bottomRect = cardRect;
+				{
+					bottomRect.y = topRect.y + topRect.height;
+					bottomRect.height = cardRect.height - topRect.height;
+
+					auto drawBarRect = [](Rect barRegion, char *text, float perc, int barColor, int textColor) {
+						Rect hpBarRect = inflatePerc(barRegion, v2(-0.3, -0.5));
+						Rect hpRect = hpBarRect;
+						hpRect.width *= perc;
+						drawRect(hpRect, barColor);
+						drawRectOutline(hpBarRect, 2, 0xFF000000);
+
+						Rect textRect = barRegion;
+						textRect.height *= 0.5;
+						textRect.y += textRect.height;
+						drawTextInRect(text, newDrawTextProps(game->defaultFont, textColor), textRect, v2(1, 0.5));
+					};
+
+					Rect hpRegion = bottomRect;
+					hpRegion.height *= 0.5;
+					drawBarRect(hpRegion, frameSprintf("%dhp", unit->hp), unit->hp / (float)unit->info->maxHp, 0xFF008000, 0x90FFFFFF);
+
+					Rect mpRegion = hpRegion;
+					mpRegion.y += mpRegion.height;
+					drawBarRect(mpRegion, frameSprintf("%dmp", unit->mp), unit->mp / (float)unit->info->maxMp, 0xFF000080, 0x90FFFFFF);
+				}
+
+				unit->couldBeTargettedThisFrame = false;
+				cursor->x += globals->characterCardSize.x + cardPadding;
+			}
+
+			{ /// Effects 2d
+				for (int i = 0; i < game->effectsNum; i++) {
+					Effect *effect = &game->effects[i];
+
+					char *text = NULL;
+					int color = 0xFFFFFFFF;
+					bool bounceText = false;
+					bool slideText = false;;
+					if (effect->type == EFFECT_DAMAGE) {
+						text = frameSprintf("-%d", effect->intValue);
+						color = 0xFFFF3030;
+						bounceText = true;
+					} else if (effect->type == EFFECT_GAIN_HP) {
+						text = frameSprintf("+%d", effect->intValue);
+						color = 0xFF30FF30;
+						slideText = true;
+					} else if (effect->type == EFFECT_LOSE_MP) {
+						text = frameSprintf("-%d", effect->intValue);
+						color = 0xFF3030FF;
+						slideText = true;
+					} else if (effect->type == EFFECT_GAIN_MP) {
+						text = frameSprintf("+%d", effect->intValue);
+						color = 0xFF303080;
+						slideText = true;
+					} else if (effect->type == EFFECT_DODGE) {
+						text = frameSprintf("Dodged");
+						color = 0xFF808080;
+						slideText = true;
+					}
+
+					if (text) {
+						Unit *unit = getUnit(effect->unitId);
+
+						Vec2 position = v2();
+						Vec2 size = getTextSize(game->defaultFont, text);
+						position = effect->position - size/2;
+
+						if (bounceText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, BOUNCE_OUT);
+						if (slideText) position.y += clampMap(effect->time, 0, 0.5, 0, 20, QUAD_OUT);
+
+						if (unit) {
+							position += getCenter(unit->cardRect); 
+							Vec2 forward = unit->ally ? v2(0, -1) : v2(0, 1);
+							position += forward * globals->characterCardSize*0.5;
+						}
+
+						drawRect(makeRect(position, size), 0x20000000);
+						drawText(text, newDrawTextProps(game->defaultFont, color, position));
+					}
+				}
+			} ///
+		} ///
+
+		{ /// Update spells
+			if (game->spellQueueNum > 0) {
+				Spell *spell = &game->spellQueue[0];
+				bool complete = false;
+
+				auto spellTimeJustPassed = [](float amount)->bool {
+					if (amount == 0) return game->spellTime == 0;
+					if (game->spellTime >= amount && game->prevSpellTime < amount) return true;
+					return false;
+				};
+
+				Unit *src = getUnit(spell->srcId);
+				Unit *dest = getUnit(spell->destId);
+
+				float baseSpellTime = game->baseSpellTime;
+
+				if (
+					spell->type == SPELL_HERO_ATTACK ||
+					spell->type == SPELL_SMALL_ATTACK ||
+					spell->type == SPELL_MEDIUM_ATTACK ||
+					spell->type == SPELL_LARGE_ATTACK ||
+					spell->type == SPELL_SUMMONER_ATTACK
+				) {
+					if (game->spellTime == 0) dealDamage(src, dest, spell->info->damage);
+				} else if (spell->type == SPELL_STORM_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.50)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+				} else if (spell->type == SPELL_QUICK_ATTACK) {
+					bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
+					game->spellImmNeverMisses = true;
+					if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/2);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/2);
+					game->spellImmNeverMisses = oldSpellImmNeverMisses;
+				} else if (spell->type == SPELL_WIDE_STRIKE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						int destIndex = -1;
+						for (int i = 0; i < game->unitsNum; i++) {
+							if (&game->units[i] == dest) destIndex = i;
+						}
+						Unit *underDest = NULL;
+						if (destIndex > 0) {
+							underDest = &game->units[destIndex-1];
+							if (underDest->ally != dest->ally) underDest = NULL;
+							if (isHidden(underDest)) underDest = NULL;
+						}
+						Unit *overDest = NULL;
+						if (destIndex < game->unitsNum-1) {
+							overDest = &game->units[destIndex+1];
+							if (overDest->ally != dest->ally) overDest = NULL;
+							if (isHidden(overDest)) overDest = NULL;
+						}
+						dealDamage(src, dest, spell->info->damage);
+						if (underDest) dealDamage(src, underDest, spell->info->damage);
+						if (overDest) dealDamage(src, overDest, spell->info->damage);
+					}
+				} else if (spell->type == SPELL_COMBO_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						Buff *comboBuff = getBuff(dest, BUFF_COMBO);
+						if (!comboBuff) comboBuff = giveBuff(dest, BUFF_COMBO, 1);
+						if (comboBuff) {
+							comboBuff->intUserData++;
+							comboBuff->turns++;
+							dealDamage(src, dest, spell->info->damage * comboBuff->intUserData);
+						} else {
+							dealDamage(src, dest, spell->info->damage);
+						}
+					}
+				} else if (spell->type == SPELL_EARTHQUAKE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							if (unit->ally == src->ally) continue;
+							dealDamage(src, unit, spell->info->damage);
+							giveBuff(unit, BUFF_QUAKED, 2);
+						}
+					}
+				} else if (spell->type == SPELL_PHYS_UP) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							if (unit->ally == src->ally) {
+								giveBuff(unit, BUFF_PHYS_UP, 2);
+							}
+						}
+					}
+				} else if (spell->type == SPELL_BODY_BLOCK) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_BODY_BLOCKING, 2);
+				} else if (spell->type == SPELL_DRAW_DEFAULT) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_DEFAULT;
+				} else if (spell->type == SPELL_DRAW_VAMPIRE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						src->weapon = WEAPON_VAMPIRE;
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							giveBuff(unit, BUFF_BLEED, 3);
+						}
+					}
+				} else if (spell->type == SPELL_DRAW_BIG_DAMAGE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) src->weapon = WEAPON_BIG_DAMAGE;
+				} else if (spell->type == SPELL_DRAW_MAGIC_RESIST) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						src->weapon = WEAPON_MAGIC_RESIST;
+						Unit *p2 = getUnitByType(UNIT_PLAYER2);
+						loseMp(p2, spell->info->mp);
+					}
+				} else if (spell->type == SPELL_DRAW_LOW_HP) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						src->weapon = WEAPON_LOW_HP;
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							if (unit->ally) gainHp(unit, 100);
+						}
+					}
+				} else if (spell->type == SPELL_DRAW_DODGE) {
+					if (spellTimeJustPassed(baseSpellTime*0.3)) {
+						src->weapon = WEAPON_DODGE;
+					} else if (spellTimeJustPassed(baseSpellTime*0.6)) {
+						dealDamage(src, dest, spell->info->damage/2);
+					} else if (spellTimeJustPassed(baseSpellTime*0.9)) {
+						dealDamage(src, dest, spell->info->damage/2);
+					}
+				} else if (spell->type == SPELL_DRAW_POISON) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						src->weapon = WEAPON_POISON;
+						giveBuff(src, BUFF_POISON, 3);
+					}
+				} else if (spell->type == SPELL_DRAW_GLASS) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						dealDamage(src, dest, spell->info->damage);
+						src->glassBroken = true;
+					}
+				} else if (spell->type == SPELL_SWIPE) {
+					if (spellTimeJustPassed(baseSpellTime*0.3)) {
+						dealDamage(src, dest, spell->info->damage/2);
+					}
+					if (spellTimeJustPassed(baseSpellTime*0.6)) {
+						int damage = spell->info->damage/2;
+						for (int i = 0; i < countBuffs(src, BUFF_ADD_POISON); i++) giveBuff(dest, BUFF_POISON, 10);
+						for (int i = 0; i < countBuffs(src, BUFF_ADD_MANA_SIPHON); i++) gainMp(src, damage * 0.01);
+						for (int i = 0; i < countBuffs(src, BUFF_ADD_ATTACK_REDUCTION); i++) giveBuff(dest, BUFF_ATTACK_REDUCTION, 2);
+						for (int i = 0; i < countBuffs(src, BUFF_ADD_DEFENSE_REDUCTION); i++) giveBuff(dest, BUFF_DEFENSE_REDUCTION, 2);
+						dealDamage(src, dest, damage);
+					}
+
+					if (spellTimeJustPassed(baseSpellTime*0.9)) {
+						removeAllBuffsOfType(src, BUFF_ADD_POISON);
+						removeAllBuffsOfType(src, BUFF_ADD_MANA_SIPHON);
+						removeAllBuffsOfType(src, BUFF_ADD_ATTACK_REDUCTION);
+						removeAllBuffsOfType(src, BUFF_ADD_DEFENSE_REDUCTION);
+					}
+				} else if (spell->type == SPELL_ADD_POISON) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_POISON, -1);
+				} else if (spell->type == SPELL_ADD_MANA_SIPHON) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_MANA_SIPHON, -1);
+				} else if (spell->type == SPELL_ADD_ATTACK_REDUCTION) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_ATTACK_REDUCTION, -1);
+				} else if (spell->type == SPELL_ADD_DEFENSE_REDUCTION) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_ADD_DEFENSE_REDUCTION, -1);
+				} else if (spell->type == SPELL_HEAL) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(dest, spell->info->damage);
+				} else if (spell->type == SPELL_HEAL2) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							if (unit->ally) gainHp(unit, spell->info->damage);
+						}
+					}
+				} else if (spell->type == SPELL_RESURRECT) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						if (dest->hp <= 0) {
+							dest->hp = dest->info->maxHp;
+						} else {
+							giveBuff(dest, BUFF_RELIFE, -1);
+						}
+					}
+				} else if (spell->type == SPELL_GIVE_MANA) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						int mp = 512;
+						for (int i = 0; i < src->giveManaCastCount; i++) mp /= 2;
+						gainMp(dest, mp);
+						src->giveManaCastCount++;
+					}
+				} else if (spell->type == SPELL_ANTI_BUFF) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_ANTI_BUFF, 2);
+				} else if (spell->type == SPELL_MOON_STRIKE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						Buff *buff = giveBuff(src, BUFF_AT_MOON, -1);
+						if (buff) buff->intUserData = dest->id;
+					}
+				} else if (spell->type == SPELL_MOON_STRIKE_RAID) {
+					if (spellTimeJustPassed(baseSpellTime*0.4)) dealDamage(src, dest, spell->info->damage/5);
+					if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/5);
+					if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/5);
+					if (spellTimeJustPassed(baseSpellTime*0.7)) dealDamage(src, dest, spell->info->damage/5);
+					if (spellTimeJustPassed(baseSpellTime*0.8)) dealDamage(src, dest, spell->info->damage/5);
+				} else if (spell->type == SPELL_LIGHTNING) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->ally) continue;
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							dealDamage(src, unit, spell->info->damage);
+						}
+					}
+				} else if (spell->type == SPELL_ICE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						giveBuff(dest, BUFF_FROZEN, 1);
+						dealDamage(src, dest, spell->info->damage);
+					}
+				} else if (spell->type == SPELL_SLEEP) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) gainHp(src, 1000);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) src->asleep = true;
+				} else if (spell->type == SPELL_WAKE_UP) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) src->asleep = false;
+				} else if (spell->type == SPELL_FOCUS) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) giveBuff(src, BUFF_FOCUS, 3);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) src->asleep = false;
+				} else if (spell->type == SPELL_DREAM) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) gainHp(src, src->info->maxHp);
+				} else if (spell->type == SPELL_VISUALIZE) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) giveBuff(src, BUFF_VISUALIZE, 3);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) src->asleep = false;
+				} else if (spell->type == SPELL_STEALTH) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(src, BUFF_STEALTHED, 2);
+				} else if (spell->type == SPELL_RE_STEALTH) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						removeAllBuffsOfType(src, BUFF_STEALTHED);
+						giveBuff(src, BUFF_STEALTHED, 2);
+					}
+				} else if (spell->type == SPELL_STEALTH_WEAPON_SWITCH) {
+				} else if (spell->type == SPELL_STEALTH_REFILL) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) refillFlasks(src);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) removeAllBuffsOfType(src, BUFF_STEALTHED);
+				} else if (spell->type == SPELL_STEALTH_MARK) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							for (int i = 0; i < game->unitsNum; i++) {
+								Unit *unit = &game->units[i];
+								if (unit->ally == src->ally) continue;
+								if (unit->hp <= 0) continue;
+								if (isHidden(unit)) continue;
+
+								if (getBuff(unit, BUFF_BLEED)) giveBuff(unit, BUFF_MARKED, 4);
+							}
+						}
+					}
+					if (spellTimeJustPassed(baseSpellTime*0.75)) removeAllBuffsOfType(src, BUFF_STEALTHED);
+				} else if (spell->type == SPELL_STEALTH_SNIPE) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) removeAllBuffsOfType(src, BUFF_STEALTHED);
+				} else if (spell->type == SPELL_SMALL_ETHER) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
+				} else if (spell->type == SPELL_LARGE_ETHER) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) gainMp(dest, spell->info->damage);
+				} else if (spell->type == SPELL_CREATE_SHIELD) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SHIELD, -1);
+				} else if (spell->type == SPELL_SHIELD_BLAST) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						dealDamage(src, dest, spell->info->damage);
+						for (int i = 0; i < 5; i++) {
+							Buff *buff = getBuff(src, BUFF_SHIELD);
+							if (buff) removeBuff(src, buff);
+						}
+					}
+				} else if (spell->type == SPELL_CREATE_2_SHIELDS) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						giveBuff(dest, BUFF_SHIELD, -1);
+						giveBuff(dest, BUFF_SHIELD, -1);
+					}
+				} else if (spell->type == SPELL_SHIELD_BUMP) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						int shields = countBuffs(src, BUFF_SHIELD);
+						dealDamage(src, dest, spell->info->damage * shields);
+					}
+				} else if (spell->type == SPELL_CREATE_FAKE_SHIELD) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_FAKE_SHIELD, -1);
+				} else if (spell->type == SPELL_TAKE_MANA) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
+				} else if (spell->type == SPELL_TAKE_MANA_BIG) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) loseMp(dest, spell->info->damage);
+				} else if (spell->type == SPELL_ACCELERATED_SLASH) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->ally == src->ally) continue;
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
+							dealDamage(src, unit, pow(2, src->accelerationCount));
+						}
+
+						src->accelerationCount++;
+					}
+				} else if (spell->type == SPELL_STUDENT_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.3)) dealDamage(src, dest, spell->info->damage/2);
+					if (spellTimeJustPassed(baseSpellTime*0.6)) dealDamage(src, dest, spell->info->damage/2);
+				} else if (spell->type == SPELL_TEACHER_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
+				} else if (spell->type == SPELL_TEACHER_TEACHER_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+				} else if (spell->type == SPELL_CREATE_STUDENT) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_STUDENT);
+				} else if (spell->type == SPELL_CREATE_TEACHER) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) createUnit(UNIT_TEACHER);
+				} else if (spell->type == SPELL_MULTIHITTER_HIT) {
+					if (spellTimeJustPassed(baseSpellTime*0.25)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage/3);
+					if (spellTimeJustPassed(baseSpellTime*0.75)) dealDamage(src, dest, spell->info->damage/3);
+				} else if (spell->type == SPELL_MULTIHITTER_SPIN_UP) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_SPUN_UP, 3);
+				} else if (spell->type == SPELL_STUNNER_ATTACK) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) dealDamage(src, dest, spell->info->damage);
+				} else if (spell->type == SPELL_STUN) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_STUNNED, 1);
+				} else if (spell->type == SPELL_GAIN_TIME_TUNE_CHARGE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_TIME_TUNE_CHARGE, -1);
+				} else if (spell->type == SPELL_TIME_TUNE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						removeAllBuffsOfType(src, BUFF_TIME_TUNE_CHARGE);
+						for (int i = 0; i < game->unitsNum; i++) {
+							Unit *unit = &game->units[i];
+							if (unit->hp <= 0) continue;
+							if (unit->ally != src->ally) continue;
+							unit->extraTurns++;
+						}
+					}
+				} else if (spell->type == SPELL_VOLUME_WARNING) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) giveBuff(dest, BUFF_VOLUME_WARNING, 1);
+				} else if (spell->type == SPELL_TAKE_LIFE) {
+					if (spellTimeJustPassed(baseSpellTime*0.5)) {
+						dest->maxHpReductionPerc += 0.01;
+						int maxHp = dest->info->maxHp * (1 - dest->maxHpReductionPerc);
+						if (dest->hp > maxHp) dest->hp = maxHp;
+					}
+				} else if (spell->type == SPELL_WAIT) {
+					if (game->spellTime == 0) logf("Waiting...\n");
+				} else if (spell->type == SPELL_END_TURN) {
+					if (game->spellTime > baseSpellTime) {
+						for (int i = 0; i < src->buffsNum; i++) {
+							Buff *buff = &src->buffs[i];
+							buff->turns--;
+
+							bool oldSpellImmNeverMisses = game->spellImmNeverMisses;
+							game->spellImmNeverMisses = true;
+
+							if (buff->type == BUFF_BLEED) dealDamage(NULL, src, 500, true);
+							if (buff->type == BUFF_POISON) dealDamage(NULL, src, 100, true);
+
+							game->spellImmNeverMisses = oldSpellImmNeverMisses;
+
+							if (buff->turns == 0) {
+								arraySpliceIndex(src->buffs, src->buffsNum, sizeof(Buff), i);
+								src->buffsNum--;
+								i--;
+								continue;
+							}
+						}
+
+						logf("%s's turn is over\n", src->info->name);
+
+						src->hasTurn = false;
+						game->chosenAllyUnit = 0;
+						complete = true;
+					}
+				} else {
+					if (game->spellTime == 0) logf("%s (spellType %d) has no update loop\n", spell->info->name, spell->type);
+					if (game->spellTime > 3) complete = true;
+				}
+
+				if (game->spellTime > baseSpellTime) complete = true;
+
+				game->prevSpellTime = game->spellTime;
+				game->spellTime += elapsed;
+
+				if (complete) {
+					arraySpliceIndex(game->spellQueue, game->spellQueueNum, sizeof(Spell), 0);
+					game->spellQueueNum--;
+					game->spellTime = 0;
+					game->prevSpellTime = 0;
+				}
+			}
+		} ///
+
+		{ /// Remove dead units
+			if (game->spellQueueNum == 0) {
+				for (int i = 0; i < game->unitsNum; i++) {
+					Unit *unit = &game->units[i];
+					if (unit->ally) continue;
+					if (unit->hp <= 0) {
+						arraySpliceIndex(game->units, game->unitsNum, sizeof(Unit), i);
+						game->unitsNum--;
+						i--;
+						continue;
+					}
+				}
+			}
+		} ///
+
+		{ /// Unit frame loop
+			for (int i = 0; i < game->unitsNum; i++) {
+				Unit *unit = &game->units[i];
+				for (int i = 0; i < unit->buffsNum; i++) {
+					Buff *buff = &unit->buffs[i];
+					buff->time += elapsed;
+				}
+			}
+		} ///
+
+		{ /// Update effects
+			for (int i = 0; i < game->effectsNum; i++) {
+				Effect *effect = &game->effects[i];
+
+				bool complete = false;
+				float maxTime = 3;
+
+				if (effect->type == EFFECT_DAMAGE) {
+				} else if (effect->type == EFFECT_LOSE_MP) {
+				} else if (effect->type == EFFECT_DODGE) {
+				}
+
+				effect->time += elapsed;
+				if (effect->time > maxTime) complete = true;
+
+				if (complete) {
+					arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
+					game->effectsNum--;
 					i--;
 					continue;
 				}
 			}
-		}
-	} ///
+		} ///
+	}
 
-	{ /// Unit frame loop
-		for (int i = 0; i < game->unitsNum; i++) {
-			Unit *unit = &game->units[i];
-			for (int i = 0; i < unit->buffsNum; i++) {
-				Buff *buff = &unit->buffs[i];
-				buff->time += elapsed;
-			}
-		}
-	} ///
-
-	{ /// Update effects
-		for (int i = 0; i < game->effectsNum; i++) {
-			Effect *effect = &game->effects[i];
-
-			bool complete = false;
-			float maxTime = 3;
-
-			if (effect->type == EFFECT_DAMAGE) {
-			} else if (effect->type == EFFECT_LOSE_MP) {
-			} else if (effect->type == EFFECT_DODGE) {
-			}
-
-			effect->time += elapsed;
-			if (effect->time > maxTime) complete = true;
-
-			if (complete) {
-				arraySpliceIndex(game->effects, game->effectsNum, sizeof(Effect), i);
-				game->effectsNum--;
-				i--;
-				continue;
-			}
-		}
-	} ///
+	game->stateTime += elapsed;
 
 	{ /// Tooltip
 		pushPass(overlayPass);
@@ -2062,6 +2212,7 @@ Spell *castSpell(Unit *src, Unit *dest, SpellType type) {
 bool isHidden(Unit *unit) {
 	if (unit == NULL) return false;
 	if (getBuff(unit, BUFF_AT_MOON)) return true;
+	if (getBuff(unit, BUFF_STEALTHED)) return true;
 	return false;
 }
 
@@ -2070,6 +2221,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 
 	float damageMulti = 1;
 	float damageAddition = 0;
+	float hitChance = 1;
 
 	if (src) {
 		for (int i = 0; i < src->buffsNum; i++) {
@@ -2103,16 +2255,16 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 	for (int i = 0; i < dest->buffsNum; i++) {
 		Buff *buff = &dest->buffs[i];
 		if (!isMagic && buff->type == BUFF_QUAKED) damageMulti *= 2;
+		if (!isMagic && buff->type == BUFF_MARKED) damageMulti *= 2;
 		if (buff->type == BUFF_DEFENSE_REDUCTION) damageMulti *= 2;
+		if (buff->type == BUFF_VISUALIZE) hitChance *= 1 - 0.5; 
 	}
 
-	float dodgeChance = dest->info->dodgeChance;
+	if (dest->weapon == WEAPON_DODGE) hitChance *= 1 - 0.1;
 
-	if (dest->weapon == WEAPON_DODGE) dodgeChance += 0.1;
-
-	if (game->spellImmNeverMisses) dodgeChance = 0;
-
-	if (rndFloat(0, 1) < dodgeChance) {
+	if (game->spellImmNeverMisses) hitChance = 1;
+	if (src && getBuff(src, BUFF_FOCUS)) hitChance = 1;
+	if (!rndPerc(hitChance)) {
 		damageMulti = 0;
 		createEffect(EFFECT_DODGE, dest);
 	}
@@ -2208,6 +2360,13 @@ void loseMp(Unit *unit, int amount) {
 
 	Effect *effect = createEffect(EFFECT_LOSE_MP, unit);
 	effect->intValue = amount;
+}
+
+void refillFlasks(Unit *unit) {
+	if (unit->type == UNIT_PLAYER2) {
+		unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
+		unit->spellsAvailableAmounts[unit->spellsAvailableNum-1] = 1;
+	}
 }
 
 Buff *getBuff(Unit *unit, BuffType type) {

@@ -45,15 +45,19 @@ Players have 10000hp and 1000mp
 		- Drop/Pick up time gem 2
 	- Wish: (Granted at the end of the round)
 		- Wish for health (gives both players 2000hp)
-		- Wish for safety (gives both players x2 defence phys/magic, for 3 turn)
+		- Wish for safety (gives both players x2 defense phys/magic, for 3 turn)
 		- Wish for power (gives both player gain x2 attack for 1 turn)
-	- Dream, gains 1000hp
-		- Haste, only if visualized, wake up instantly, 50% dodge chance for 2 turns
-		? Deep dream, 2000hp
-		- Visualize, power up, 2x damage for 2 turns
-		- Stealth, hide for 1 turn
-		- Fast weapon switch
-		- Refill flasks
+	- Sleep, gains 1000hp
+		- Focus, wake up, never miss for 3 turns
+		- Dream, 10000hp
+		- Visualize, 50% dodge chance for 3 turns
+		- Stealth, hide for 2 turn
+			- Re-Stealth
+			- Fast weapon switch + attack
+			- Refill flasks
+			- Mark, x2 damage for 4 turns
+			- Stealth attack
+			? Rearrange enemies?
 		? Libra
 		? Judge
 	? Environment
@@ -511,3 +515,4 @@ Players have 10000hp and 1000mp
 	- P2 Ice bolt, freezed everything 400mp?
 	- Wake cancel
 	- P2 ice storm, small random damage
+	- Vulture enemy, one that retreats and appears in the next fight

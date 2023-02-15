@@ -440,7 +440,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 			destBuffer[i] = clampedS16Add(destBuffer[i], rightSample);
 			destBuffer[i+1] = clampedS16Add(destBuffer[i+1], leftSample);
 
-			if (channel->samplePosition >= sound->samplesTotal-1) {
+			if (channel->samplePosition >= sound->samplesTotal-2) {
 				if (channel->looping) {
 					channel->samplePosition = 0;
 				} else {

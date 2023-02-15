@@ -813,7 +813,7 @@ void drawGame(float elapsed) {
 
 						{
 							float oldCursorX = cursor.x;
-							cursor.x -= 50 * ngui->uiScale;
+							cursor.x -= 50 * ngui->uiScale.y;
 							auto drawPoints = [](Vec2 *cursor, float points, int color) {
 								Vec2 pipSize = v2(16, 16);
 								pipSize.x = clampMap(points, 200, 3000, 32, 6);
