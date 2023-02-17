@@ -74,6 +74,7 @@ char **frameSplitString(char *str, char *delim, int *outStringsNum);
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);
 #define ArraySplice(array, element) arraySplice((array), sizeof((array)), sizeof((array)[0]), element);
+#define ArraySpliceIndex(array, arrayMaxLength, index) arraySpliceIndex((array), (arrayMaxLength), sizeof((array)[0]), (index));
 bool arraySplice(void *array, int arraySize, int elementSize, void *element);
 bool arraySpliceIndex(void *array, int arrayMaxLength, int elementSize, int index);
 

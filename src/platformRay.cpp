@@ -38,6 +38,7 @@ struct Platform {
 	int windowHeight;
 	Vec2i windowSize;
 	float windowScaling;
+	Vec2 hackedWindowSize;
 
 	float realElapsed;
 	float elapsed;
@@ -239,6 +240,11 @@ void platformUpdate() {
 
 	platform->windowWidth = Raylib::GetScreenWidth();
 	platform->windowHeight = Raylib::GetScreenHeight();
+
+	if (!isZero(platform->hackedWindowSize)) {
+		platform->windowWidth = platform->hackedWindowSize.x;
+		platform->windowHeight = platform->hackedWindowSize.y;
+	}
 
 #ifdef __EMSCRIPTEN__
 		// float windowScaling = emscripten_get_device_pixel_ratio();
@@ -1439,6 +1445,7 @@ void popTargetTexture() {
 void setTargetTexture(RenderTexture *renderTexture) {
 	if (renderTexture == NULL) {
 		Raylib::EndTextureMode();
+		if (!isZero(platform->hackedWindowSize)) Raylib::rlViewport(0, 0, platform->hackedWindowSize.x, platform->hackedWindowSize.y);
 	} else {
 		Raylib::BeginTextureMode(renderTexture->raylibRenderTexture);
 	}
