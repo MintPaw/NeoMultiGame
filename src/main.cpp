@@ -463,6 +463,10 @@ NanoTime mainNano;
 # include "../../multiGamePrivate/src/destinyGame.cpp"
 #endif
 
+#if defined(PLAYING_swfTestGame)
+# include "swfTestGame.cpp"
+#endif
+
 #ifdef _WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else

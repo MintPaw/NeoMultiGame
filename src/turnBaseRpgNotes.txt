@@ -512,7 +512,19 @@ Players have 10000hp and 1000mp
 	- The difference between DoTs that derive damage multiplier based off current magic buffs, or the magic buffs when first cast
 	- P2 flash? Blinds enemies
 	- Moon strike should apply additions?
-	- P2 Ice bolt, freezed everything 400mp?
 	- Wake cancel
 	- P2 ice storm, small random damage
 	- Vulture enemy, one that retreats and appears in the next fight
+	- You can draw magic resist then the ally is dead, you should use that...
+	- Shield summoners don't take fake shields, I should use that...
+	- Extra spells:
+		- P1: A slash that takes mana
+		- P1: A slash that takes mana from both players
+		- P1: A slash that hurts the second player
+
+		- P2: Deep freeze, 400mp, freezes for 3 turns
+		- P2: Ice bolt, freezed everything 400mp?
+		- P2: Snowstorm, 50mp, does small damage to everything 10% chance of freezing
+		- P2: A spell that hits the 1,3,5 indices?
+		- P2: Sandstorm, 100mp, does damage to everything blinds all for 20% chance of missing
+

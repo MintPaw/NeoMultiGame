@@ -922,6 +922,8 @@ struct Swf {
 	MemoryArena *drawablesArena;
 };
 
+bool swfFreeDrawEdges = true;
+
 Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
@@ -1500,7 +1502,7 @@ Swf *loadSwf(char *path) {
 					}
 					if (placeObject->pfHasClipActions) {
 						logf("Has clip actions!\n");
-						Panic("RIP");
+						// Panic("RIP");
 					}
 
 					if (sprite->highestDepth < placeObject->depth) sprite->highestDepth = placeObject->depth;
@@ -1669,7 +1671,8 @@ Swf *loadSwf(char *path) {
 					skipBytes(&stream, controlTagHeader.length); // Nothing...
 				} else {
 					logf("Not handling control tag %d\n", controlTagHeader.type);
-					Panic("RIP");
+					skipBytes(&stream, controlTagHeader.length);
+					// Panic("RIP");
 				}
 				// logf("Parsed control flag %d\n", controlTagHeader.type);
 				byteAlign(&stream); // I dunno if I actually need this
@@ -1938,8 +1941,8 @@ Swf *loadSwf(char *path) {
 		} else if (recordHeader.type == SWF_TAG_END) {
 			break;
 		} else {
-			logf("Failed to parse code: %d, len: %d\n", recordHeader.type, recordHeader.length);
-			break;
+			logf("Failed to parse code: %d, len: %d, pos: %d\n", recordHeader.type, recordHeader.length, stream.byteIndex);
+			skipTag = true;
 		}
 
 		if (skipTag) {
@@ -1996,7 +1999,7 @@ Swf *loadSwf(char *path) {
 			SwfTagType tagType = tagPointer->header.type;
 			if (tagType == SWF_TAG_DEFINE_SHAPE) {
 				SwfShape *shape = (SwfShape *)tagPointer->tag;
-				if (shape->drawEdges) free(shape->drawEdges);
+				if (swfFreeDrawEdges && shape->drawEdges) free(shape->drawEdges);
 				for (int i = 0; i < shape->fillStylesNum; i++) {
 					FillStyle *fill = &shape->fillStyles[i];
 					if (fill->fillStyleType == FILL_STYLE_CLIPPED_BITMAP || fill->fillStyleType == FILL_STYLE_REPEATING_BITMAP) {
@@ -2063,6 +2066,7 @@ Swf *loadSwf(char *path) {
 				for (int i = 0; i < sprite->controlTagsNum; i++) {
 					ControlTag *tag = &sprite->controlTags[i];
 					if (tag->type == SWF_TAG_END) break;
+					if (frameCount == 0) break;
 
 					if (firstTagOfFrame) {
 						firstTagOfFrame = false;

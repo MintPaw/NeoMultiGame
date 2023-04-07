@@ -274,6 +274,9 @@ void updateGame() {
 			loadState("assets/states/demo.save_state");
 			game->state = GAME_PLAY;
 		}
+
+		logf("Hello\n");
+		exit(0);
 	}
 
 	if (!equal(game->size, v2(platform->windowSize))) {

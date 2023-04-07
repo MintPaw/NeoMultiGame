@@ -8,6 +8,7 @@ tags
 *.blend1
 *.hdr
 sesh
+seshTablet
 Thumbs.db
 dynaGameAssets/
 *.save_state

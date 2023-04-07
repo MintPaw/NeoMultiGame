@@ -650,7 +650,9 @@ bool skip3dShaders = false;
 
 Raylib::Color toRaylibColor(int color) { return Raylib::GetColor(argbToRgba(color)); }
 Raylib::Vector3 toRaylib(Vec3 vec) { return {vec.x, vec.y, vec.z}; }
+Raylib::Vector3 toRaylib(Vec2 vec) { return {vec.x, vec.y}; }
 Vec3 v3(Raylib::Vector3 vec) { return v3(vec.x, vec.y, vec.z); }
+Vec2 v2(Raylib::Vector2 vec) { return v2(vec.x, vec.y); }
 Raylib::Matrix toRaylib(Matrix4 matrix) {
 	Raylib::Matrix raylibMatrix = {};
 	memcpy(&raylibMatrix.m0, matrix.transpose().data, sizeof(float) * 16);
@@ -680,6 +682,7 @@ void setTextureData(Texture *texture, void *data, int width, int height, int fla
 void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, int height, int flags);
 u8 *getTextureData(RenderTexture *renderTexture, int flags=0);
 u8 *getTextureData(Texture *texture, int flags=0);
+bool writeTextureToFile(Texture *texture, char *path);
 
 void destroyTexture(Texture *texture);
 void destroyTexture(RenderTexture *renderTexture);
@@ -1127,6 +1130,19 @@ u8 *getTextureData(Texture *texture, int flags) {
 
 	Raylib::UnloadImage(raylibImage);
 	return data;
+}
+
+bool writeTextureToFile(Texture *texture, char *path) {
+	u8 *bitmapData = getTextureData(texture);
+
+	stbi_flip_vertically_on_write(true);
+	if (!stbi_write_png(frameSprintf("%s%s", filePathPrefix, path), texture->width, texture->height, 4, bitmapData, texture->width*4)) {
+		logf("Failed to write sprite sheet: %s\n", path);
+		free(bitmapData);
+		return false;
+	}
+	free(bitmapData);
+	return true;
 }
 
 void destroyTexture(Texture *texture) {

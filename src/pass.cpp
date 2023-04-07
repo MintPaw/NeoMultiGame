@@ -71,7 +71,7 @@ PassCmd *createPassCmd(Pass *pass);
 
 void initPassSystem() {
 	passSys = (PassSystem *)zalloc(sizeof(PassSystem));
-	logf("PassSystem is %.1fmb\n", (float)sizeof(PassSystem) / (float)sizeof(Megabytes(1)));
+	// logf("PassSystem is %.1fmb\n", (float)sizeof(PassSystem) / (float)sizeof(Megabytes(1)));
 }
 
 Pass *createPass() {

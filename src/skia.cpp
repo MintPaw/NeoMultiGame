@@ -1,4 +1,3 @@
-#define DO_DRAW_AFTER_CONTEXT_SWITCH 1
 #define USE_MSAA_RENDERBUFFER 1
 
 struct VDrawPaletteSwap {
@@ -195,7 +194,7 @@ SpriteTransform *getSpriteTransform(SpriteTransform *transforms, int *transforms
 	initSpriteTransforms(varName, count); \
 	int varNumName = 0;
 
-void drawSwfAnalyzer();
+void drawSwfAnalyzer(char *basePath, Vec2 screenSize);
 
 /// FUNCTIONS ^
 
@@ -329,21 +328,14 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 }
 
 void drawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse) {
+	if (!sprite) logf("Drawing null sprite\n");
 	genDrawSprite(sprite, transforms, transformsNum, recurse, &skiaSys->immVDrawCommandsList);
-#if !DO_DRAW_AFTER_CONTEXT_SWITCH
-	execCommands(&skiaSys->immVDrawCommandsList);
-	skiaSys->immVDrawCommandsList.cmdsNum = 0;
-#endif
 }
 
 void drawShape(SwfShape *shape, Matrix3 matrix, DrawShapeProps props) {
 	pushSpriteMatrix(&skiaSys->immVDrawCommandsList, matrix);
 	genDrawShape(shape, props, &skiaSys->immVDrawCommandsList);
 	popSpriteMatrix(&skiaSys->immVDrawCommandsList);
-#if !DO_DRAW_AFTER_CONTEXT_SWITCH
-	execCommands(&skiaSys->immVDrawCommandsList);
-	skiaSys->immVDrawCommandsList.cmdsNum = 0;
-#endif
 }
 
 VDrawCommand *createCommand(VDrawCommandsList *cmdList, VDrawCommandType type) {
@@ -981,6 +973,7 @@ void clearSkia(int color) {
 }
 
 void startSkiaFrame() {
+	processBatchDraws();
 	if (skiaSys->matrixStackNum != 1) logf("Matrix stack mismatch\n");
 
 	skiaSys->canvas->clear(0);
@@ -991,10 +984,9 @@ void endSkiaFrame() {
 		setRendererBlendMode(BLEND_SKIA);
 
 		skiaSys->grDirectContext->resetContext();
-#if DO_DRAW_AFTER_CONTEXT_SWITCH
+
 		execCommands(&skiaSys->immVDrawCommandsList);
 		skiaSys->immVDrawCommandsList.cmdsNum = 0;
-#endif
 
 		skiaSys->grDirectContext->flushAndSubmit();
 
@@ -1017,10 +1009,8 @@ void endSkiaFrame() {
 		popTargetTexture();
 
 	} else {
-#if DO_DRAW_AFTER_CONTEXT_SWITCH
 		execCommands(&skiaSys->immVDrawCommandsList);
 		skiaSys->immVDrawCommandsList.cmdsNum = 0;
-#endif
 
 		SkImageInfo info = {};
 		size_t rowBytes = 0;
@@ -1088,7 +1078,7 @@ SpriteTransform *getSpriteTransform(SpriteTransform *transforms, int *transforms
 	return transform;
 };
 
-void drawSwfAnalyzer() {
+void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 	struct SwfASys {
 		char inputPath[PATH_MAX_LEN];
 		Swf *swf;
@@ -1117,12 +1107,17 @@ void drawSwfAnalyzer() {
 
 		aSys->shapeTexture = createRenderTexture(512, 512);
 		aSys->shapeScale = 1;
-		strcpy(aSys->inputPath, "assets/swf/Shared.swf");
+
+		if (!basePath) basePath = "assets/swf/Shared.swf";
+		strcpy(aSys->inputPath, basePath);
 	}
 
 	ImGui::InputText("Input swf", aSys->inputPath, PATH_MAX_LEN);
 	ImGui::SameLine();
-	if (ImGui::Button("Analyze")) aSys->swf = loadSwf(aSys->inputPath);
+	if (ImGui::Button("Analyze")) {
+		swfFreeDrawEdges = false;
+		aSys->swf = loadSwf(aSys->inputPath);
+	}
 	if (!aSys->swf) {
 		// if (ImGui::Button("Shared.swf")) strcpy(aSys->inputPath, "assets/swf/Shared.swf");
 	}
@@ -1130,7 +1125,7 @@ void drawSwfAnalyzer() {
 	Swf *swf = aSys->swf;
 	if (swf && swf->allSpritesNum > 0) {
 
-		ImGui::BeginChild("spritesListChild", ImVec2(200, 500), true, 0); 
+		ImGui::BeginChild("spritesListChild", ImVec2(screenSize.x*0.15, screenSize.y*0.5), true, 0); 
 		ImGui::InputText("Filter", aSys->spriteFilter, PATH_MAX_LEN);
 		ImGui::Checkbox("Show unnamed", &aSys->showUnnamedSprites);
 		for (int i = 0; i < swf->allSpritesNum; i++) {
@@ -1143,13 +1138,24 @@ void drawSwfAnalyzer() {
 			}
 			if (ImGui::Selectable(name, aSys->selectedSprite == i)) {
 				aSys->selectedSprite = i;
+				aSys->selectedSpriteFrame = 0;
+				SwfDrawable *drawable = sprite->frames[0].depths;
+
+				if (drawable->type == SWF_DRAWABLE_SHAPE) {
+					for (int i = 0; i < aSys->swf->allShapesNum; i++) {
+						SwfShape *shape = aSys->swf->allShapes[i];
+						if (shape == drawable->shape) {
+							aSys->selectedShape = i;
+						}
+					}
+				}
 			}
 		}
 
 		ImGui::EndChild();
 		ImGui::SameLine();
 
-		ImGui::BeginChild("spriteChild", ImVec2(400, 500), true, 0); 
+		ImGui::BeginChild("spriteChild", ImVec2(screenSize.x*0.2, screenSize.y*0.5), true, 0); 
 		SwfSprite *sprite = swf->allSprites[aSys->selectedSprite];
 
 		ImGui::InputInt("Frame", &aSys->selectedSpriteFrame);
@@ -1262,7 +1268,7 @@ void drawSwfAnalyzer() {
 		}
 
 		ImGui::SameLine();
-		if (ImGui::Button("Record skp")) aSys->recordFrame = true;
+		// if (ImGui::Button("Record skp")) aSys->recordFrame = true;
 
 		{ /// Drawables
 			SwfDrawable *drawables = NULL;
@@ -1326,9 +1332,9 @@ void drawSwfAnalyzer() {
 
 		ImGui::SameLine();
 		{ /// Shapes
-			ImGui::BeginChild("shapesChild", ImVec2(400, 500), true, 0); 
+			ImGui::BeginChild("shapesChild", ImVec2(screenSize.x*0.2, screenSize.y*0.5), true, 0); 
 			SwfShape *shape = aSys->swf->allShapes[aSys->selectedShape];
-#if 1
+#if 0
 			for (int i = 0; i < shape->subShapesNum; i++) {
 				SwfSubShape *subShape = &shape->subShapes[i];
 				ImGui::Text("Fill style index: %d", subShape->fillStyleIndex);
@@ -1360,6 +1366,8 @@ void drawSwfAnalyzer() {
 
 			guiTexture(aSys->shapeTexture);
 			Rect bounds = toRect(shape->shapeBounds);
+			ImGui::DragFloat2("shapeOffset", &aSys->shapeOffset.x);
+			ImGui::DragFloat("shapeScale", &aSys->shapeScale, 0.01);
 			ImGui::Text("Bounds: %.1f %.1f %.1f %.1f", bounds.x, bounds.y, bounds.width, bounds.height);
 			ImGui::Text("ShapeId: %d", shape->shapeId);
 			if (ImGui::TreeNode("Line styles")) {

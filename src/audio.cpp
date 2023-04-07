@@ -60,7 +60,7 @@ struct Channel {
 
 struct Audio {
 	bool disabled;
-	bool htmlAllowedAudio;
+	bool autoConsumeBuffer;
 
 	Channel channels[CHANNELS_MAX];
 	int channelsNum;
@@ -271,9 +271,16 @@ void updateAudio(float elapsed) {
 
 #if defined(__EMSCRIPTEN__)
 	if (platform->frameCount % 8 == 0) {
-		EM_ASM({
-			if (AL.currentCtx.audioCtx.state == "suspended") AL.currentCtx.audioCtx.resume();
+		int playing = EM_ASM_INT({
+			if (AL.currentCtx.audioCtx.state == "suspended") {
+				return 0;
+				AL.currentCtx.audioCtx.resume();
+			} else {
+				return 1;
+			}
 		});
+
+		audio->autoConsumeBuffer = !playing;
 	}
 #endif
 
@@ -291,6 +298,7 @@ void updateAudio(float elapsed) {
 	int samplesToAdd = elapsed * SAMPLE_RATE * 2;
 	if (samplesToAdd > audio->sampleBufferLimit) samplesToAdd = audio->sampleBufferLimit;
 	mixSoundInToGlobalBuffer(samplesToAdd);
+	if (audio->autoConsumeBuffer) audio->storedSamplesPosition = 0;
 
 	// logf("%d\n", samplesToAdd);
 
@@ -463,6 +471,7 @@ void mixSoundInToGlobalBuffer(int samplesToAdd) {
 		// logf("Resizing from %d to %d\n", audio->storedSamplesMax, maxSamplesNeeded);
 		audio->storedSamples = (s16 *)resizeArray(audio->storedSamples, sizeof(s16), audio->storedSamplesMax, maxSamplesNeeded);
 		audio->storedSamplesMax = maxSamplesNeeded;
+		if (audio->storedSamplesMax > 1 * SAMPLE_RATE) logf("storedSamplesMax is %d???\n", audio->storedSamplesMax);
 	}
 #else
 	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;

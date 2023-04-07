@@ -309,7 +309,6 @@ Vec2 drawText(Font *font, const char *text, Vec2 position, int color, float maxW
 	props.scale = scale;
 	props.skipDraw = skipDraw;
 	props.scale = scale;
-	props.lineSpacingScale = 1;
 	return drawText(text, props);
 }
 
@@ -319,6 +318,7 @@ DrawTextProps newDrawTextProps() {
 	props.color = 0xFF000000;
 	props.maxWidth = 9999;
 	props.scale = v2(1, 1);
+	props.lineSpacingScale = 1;
 	return props;
 }
 

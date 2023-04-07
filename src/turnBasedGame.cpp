@@ -1495,13 +1495,16 @@ void updateGame() {
 							buffRect.y += buffRect.height;
 						}
 
+						char *buffName = buff->info->name;
+						if (buff->type == BUFF_FAKE_SHIELD) buffName = game->buffTypeInfos[BUFF_SHIELD].name;
+
 						if (contains(buffRect, game->mouse)) {
-							game->tooltip = frameSprintf("%s", buff->info->name);
+							game->tooltip = frameSprintf("%s", buffName);
 							if (buff->turns > 0) game->tooltip = frameSprintf("%s\n%d turns left", game->tooltip, buff->turns);
 						}
 
 						drawRect(inflatePerc(buffRect, -0.1), 0xFF008000);
-						drawTextInRect(buff->info->name, newDrawTextProps(game->defaultFont, 0xFF000000), buffRect, v2(0.5, 0.5));
+						drawTextInRect(buffName, newDrawTextProps(game->defaultFont, 0xFF000000), buffRect, v2(0.5, 0.5));
 
 						buffRect.x += buffRect.width;
 					}
@@ -1844,14 +1847,12 @@ void updateGame() {
 				} else if (spell->type == SPELL_STEALTH_MARK) {
 					if (spellTimeJustPassed(baseSpellTime*0.25)) {
 						for (int i = 0; i < game->unitsNum; i++) {
-							for (int i = 0; i < game->unitsNum; i++) {
-								Unit *unit = &game->units[i];
-								if (unit->ally == src->ally) continue;
-								if (unit->hp <= 0) continue;
-								if (isHidden(unit)) continue;
+							Unit *unit = &game->units[i];
+							if (unit->ally == src->ally) continue;
+							if (unit->hp <= 0) continue;
+							if (isHidden(unit)) continue;
 
-								if (getBuff(unit, BUFF_BLEED)) giveBuff(unit, BUFF_MARKED, 4);
-							}
+							if (getBuff(unit, BUFF_BLEED)) giveBuff(unit, BUFF_MARKED, 4);
 						}
 					}
 					if (spellTimeJustPassed(baseSpellTime*0.75)) removeAllBuffsOfType(src, BUFF_STEALTHED);
@@ -1869,6 +1870,7 @@ void updateGame() {
 						dealDamage(src, dest, spell->info->damage);
 						for (int i = 0; i < 5; i++) {
 							Buff *buff = getBuff(src, BUFF_SHIELD);
+							if (!buff) buff = getBuff(src, BUFF_FAKE_SHIELD);
 							if (buff) removeBuff(src, buff);
 						}
 					}
@@ -2051,7 +2053,12 @@ void updateGame() {
 			Vec2 size = getTextSize(game->tooltip, props);
 			props.position.x = game->mouse.x;
 			props.position.y = game->mouse.y - size.y;
-			drawRect(makeRect(props.position, size), 0xC0000000);
+			Rect rect = makeRect(props.position, size);
+			if (rect.x < 0) rect.x = 0;
+			if (rect.x + rect.width > game->size.x) rect.x = game->size.x - rect.width;
+			if (rect.y + rect.height > game->size.y) rect.y = game->size.y - rect.height;
+			props.position = getPosition(rect);
+			drawRect(rect, 0xC0000000);
 			drawText(game->tooltip, props);
 			game->tooltip = NULL;
 		}
@@ -2221,7 +2228,7 @@ void dealDamage(Unit *src, Unit *dest, int damageAmount, bool isMagic) {
 
 	float damageMulti = 1;
 	float damageAddition = 0;
-	float hitChance = 1;
+	float hitChance = 1 - dest->info->dodgeChance;
 
 	if (src) {
 		for (int i = 0; i < src->buffsNum; i++) {
@@ -2595,14 +2602,15 @@ void nextWave() {
 		auto inputRandomness = []() {
 			Unit *unit = NULL;
 			unit = createUnit(UNIT_SMALL_SHIELDSTER);
-			unit = createUnit(UNIT_SMALL_SHIELDSTER);
 			unit = createUnit(UNIT_SUPER_SHIELDSTER);
 			unit = createUnit(UNIT_SMALL_SHIELDSTER);
+			unit = createUnit(UNIT_SUPER_SHIELDSTER);
 			unit = createUnit(UNIT_SMALL_SHIELDSTER);
 		};
 		auto outputRandomness = []() {
 			Unit *unit = NULL;
 			unit = createUnit(UNIT_FAKE_SHIELDSTER);
+			unit = createUnit(UNIT_SUPER_SHIELDSTER);
 			unit = createUnit(UNIT_SUPER_SHIELDSTER);
 			unit = createUnit(UNIT_FAKE_SHIELDSTER);
 		};
@@ -2642,12 +2650,13 @@ void nextWave() {
 		unit = createUnit(UNIT_ACCELERATOR);
 		unit = createUnit(UNIT_ACCELERATOR);
 		unit = createUnit(UNIT_ACCELERATOR);
+		unit = createUnit(UNIT_SMALL_SHIELDSTER);
 		NextWaveDef();
-		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
 		unit = createUnit(UNIT_ACCELERATOR);
 		unit = createUnit(UNIT_ACCELERATOR);
 		unit = createUnit(UNIT_ACCELERATOR);
-		unit = createUnit(UNIT_SMALL_SHIELDSTER);
+		unit = createUnit(UNIT_SUPER_SHIELDSTER);
 		NextWaveDef();
 		logf("End of waves\n");
 		EndWaveDef();

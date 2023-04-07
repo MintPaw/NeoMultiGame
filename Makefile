@@ -11,7 +11,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=tower2Game
 # GAME_NAME=gladiators2Game
 # GAME_NAME=deskGame
@@ -20,6 +20,7 @@ GAME_NAME=horseGame
 # GAME_NAME=turnBasedGame
 # GAME_NAME=catCardGame
 # GAME_NAME=destinyGame
+GAME_NAME=swfTestGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -498,10 +499,14 @@ shipHorseGameToSelf:
 encodeHorseGameAudio:
 	rm -rf /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio
 	cp -r /c/Dropbox/FallowCandy/HorseProjects/raw/audio /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio
-	for file in `find /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio -type f -name "*.wav"`; do \
-		ffmpeg -i $$file -ar 44100 $${file%.*}.ogg & \
-	done; \
-	wait
+	N=32; \
+		( \
+		for file in `find /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio -type f -name "*.wav"`; do \
+		((i=i%N)); ((i++==0)) && wait ; \
+		ffmpeg -hide_banner -loglevel error -i $$file -ar 44100 $${file%.*}.ogg & \
+		done; \
+		)
+	sleep 2
 	find /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio -type f -name "*.wav" -delete
 
 encodeConcreteJungleGameAudio:
@@ -666,6 +671,31 @@ shipTestGameToSelf:
 		
 		cd /c/bin; \
 			$(SEVEN_ZIP) a -tzip selfShip.zip selfShip
+
+shipSwfTestGameToSelf:
+	$(MAKE) clean
+	$(WIN_CMD) "\
+		set GAME_NAME=swfTestGame&& \
+		set DEBUG_MODE=1&& \
+		set INTERNAL_MODE=0&& \
+		set OPTIMIZED_MODE=1&& \
+		buildSystem\$(WIN_BUILD_BAT).bat\
+		"
+	cd /c/bin; \
+		rm -rf pack; \
+		mkdir pack; \
+		cd pack; \
+		cp /c/bin/*.exe .; \
+		cp /c/bin/*.dll .; \
+		mkdir /c/bin/swfTestGame; \
+		rsync -at \
+			--exclude '__*' --exclude '*.psd' --exclude '*_baked.png' --exclude 'Lightmaps' --exclude 'LilySurface' \
+			--exclude '*.blend' --exclude '*.blend1' \
+			/c/Dropbox/MultiGame/multiGame/swfTestGameAssets/* .; \
+		rsync -a /c/bin/pack/* /c/bin/swfTestGame
+		
+		cd /c/bin; \
+			$(SEVEN_ZIP) a -tzip -mx=9 swfTestGame.zip swfTestGame
 
 shipCatsFirstGameToCat:
 	-$(MAKE) clean

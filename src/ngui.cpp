@@ -643,8 +643,7 @@ void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type)
 	char data[NGUI_STYLE_VAR_DATA_SIZE];
 	nguiGetStyleOfType(src, type, styleTypeInfo->dataType, data);
 	nguiPushStyleOfType(dest, type, styleTypeInfo->dataType, data);
-};
-
+}
 
 void nguiDraw(float elapsed) {
 	for (int i = 0; i < ngui->elementsNum; i++) { /// Splice dead elements
@@ -702,61 +701,63 @@ void nguiDraw(float elapsed) {
 
 			qsort(children, childrenNum, sizeof(NguiElement *), qsortChildrenByOrderIndex);
 
-			Vec2 prevCursor = v2();
-			Vec2 cursor = v2();
 			Vec2 childrenSize = v2();
-			NguiElement *prevChild = NULL;
-			int elementsInRow = 0;
-			float rowHeight = 0;
-			for (int i = 0; i < childrenNum; i++) { // Layout
-				NguiElement *child = children[i];
-				ngui->currentStyleStack = &child->styleStack;
+			{ /// Layout
+				Vec2 prevCursor = v2();
+				Vec2 cursor = v2();
+				NguiElement *prevChild = NULL;
+				int elementsInRow = 0;
+				float rowHeight = 0;
+				for (int i = 0; i < childrenNum; i++) {
+					NguiElement *child = children[i];
+					ngui->currentStyleStack = &child->styleStack;
 
-				child->active = false;
+					child->active = false;
 
-				bool skipCursorBump = false;
-				if (child->alive != 1) skipCursorBump = true;
-				if (child->creationTime == 0) {
-					if (prevChild && prevChild->creationTime == 0) {
-						child->position = prevCursor;
-						skipCursorBump = true;
-					} else {
-						child->position = cursor;
-					}
-				}
-
-				Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
-				Vec2 position = cursor;
-
-				if (rowHeight > elementSize.y) position.y += (rowHeight - elementSize.y)/2; //@hack Fix up y positions to be centered with previous items
-				rowHeight = MaxNum(rowHeight, elementSize.y);
-
-				if (child->alive == 1) child->position = lerp(child->position, position, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
-				Rect childRect = makeRect(child->position, elementSize) * ngui->uiScale;
-				childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale.x;
-
-				child->childRect = childRect;
-
-				childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
-				childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
-
-				Vec2 elementPadding = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_PADDING) * ngui->uiScale;
-
-				if (!skipCursorBump) {
-					elementsInRow++;
-					prevCursor = cursor;
-					if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
-						cursor.x += elementSize.x + elementPadding.x;
-					} else {
-						cursor.x = 0;
-						cursor.y += rowHeight + elementPadding.y;
-						elementsInRow = 0;
-						rowHeight = 0;
+					bool skipCursorBump = false;
+					if (child->alive != 1) skipCursorBump = true;
+					if (child->creationTime == 0) {
+						if (prevChild && prevChild->creationTime == 0) {
+							child->position = prevCursor;
+							skipCursorBump = true;
+						} else {
+							child->position = cursor;
+						}
 					}
 
+					Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
+					Vec2 position = cursor;
+
+					if (rowHeight > elementSize.y) position.y += (rowHeight - elementSize.y)/2; //@hack Fix up y positions to be centered with previous items
+					rowHeight = MaxNum(rowHeight, elementSize.y);
+
+					if (child->alive == 1) child->position = lerp(child->position, position, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
+					Rect childRect = makeRect(child->position, elementSize) * ngui->uiScale;
+					childRect.x += nguiGetStyleFloat(NGUI_STYLE_INDENT) * ngui->uiScale.x;
+
+					child->childRect = childRect;
+
+					childrenSize.x = MaxNum(childrenSize.x, childRect.x + childRect.width);
+					childrenSize.y = MaxNum(childrenSize.y, childRect.y + childRect.height);
+
+					Vec2 elementPadding = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_PADDING) * ngui->uiScale;
+
+					if (!skipCursorBump) {
+						elementsInRow++;
+						prevCursor = cursor;
+						if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
+							cursor.x += elementSize.x + elementPadding.x;
+						} else {
+							cursor.x = 0;
+							cursor.y += rowHeight + elementPadding.y;
+							elementsInRow = 0;
+							rowHeight = 0;
+						}
+
+					}
+					prevChild = child;
 				}
-				prevChild = child;
-			}
+			} ///
 
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 
@@ -772,12 +773,12 @@ void nguiDraw(float elapsed) {
 
 			windowPosition -= windowSize * nguiGetStyleVec2(NGUI_STYLE_WINDOW_PIVOT);
 
-			float windowLerpSpeed = nguiGetStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED);
-
 			if (window->creationTime <= 0.02) { // I have to do this for 2 frames for some reason
 				window->position = windowPosition;
 				window->size = windowSize;
 			}
+
+			float windowLerpSpeed = nguiGetStyleFloat(NGUI_STYLE_WINDOW_LERP_SPEED);
 			window->position = lerp(window->position, windowPosition, windowLerpSpeed);
 			window->size = lerp(window->size, windowSize, windowLerpSpeed);
 
@@ -1267,6 +1268,60 @@ int getSizeForDataType(NguiDataType dataType) {
 	if (dataType == NGUI_DATA_TYPE_PTR) size = sizeof(void *);
 	if (!size) Panic(frameSprintf("Invalid size for ngui data type %d?", dataType));
 	return size;
+}
+
+void nguiShowImGuiStylesEditor(NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax) {
+	for (int i = 0; i < *styleStacksNum; i++) {
+		ImGui::PushID(i);
+
+		bool shouldSpliceStack = false;
+		guiPushStyleColor(ImGuiCol_Button, 0xFF900000);
+		if (ImGui::Button("X")) shouldSpliceStack = true;
+		guiPopStyleColor();
+
+		ImGui::SameLine();
+		if (ImGui::ArrowButton("moveUp", ImGuiDir_Up)) {
+			if (i > 0) {
+				arraySwap(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i, i-1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::ArrowButton("moveDown", ImGuiDir_Down)) {
+			if (i < *styleStacksNum-1) {
+				arraySwap(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i, i+1);
+				ImGui::PopID();
+				continue;
+			}
+		}
+
+		ImGui::SameLine();
+		NguiNamedStyleStack *namedStyle = &styleStacks[i];
+		if (ImGui::TreeNode(frameSprintf("%d: %s###styleNode%d", i, namedStyle->name, i))) {
+			ImGui::InputText("Name", namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN);
+			nguiShowImGuiStyleEditor(&namedStyle->style);
+			ImGui::TreePop();
+		}
+
+		ImGui::PopID();
+
+		if (shouldSpliceStack) {
+			arraySpliceIndex(styleStacks, *styleStacksNum, sizeof(NguiNamedStyleStack), i);
+			*styleStacksNum = *styleStacksNum - 1;
+			i--;
+		}
+	}
+
+	if (ImGui::Button("Create custom style")) {
+		if (*styleStacksNum > styleStacksMax-1) {
+			logf("Too many custom style stacks!\n");
+		} else {
+			NguiNamedStyleStack *namedStyle = &styleStacks[*styleStacksNum];
+			*styleStacksNum = *styleStacksNum + 1;
+			memset(namedStyle, 0, sizeof(NguiNamedStyleStack));
+		}
+	}
 }
 
 void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {

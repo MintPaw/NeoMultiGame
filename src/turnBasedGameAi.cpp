@@ -95,8 +95,13 @@ void aiTakeTurn(Unit *src) {
 	} else if (src->type == UNIT_SHIELD_SUMMONER) {
 		castSpell(src, getRandomOpponent(src), SPELL_SUMMONER_ATTACK);
 	} else if (src->type == UNIT_FAKE_SHIELDSTER) {
-		castSpell(src, getRandomFriend(src), SPELL_CREATE_SHIELD);
-		castSpell(src, getRandomFriend(src), SPELL_CREATE_FAKE_SHIELD);
+		int shields = countBuffs(src, BUFF_SHIELD);
+		if (shields >= 5) {
+			castSpell(src, getRandomOpponent(src), SPELL_SHIELD_BLAST);
+		} else {
+			castSpell(src, getRandomFriend(src), SPELL_CREATE_SHIELD);
+			castSpell(src, getRandomFriend(src), SPELL_CREATE_FAKE_SHIELD);
+		}
 	} else if (src->type == UNIT_MANA_BRUISER) {
 		Unit *p1 = getUnitByType(UNIT_PLAYER1);
 		Unit *p2 = getUnitByType(UNIT_PLAYER2);
