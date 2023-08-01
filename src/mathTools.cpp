@@ -1,9 +1,12 @@
 #define MinNum(x, y) ((x) < (y) ? (x) : (y))
 #define MaxNum(x, y) ((x) > (y) ? (x) : (y))
 #define ArrayLength(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
-#define mathClamp(x, min, max) ((x) < (min) ? (min) : (x) > (max) ? (max) : (x))
-#define MathClamp(x, min, max) ((x) < (min) ? (min) : (x) > (max) ? (max) : (x))
+// #define mathClamp(x, min, max) ((x) < (min) ? (min) : (x) > (max) ? (max) : (x))
+// #define MathClamp(x, min, max) ((x) < (min) ? (min) : (x) > (max) ? (max) : (x))
 #define Clamp01(x) ((x) < (0) ? (0) : (x) > (1) ? (1) : (x))
+
+float mathClamp(float x, float min, float max) { return x < min ? min : x > max ? max : x; }
+float MathClamp(float x, float min, float max) { return x < min ? min : x > max ? max : x; }
 
 #ifndef M_PI
 # define M_PI 3.14159265359
@@ -578,6 +581,9 @@ struct Capsule3 {
 
 struct Matrix3 {
 	float data[9];
+	// ? ? ?
+	// ? ? ?
+	// x y z
 
 	void zero();
 
@@ -845,7 +851,7 @@ Rect makeRect(Vec2 xy, Vec2 size);
 Rect makeCenteredRect(Vec2 position, Vec2 size);
 Rect makeCenteredSquare(Vec2 position, float size);
 Rect getInnerRectOfAspect(Rect toFit, Vec2 aspect, Vec2 gravity=v2(0.5, 0.5));
-Rect getInnerRectOfSize(Rect toFit, Vec2 size, Vec2 gravity);
+Rect getInnerRectOfSize(Rect toFit, Vec2 size, Vec2 gravity=v2(0.5, 0.5));
 Rect inflate(Rect rect, float size);
 Rect inflate(Rect rect, Vec2 size);
 Rect inflatePerc(Rect rect, float perc);
@@ -1659,7 +1665,7 @@ float lerpDegrees(float start, float end, float perc) {
 
 	if (value >= 0 && value <= 360) return value;
 
-	return ((int)value % 360);
+	return fmod(value, 360);
 }
 
 float timePhase(float time, float freq) {
@@ -4180,6 +4186,12 @@ struct Circle {
 	float radius;
 };
 
+Circle operator* (Circle circle, float value) {
+	circle.position *= value;
+	circle.radius *= value;
+	return circle;
+}
+
 Circle makeCircle(Vec2 position, float radius);
 Circle makeCircle(Vec2 position, float radius) {
 	return {position, radius};
@@ -4513,8 +4525,8 @@ Matrix2x3 toMatrix2x3(Matrix3 matrix) {
 	return matrix2;
 }
 
-Matrix3 toMatrix3(Matrix2x3 matrix2);
-Matrix3 toMatrix3(Matrix2x3 matrix2) {
+Matrix3 mat3(Matrix2x3 matrix2);
+Matrix3 mat3(Matrix2x3 matrix2) {
 	Matrix3 matrix = mat3();
 	matrix.data[0] = matrix2.data[0];
 	matrix.data[1] = matrix2.data[1];

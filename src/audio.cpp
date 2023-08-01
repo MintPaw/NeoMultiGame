@@ -14,7 +14,7 @@
 // #define STORED_SAMPLES_MAX ((int)(SAMPLE_BUFFER_LIMIT*1.5))
 
 #define CHANNELS_MAX 512
-#define SOUNDS_MAX 4096
+#define SOUNDS_MAX 8192
 #define SAMPLE_RATE 44100
 
 struct Sound {
@@ -364,6 +364,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 	for (int i = 0; i < audio->channelsNum; i++) {
 		Channel *channel = &audio->channels[i];
 		Sound *sound = channel->sound;
+		if (channel->markedForDeletion) continue;
 
 		if (sound->samplesStreamed < sound->samplesTotal) {
 			if (!sound->samples) {
@@ -467,11 +468,13 @@ void mixSoundInToGlobalBuffer(int samplesToAdd) {
 
 #if 1
 	int maxSamplesNeeded = audio->storedSamplesPosition + samplesToAdd;
+	if (maxSamplesNeeded > 8192) maxSamplesNeeded = 8192;
 	if (maxSamplesNeeded > audio->storedSamplesMax) {
 		// logf("Resizing from %d to %d\n", audio->storedSamplesMax, maxSamplesNeeded);
 		audio->storedSamples = (s16 *)resizeArray(audio->storedSamples, sizeof(s16), audio->storedSamplesMax, maxSamplesNeeded);
 		audio->storedSamplesMax = maxSamplesNeeded;
-		if (audio->storedSamplesMax > 1 * SAMPLE_RATE) logf("storedSamplesMax is %d???\n", audio->storedSamplesMax);
+		// if (audio->storedSamplesMax > 1 * SAMPLE_RATE) logf("storedSamplesMax is %d???\n", audio->storedSamplesMax);
+		// logf("storedSamplesMax is %d???\n", audio->storedSamplesMax);
 	}
 #else
 	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;

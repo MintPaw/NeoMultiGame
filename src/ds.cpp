@@ -612,3 +612,87 @@ void destroyStringReader(StringReader *reader) {
 	free(reader->base);
 	free(reader);
 }
+
+//
+/// Resizing pool start
+//
+
+struct PoolBlock {
+	u8 *data;
+	int index;
+};
+
+struct ResizingPool {
+	PoolBlock *blocks;
+	int blocksNum;
+	int blockIndex;
+
+	int blockSize;
+};
+
+ResizingPool *createResizingPool(int blockSize);
+PoolBlock *addBlock(ResizingPool *pool, int blockSize);
+void *allocateFrom(ResizingPool *pool, int size);
+void freePool(ResizingPool *pool);
+void clearPool(ResizingPool *pool);
+
+ResizingPool *createResizingPool(int blockSize) {
+	ResizingPool *pool = (ResizingPool *)zalloc(sizeof(ResizingPool));
+	pool->blockSize = blockSize;
+
+	addBlock(pool, pool->blockSize);
+	return pool;
+}
+
+PoolBlock *addBlock(ResizingPool *pool, int blockSize) {
+	pool->blocks = (PoolBlock *)resizeArray(pool->blocks, sizeof(PoolBlock), pool->blocksNum, pool->blocksNum+1);
+	PoolBlock *block = &pool->blocks[pool->blocksNum++];
+	block->data = (u8 *)malloc(blockSize);
+	return block;
+}
+
+void *allocateFrom(ResizingPool *pool, int size) {
+	PoolBlock *block = &pool->blocks[pool->blockIndex];
+
+	for (;;) {
+		int spaceLeft = pool->blockSize - block->index;
+		if (spaceLeft >= size) break;
+
+		if (pool->blockIndex < pool->blocksNum-1) {
+			if (size > pool->blockSize) {
+				block = addBlock(pool, size);
+			} else {
+				block = addBlock(pool, pool->blockSize);
+			}
+		}
+
+		pool->blockIndex++;
+		block = &pool->blocks[pool->blockIndex];
+	}
+
+	void *ptr = block->data + block->index;
+	block->index += size;
+	memset(ptr, 0, size);
+	return ptr;
+}
+
+void clearPool(ResizingPool *pool) {
+	for (int i = 0; i < pool->blocksNum; i++) {
+		PoolBlock *block = &pool->blocks[i];
+		block->index = 0;
+	}
+}
+
+void freePool(ResizingPool *pool) {
+	for (int i = 0; i < pool->blocksNum; i++) {
+		PoolBlock *block = &pool->blocks[i];
+		free(block->data);
+	}
+
+	free(pool->blocks);
+	free(pool);
+}
+
+//
+/// Resizing pool end
+//

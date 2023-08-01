@@ -17,8 +17,10 @@
 
 #ifndef NO_SKIA
 #define SK_GL
-#include "include/core/SkCanvas.h"
+#define SK_GANESH
 #include "include/core/SkFont.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkSurface.h"
@@ -36,6 +38,9 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
+
+// #include "include/gpu/GrBackendSurface.h"
+// #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #endif
 
 
@@ -105,7 +110,12 @@ int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); 
 
 #define IncMutex(mutex) //@todo
 #define DecMutex(mutex) //@todo
-#define FORCE_INLINE //@todo
+
+#ifdef _WIN32
+# define FORCE_INLINE __forceinline
+#else 
+# define FORCE_INLINE __attribute__((always_inline)) 
+#endif
 
 
 #define STB_VORBIS_HEADER_ONLY // This matters later for audio.cpp
@@ -151,15 +161,17 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "reflectionTool.cpp"
 #include "animation.cpp"
 
+#include "saveLoadVersioning.cpp"
 #include "ngui.cpp"
 
 #ifdef SK_GL
 # include "swf.cpp"
 # include "skia.cpp"
 #endif
+#include "spriteSheets.cpp"
+#include "particles.cpp"
 
 #include "utils.cpp"
-#include "saveLoadVersioning.cpp"
 
 #else // !RAYLIB_MODE
 

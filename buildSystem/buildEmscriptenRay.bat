@@ -3,9 +3,6 @@ set PATH=%PATH%;c:\emsdk\upstream\emscripten
 set PATH=%PATH%;c:\emsdk\node\12.18.1_64bit\bin
 set PATH=%PATH%;c:\emsdk\python\3.7.4-pywin32_64bit
 set PATH=%PATH%;c:\emsdk\java\8.152_64bit\bin
-REM set PATH=%PATH%;C:\emsdk
-REM set PATH=%PATH%;C:\emsdk\node\14.18.2_64bit\bin
-REM set PATH=%PATH%;C:\emsdk\upstream\emscripten
 
 set EMSDK=c:/emsdk
 set EM_CONFIG=c:\emsdk\.emscripten
@@ -13,10 +10,16 @@ set EMSDK_NODE=c:\emsdk\node\12.18.1_64bit\bin\node.exe
 set EMSDK_PYTHON=c:\emsdk\python\3.7.4-pywin32_64bit\python.exe
 set JAVA_HOME=c:\emsdk\java\8.152_64bit
 set EM_CACHE=c:/emsdk/upstream/emscripten\cache
-REM set EMSDK=C:/emsdk
-REM set EMSDK_NODE=C:\emsdk\node\14.18.2_64bit\bin\node.exe
-REM set EMSDK_PYTHON=C:\emsdk\python\3.9.2-nuget_64bit\python.exe
-REM set JAVA_HOME=C:\emsdk\java\8.152_64bit
+
+REM set PATH=%PATH%;c:\emsdk
+REM set PATH=%PATH%;c:\emsdk\upstream\emscripten
+
+REM set EMSDK=c:/emsdk
+REM set EM_CONFIG=c:/emsdk/.emscripten
+REM set EMSDK_NODE=C:/emsdk/node/16.20.0_64bit/bin/node.exe
+REM set EMSDK_PYTHON=C:/emsdk/python/3.9.2-nuget_64bit/python.exe
+REM set JAVA_HOME=C:/emsdk/java/8.152_64bit
+REM set EM_CACHE=c:/emsdk/upstream/emscripten/cache
 
 cd /d "%~dp0.."
 
@@ -105,7 +108,7 @@ if [%OPTIMIZED_MODE%]==[1] (
 )
 
 call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_DIR%\main.cpp ^
-	%LIB_DIR%\libraylib.a %LIB_DIR%\libskia.a -I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
+	%LIB_DIR%\libraylib.a %LIB_DIR%\libskia.a %LIB_DIR%\libbox2d.a -I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
 	-lidbfs.js ^
 	-fno-rtti -fno-exceptions -Wno-c++11-compat-deprecated-writable-strings -Wno-writable-strings ^
 	-DPLAYING_%GAME_NAME% -DPROJECT_ASSET_DIR="." -DRAYLIB_MODE=1 -DPLATFORM_WEB ^

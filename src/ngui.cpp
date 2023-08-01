@@ -88,7 +88,7 @@ enum NguiElementType {
 struct NguiElement {
 	NguiElementType type;
 
-#define NGUI_ELEMENT_NAME_MAX_LEN 64
+#define NGUI_ELEMENT_NAME_MAX_LEN 512
 	char name[NGUI_ELEMENT_NAME_MAX_LEN];
 	float alive;
 	int id;
@@ -117,6 +117,10 @@ struct NguiElement {
 	Rect childRect;
 	Vec2 scroll;
 	Vec2 visualScroll;
+
+	bool isRestrictedFocusWindow;
+
+	void *userData;
 };
 
 struct Ngui {
@@ -139,6 +143,7 @@ struct Ngui {
 	int currentOrderIndex;
 
 	int draggingId;
+	Vec2 draggingCurrentPos;
 
 	Vec2 uiScale;
 
@@ -148,6 +153,8 @@ struct Ngui {
 	NguiStyleStack *currentStyleStack;
 
 	int currentParentId;
+
+	void (*afterElementBgDraw)(NguiElement*, Rect); // declare foo as pointer to function (pointer to int, Rect) returning void
 };
 Ngui *ngui = NULL;
 
@@ -232,6 +239,8 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack);
 
 void writeNguiStyleStack(DataStream *stream, NguiStyleStack *styleStack);
 NguiStyleStack readNguiStyleStack(DataStream *stream);
+bool saveLoadNguiStyleStack(DataStream *stream, bool save, int version, NguiStyleStack *styleStack, int startVersion, int endVersion);
+bool saveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax, int startVersion, int endVersion);
 
 /// FUNCTIONS ^
 
@@ -657,6 +666,12 @@ void nguiDraw(float elapsed) {
 		}
 	} ///
 
+	bool hasRestrictedFocusWindows = false;
+	for (int i = 0; i < ngui->elementsNum; i++) {
+		NguiElement *element = &ngui->elements[i];
+		if (element->isRestrictedFocusWindow) hasRestrictedFocusWindows = true;
+	}
+
 	ngui->currentStyleStack = &ngui->globalStyleStack;
 
 	NguiElement **elementsLeft = (NguiElement **)frameMalloc(sizeof(NguiElement *) * ngui->elementsMax);
@@ -728,7 +743,6 @@ void nguiDraw(float elapsed) {
 					Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
 					Vec2 position = cursor;
 
-					if (rowHeight > elementSize.y) position.y += (rowHeight - elementSize.y)/2; //@hack Fix up y positions to be centered with previous items
 					rowHeight = MaxNum(rowHeight, elementSize.y);
 
 					if (child->alive == 1) child->position = lerp(child->position, position, 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED));
@@ -748,6 +762,18 @@ void nguiDraw(float elapsed) {
 						if (elementsInRow < nguiGetStyleInt(NGUI_STYLE_ELEMENTS_IN_ROW)) {
 							cursor.x += elementSize.x + elementPadding.x;
 						} else {
+							{ //@hack Fix up y positions to be centered with previous items
+								int currentChildIndex = i;
+								for (int i = currentChildIndex - (elementsInRow-1); i <= currentChildIndex; i++) {
+									NguiElement *child = children[i];
+									if (rowHeight > child->childRect.height) {
+										float maxHeight = rowHeight*ngui->uiScale.y;
+										float adjust = (maxHeight - child->childRect.height)/2;
+										child->childRect.y += adjust;
+									}
+								}
+							}
+
 							cursor.x = 0;
 							cursor.y += rowHeight + elementPadding.y;
 							elementsInRow = 0;
@@ -789,17 +815,24 @@ void nguiDraw(float elapsed) {
 			Rect clippingRect = makeRect();
 			if (windowSize.x < childrenSize.x || windowSize.y < childrenSize.y) clippingRect = windowRect;
 
+			bool noFocusForThisWindow = false;
+			if (hasRestrictedFocusWindows && !window->isRestrictedFocusWindow) noFocusForThisWindow = true;
+
 			bool mouseInClipRect = true;
-			if (!isZero(clippingRect)) {
-				if (contains(windowRect, ngui->mouse)) {
-					mouseInClipRect = true;
-					window->scroll.y -= (platform->mouseWheel * ngui->uiScale.y / childrenSize.y) * 40;
-				} else {
-					mouseInClipRect = false;
-				}
-				window->scroll.y = Clamp01(window->scroll.y);
+			if (noFocusForThisWindow) {
+				mouseInClipRect = false;
 			} else {
-				window->scroll = v2();
+				if (!isZero(clippingRect)) {
+					if (contains(windowRect, ngui->mouse)) {
+						mouseInClipRect = true;
+						window->scroll.y -= (platform->mouseWheel * ngui->uiScale.y / childrenSize.y) * 40;
+					} else {
+						mouseInClipRect = false;
+					}
+					window->scroll.y = Clamp01(window->scroll.y);
+				} else {
+					window->scroll = v2();
+				}
 			}
 
 			if (contains(windowRect, ngui->mouse)) {
@@ -900,6 +933,8 @@ void nguiDraw(float elapsed) {
 						drawTexture(renderer->whiteTexture, props);
 					}
 
+					if (ngui->afterElementBgDraw) ngui->afterElementBgDraw(child, rect);
+
 					RenderProps props = newRenderProps();
 					props.matrix.TRANSLATE(rect.x, rect.y);
 					props.matrix.SCALE(rect.width, rect.height);
@@ -911,6 +946,32 @@ void nguiDraw(float elapsed) {
 					int highlightColor = tintColor(child->bgColor, nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT));
 					props.tint = highlightColor;
 					drawTexture(renderer->linearGrad256, props);
+
+					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
+					if (iconTexture) {
+						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
+						Rect iconRect = getInnerRectOfAspect(rect, getSize(iconTexture) * nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE), iconGravity);
+						// setScissor(iconRect);
+
+						Matrix3 matrix = mat3();
+						matrix.TRANSLATE(iconRect.x, iconRect.y);
+						matrix.TRANSLATE(getSize(iconRect)/2);
+						// matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE)); // Scale calculated in rect
+						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
+						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
+						matrix.TRANSLATE(-getSize(iconRect)/2);
+						matrix.SCALE(iconRect.width, iconRect.height);
+
+						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
+						RenderProps props = newRenderProps();
+						props.srcWidth = props.srcHeight = 1;
+						props.matrix = matrix;
+						props.alpha = alpha;
+						props.tint = nguiGetStyleColorInt(NGUI_STYLE_ICON_TINT);
+						drawTexture(iconTexture, props);
+						// drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
+						// clearScissor();
+					}
 				};
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
@@ -958,33 +1019,7 @@ void nguiDraw(float elapsed) {
 						if (graphicsRect.y < 0) graphicsRect.y += -graphicsRect.y;
 					}
 
-					drawElementBg(child, graphicsRect);
-
-					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
-					if (iconTexture) {
-						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
-						Rect iconRect = getInnerRectOfAspect(graphicsRect, getSize(iconTexture) * nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE), iconGravity);
-						// setScissor(iconRect);
-
-						Matrix3 matrix = mat3();
-						matrix.TRANSLATE(iconRect.x, iconRect.y);
-						matrix.TRANSLATE(getSize(iconRect)/2);
-						// matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE)); // Scale calculated in rect
-						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
-						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
-						matrix.TRANSLATE(-getSize(iconRect)/2);
-						matrix.SCALE(iconRect.width, iconRect.height);
-
-						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
-						RenderProps props = newRenderProps();
-						props.srcWidth = props.srcHeight = 1;
-						props.matrix = matrix;
-						props.alpha = alpha;
-						props.tint = nguiGetStyleColorInt(NGUI_STYLE_ICON_TINT);
-						drawTexture(iconTexture, props);
-						// drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
-						// clearScissor();
-					}
+					if (isZero(clippingRect) || contains(clippingRect, graphicsRect)) drawElementBg(child, graphicsRect);
 
 					{
 						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
@@ -1068,16 +1103,51 @@ void nguiDraw(float elapsed) {
 						drawCircle(buttonCircle, labelTextColor);
 					}
 
-					if (contains(buttonRect, ngui->mouse) || contains(barRect, ngui->mouse)) {
-						if (platform->mouseJustDown) ngui->draggingId = child->id;
+					auto getPercFromMouseClick = [](Rect rect, Vec2 mouse, bool vertical)->float {
+						if (vertical) {
+							return norm(rect.y, rect.y+rect.height, mouse.y);
+						} else {
+							return norm(rect.x, rect.x+rect.width, mouse.x);
+						}
+					};
+
+					if (mouseInClipRect) {
+						bool hoveredButton = contains(buttonRect, ngui->mouse);
+						bool hoveredBar = contains(barRect, ngui->mouse);
+						if (hoveredButton || hoveredBar) {
+							if (platform->mouseWheel) {
+								float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
+								if (platform->mouseWheel > 0) perc -= 0.05;
+								if (platform->mouseWheel < 0) perc += 0.05;
+								perc = Clamp01(perc);
+								float value = lerp(child->valueMin, child->valueMax, perc);
+								if (snapInterval > 0) value = roundToNearest(value, snapInterval);
+								*(float *)child->valuePtr = value;
+							}
+							if (platform->mouseJustDown) {
+								if (hoveredBar && !hoveredButton) {
+									*(float *)child->valuePtr = lerp(child->valueMin, child->valueMax, getPercFromMouseClick(barRect, ngui->mouse, vertical));
+								}
+								ngui->draggingId = child->id;
+								ngui->draggingCurrentPos = ngui->mouse;
+							}
+						}
 					}
 
 					if (ngui->draggingId == child->id) {
 						float newPerc;
-						if (vertical) {
-							newPerc = Clamp01(norm(barRect.y, barRect.y + barRect.height, ngui->mouse.y));
+						if (snapInterval == 0) {
+							float oldPerc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
+							float percOffset = 0;
+							if (vertical) {
+								percOffset = (ngui->mouse.y - ngui->draggingCurrentPos.y) / (barRect.height - buttonRect.height);
+							} else {
+								percOffset = (ngui->mouse.x - ngui->draggingCurrentPos.x) / (barRect.width - buttonRect.width);
+							}
+							newPerc = Clamp01(oldPerc + percOffset);
+							ngui->draggingCurrentPos = ngui->mouse;
 						} else {
-							newPerc = Clamp01(norm(barRect.x, barRect.x + barRect.width, ngui->mouse.x));
+							newPerc = Clamp01(getPercFromMouseClick(barRect, ngui->mouse, vertical));
 						}
 
 						float value = lerp(child->valueMin, child->valueMax, newPerc);
@@ -1137,6 +1207,7 @@ void nguiDraw(float elapsed) {
 	}
 
 	if (!platform->mouseDown) ngui->draggingId = 0;
+	ngui->afterElementBgDraw = NULL;
 	ngui->time += elapsed;
 }
 
@@ -1184,6 +1255,8 @@ NguiElement *getAndReviveNguiElement(char *name) {
 	}
 
 	strncpy(element->name, name, NGUI_ELEMENT_NAME_MAX_LEN);
+	element->name[NGUI_ELEMENT_NAME_MAX_LEN-1] = 0;
+
 	element->alive = 1;
 	element->orderIndex = ngui->currentOrderIndex++;
 	element->parentId = ngui->currentParentId;
@@ -1258,7 +1331,7 @@ float nguiHoveringElement() {
 	return ngui->lastElement->hoveringTime;
 }
 
-int getSizeForDataType(NguiDataType dataType) {
+int FORCE_INLINE getSizeForDataType(NguiDataType dataType) {
 	int size = 0;
 	if (dataType == NGUI_DATA_TYPE_INT) size = sizeof(int);
 	if (dataType == NGUI_DATA_TYPE_COLOR_INT) size = sizeof(int);
@@ -1503,3 +1576,54 @@ NguiStyleStack readNguiStyleStack(DataStream *stream) {
 
 	return styleStack;
 }
+
+bool saveLoadNguiStyleStack(DataStream *stream, bool save, int version, NguiStyleStack *styleStack, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+
+	saveLoadInt(stream, save, version, &styleStack->varsNum, 0, 9999);
+	if (!save) {
+		styleStack->varsMax = styleStack->varsNum;
+		styleStack->vars = (NguiStyleVar *)zalloc(sizeof(NguiStyleVar) * styleStack->varsMax);
+	}
+	for (int i = 0; i < styleStack->varsNum; i++) {
+		NguiStyleVar *var = &styleStack->vars[i];
+		saveLoadU32(stream, save, version, (u32 *)&var->type, 0, 9999);
+		saveLoadBytes(stream, save, version, &var->data, sizeof(Vec4), 0, 9999);
+	}
+
+	return true;
+}
+
+bool saveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+
+	saveLoadInt(stream, save, version, styleStacksNum, 0, 9999);
+	for (int i = 0; i < *styleStacksNum; i++) {
+		NguiNamedStyleStack *namedStyle = &styleStacks[i];
+		saveLoadStringInto(stream, save, version, namedStyle->name, NGUI_NAMED_STYLE_STACK_NAME_MAX_LEN, 0, 9999);
+		saveLoadNguiStyleStack(stream, save, version, &namedStyle->style, 0, 9999);
+	}
+
+	return true;
+}
+
+/// Helpers
+bool nguiArrowButton(char *name, char *texturePath, NguiDirection dir) {
+	Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
+	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(elementSize.x, elementSize.y*0.5));
+	nguiPushStylePtr(NGUI_STYLE_ICON_PTR, getTexture(texturePath));
+	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(0.5, 0.5));
+	if (dir == NGUI_DIR_UP) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
+	if (dir == NGUI_DIR_LEFT) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 90);
+	if (dir == NGUI_DIR_DOWN) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 180);
+	if (dir == NGUI_DIR_RIGHT) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 270);
+	bool value = false;
+	if (nguiButton(name)) value = true;
+	nguiPopStyleVar(NGUI_STYLE_ICON_ROTATION);
+	nguiPopStyleVar(NGUI_STYLE_ICON_GRAVITY);
+	nguiPopStyleVar(NGUI_STYLE_ICON_PTR);
+	nguiPopStyleVar(NGUI_STYLE_ELEMENT_SIZE);
+
+	return value;
+};
+

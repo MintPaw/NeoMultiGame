@@ -32,6 +32,10 @@ struct FontSystem {
 	Font *defaultFont;
 	Font *logFont;
 	bool yIsUp;
+
+#define FONTS_MAX 128
+	Font *fonts[FONTS_MAX];
+	int fontsNum;
 };
 
 struct DrawTextProps {
@@ -47,6 +51,7 @@ struct DrawTextProps {
 
 FontSystem *fontSys = NULL;
 
+void initFonts();
 Font *createFont(const char *ttfPath, int fontSize);
 
 TextProps startText(const char *string, Vec2 position=v2());
@@ -65,7 +70,7 @@ DrawTextProps createDrawTextProps(Font *font, int color, Vec2 position=v2()) { r
 Vec2 drawText(const char *text, DrawTextProps props);
 void passText(char *text, DrawTextProps drawTextProps);
 
-void initFonts();
+Font *getFont(const char *ttfPath, int fontSize);
 void drawOnScreenLog();
 void destroyFont(Font *font);
 /// FUNCTIONS ^
@@ -449,6 +454,31 @@ void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
 	passText(text, props);
 }
 
+Font *getFont(const char *ttfPath, int fontSize) {
+	for (int i = 0; i < fontSys->fontsNum; i++) {
+		Font *font = fontSys->fonts[i];
+		if (fontSize == font->fontSize && streq(font->path, ttfPath)) {
+			return font;
+		}
+	}
+
+	if (!fileExists(ttfPath)) {
+		logf("Couldn't find font %s\n", ttfPath);
+		return getFont(fontSys->defaultFont->path, fontSize);
+	}
+
+	if (fontSys->fontsNum > FONTS_MAX-1) {
+		logf("Font pruged from cache (%s)\n", fontSys->fonts[0]->path);
+		destroyFont(fontSys->fonts[0]);
+		memmove(&fontSys->fonts[0], &fontSys->fonts[1], sizeof(Font *) * FONTS_MAX-1);
+		fontSys->fontsNum--;
+	}
+
+	Font *font = createFont(ttfPath, fontSize);
+	fontSys->fonts[fontSys->fontsNum++] = font;
+	return font;
+}
+
 void drawOnScreenLog() {
 	if (!logSys) initLoggingSystem();
 
@@ -480,7 +510,15 @@ void drawOnScreenLog() {
 			if (fadePerc <= 0) shouldDestroy = true;
 		}
 
-		Vec2 size = getTextSize(fontSys->logFont, logBuffer->buffer, platform->windowWidth);
+		float textScale = platform->windowHeight / 1080.0;
+
+		DrawTextProps textProps = createDrawTextProps();
+		textProps.font = fontSys->logFont;
+		textProps.color = color;
+		textProps.maxWidth = platform->windowWidth;
+		textProps.scale.x = textProps.scale.y = textScale;
+
+		Vec2 size = getTextSize(logBuffer->buffer, textProps);
 		Vec2 position;
 		position.x = platform->windowWidth/2 - size.x/2;
 		position.y = platform->windowHeight * 0.3;
@@ -497,7 +535,8 @@ void drawOnScreenLog() {
 				drawRect(rect, color); 
 			}
 
-			drawText(fontSys->logFont, logBuffer->buffer, position, color, platform->windowWidth);
+			textProps.position = position;
+			drawText(logBuffer->buffer, textProps);
 		}
 
 		if (shouldDestroy) logBuffer->buffer[0] = 0;

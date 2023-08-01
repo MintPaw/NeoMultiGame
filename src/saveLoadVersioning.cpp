@@ -1,8 +1,17 @@
 bool saveLoadVersionCheck(int version, int startVersion, int endVersion, bool save);
-bool versionSaveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion);
-bool versionSaveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion);
-bool versionSaveLoadFloat(DataStream *stream, bool save, int version, float *ptr, int startVersion, int endVersion);
-bool versionSaveLoadVec2(DataStream *stream, bool save, int version, Vec2 *ptr, int startVersion, int endVersion);
+bool saveLoadBool(DataStream *stream, bool save, int version, bool *ptr, int startVersion, int endVersion);
+bool saveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion);
+bool saveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion);
+bool saveLoadInt64To32(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion);
+bool saveLoadFloat(DataStream *stream, bool save, int version, float *ptr, int startVersion, int endVersion);
+bool saveLoadVec2(DataStream *stream, bool save, int version, Vec2 *ptr, int startVersion, int endVersion);
+bool saveLoadVec3(DataStream *stream, bool save, int version, Vec3 *ptr, int startVersion, int endVersion);
+bool saveLoadVec4(DataStream *stream, bool save, int version, Vec4 *ptr, int startVersion, int endVersion);
+bool saveLoadRect(DataStream *stream, bool save, int version, Rect *ptr, int startVersion, int endVersion);
+bool saveLoadStringInto(DataStream *stream, bool save, int version, char *ptr, int maxLen, int startVersion, int endVersion);
+bool saveLoadString(DataStream *stream, bool save, int version, char **ptr, int startVersion, int endVersion);
+bool saveLoadJaiString(DataStream *stream, bool save, int version, char **ptr, int startVersion, int endVersion);
+bool saveLoadBytes(DataStream *stream, bool save, int version, void *ptr, int size, int startVersion, int endVersion);
 /// FUNCTIONS ^
 
 bool saveLoadVersionCheck(int version, int startVersion, int endVersion, bool save) {
@@ -19,30 +28,98 @@ bool saveLoadVersionCheck(int version, int startVersion, int endVersion, bool sa
 	return true;
 }
 
-bool versionSaveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion) {
+bool saveLoadBool(DataStream *stream, bool save, int version, bool *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeU8(stream, *ptr);
+	else *ptr = readU8(stream);
+	return true;
+}
+
+bool saveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion) {
 	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
 	if (save) writeU32(stream, *ptr);
 	else *ptr = readU32(stream);
 	return true;
 }
 
-bool versionSaveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion) {
+bool saveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion) {
 	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
 	if (save) writeU32(stream, *ptr);
 	else *ptr = readU32(stream);
 	return true;
 }
 
-bool versionSaveLoadFloat(DataStream *stream, bool save, int version, float *ptr, int startVersion, int endVersion) {
+bool saveLoadInt64To32(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) {
+    writeU32(stream, *ptr);
+    writeU32(stream, 0);
+  } else {
+    *ptr = readU32(stream);
+    readU32(stream);
+  }
+	return true;
+}
+
+bool saveLoadFloat(DataStream *stream, bool save, int version, float *ptr, int startVersion, int endVersion) {
 	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
 	if (save) writeFloat(stream, *ptr);
 	else *ptr = readFloat(stream);
 	return true;
 }
 
-bool versionSaveLoadVec2(DataStream *stream, bool save, int version, Vec2 *ptr, int startVersion, int endVersion) {
+bool saveLoadVec2(DataStream *stream, bool save, int version, Vec2 *ptr, int startVersion, int endVersion) {
 	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
 	if (save) writeVec2(stream, *ptr);
 	else *ptr = readVec2(stream);
+	return true;
+}
+
+bool saveLoadVec3(DataStream *stream, bool save, int version, Vec3 *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeVec3(stream, *ptr);
+	else *ptr = readVec3(stream);
+	return true;
+}
+
+bool saveLoadVec4(DataStream *stream, bool save, int version, Vec4 *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeVec4(stream, *ptr);
+	else *ptr = readVec4(stream);
+	return true;
+}
+
+bool saveLoadRect(DataStream *stream, bool save, int version, Rect *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeRect(stream, *ptr);
+	else *ptr = readRect(stream);
+	return true;
+}
+
+bool saveLoadStringInto(DataStream *stream, bool save, int version, char *ptr, int maxLen, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeString(stream, ptr);
+	else readStringInto(stream, ptr, maxLen);
+	return true;
+}
+
+bool saveLoadString(DataStream *stream, bool save, int version, char **ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeString(stream, *ptr);
+	else *ptr = readString(stream);
+	return true;
+}
+
+bool saveLoadJaiString(DataStream *stream, bool save, int version, char **ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeJaiString(stream, *ptr);
+	else *ptr = readJaiString(stream);
+	return true;
+}
+
+bool saveLoadBytes(DataStream *stream, bool save, int version, void *ptr, int size, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeBytes(stream, ptr, size);
+	else readBytes(stream, ptr, size);
 	return true;
 }

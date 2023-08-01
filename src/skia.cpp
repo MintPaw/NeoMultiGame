@@ -99,6 +99,30 @@ enum VDrawCommandType {
 	VDRAW_BITMAP_FILL,
 	VDRAW_TEXT,
 };
+char *vDrawCommandTypeStrings[] = {
+	"VDRAW_SET_MATRIX",
+	"VDRAW_CLIP_PATH",
+	"VDRAW_DRAW_CACHED_PATH",
+	"VDRAW_CLIP_CACHED_PATH",
+	"VDRAW_SAVE",
+	"VDRAW_RESTORE",
+	"VDRAW_START_SHAPE",
+	"VDRAW_END_SHAPE",
+	"VDRAW_END_SPRITE",
+	"VDRAW_START_BLUR",
+	"VDRAW_END_BLUR",
+	"VDRAW_START_COLOR_MATRIX",
+	"VDRAW_END_COLOR_MATRIX",
+	"VDRAW_SET_BLEND_MODE",
+	"VDRAW_END_BLEND_MODE",
+	"VDRAW_SET_SOLID_FILL",
+	"VDRAW_SET_LINEAR_GRADIENT_FILL",
+	"VDRAW_SET_RADIAL_GRADIENT_FILL",
+	"VDRAW_SET_FOCAL_GRADIENT_FILL",
+	"VDRAW_SET_LINE_STYLE",
+	"VDRAW_BITMAP_FILL",
+	"VDRAW_TEXT",
+};
 struct VDrawCommand {
 	VDrawCommandType type;
 
@@ -159,11 +183,13 @@ struct SkiaSystem {
 	Vec2 scale;
 	float superSampleScale;
 	bool useCpuAA;
-	bool blurEnabled;
+	bool blurDisabled;
 
 	Vec2 subFrameCachedScale;
 
 	VDrawCommandsList immVDrawCommandsList;
+
+	bool recordFrame;
 };
 SkiaSystem *skiaSys = NULL;
 
@@ -184,6 +210,9 @@ void startSkiaFrame();
 void endSkiaFrame();
 void startSkiaSubFrame(float scale);
 void endSkiaSubFrame();
+
+void drawSkiaFrameOnRenderTexture(RenderTexture *renderTexture, bool doClear=false);
+Texture *getSkiaFrameAsTexture(Vec2 size);
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum);
 
@@ -207,8 +236,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys = (SkiaSystem *)zalloc(sizeof(SkiaSystem));
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
-
-		skiaSys->blurEnabled = true;
 
 		SkGraphics::Init();
 	}
@@ -276,6 +303,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 
 		GrBackendTexture backendTexture(skiaSys->skiaTexture->width, skiaSys->skiaTexture->height, GrMipmapped::kNo, textureInfo);
 
+		// skiaSys->gpuSurface = SkSurfaces::WrapBackendTexture(
 		skiaSys->gpuSurface = SkSurface::MakeFromBackendTexture(
 			skiaSys->grDirectContext,
 			backendTexture,
@@ -369,10 +397,10 @@ void pushSpriteMatrix(VDrawCommandsList *cmdList, Matrix3 mat) {
 }
 void popSpriteMatrix(VDrawCommandsList *cmdList) {
 	skiaSys->matrixStackNum--;
-	Matrix3 prevMatrix = skiaSys->matrixStack[skiaSys->matrixStackNum-1];
+	Matrix3 newMatix = skiaSys->matrixStack[skiaSys->matrixStackNum-1];
 
 	VDrawCommand *cmd = createCommand(cmdList, VDRAW_SET_MATRIX);
-	cmd->matrix = prevMatrix;
+	cmd->matrix = newMatix;
 }
 
 DrawShapeProps newDrawShapeProps() {
@@ -465,7 +493,7 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 				for (int i = 0; i < 16; i++) {
 					int a, r, g, b;
 					hexToArgb(paintCmd->colors[i], &a, &r, &g, &b);
-					a = ((a/255.0) * props.alpha) * 255.0;
+					a = ((a/255.0) * Clamp01(props.alpha)) * 255.0;
 					paintCmd->colors[i] = argbToHex(a, r, g, b);
 				}
 			}
@@ -553,7 +581,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			recurse.swapsNum = matchingTransform->swapsNum;
 		}
 		matchingTransform->touched = true;
-		// if (keyJustPressed('A')) logf("Drawing %s frame %d\n", recurse.path, frame);
 	}
 	Font *font = recurse.font;
 	char *text = recurse.text;
@@ -580,7 +607,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				cmd->text = text;
 				cmd->position = getPosition(textRect);
 				cmd->control = getSize(textRect);
-				cmd->colors[0] = setAofArgb(sprite->textColor, 255*recurse.alpha);
+				cmd->colors[0] = setAofArgb(sprite->textColor, 255*Clamp01(recurse.alpha));
 
 				if (sprite->textAlign == TEXT_ALIGN_LEFT) {
 					cmd->gravity = v2(0, 0);
@@ -640,7 +667,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					createCommand(cmdList, VDRAW_SAVE);
 				}
 
-				pushSpriteMatrix(cmdList, toMatrix3(drawable->matrix));
+				pushSpriteMatrix(cmdList, mat3(drawable->matrix));
 				if (drawable->type == SWF_DRAWABLE_SHAPE) {
 					DrawShapeProps props = {};
 					props.useClip = nextUseClip;
@@ -661,7 +688,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					for (int i = 0; i < drawable->filtersNum; i++) {
 						SwfFilter *filter = &drawable->filters[i];
 						if (filter->type == SWF_FILTER_BLUR) {
-							if (skiaSys->blurEnabled) {
+							if (!skiaSys->blurDisabled) {
 								VDrawCommand *cmd = createCommand(cmdList, VDRAW_START_BLUR);
 								cmd->position = v2(filter->blurFilter.blurX, filter->blurFilter.blurY);
 								shouldStopBlur = true;
@@ -711,7 +738,13 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 
 			for (int i = 0; i < recurse.swapsNum; i++) {
 				VDrawPaletteSwap *swap = &recurse.swaps[i];
-				for (int i = 0; i < 16; i++) { //@speed You can only do colors[0] if it's a non-gradient
+
+				int colorsToCheck = 16;
+
+				//@speed You can only do colors[0] if it's a non-gradient, but lines can have gradients?
+				// if (cmd->type == VDRAW_SET_SOLID_FILL || cmd->type == VDRAW_SET_LINE_STYLE) colorsToCheck = 1;
+
+				for (int i = 0; i < colorsToCheck; i++) {
 					u8 alphaByte = getAofArgb(cmd->colors[i]);
 					if ((cmd->colors[i] & 0x00FFFFFF) == (swap->from & 0x00FFFFFF)) {
 						cmd->colors[i] = setAofArgb(swap->to, alphaByte);
@@ -720,6 +753,48 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			}
 		}
 	}
+
+	auto copyCmdList = [](VDrawCommandsList *cmdList) {
+		char *wholeStr = "";
+
+		for (int i = 0; i < cmdList->cmdsNum; i++) {
+			VDrawCommand *cmd = &cmdList->cmds[i];
+			char *str = frameSprintf("%d: %s\n", i, vDrawCommandTypeStrings[cmd->type]);
+			if (cmd->type == VDRAW_SET_MATRIX) {
+				str = frameSprintf(
+					"%d: %s (%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f)\n",
+					i,
+					vDrawCommandTypeStrings[cmd->type],
+					cmd->matrix.data[0], cmd->matrix.data[1], cmd->matrix.data[2],
+					cmd->matrix.data[3], cmd->matrix.data[4], cmd->matrix.data[5],
+					cmd->matrix.data[6], cmd->matrix.data[7], cmd->matrix.data[8]
+				);
+			} else if (cmd->type == VDRAW_START_COLOR_MATRIX) {
+				str = frameSprintf(
+					"%d: %s (%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f)\n",
+					i,
+					vDrawCommandTypeStrings[cmd->type],
+					cmd->colors[0], cmd->colors[1], cmd->colors[2], cmd->colors[3], cmd->colors[4],
+					cmd->colors[5], cmd->colors[6], cmd->colors[7], cmd->colors[8], cmd->colors[9],
+					cmd->colors[10], cmd->colors[11], cmd->colors[12], cmd->colors[13], cmd->colors[14],
+					cmd->colors[15], cmd->colors[16], cmd->colors[17], cmd->colors[18], cmd->colors[19]
+				);
+			} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
+				str = frameSprintf("%d: %s (%d)\n", i, vDrawCommandTypeStrings[cmd->type], cmd->blendMode);
+			} else if (cmd->type == VDRAW_SET_SOLID_FILL) {
+				str = frameSprintf("%d: %s (0x%X)\n", i, vDrawCommandTypeStrings[cmd->type], cmd->colors[0]);
+			} else if (cmd->type == VDRAW_SET_LINE_STYLE) {
+				str = frameSprintf("%d: %s (0x%X, %.2f)\n", i, vDrawCommandTypeStrings[cmd->type], cmd->colors[0], cmd->width);
+			} else if (cmd->type == VDRAW_DRAW_CACHED_PATH) {
+				str = frameSprintf("%d: %s (%d)\n", i, vDrawCommandTypeStrings[cmd->type], cmd->path->countVerbs());
+			}
+
+			wholeStr = frameSprintf("%s%s", wholeStr, str);
+		}
+
+		Raylib::SetClipboardText(wholeStr);
+	};
+
 	if (matchingTransform) {
 		for (int i = 0; i < matchingTransform->drawSpriteCallsNum; i++) {
 			genDrawSprite(
@@ -946,6 +1021,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 			Rect textRect = getInnerRectOfAspect(toFit, actualTextSize, cmd->gravity);
 
 			// skiaSys->canvas->drawRect(skiaBounds, outlinePaint);
+			// skiaSys->canvas->drawRect(SkRect::MakeXYWH(textRect.x, textRect.y, textRect.width, textRect.height), outlinePaint);
 			// skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlinePaint2);
 
 			Matrix3 matrix = mat3();
@@ -972,9 +1048,14 @@ void clearSkia(int color) {
 	skiaSys->canvas->clear(color);
 }
 
+SkPictureRecorder recorder;
 void startSkiaFrame() {
 	processBatchDraws();
 	if (skiaSys->matrixStackNum != 1) logf("Matrix stack mismatch\n");
+
+	if (skiaSys->recordFrame) {
+		skiaSys->canvas = recorder.beginRecording(skiaSys->width, skiaSys->height);
+	}
 
 	skiaSys->canvas->clear(0);
 }
@@ -1032,6 +1113,18 @@ void endSkiaFrame() {
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
 #endif
 	}
+
+	if (skiaSys->recordFrame) {
+		skiaSys->recordFrame = false;
+		skiaSys->canvas = skiaSys->mainCanvas;
+		sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
+		sk_sp<SkData> skiaData = picture->serialize();
+		void *data = (void *)skiaData->bytes();
+		int size = skiaData->size();
+		writeFile("assets/recording.skp", data, size);
+		logf("Wrote recording\n");
+		return;
+	}
 }
 
 void startSkiaSubFrame(float scale) {
@@ -1048,13 +1141,18 @@ void endSkiaSubFrame() {
 Texture *getSkiaFrameAsTexture(Vec2 size) {
 	RenderTexture *renderTexture = createRenderTexture(size.x, size.y);
 
-	pushTargetTexture(renderTexture);
-	drawSimpleTexture(skiaSys->backTexture);
-	popTargetTexture();
+	drawSkiaFrameOnRenderTexture(renderTexture);
 
 	Texture *texture = renderTextureToTexture(renderTexture);
 	setTextureClamped(texture, true);
 	return texture;
+}
+
+void drawSkiaFrameOnRenderTexture(RenderTexture *renderTexture, bool doClear) {
+	pushTargetTexture(renderTexture);
+	if (doClear) clearRenderer();
+	drawSimpleTexture(skiaSys->backTexture);
+	popTargetTexture();
 }
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {
@@ -1166,7 +1264,6 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			SkCanvas *pictureCanvas = recorder.beginRecording(skiaSys->width, skiaSys->height);
 			skiaSys->canvas = pictureCanvas;
 		}
-
 
 		int frame = aSys->selectedSpriteFrame;
 		Rect rect = getFrameBounds(sprite, frame);

@@ -917,6 +917,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum) {
 }
 
 void showErrorWindow(char *msg) {
+	logf("Error window: %s\n", msg);
 #if defined(_WIN32)
 	int result = MessageBoxA(NULL, msg, "Error", MB_OK);
 #elif defined(__EMSCRIPTEN__)

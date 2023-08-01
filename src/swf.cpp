@@ -920,6 +920,7 @@ struct Swf {
 	HashMap *characterMap;
 
 	MemoryArena *drawablesArena;
+	ResizingPool *shapePool;
 };
 
 bool swfFreeDrawEdges = true;
@@ -970,7 +971,7 @@ Swf *loadSwf(char *path) {
 
 		int err = uncompress(uncompressedData, (unsigned long *)&uncompressedDataSize, compressedData, compressedDataSize);
 		if (err != Z_OK) {
-			logf("zlib error: %d\n", err);
+			showErrorWindow(frameSprintf("zlib error: %d (file: %s)\n", err, path));
 			Panic("RIP");
 		}
 
@@ -994,6 +995,8 @@ Swf *loadSwf(char *path) {
 	swf->tagsMax = 128;
 	swf->tags = (SwfTagPointer *)zalloc(sizeof(SwfTagPointer) * swf->tagsMax);
 	swf->tagsNum = 0;
+
+	swf->shapePool = createResizingPool(Megabytes(8));
 
 	for (;;) {
 		bool skipTag = false;
@@ -1088,11 +1091,13 @@ Swf *loadSwf(char *path) {
 			Vec2 cursor = v2();
 
 			int shapeRecordsMax = 8;
-			ShapeRecord *shapeRecords = (ShapeRecord *)zalloc(sizeof(ShapeRecord) * shapeRecordsMax);
+			ShapeRecord *shapeRecords = (ShapeRecord *)allocateFrom(swf->shapePool, sizeof(ShapeRecord) * shapeRecordsMax);
 			int shapeRecordsNum = 0;
 			for (;;) {
 				if (shapeRecordsNum > shapeRecordsMax-1) {
-					shapeRecords = (ShapeRecord *)resizeArray(shapeRecords, sizeof(ShapeRecord), shapeRecordsMax, shapeRecordsMax * 1.5);
+					ShapeRecord *newShapeRecords = (ShapeRecord *)allocateFrom(swf->shapePool, sizeof(ShapeRecord) * shapeRecordsMax * 1.5);
+					memcpy(newShapeRecords, shapeRecords, sizeof(ShapeRecord) * shapeRecordsMax);
+					shapeRecords = newShapeRecords;
 					shapeRecordsMax *= 1.5;
 				}
 
@@ -1208,7 +1213,7 @@ Swf *loadSwf(char *path) {
 
 			{
 				int subPathMax = shapeRecordsNum; // This is just a guess
-				DrawEdgeRecord *subPath = (DrawEdgeRecord *)malloc(sizeof(DrawEdgeRecord) * subPathMax);
+				DrawEdgeRecord *subPath = (DrawEdgeRecord *)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord) * subPathMax);
 				int subPathNum = 0;
 
 				int lineStyleIndex = 0;
@@ -1216,7 +1221,7 @@ Swf *loadSwf(char *path) {
 				int fillStyle1Index = 0;
 
 				int drawEdgesMax = shapeRecordsNum; // This is just a guess
-				DrawEdgeRecord *drawEdges = (DrawEdgeRecord *)zalloc(sizeof(DrawEdgeRecord) * drawEdgesMax);
+				DrawEdgeRecord *drawEdges = (DrawEdgeRecord *)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord) * drawEdgesMax);
 				int drawEdgesNum = 0;
 
 				for (int i = 0; i < shapeRecordsNum; i++) {
@@ -1228,7 +1233,9 @@ Swf *loadSwf(char *path) {
 							record->edgeRecord.fillStyle1Index != fillStyle1Index
 						) {
 							while (drawEdgesNum + subPathNum*3 > drawEdgesMax-1) { //@copyPastedReserveMaxEdges
-								drawEdges = (DrawEdgeRecord *)resizeArray(drawEdges, sizeof(DrawEdgeRecord), drawEdgesMax, drawEdgesMax * 1.5);
+								DrawEdgeRecord *newDrawEdges = (DrawEdgeRecord *)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord) * drawEdgesMax * 1.5);
+								memcpy(newDrawEdges, drawEdges, sizeof(DrawEdgeRecord) * drawEdgesMax);
+								drawEdges = newDrawEdges;
 								drawEdgesMax *= 1.5;
 							}
 							drawEdgesNum = processSubPath(drawEdges, drawEdgesNum, subPath, subPathNum);
@@ -1240,7 +1247,9 @@ Swf *loadSwf(char *path) {
 						}
 
 						if (subPathNum > subPathMax-1) {
-							subPath = (DrawEdgeRecord *)resizeArray(subPath, sizeof(DrawEdgeRecord), subPathMax, subPathMax * 1.5);
+							DrawEdgeRecord *newSubPath = (DrawEdgeRecord *)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord) * subPathMax * 1.5);
+							memcpy(newSubPath, subPath, sizeof(DrawEdgeRecord) * subPathMax);
+							subPath = newSubPath;
 							subPathMax *= 1.5;
 						}
 
@@ -1263,23 +1272,25 @@ Swf *loadSwf(char *path) {
 				}
 
 				while (drawEdgesNum + subPathNum*3 > drawEdgesMax-1) { //@copyPastedReserveMaxEdges
-					drawEdges = (DrawEdgeRecord *)resizeArray(drawEdges, sizeof(DrawEdgeRecord), drawEdgesMax, drawEdgesMax * 1.5);
+					DrawEdgeRecord *newDrawEdges = (DrawEdgeRecord *)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord) * drawEdgesMax * 1.5);
+					memcpy(newDrawEdges, drawEdges, sizeof(DrawEdgeRecord) * drawEdgesMax);
+					drawEdges = newDrawEdges;
 					drawEdgesMax *= 1.5;
 				}
 				drawEdgesNum = processSubPath(drawEdges, drawEdgesNum, subPath, subPathNum);
 
 				tag->drawEdgesMax = drawEdgesNum;
-				tag->drawEdges = (DrawEdgeRecord *)zalloc(sizeof(DrawEdgeRecord) * tag->drawEdgesMax);
+				tag->drawEdges = (DrawEdgeRecord *)zalloc(sizeof(DrawEdgeRecord) * tag->drawEdgesMax); //@memory We don't actually really need this I don't think
 
-				DrawEdgeRecord **edgesLeft = (DrawEdgeRecord **)frameMalloc(sizeof(DrawEdgeRecord *) * drawEdgesNum);
+				DrawEdgeRecord **edgesLeft = (DrawEdgeRecord **)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord *) * drawEdgesNum);
 				int edgesLeftNum = 0;
 				for (int i = 0; i < drawEdgesNum; i++) edgesLeft[edgesLeftNum++] = &drawEdges[i];
 
-				DrawEdgeRecord **edgesOut = (DrawEdgeRecord **)frameMalloc(sizeof(DrawEdgeRecord *) * drawEdgesNum);
+				DrawEdgeRecord **edgesOut = (DrawEdgeRecord **)allocateFrom(swf->shapePool, sizeof(DrawEdgeRecord *) * drawEdgesNum);
 				int edgesOutNum = 0;
 
 				{ /// Connect everything together
-					int *chain = (int *)frameMalloc(sizeof(int) * edgesLeftNum);
+					int *chain = (int *)allocateFrom(swf->shapePool, sizeof(int) * edgesLeftNum);
 					int chainNum = 0;
 					for (;;) {
 						if (edgesLeftNum <= 0) break;
@@ -1389,11 +1400,8 @@ Swf *loadSwf(char *path) {
 
 					}
 				}
-
-				free(subPath);
-				free(drawEdges);
 			}
-			free(shapeRecords);
+			clearPool(swf->shapePool);
 
 			{ /// Build sub shapes
 				int lineStyleIndex = 0;
@@ -1804,7 +1812,7 @@ Swf *loadSwf(char *path) {
 			u8 *uncompressedData = (u8 *)malloc(uncompressedDataSize);
 			int err = uncompress(uncompressedData, (unsigned long *)&uncompressedDataSize, &stream.data[stream.byteIndex], bytesLeft);
 			if (err != Z_OK) {
-				logf("zlib error: %d\n", err);
+				showErrorWindow(frameSprintf("zlib error: %d (file: %s)\n", err, path));
 				Panic("RIP");
 			}
 
@@ -1941,7 +1949,7 @@ Swf *loadSwf(char *path) {
 		} else if (recordHeader.type == SWF_TAG_END) {
 			break;
 		} else {
-			logf("Failed to parse code: %d, len: %d, pos: %d\n", recordHeader.type, recordHeader.length, stream.byteIndex);
+			showErrorWindow(frameSprintf("Failed to parse code: %d, len: %d, pos: %d (%s)\n", recordHeader.type, recordHeader.length, stream.byteIndex, path));
 			skipTag = true;
 		}
 
@@ -2158,7 +2166,7 @@ Swf *loadSwf(char *path) {
 					}
 
 					if (!isZero(newBounds)) {
-						newBounds = toMatrix3(drawable->matrix) * newBounds;
+						newBounds = mat3(drawable->matrix) * newBounds;
 						sprite->bounds = insert(sprite->bounds, newBounds);
 					}
 				}
@@ -2175,6 +2183,7 @@ Swf *loadSwf(char *path) {
 	// logf("%d sprites * %d bytes = %.1fmb\n", swf->allSpritesNum, sizeof(SwfShape), (swf->allSpritesNum*sizeof(SwfSprite))/(float)(Megabytes(1)));
 
 	destroyHashMap(swf->characterMap);
+	freePool(swf->shapePool);
 	// logf("Parsing %s complete %d tags\n", path, swf->tagsNum);
 	free(stream.toFree);
 
@@ -2455,7 +2464,7 @@ Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
 		}
 
 		if (!isZero(newBounds)) {
-			newBounds = toMatrix3(drawable->matrix) * newBounds;
+			newBounds = mat3(drawable->matrix) * newBounds;
 			bounds = insert(bounds, newBounds);
 		}
 	}

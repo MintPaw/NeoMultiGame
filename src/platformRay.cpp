@@ -121,8 +121,9 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle);
 void platformUpdateLoop(void (*updateCallback)());
 void platformUpdate();
 
-void minimizeWindow();
-void maximizeWindow();
+void maximizeWindow() { Raylib::MaximizeWindow(); }
+void minimizeWindow() { Raylib::MinimizeWindow(); }
+void restoreWindow() { Raylib::RestoreWindow(); }
 bool keyPressed(int key);
 bool keyJustPressed(int key);
 bool keyJustReleased(int key);
@@ -274,6 +275,7 @@ void platformUpdate() {
 
 #ifdef __EMSCRIPTEN__
 		platform->mouseWheel *= -1;
+		// platform->mouseWheel *= -1/60.0;
 #endif
 
 		Raylib::Vector2 mouse = Raylib::GetMousePosition();
@@ -351,14 +353,6 @@ void platformUpdate() {
 	platform->frameCount++;
 	platform->time += platform->elapsed;
 	logSys->time = platform->time;
-}
-
-void minimizeWindow() {
-	Raylib::MinimizeWindow();
-}
-
-void maximizeWindow() {
-	Raylib::MaximizeWindow();
 }
 
 void setClipboard(char *str) {
@@ -450,7 +444,18 @@ void navigateToUrl(const char *url) {
 }
 
 void showErrorWindow(char *msg) {
-	//@stub
+	logf("Error window: %s\n", msg);
+#if defined(_WIN32)
+	int result = MessageBoxA(NULL, msg, "Error", MB_OK);
+#elif defined(__EMSCRIPTEN__)
+	EM_ASM({
+		var str = UTF8ToString($0);
+		str = str.split("\n").join("<br />");
+		crashlogElement.innerHTML += str;
+	}, msg);
+#else
+	logf("Can't show error window on this platform\n");
+#endif
 }
 
 void pngQuantImage(const char *path) {
@@ -500,6 +505,7 @@ struct Texture {
 	int width;
 	int height;
 
+	bool clamped;
 	char *path;
 };
 
@@ -507,6 +513,8 @@ struct RenderTexture {
 	Raylib::RenderTexture2D raylibRenderTexture;
 	int width;
 	int height;
+
+	bool clamped;
 };
 
 struct RenderProps {
@@ -639,6 +647,8 @@ struct Renderer {
 	int tempTextureBufferSize;
 	void *tempTextureRowBuffer;
 	int tempTextureRowBufferSize;
+
+  bool defaultSetSrcWidthAndSrcHeightTo1;
 };
 
 Renderer *renderer = NULL;
@@ -1029,9 +1039,13 @@ void setTextureSmooth(RenderTexture *renderTexture, bool smooth) {
 }
 
 void setTextureClamped(Texture *texture, bool clamped) {
+	if (texture->clamped == clamped) return;
+	texture->clamped = clamped;
 	Raylib::SetTextureWrap(texture->raylibTexture, clamped ? Raylib::TEXTURE_WRAP_CLAMP : Raylib::TEXTURE_WRAP_REPEAT);
 }
 void setTextureClamped(RenderTexture *renderTexture, bool clamped) {
+	if (renderTexture->clamped == clamped) return;
+	renderTexture->clamped = clamped;
 	Raylib::SetTextureWrap(renderTexture->raylibRenderTexture.texture, clamped ? Raylib::TEXTURE_WRAP_CLAMP : Raylib::TEXTURE_WRAP_REPEAT);
 }
 
@@ -1147,6 +1161,7 @@ bool writeTextureToFile(Texture *texture, char *path) {
 
 void destroyTexture(Texture *texture) {
 	Raylib::UnloadTexture(texture->raylibTexture);
+	if (texture->path) free(texture->path);
 	free(texture);
 }
 

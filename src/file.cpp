@@ -19,7 +19,7 @@ enum FuzzyPathType {
 };
 
 char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnderscored=false, bool shallow=false, bool includeFolders=false);
-char **getFrameDirectoryList(char *path, int *outFilesNum);
+char **getFrameDirectoryList(char *path, int *outFilesNum, bool includingUnderscored=false, bool shallow=false, bool includeFolders=false);
 char *resolveFuzzyPath(const char *fileName, const char *fileName2=NULL, FuzzyPathType type=FUZZY_ALL);
 bool directoryExists(const char *dirPath);
 bool fileExists(const char *fileName);
@@ -284,9 +284,9 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 	return fileNames;
 }
 
-char **getFrameDirectoryList(char *path, int *outFilesNum) {
+char **getFrameDirectoryList(char *path, int *outFilesNum, bool includingUnderscored, bool shallow, bool includeFolders) {
 	int filesNum = 0;
-	char **files = getDirectoryList(path, &filesNum);
+	char **files = getDirectoryList(path, &filesNum, includingUnderscored, shallow, includeFolders);
 
 	char **frameFiles = (char **)frameMalloc(sizeof(char *) * filesNum);
 

@@ -52,6 +52,7 @@ RenderProps newRenderProps() {
 	props.matrix = mat3();
 	props.uvMatrix = mat3();
 	props.uv1 = v2(1, 1);
+  if (renderer->defaultSetSrcWidthAndSrcHeightTo1) props.srcWidth = props.srcHeight = 1;
 	return props;
 }
 

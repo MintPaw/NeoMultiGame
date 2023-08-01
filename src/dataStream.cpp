@@ -9,6 +9,7 @@ struct DataStream {
 
 void readBytes(DataStream *stream, void *ptr, int size);
 char *readString(DataStream *stream);
+char *readJaiString(DataStream *stream);
 char *readFrameString(DataStream *stream);
 void readStringInto(DataStream *stream, char *dest, int max);
 u64 readU64(DataStream *stream);
@@ -33,6 +34,7 @@ void destroyDataStream(DataStream *stream);
 
 void writeBytes(DataStream *stream, void *ptr, int size);
 void writeString(DataStream *stream, char *string);
+void writeJaiString(DataStream *stream, char *string);
 
 #ifndef NO_DATA_STREAM_IO
 DataStream *loadDataStream(char *path);
@@ -83,6 +85,22 @@ char *readString(DataStream *stream) {
 
 	char *str = (char *)malloc(size);
 	strncpy(str, (const char *)&stream->data[stream->index], size);
+	stream->index += size;
+
+	return str;
+}
+
+char *readJaiString(DataStream *stream) {
+	int size = readU64(stream);
+	if (size == 0) return NULL;
+
+	if (size > stream->dataMax-stream->index) {
+		logf("Read too long of a jai string by %d bytes\n", size - stream->dataMax-stream->index);
+	}
+
+	char *str = (char *)malloc(size+1);
+	strncpy(str, (const char *)&stream->data[stream->index], size);
+  str[size] = 0;
 	stream->index += size;
 
 	return str;
@@ -244,6 +262,17 @@ void writeString(DataStream *stream, char *string) {
 	}
 
 	writeBytes(stream, string, strlen(string)+1);
+}
+
+void writeJaiString(DataStream *stream, char *string) {
+	if (!string) {
+		char data = 0;
+		writeBytes(stream, &data, 0);
+		return;
+	}
+
+  writeU64(stream, strlen(string));
+	writeBytes(stream, string, strlen(string));
 }
 
 #ifndef NO_DATA_STREAM_IO

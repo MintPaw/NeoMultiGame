@@ -89,3 +89,24 @@ void guiColoredTreePop() {
 	guiPopStyleColor();
 	ImGui::TreePop();
 }
+
+void guiMapVec4(char *srcName, char *destName, Vec4 *vec);
+void guiMapVec4(char *srcName, char *destName, Vec4 *vec) {
+	ImGui::PushID(frameSprintf("%s mapped to %s", srcName, destName));
+	ImGui::PushItemWidth(120);
+
+	ImGui::Text("%s", srcName);
+	ImGui::SameLine();
+	ImGui::InputFloat(frameSprintf("###SrcMin", srcName), &vec->x);
+	ImGui::SameLine();
+	ImGui::InputFloat(frameSprintf("###SrcMax", srcName), &vec->y);
+	ImGui::SameLine();
+	ImGui::Text("-> %s", destName);
+	ImGui::SameLine();
+	ImGui::InputFloat(frameSprintf("###DestMin", destName), &vec->z);
+	ImGui::SameLine();
+	ImGui::InputFloat(frameSprintf("###DestMax", destName), &vec->w);
+
+	ImGui::PopItemWidth();
+	ImGui::PopID();
+}

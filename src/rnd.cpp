@@ -6,6 +6,7 @@ int FORCE_INLINE rndInt(int min, int max);
 bool FORCE_INLINE rndBool();
 bool FORCE_INLINE rndPerc(float perc);
 int rndPick(int *weights, int weightsNum);
+int rndPick(float *weights, int weightsNum);
 void rndTest();
 
 #define LCG_SEED_STACK_MAX 4096
@@ -46,7 +47,7 @@ u32 rnd() {
 
 float rndFloat(float min, float max) { return min + (rnd() / (float)lcgM) * (max - min); }
 int rndInt(int min, int max) { 
-	if (min == max) return min;
+	if (min >= max) return min;
 	return min + rnd() / (lcgM / (max - min + 1) + 1);
 }
 bool rndBool() { return rndFloat(0, 1) > 0.5; }
@@ -83,6 +84,5 @@ int rndPick(float *weights, int weightsNum) {
 		if (rnd <= 0) return i;
 	}
 
-	logf("rndPick(float) failed horribly\n");
 	return 0;
 }

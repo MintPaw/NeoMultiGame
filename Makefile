@@ -11,7 +11,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
-# GAME_NAME=horseGame
+GAME_NAME=horseGame
 # GAME_NAME=tower2Game
 # GAME_NAME=gladiators2Game
 # GAME_NAME=deskGame
@@ -20,7 +20,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=turnBasedGame
 # GAME_NAME=catCardGame
 # GAME_NAME=destinyGame
-GAME_NAME=swfTestGame
+# GAME_NAME=swfTestGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -30,10 +30,12 @@ endif
 ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=butt2GoGame
-GAME_NAME=tower2Game
+# GAME_NAME=tower2Game
+# GAME_NAME=gladiators2Game
 # GAME_NAME=horseGame
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
+GAME_NAME=catCardGame
 endif
 
 
@@ -177,13 +179,14 @@ else ifeq ($(GAME_NAME), zooBoundGame)
 else ifeq ($(GAME_NAME), concreteJungleGame)
 	rsync -at "/c/Dropbox/MultiGame/multiGame/commonAssets/assets/common" "/c/Dropbox/concreteJungle/concreteJungleGameAssets/assets" &
 endif
+	echo -ne "\e]0;\a"
 	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
 		set CLANG_MODE=0&& \
 		buildSystem\$(WIN_BUILD_BAT).bat\
-		"
+		" && (echo -ne "\e]0;GOOD\a") || (echo -ne "\e]0;BAD\a"; exit 1)
 
 clang:
 	$(MAKE) bclang
