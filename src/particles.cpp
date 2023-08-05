@@ -2,15 +2,16 @@ struct Particle {
 	int imageIndex;
 
 	Vec2 position;
-	Vec2 velo;
+	Vec2 veloStart, veloEnd;
+	Vec2 veloFromAccel;
 
-	Vec2 startAccel, endAccel;
+	Vec2 accel;
 
-	float startScale, endScale;
+	float scaleStart, scaleEnd;
 
-	// float rotation;
-	// float rotationVelo;
-	// float startAngularAccel, endAngularAccel;
+	float rotation;
+	float angularSpeedStart, angularSpeedEnd;
+
 	float lifetime;
 
 	int startColor, endColor;
@@ -18,27 +19,45 @@ struct Particle {
 	float time;
 };
 
+enum EmitterShape {
+	EMITTER_SHAPE_POINT,
+	EMITTER_SHAPE_LINE,
+	EMITTER_SHAPE_CIRCLE,
+	EMITTER_SHAPE_RECT,
+};
+char *emitterShapeStrings[] = {
+	"Point",
+	"Line",
+	"Circle",
+	"Rect",
+};
+
 struct EmitterInfo {
 #define EMITTER_INFO_NAME_MAX_LEN 64
 	char name[EMITTER_INFO_NAME_MAX_LEN];
 
 	char textureDir[PATH_MAX_LEN];
-	int imageCount;
-	float particlesPerSec;
+	bool animated;
+	float frameRate; 
 
-	Vec2 startDir, startDirVariance;
-	float startSpeed, startSpeedVariance;
+	EmitterShape shape;
+	float shapeInnerCutPerc;
+	bool explode;
+	float rate;
 
-	Vec2 startAccel, startAccelVariance;
-	Vec2 endAccel, endAccelVariance;
+	Vec2 dir, dirVariance;
 
-	float startScale, startScaleVariance;
-	float endScale, endScaleVariance;
+	float speedStart, speedStartVariance;
+	float speedEnd, speedEndVariance;
 
-	float startRotation, startRotationVariance;
-	float startAngularSpeed, startAngularSpeedVariance;
-	float startAngularAccel, startAngularAccelVariance;
-	float endAngularAccel, endAngularAccelVariance;
+	Vec2 accel, accelVariance;
+
+	float scaleStart, scaleStartVariance;
+	float scaleEnd, scaleEndVariance;
+
+	float rotation, rotationVariance;
+	float angularSpeedStart, angularSpeedStartVariance;
+	float angularSpeedEnd, angularSpeedEndVariance;
 
 	float lifetime, lifetimeVariance;
 
@@ -46,21 +65,19 @@ struct EmitterInfo {
 	int endColor, endColorVariance;
 };
 
-enum EmitterShape {
-	EMITTER_SHAPE_POINT,
-	// EMITTER_SHAPE_LINE,
-	// EMITTER_SHAPE_RECT,
-	// EMITTER_SHAPE_CIRCLE,
-};
 struct Emitter {
-	EmitterShape shape;
-	Vec2 position;
-
 	EmitterInfo *info;
 	char prevTextureDir[PATH_MAX_LEN];
+
+	Vec2 position;
+	Line2 line;
+	Rect rect;
+	float circleRadius;
+
+	bool enabled;
 	SpriteSheet *sheet;
 
-	float timeLeftTillNextParticle;
+	float timeSinceLastEmit;
 
 	Particle *particles;
 	int particlesNum;
@@ -104,25 +121,28 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 		emitter->sheet = createSpriteSheet(info->textureDir);
 	}
 
-	if (info->particlesPerSec > 0) {
-		emitter->timeLeftTillNextParticle -= elapsed;
-		float timeBetween = 1 / info->particlesPerSec;
-		if (emitter->timeLeftTillNextParticle > timeBetween) emitter->timeLeftTillNextParticle = timeBetween;
-		while (emitter->timeLeftTillNextParticle < 0) {
-			emitter->timeLeftTillNextParticle += timeBetween;
-			emit(emitter);
+	if (!info->explode) {
+		if (emitter->enabled) emitter->timeSinceLastEmit += elapsed;
+
+		if (!info->explode) {
+			while (emitter->timeSinceLastEmit > info->rate) {
+				emitter->timeSinceLastEmit -= info->rate;
+				emit(emitter);
+			}
 		}
 	}
 
 	for (int i = 0; i < emitter->particlesNum; i++) {
 		Particle *particle = &emitter->particles[i];
-
 		float perc = particle->time / particle->lifetime;
 
-		Vec2 accel = lerp(particle->startAccel, particle->endAccel, perc);
+		Vec2 velo = lerp(particle->veloStart, particle->veloEnd, perc);
+		float angularSpeed = lerp(particle->angularSpeedStart, particle->angularSpeedEnd, perc);
 
-		particle->velo += accel;
-		particle->position += particle->velo;
+		particle->position += (velo + particle->veloFromAccel) * elapsed;
+		particle->veloFromAccel += particle->accel;
+
+		particle->rotation += angularSpeed;
 
 		particle->time += elapsed;
 		if (particle->time > particle->lifetime) {
@@ -149,26 +169,59 @@ Particle *emit(Emitter *emitter) {
 		particle->imageIndex = rndInt(0, emitter->sheet->imagesNum-1);
 	}
 
-	if (emitter->shape == EMITTER_SHAPE_POINT) {
+	if (info->shape == EMITTER_SHAPE_POINT) {
 		particle->position = emitter->position;
+	} else if (info->shape == EMITTER_SHAPE_LINE) {
+		float perc = rndFloat(0, 1);
+		particle->position.x = lerp(emitter->line.start.x, emitter->line.end.x, perc);
+		particle->position.y = lerp(emitter->line.start.y, emitter->line.end.y, perc);
+	} else if (info->shape == EMITTER_SHAPE_CIRCLE) {
+		float dirPerc = rndFloat(0, 1);
+		float distPerc = rndFloat(info->shapeInnerCutPerc, 1);
+
+		float rads = dirPerc * 2*M_PI;
+		float dist = distPerc * emitter->circleRadius;
+		particle->position = emitter->position;
+		particle->position.x += cos(rads) * dist;
+		particle->position.y += sin(rads) * dist;
+	} else if (info->shape == EMITTER_SHAPE_RECT) {
+		float percX;
+		float percY;
+		if (rndPerc(0.5)) {
+			percX = rndFloat(info->shapeInnerCutPerc, 1);
+			percY = rndFloat(0, 1);
+		} else {
+			percX = rndFloat(0, 1);
+			percY = rndFloat(info->shapeInnerCutPerc, 1);
+		}
+
+		if (rndPerc(0.5)) percX *= -1;
+		if (rndPerc(0.5)) percY *= -1;
+
+		particle->position = getCenter(emitter->rect);
+		particle->position.x += percX * emitter->rect.width/2;
+		particle->position.y += percY * emitter->rect.height/2;
 	}
 
 	Vec2 dir;
-	dir.x = info->startDir.x + info->startDirVariance.x*rndFloat(-1, 1);
-	dir.y = info->startDir.y + info->startDirVariance.y*rndFloat(-1, 1);
-	float speed = info->startSpeed + info->startSpeedVariance*rndFloat(-1, 1);
+	dir.x = info->dir.x + info->dirVariance.x*rndFloat(-1, 1);
+	dir.y = info->dir.y + info->dirVariance.y*rndFloat(-1, 1);
+	dir = normalize(dir);
 
-	particle->velo = normalize(dir) * speed;
+	float veloStart = info->speedStart + info->speedStartVariance*rndFloat(-1, 1);
+	float veloEnd = info->speedEnd + info->speedEndVariance*rndFloat(-1, 1);
 
-	particle->startAccel = info->startAccel + info->startAccelVariance*rndFloat(-1, 1);
-	particle->endAccel = info->endAccel + info->endAccelVariance*rndFloat(-1, 1);
+	particle->veloStart = dir * veloStart;
+	particle->veloEnd = dir * veloEnd;
 
-	particle->startScale = info->startScale + info->startScaleVariance*rndFloat(-1, 1);
-	particle->endScale = info->endScale + info->endScaleVariance*rndFloat(-1, 1);
-	// @todo
-	// float rotation;
-	// float rotationVelo;
-	// float startAngularAccel, endAngularAccel;
+	particle->accel = info->accel + info->accelVariance*rndFloat(-1, 1);
+
+	particle->scaleStart = info->scaleStart + info->scaleStartVariance*rndFloat(-1, 1);
+	particle->scaleEnd = info->scaleEnd + info->scaleEndVariance*rndFloat(-1, 1);
+
+	particle->rotation = info->rotation + info->rotationVariance*rndFloat(-1, 1);
+	particle->angularSpeedStart = info->angularSpeedStart + info->angularSpeedStartVariance*rndFloat(-1, 1);
+	particle->angularSpeedEnd = info->angularSpeedEnd + info->angularSpeedEndVariance*rndFloat(-1, 1);
 
 	particle->lifetime = info->lifetime + info->lifetimeVariance*rndFloat(-1, 1);
 
@@ -204,28 +257,36 @@ Particle *emit(Emitter *emitter) {
 }
 
 void drawEmitter(Emitter *emitter) {
-	// EmitterInfo *info = emitter->info;
-	// if (!info) {
-	// 	logf("Drawing emitter with no info!\n");
-	// 	return;
-	// }
+	EmitterInfo *info = emitter->info;
+	if (!info) {
+		logf("Drawing emitter with no info!\n");
+		return;
+	}
 
 	for (int i = 0; i < emitter->particlesNum; i++) {
 		Particle *particle = &emitter->particles[i];
 		float perc = particle->time / particle->lifetime;
 
 		int color = lerpColor(particle->startColor, particle->endColor, perc);
-
-		float scale = lerp(particle->startScale, particle->endScale, perc);
+		float scale = lerp(particle->scaleStart, particle->scaleEnd, perc); //@incomplete
 
 		if (emitter->sheet) {
 			SpriteSheet *sheet = emitter->sheet;
+			if (info->animated) particle->imageIndex = (int)(particle->time * info->frameRate) % sheet->imagesNum;
+
 			SpriteSheetImage *image = &sheet->images[particle->imageIndex];
 
 			RenderProps props = newRenderProps();
 			props.srcWidth = props.srcHeight = 1;
-			props.matrix.TRANSLATE(particle->position);
-			props.matrix.SCALE(image->srcWidth, image->srcHeight);
+			Vec2 textureSize = v2(image->srcWidth, image->srcHeight);
+			props.matrix.TRANSLATE(particle->position + v2(image->destOffX, image->destOffY));
+
+			props.matrix.TRANSLATE(textureSize/2);
+			props.matrix.SCALE(scale);
+			props.matrix.ROTATE(particle->rotation);
+			props.matrix.TRANSLATE(-textureSize/2);
+
+			props.matrix.SCALE(textureSize);
 
 			props.uv0.x = (float)image->srcX / (float)sheet->texture->width;
 			props.uv0.y = (float)image->srcY / (float)sheet->texture->height;
@@ -247,7 +308,22 @@ void guiInputEmitter(Emitter *emitter) {
 
 	ImGui::Begin("Emitter", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 	ImGui::Text("Particles: %d/%d", emitter->particlesNum, emitter->particlesMax);
-	ImGui::DragFloat2("Position", &emitter->position.x);
+
+	EmitterInfo *info = emitter->info;
+	if (info) {
+		if (info->shape == EMITTER_SHAPE_POINT) {
+			ImGui::DragFloat2("Position", &emitter->position.x);
+		} else if (info->shape == EMITTER_SHAPE_LINE) {
+			ImGui::DragFloat2("Line start", &emitter->line.start.x);
+			ImGui::DragFloat2("Line end", &emitter->line.end.x);
+		} else if (info->shape == EMITTER_SHAPE_CIRCLE) {
+			ImGui::DragFloat2("Position", &emitter->position.x);
+			ImGui::DragFloat("Radius", &emitter->circleRadius);
+		} else if (info->shape == EMITTER_SHAPE_RECT) {
+			ImGui::DragFloat4("Rect", &emitter->rect.x);
+		}
+	}
+
 	ImGui::End();
 
 	ImGui::PopID();
@@ -258,43 +334,50 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 
 	ImGui::InputText("Name", info->name, EMITTER_INFO_NAME_MAX_LEN);
 	ImGui::InputText("Texture path", info->textureDir, PATH_MAX_LEN);
-	ImGui::InputInt("Image count", &info->imageCount);
+	ImGui::Checkbox("Animated", &info->animated);
+	if (info->animated) ImGui::DragFloat("Frame rate", &info->frameRate, 0.1);
 
-	ImGui::DragFloat("Particles per sec", &info->particlesPerSec);
+	ImGui::Combo("Shape", (int *)&info->shape, emitterShapeStrings, ArrayLength(emitterShapeStrings));
+	ImGui::SliderFloat("Shape inner cut perc", &info->shapeInnerCutPerc, 0, 1);
+	ImGui::Checkbox("Explode", &info->explode);
 
-	ImGui::DragFloat2("Start direction", &info->startDir.x, 0.1);
-	ImGui::SameLine();
-	ImGui::DragFloat2("+/-###Start direction variance", &info->startDirVariance.x, 0.1);
+	auto setFloatWithVariance = [](char *label, float *value, float *variance, float speed) {
+		ImGui::Text("%s", label);
+		ImGui::SameLine();
+		ImGui::DragFloat(frameSprintf("###%s base", label), value, speed);
+		ImGui::SameLine();
+		ImGui::Text("+/-");
+		ImGui::SameLine();
+		ImGui::DragFloat(frameSprintf("###%s variance", label), variance, speed);
+	};
 
-	ImGui::DragFloat("Start speed", &info->startSpeed, 0.1);
-	ImGui::SameLine();
-	ImGui::DragFloat("+/-###Start speed variance", &info->startSpeedVariance, 0.1);
+	auto setVec2WithVariance = [](char *label, Vec2 *value, Vec2 *variance, float speed) {
+		ImGui::Text("%s", label);
+		ImGui::SameLine();
+		ImGui::DragFloat2(frameSprintf("###%s base", label), &value->x, speed);
+		ImGui::SameLine();
+		ImGui::Text("+/-");
+		ImGui::SameLine();
+		ImGui::DragFloat2(frameSprintf("###%s variance", label), &variance->x, speed);
+	};
 
-	ImGui::DragFloat2("Start accel", &info->startAccel.x, 0.01);
-	ImGui::SameLine();
-	ImGui::DragFloat2("+/-###Start accel variance", &info->startAccelVariance.x, 0.01);
+	ImGui::DragFloat("Rate", &info->rate, 0.001);
+	if (info->rate < 0.001) info->rate = 0.001;
 
-	ImGui::DragFloat2("End accel", &info->endAccel.x, 0.01);
-	ImGui::SameLine();
-	ImGui::DragFloat2("+/-###End accel variance", &info->endAccelVariance.x, 0.01);
+	setVec2WithVariance("Direction", &info->dir, &info->dirVariance, 0.1);
+	setFloatWithVariance("Speed start", &info->speedStart, &info->speedStartVariance, 0.1);
+	setFloatWithVariance("Speed end", &info->speedEnd, &info->speedEndVariance, 0.1);
 
-	ImGui::DragFloat("Start scale", &info->startScale, 0.001);
-	ImGui::SameLine();
-	ImGui::DragFloat("+/-###Start scale variance", &info->startScaleVariance, 0.001);
+	setVec2WithVariance("Accel", &info->accel, &info->accelVariance, 0.01);
 
-	ImGui::DragFloat("End scale", &info->endScale, 0.001);
-	ImGui::SameLine();
-	ImGui::DragFloat("+/-###End scale variance", &info->endScaleVariance, 0.001);
+	setFloatWithVariance("Scale start", &info->scaleStart, &info->scaleStartVariance, 0.01);
+	setFloatWithVariance("Scale end", &info->scaleEnd, &info->scaleEndVariance, 0.01);
 
-	// @todo
-	// float startRotation, startRotationVariance;
-	// float startAngularSpeed, startAngularSpeedVariance;
-	// float startAngularAccel, startAngularAccelVariance;
-	// float endAngularAccel, endAngularAccelVariance;
+	setFloatWithVariance("Rotation", &info->rotation, &info->rotationVariance, 0.1);
+	setFloatWithVariance("Angular speed start", &info->angularSpeedStart, &info->angularSpeedStartVariance, 0.01);
+	setFloatWithVariance("Angular speed end", &info->angularSpeedEnd, &info->angularSpeedEndVariance, 0.01);
 
-	ImGui::DragFloat("Lifetime", &info->lifetime, 0.1);
-	ImGui::SameLine();
-	ImGui::DragFloat("+/-###Lifetime variance", &info->lifetimeVariance, 0.1);
+	setFloatWithVariance("Lifetime", &info->lifetime, &info->lifetimeVariance, 0.1);
 
 	guiInputArgb("Start color", &info->startColor);
 	ImGui::SameLine();
@@ -308,38 +391,43 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 }
 
 void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
-	int version = 1;
+	int version = 3;
 	writeU32(stream, version);
 
 	writeString(stream, info->name);
 
 	writeString(stream, info->textureDir);
-	writeU32(stream, info->imageCount);
-	writeFloat(stream, info->particlesPerSec);
+	writeU8(stream, info->animated);
+	writeFloat(stream, info->frameRate);
 
-	writeVec2(stream, info->startDir);
-	writeVec2(stream, info->startDirVariance);
-	writeFloat(stream, info->startSpeed);
-	writeFloat(stream, info->startSpeedVariance);
+	writeU32(stream, (int)info->shape);
+	writeFloat(stream, info->shapeInnerCutPerc);
+	writeU8(stream, info->explode);
 
-	writeVec2(stream, info->startAccel);
-	writeVec2(stream, info->startAccelVariance);
-	writeVec2(stream, info->endAccel);
-	writeVec2(stream, info->endAccelVariance);
+	writeFloat(stream, info->rate);
 
-	writeFloat(stream, info->startScale);
-	writeFloat(stream, info->startScaleVariance);
-	writeFloat(stream, info->endScale);
-	writeFloat(stream, info->endScaleVariance);
+	writeVec2(stream, info->dir);
+	writeVec2(stream, info->dirVariance);
 
-	writeFloat(stream, info->startRotation);
-	writeFloat(stream, info->startRotationVariance);
-	writeFloat(stream, info->startAngularSpeed);
-	writeFloat(stream, info->startAngularSpeedVariance);
-	writeFloat(stream, info->startAngularAccel);
-	writeFloat(stream, info->startAngularAccelVariance);
-	writeFloat(stream, info->endAngularAccel);
-	writeFloat(stream, info->endAngularAccelVariance);
+	writeFloat(stream, info->speedStart);
+	writeFloat(stream, info->speedStartVariance);
+	writeFloat(stream, info->speedEnd);
+	writeFloat(stream, info->speedEndVariance);
+
+	writeVec2(stream, info->accel);
+	writeVec2(stream, info->accelVariance);
+
+	writeFloat(stream, info->scaleStart);
+	writeFloat(stream, info->scaleStartVariance);
+	writeFloat(stream, info->scaleEnd);
+	writeFloat(stream, info->scaleEndVariance);
+
+	writeFloat(stream, info->rotation);
+	writeFloat(stream, info->rotationVariance);
+	writeFloat(stream, info->angularSpeedStart);
+	writeFloat(stream, info->angularSpeedStartVariance);
+	writeFloat(stream, info->angularSpeedEnd);
+	writeFloat(stream, info->angularSpeedEndVariance);
 
 	writeFloat(stream, info->lifetime);
 	writeFloat(stream, info->lifetimeVariance);
@@ -356,32 +444,49 @@ void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	readStringInto(stream, info->name, EMITTER_INFO_NAME_MAX_LEN);
 
 	readStringInto(stream, info->textureDir, PATH_MAX_LEN);
-	info->imageCount = readU32(stream);
-	info->particlesPerSec = readFloat(stream);
+	if (version >= 3) {
+		info->animated = readU8(stream);
+		info->frameRate = readFloat(stream);
+		info->shape = (EmitterShape)readU32(stream);
+		info->shapeInnerCutPerc = readFloat(stream);
+		info->explode = readU8(stream);
+	} else {
+		readU32(stream);
+	}
+	info->rate = readFloat(stream);
 
-	info->startDir = readVec2(stream);
-	info->startDirVariance = readVec2(stream);
-	info->startSpeed = readFloat(stream);
-	info->startSpeedVariance = readFloat(stream);
+	info->dir = readVec2(stream);
+	info->dirVariance = readVec2(stream);
 
-	info->startAccel = readVec2(stream);
-	info->startAccelVariance = readVec2(stream);
-	info->endAccel = readVec2(stream);
-	info->endAccelVariance = readVec2(stream);
+	info->speedStart = readFloat(stream);
+	info->speedStartVariance = readFloat(stream);
+	if (version >= 2) {
+		info->speedEnd = readFloat(stream);
+		info->speedEndVariance = readFloat(stream);
+	}
 
-	info->startScale = readFloat(stream);
-	info->startScaleVariance = readFloat(stream);
-	info->endScale = readFloat(stream);
-	info->endScaleVariance = readFloat(stream);
+	info->accel = readVec2(stream);
+	info->accelVariance = readVec2(stream);
+	if (version <= 1) {
+		readVec2(stream);
+		readVec2(stream);
+	}
 
-	info->startRotation = readFloat(stream);
-	info->startRotationVariance = readFloat(stream);
-	info->startAngularSpeed = readFloat(stream);
-	info->startAngularSpeedVariance = readFloat(stream);
-	info->startAngularAccel = readFloat(stream);
-	info->startAngularAccelVariance = readFloat(stream);
-	info->endAngularAccel = readFloat(stream);
-	info->endAngularAccelVariance = readFloat(stream);
+	info->scaleStart = readFloat(stream);
+	info->scaleStartVariance = readFloat(stream);
+	info->scaleEnd = readFloat(stream);
+	info->scaleEndVariance = readFloat(stream);
+
+	info->rotation = readFloat(stream);
+	info->rotationVariance = readFloat(stream);
+	info->angularSpeedStart = readFloat(stream);
+	info->angularSpeedStartVariance = readFloat(stream);
+	info->angularSpeedEnd = readFloat(stream);
+	info->angularSpeedEndVariance = readFloat(stream);
+	if (version <= 1) {
+		readFloat(stream);
+		readFloat(stream);
+	}
 
 	info->lifetime = readFloat(stream);
 	info->lifetimeVariance = readFloat(stream);

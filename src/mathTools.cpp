@@ -3207,7 +3207,7 @@ float tweenEase(float p, Ease ease) {
 	} else if (ease == QUINT_IN_OUT) {
 		float f = ((2 * p) - 2);
 		if (p < 0.5) return 16 * p * p * p * p * p;
-		else return  0.5 * f * f * f * f * f + 1;
+		else return 0.5 * f * f * f * f * f + 1;
 	} else if (ease == SINE_IN) {
 		return sin((p - 1) * piOver2) + 1;
 	} else if (ease == SINE_OUT) {
