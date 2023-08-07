@@ -84,24 +84,40 @@ struct Emitter {
 	int particlesMax;
 };
 
+struct EmitterSystem {
+	Vec2 sizeScale;
+
+	int debugExplodeCount;
+	bool debugExplodingRepeatedly;
+	float debugExplodingRepeatedlyDelay;
+	float debugTimeTillNextExplode;
+};
+
+void checkEmitterSystemInit();
 Emitter *createEmitter();
 void updateEmitter(Emitter *emitter, float elapsed);
 Particle *emit(Emitter *emitter);
 void drawEmitter(Emitter *emitter);
+void updateAndDrawEmitter(Emitter *emitter, float elapsed);
 
-void guiInputEmitter(Emitter *emitter);
+void guiInputEmitter(Emitter *emitter, float elapsed);
 void guiInputEmitterInfo(EmitterInfo *info);
 void writeEmitterInfo(DataStream *stream, EmitterInfo *info);
 void readEmitterInfo(DataStream *stream, EmitterInfo *info);
 bool saveLoadEmitterInfo(DataStream *stream, bool save, int version, EmitterInfo *info, int startVersion, int endVersion);
 /// FUNCTIONS ^
 
-// struct EmitterSystem {
-// };
+EmitterSystem *emitterSys = NULL;
 
-// EmitterSystem *emitterSys = NULL;
+void checkEmitterSystemInit() {
+	if (emitterSys) return;
+	emitterSys = (EmitterSystem *)zalloc(sizeof(EmitterSystem));
+	emitterSys->sizeScale = v2(1, 1);
+}
 
 Emitter *createEmitter() {
+	checkEmitterSystemInit();
+
 	Emitter *emitter = (Emitter *)zalloc(sizeof(Emitter));
 	emitter->particlesMax = 128;
 	emitter->particles = (Particle *)zalloc(sizeof(Particle) * emitter->particlesMax);
@@ -109,6 +125,8 @@ Emitter *createEmitter() {
 }
 
 void updateEmitter(Emitter *emitter, float elapsed) {
+	checkEmitterSystemInit();
+
 	EmitterInfo *info = emitter->info;
 	if (!info) {
 		logf("Updating emitter with no info!\n");
@@ -155,6 +173,8 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 }
 
 Particle *emit(Emitter *emitter) {
+	checkEmitterSystemInit();
+
 	EmitterInfo *info = emitter->info;
 
 	if (emitter->particlesNum > emitter->particlesMax-1) {
@@ -268,7 +288,8 @@ void drawEmitter(Emitter *emitter) {
 		float perc = particle->time / particle->lifetime;
 
 		int color = lerpColor(particle->startColor, particle->endColor, perc);
-		float scale = lerp(particle->scaleStart, particle->scaleEnd, perc); //@incomplete
+		float scaleFactor = lerp(particle->scaleStart, particle->scaleEnd, perc);
+		Vec2 scale = v2(scaleFactor, scaleFactor);
 
 		if (emitter->sheet) {
 			SpriteSheet *sheet = emitter->sheet;
@@ -278,8 +299,14 @@ void drawEmitter(Emitter *emitter) {
 
 			RenderProps props = newRenderProps();
 			props.srcWidth = props.srcHeight = 1;
+
+			Vec2 position = particle->position + v2(image->destOffX, image->destOffY);
 			Vec2 textureSize = v2(image->srcWidth, image->srcHeight);
-			props.matrix.TRANSLATE(particle->position + v2(image->destOffX, image->destOffY));
+
+			position *= emitterSys->sizeScale;
+			textureSize *= emitterSys->sizeScale;
+
+			props.matrix.TRANSLATE(position - textureSize/2);
 
 			props.matrix.TRANSLATE(textureSize/2);
 			props.matrix.SCALE(scale);
@@ -297,16 +324,24 @@ void drawEmitter(Emitter *emitter) {
 
 			drawTexture(emitter->sheet->texture, props);
 		} else {
-			Circle circle = makeCircle(particle->position, 32*scale);
+			Circle circle = makeCircle(particle->position, 32*scale.x);
 			drawCircle(circle, color);
 		}
 	}
 }
 
-void guiInputEmitter(Emitter *emitter) {
+void updateAndDrawEmitter(Emitter *emitter, float elapsed) {
+	updateEmitter(emitter, elapsed);
+	drawEmitter(emitter);
+}
+
+void guiInputEmitter(Emitter *emitter, float elapsed) {
+	checkEmitterSystemInit();
+
 	ImGui::PushID(emitter);
 
 	ImGui::Begin("Emitter", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+	ImGui::Text("Size scale: %.2f,%.2f", emitterSys->sizeScale.x, emitterSys->sizeScale.y);
 	ImGui::Text("Particles: %d/%d", emitter->particlesNum, emitter->particlesMax);
 
 	EmitterInfo *info = emitter->info;
@@ -324,12 +359,39 @@ void guiInputEmitter(Emitter *emitter) {
 		}
 	}
 
+	if (info->explode) {
+		ImGui::InputInt("Explode count", &emitterSys->debugExplodeCount);
+		ImGui::SameLine();
+		if (ImGui::Button("Explode")) {
+			for (int i = 0; i < emitterSys->debugExplodeCount; i++) {
+				emit(emitter);
+			}
+		}
+
+		ImGui::Checkbox("Explode repeatedly", &emitterSys->debugExplodingRepeatedly);
+		if (emitterSys->debugExplodingRepeatedly) {
+			ImGui::SameLine();
+			ImGui::DragFloat("Delay", &emitterSys->debugExplodingRepeatedlyDelay, 0.1);
+			if (emitterSys->debugExplodingRepeatedlyDelay < 0.1) emitterSys->debugExplodingRepeatedlyDelay = 0.1;
+
+			emitterSys->debugTimeTillNextExplode -= elapsed;
+			if (emitterSys->debugTimeTillNextExplode < 0) {
+				emitterSys->debugTimeTillNextExplode = emitterSys->debugExplodingRepeatedlyDelay;
+				for (int i = 0; i < emitterSys->debugExplodeCount; i++) {
+					emit(emitter);
+				}
+			}
+		}
+	}
+
 	ImGui::End();
 
 	ImGui::PopID();
 }
 
 void guiInputEmitterInfo(EmitterInfo *info) {
+	checkEmitterSystemInit();
+
 	ImGui::PushID(info);
 
 	ImGui::InputText("Name", info->name, EMITTER_INFO_NAME_MAX_LEN);
@@ -370,14 +432,14 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 
 	setVec2WithVariance("Accel", &info->accel, &info->accelVariance, 0.01);
 
-	setFloatWithVariance("Scale start", &info->scaleStart, &info->scaleStartVariance, 0.01);
-	setFloatWithVariance("Scale end", &info->scaleEnd, &info->scaleEndVariance, 0.01);
+	setFloatWithVariance("Scale start", &info->scaleStart, &info->scaleStartVariance, 0.001);
+	setFloatWithVariance("Scale end", &info->scaleEnd, &info->scaleEndVariance, 0.001);
 
 	setFloatWithVariance("Rotation", &info->rotation, &info->rotationVariance, 0.1);
 	setFloatWithVariance("Angular speed start", &info->angularSpeedStart, &info->angularSpeedStartVariance, 0.01);
 	setFloatWithVariance("Angular speed end", &info->angularSpeedEnd, &info->angularSpeedEndVariance, 0.01);
 
-	setFloatWithVariance("Lifetime", &info->lifetime, &info->lifetimeVariance, 0.1);
+	setFloatWithVariance("Lifetime", &info->lifetime, &info->lifetimeVariance, 0.01);
 
 	guiInputArgb("Start color", &info->startColor);
 	ImGui::SameLine();
