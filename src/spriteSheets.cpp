@@ -11,8 +11,6 @@ struct SpriteSheetImage {
 	int destOffY;
 	int width;
 	int height;
-
-	u8 *srcBitmap;
 };
 
 struct SpriteSheet {
@@ -45,6 +43,8 @@ SpriteSheet *createSpriteSheet(char *dir) {
 
 	stbrp_rect *rects = (stbrp_rect *)frameMalloc(pathsNum * sizeof(stbrp_rect));
 
+	u8 **srcBitmaps = (u8 **)frameMalloc(sizeof(u8 *) * pathsNum);
+
 	for (int i = 0; i < pathsNum; i++) {
 		char *path = paths[i];
 
@@ -56,7 +56,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
 
 		int width, height, channels;
 		stbi_set_flip_vertically_on_load(false);
-		image->srcBitmap = stbi_load_from_memory(pngData, pngDataSize, &width, &height, &channels, 4);
+		srcBitmaps[i] = stbi_load_from_memory(pngData, pngDataSize, &width, &height, &channels, 4);
 		stbi_set_flip_vertically_on_load(true);
 		free(pngData);
 
@@ -104,7 +104,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
 
 		for (int y = startY; y < endY; y++) {
 			for (int x = startX; x < endX; x++) {
-				u8 *readStart = &image->srcBitmap[((y+image->destOffY)*image->srcWidth + (x+image->destOffX))*4];
+				u8 *readStart = &srcBitmaps[i][((y+image->destOffY)*image->srcWidth + (x+image->destOffX))*4];
 
 				int writeY = rpRect->y + padding + y;
 				int writeX = rpRect->x + padding + x;
@@ -117,7 +117,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
 			}
 		}
 
-		free(image->srcBitmap);
+		free(srcBitmaps[i]);
 	}
 
 	sheet->texture = createTexture(SPRITE_SHEET_WIDTH_MAX, SPRITE_SHEET_HEIGHT_MAX);
@@ -128,5 +128,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
 }
 
 void destroySpriteSheet(SpriteSheet *sheet) {
-	//@incomplete
+	destroyTexture(sheet->texture);
+	free(sheet->images);
+	free(sheet);
 }

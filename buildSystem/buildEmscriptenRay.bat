@@ -1,24 +1,24 @@
-set PATH=%PATH%;c:\emsdk
-set PATH=%PATH%;c:\emsdk\upstream\emscripten
-set PATH=%PATH%;c:\emsdk\node\12.18.1_64bit\bin
-set PATH=%PATH%;c:\emsdk\python\3.7.4-pywin32_64bit
-set PATH=%PATH%;c:\emsdk\java\8.152_64bit\bin
-
-set EMSDK=c:/emsdk
-set EM_CONFIG=c:\emsdk\.emscripten
-set EMSDK_NODE=c:\emsdk\node\12.18.1_64bit\bin\node.exe
-set EMSDK_PYTHON=c:\emsdk\python\3.7.4-pywin32_64bit\python.exe
-set JAVA_HOME=c:\emsdk\java\8.152_64bit
-set EM_CACHE=c:/emsdk/upstream/emscripten\cache
-
 REM set PATH=%PATH%;c:\emsdk
 REM set PATH=%PATH%;c:\emsdk\upstream\emscripten
+REM set PATH=%PATH%;c:\emsdk\node\12.18.1_64bit\bin
+REM set PATH=%PATH%;c:\emsdk\python\3.7.4-pywin32_64bit
+REM set PATH=%PATH%;c:\emsdk\java\8.152_64bit\bin
 
 REM set EMSDK=c:/emsdk
+REM set EM_CONFIG=c:\emsdk\.emscripten
+REM set EMSDK_NODE=c:\emsdk\node\12.18.1_64bit\bin\node.exe
+REM set EMSDK_PYTHON=c:\emsdk\python\3.7.4-pywin32_64bit\python.exe
+REM set JAVA_HOME=c:\emsdk\java\8.152_64bit
+REM set EM_CACHE=c:/emsdk/upstream/emscripten\cache
+
+set PATH=%PATH%;c:\emsdk
+set PATH=%PATH%;c:\emsdk\upstream\emscripten
+
+set EMSDK=c:/emsdk
 REM set EM_CONFIG=c:/emsdk/.emscripten
-REM set EMSDK_NODE=C:/emsdk/node/16.20.0_64bit/bin/node.exe
-REM set EMSDK_PYTHON=C:/emsdk/python/3.9.2-nuget_64bit/python.exe
-REM set JAVA_HOME=C:/emsdk/java/8.152_64bit
+set EMSDK_NODE=C:/emsdk/node/16.20.0_64bit/bin/node.exe
+set EMSDK_PYTHON=C:/emsdk/python/3.9.2-nuget_64bit/python.exe
+set JAVA_HOME=C:/emsdk/java/8.152_64bit
 REM set EM_CACHE=c:/emsdk/upstream/emscripten/cache
 
 cd /d "%~dp0.."

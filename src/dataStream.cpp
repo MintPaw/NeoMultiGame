@@ -39,8 +39,10 @@ void writeJaiString(DataStream *stream, char *string);
 #ifndef NO_DATA_STREAM_IO
 DataStream *loadDataStream(char *path);
 DataStream *loadDataStreamFromHexString(char *hexStr);
-bool writeDataStream(char *path, DataStream *stream);
+bool writeDataStream(DataStream *stream, char *path);
 char *writeToHexString(DataStream *stream);
+bool writeToCompressedFile(DataStream *stream, char *path);
+DataStream *readFromCompressedFile(char *path);
 #endif //NO_DATA_STREAM_IO
 
 
@@ -300,9 +302,8 @@ DataStream *loadDataStreamFromHexString(char *hexStr) {
 	return stream;
 }
 
-bool writeDataStream(char *path, DataStream *stream) {
-	return writeFile(path, stream->data, stream->index);
-}
+bool writeDataStream(char *path, DataStream *stream) { return writeFile(path, stream->data, stream->index); }
+bool writeDataStream(DataStream *stream, char *path) { return writeFile(path, stream->data, stream->index); }
 
 char *writeToHexString(DataStream *stream) {
 	int newDataSize;
@@ -311,6 +312,28 @@ char *writeToHexString(DataStream *stream) {
 	free(newData);
 	return hexStr;
 }
+
+bool writeToCompressedFile(DataStream *stream, char *path) {
+	int newDataSize;
+	void *newData = compressBytes(stream->data, stream->index, &newDataSize);
+
+  bool ret = writeFile(path, newData, newDataSize);
+  free(newData);
+
+  return ret;
+}
+
+DataStream *readFromCompressedFile(char *path) {
+  int smallDataSize = 0;
+  void *smallData = readFile(path, &smallDataSize);
+
+	DataStream *stream = (DataStream *)zalloc(sizeof(DataStream));
+	stream->data = (u8 *)uncompressBytes(smallData, smallDataSize, &stream->dataMax);
+
+	free(smallData);
+	return stream;
+}
+
 #endif //NO_DATA_STREAM_IO
 
 #endif

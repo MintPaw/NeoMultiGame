@@ -95,6 +95,8 @@ void guiMapVec4(char *srcName, char *destName, Vec4 *vec) {
 	ImGui::PushID(frameSprintf("%s mapped to %s", srcName, destName));
 	ImGui::PushItemWidth(120);
 
+	bool hovering = false;
+
 	ImGui::Text("%s", srcName);
 	ImGui::SameLine();
 	ImGui::InputFloat(frameSprintf("###SrcMin", srcName), &vec->x);
@@ -106,6 +108,35 @@ void guiMapVec4(char *srcName, char *destName, Vec4 *vec) {
 	ImGui::InputFloat(frameSprintf("###DestMin", destName), &vec->z);
 	ImGui::SameLine();
 	ImGui::InputFloat(frameSprintf("###DestMax", destName), &vec->w);
+
+	ImGui::SameLine();
+	ImGui::Text("(?)");
+	if (ImGui::IsItemHovered()) hovering = true;
+
+	if (hovering) {
+		StringBuilder builder = createStringBuilder(128);
+
+		float srcMin = vec->x;
+		float srcMax = vec->y;
+		float destMin = vec->z;
+		float destMax = vec->w;
+
+		int colLen = MaxNum(strlen(srcName), strlen(destName));
+		if (colLen < 8) colLen = 8;
+
+		addText(&builder, frameSprintf("%*s -> %-*s\n", colLen, srcName, colLen, destName));
+		for (int i = 0; i < 10; i++) {
+			float perc = i / 10.0;
+			char *srcStr = frameSprintf("%g", lerp(srcMin, srcMax, perc));
+			char *destStr = frameSprintf("%g", lerp(destMin, destMax, perc));
+			addText(&builder, frameSprintf("%*s -> %-*s\n", colLen, srcStr, colLen, destStr));
+		}
+		ImGui::BeginTooltip();
+		ImGui::Text("%s", builder.string);
+		ImGui::EndTooltip();
+
+		destroy(builder);
+	}
 
 	ImGui::PopItemWidth();
 	ImGui::PopID();

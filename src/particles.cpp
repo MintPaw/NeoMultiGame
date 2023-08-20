@@ -8,14 +8,18 @@ struct Particle {
 	Vec2 accel;
 
 	float scaleStart, scaleEnd;
+	float scale;
 
 	float rotation;
 	float angularSpeedStart, angularSpeedEnd;
 
 	float lifetime;
 
-	int startColor, endColor;
+	int colorStart, colorEnd;
+	int color;
 
+	u32 randomValue;
+	float delay;
 	float time;
 };
 
@@ -30,6 +34,12 @@ char *emitterShapeStrings[] = {
 	"Line",
 	"Circle",
 	"Rect",
+};
+
+struct EmitterFnInfo {
+	bool enabled;
+	float amplitude;
+	float frequency;
 };
 
 struct EmitterInfo {
@@ -49,20 +59,31 @@ struct EmitterInfo {
 
 	float speedStart, speedStartVariance;
 	float speedEnd, speedEndVariance;
+	bool animateSpeed;
+
+	EmitterFnInfo veloXFn;
 
 	Vec2 accel, accelVariance;
 
 	float scaleStart, scaleStartVariance;
 	float scaleEnd, scaleEndVariance;
+	bool animateScale;
+
+	EmitterFnInfo scaleFn;
 
 	float rotation, rotationVariance;
 	float angularSpeedStart, angularSpeedStartVariance;
 	float angularSpeedEnd, angularSpeedEndVariance;
+	bool animateAngularSpeed;
 
 	float lifetime, lifetimeVariance;
+	float delay, delayVariance;
 
-	int startColor, startColorVariance;
-	int endColor, endColorVariance;
+	int colorStart, colorStartVariance;
+	int colorEnd, colorEndVariance;
+	bool animateColor;
+
+	float fadeInPerc;
 };
 
 struct Emitter {
@@ -99,6 +120,7 @@ void updateEmitter(Emitter *emitter, float elapsed);
 Particle *emit(Emitter *emitter);
 void drawEmitter(Emitter *emitter);
 void updateAndDrawEmitter(Emitter *emitter, float elapsed);
+void destroy(Emitter *emitter);
 
 void guiInputEmitter(Emitter *emitter, float elapsed);
 void guiInputEmitterInfo(EmitterInfo *info);
@@ -127,6 +149,13 @@ Emitter *createEmitter() {
 void updateEmitter(Emitter *emitter, float elapsed) {
 	checkEmitterSystemInit();
 
+	auto applyFn = [](Particle *particle, EmitterFnInfo *fnInfo, float *value) {
+		if (fnInfo->enabled) {
+			float phaseShift = M_PI/2 + (2*M_PI * rndFloat(0, 1));
+			(*value) += sin(particle->time * fnInfo->frequency + phaseShift) * fnInfo->amplitude;
+		}
+	};
+
 	EmitterInfo *info = emitter->info;
 	if (!info) {
 		logf("Updating emitter with no info!\n");
@@ -152,15 +181,36 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 
 	for (int i = 0; i < emitter->particlesNum; i++) {
 		Particle *particle = &emitter->particles[i];
+		if (particle->delay > 0) {
+			particle->delay -= elapsed;
+			if (particle->delay > 0) continue; // Maybe you can accumulate into particle->time, because t=0 doesn't matter
+		}
+		pushRndSeed(particle->randomValue);
+
 		float perc = particle->time / particle->lifetime;
 
 		Vec2 velo = lerp(particle->veloStart, particle->veloEnd, perc);
+		if (!info->animateSpeed) velo = particle->veloStart;
+		applyFn(particle, &info->veloXFn, &velo.x);
+
 		float angularSpeed = lerp(particle->angularSpeedStart, particle->angularSpeedEnd, perc);
+		if (!info->animateAngularSpeed) angularSpeed = particle->angularSpeedStart;
 
 		particle->position += (velo + particle->veloFromAccel) * elapsed;
-		particle->veloFromAccel += particle->accel;
+
+		Vec2 accel = particle->accel;
+		particle->veloFromAccel += accel;
+
+		particle->scale = lerp(particle->scaleStart, particle->scaleEnd, perc);
+		if (!info->animateScale) particle->scale = particle->scaleStart;
+		applyFn(particle, &info->scaleFn, &particle->scale);
 
 		particle->rotation += angularSpeed;
+
+		particle->color = lerpColor(particle->colorStart, particle->colorEnd, perc);
+		if (!info->animateColor) particle->color = particle->colorStart;
+
+		popRndSeed();
 
 		particle->time += elapsed;
 		if (particle->time > particle->lifetime) {
@@ -185,9 +235,7 @@ Particle *emit(Emitter *emitter) {
 	Particle *particle = &emitter->particles[emitter->particlesNum++];
 	memset(particle, 0, sizeof(Particle));
 
-	if (emitter->sheet) {
-		particle->imageIndex = rndInt(0, emitter->sheet->imagesNum-1);
-	}
+	if (emitter->sheet) particle->imageIndex = rndInt(0, emitter->sheet->imagesNum-1);
 
 	if (info->shape == EMITTER_SHAPE_POINT) {
 		particle->position = emitter->position;
@@ -244,34 +292,37 @@ Particle *emit(Emitter *emitter) {
 	particle->angularSpeedEnd = info->angularSpeedEnd + info->angularSpeedEndVariance*rndFloat(-1, 1);
 
 	particle->lifetime = info->lifetime + info->lifetimeVariance*rndFloat(-1, 1);
+	particle->delay = info->delay + fabs(info->delayVariance*rndFloat(-1, 1));
 
 	{
 		int a, r, g, b;
 		int va, vr, vg, vb;
-		hexToArgb(info->startColor, &a, &r, &g, &b);
-		hexToArgb(info->startColorVariance, &va, &vr, &vg, &vb);
+		hexToArgb(info->colorStart, &a, &r, &g, &b);
+		hexToArgb(info->colorStartVariance, &va, &vr, &vg, &vb);
 
 		a = mathClamp(a + va*rndFloat(-1, 1), 0, 255);
 		r = mathClamp(r + vr*rndFloat(-1, 1), 0, 255);
 		g = mathClamp(g + vg*rndFloat(-1, 1), 0, 255);
 		b = mathClamp(b + vb*rndFloat(-1, 1), 0, 255);
 
-		particle->startColor = argbToHex(a, r, g, b);
+		particle->colorStart = argbToHex(a, r, g, b);
 	}
 
 	{
 		int a, r, g, b;
 		int va, vr, vg, vb;
-		hexToArgb(info->endColor, &a, &r, &g, &b);
-		hexToArgb(info->endColorVariance, &va, &vr, &vg, &vb);
+		hexToArgb(info->colorEnd, &a, &r, &g, &b);
+		hexToArgb(info->colorEndVariance, &va, &vr, &vg, &vb);
 
 		a = mathClamp(a + va*rndFloat(-1, 1), 0, 255);
 		r = mathClamp(r + vr*rndFloat(-1, 1), 0, 255);
 		g = mathClamp(g + vg*rndFloat(-1, 1), 0, 255);
 		b = mathClamp(b + vb*rndFloat(-1, 1), 0, 255);
 
-		particle->endColor = argbToHex(a, r, g, b);
+		particle->colorEnd = argbToHex(a, r, g, b);
 	}
+
+	particle->randomValue = rnd();
 
 	return particle;
 }
@@ -285,11 +336,11 @@ void drawEmitter(Emitter *emitter) {
 
 	for (int i = 0; i < emitter->particlesNum; i++) {
 		Particle *particle = &emitter->particles[i];
+		if (particle->delay > 0) continue;
+
 		float perc = particle->time / particle->lifetime;
 
-		int color = lerpColor(particle->startColor, particle->endColor, perc);
-		float scaleFactor = lerp(particle->scaleStart, particle->scaleEnd, perc);
-		Vec2 scale = v2(scaleFactor, scaleFactor);
+		Vec2 scale = v2(particle->scale, particle->scale);
 
 		if (emitter->sheet) {
 			SpriteSheet *sheet = emitter->sheet;
@@ -320,12 +371,15 @@ void drawEmitter(Emitter *emitter) {
 			props.uv1.x = (float)(image->srcX+image->srcWidth) / (float)sheet->texture->width;
 			props.uv1.y = (float)(image->srcY+image->srcHeight) / (float)sheet->texture->height;
 
-			props.tint = color;
+			props.tint = particle->color;
+			if (info->fadeInPerc) props.alpha = clampMap(perc, 0, info->fadeInPerc, 0, 1);
 
 			drawTexture(emitter->sheet->texture, props);
 		} else {
 			Circle circle = makeCircle(particle->position, 32*scale.x);
-			drawCircle(circle, color);
+			circle.position *= emitterSys->sizeScale;
+			circle.radius *= emitterSys->sizeScale.x;
+			drawCircle(circle, particle->color);
 		}
 	}
 }
@@ -333,6 +387,12 @@ void drawEmitter(Emitter *emitter) {
 void updateAndDrawEmitter(Emitter *emitter, float elapsed) {
 	updateEmitter(emitter, elapsed);
 	drawEmitter(emitter);
+}
+
+void destroy(Emitter *emitter) {
+	if (emitter->sheet) destroySpriteSheet(emitter->sheet);
+	free(emitter->particles);
+	free(emitter);
 }
 
 void guiInputEmitter(Emitter *emitter, float elapsed) {
@@ -423,37 +483,67 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 		ImGui::DragFloat2(frameSprintf("###%s variance", label), &variance->x, speed);
 	};
 
+	auto setFnInfo = [](char *label, EmitterFnInfo *fnInfo, float amplitudeSpeed) {
+		ImGui::Checkbox(frameSprintf("%s use fn", label), &fnInfo->enabled);
+		if (fnInfo->enabled) {
+			ImGui::DragFloat(frameSprintf("%s fn amplitude", label), &fnInfo->amplitude, amplitudeSpeed);
+			ImGui::DragFloat(frameSprintf("%s fn frequency", label), &fnInfo->frequency, 0.01);
+		}
+	};
+
 	ImGui::DragFloat("Rate", &info->rate, 0.001);
 	if (info->rate < 0.001) info->rate = 0.001;
 
-	setVec2WithVariance("Direction", &info->dir, &info->dirVariance, 0.1);
+	setVec2WithVariance("Direction", &info->dir, &info->dirVariance, 0.001);
 	setFloatWithVariance("Speed start", &info->speedStart, &info->speedStartVariance, 0.1);
-	setFloatWithVariance("Speed end", &info->speedEnd, &info->speedEndVariance, 0.1);
+	if (info->animateSpeed) setFloatWithVariance("Speed end", &info->speedEnd, &info->speedEndVariance, 0.1);
+	ImGui::Checkbox("Animate speed", &info->animateSpeed);
 
 	setVec2WithVariance("Accel", &info->accel, &info->accelVariance, 0.01);
 
+	setFnInfo("VeloX", &info->veloXFn, 1);
+
 	setFloatWithVariance("Scale start", &info->scaleStart, &info->scaleStartVariance, 0.001);
-	setFloatWithVariance("Scale end", &info->scaleEnd, &info->scaleEndVariance, 0.001);
+	if (info->animateScale) setFloatWithVariance("Scale end", &info->scaleEnd, &info->scaleEndVariance, 0.001);
+	ImGui::Checkbox("Animate scale", &info->animateScale);
+	setFnInfo("Scale", &info->scaleFn, 0.001);
 
 	setFloatWithVariance("Rotation", &info->rotation, &info->rotationVariance, 0.1);
 	setFloatWithVariance("Angular speed start", &info->angularSpeedStart, &info->angularSpeedStartVariance, 0.01);
-	setFloatWithVariance("Angular speed end", &info->angularSpeedEnd, &info->angularSpeedEndVariance, 0.01);
+	if (info->animateAngularSpeed) setFloatWithVariance("Angular speed end", &info->angularSpeedEnd, &info->angularSpeedEndVariance, 0.01);
+	ImGui::Checkbox("Animate angular speed", &info->animateAngularSpeed);
 
 	setFloatWithVariance("Lifetime", &info->lifetime, &info->lifetimeVariance, 0.01);
+	setFloatWithVariance("Delay", &info->delay, &info->delayVariance, 0.01);
 
-	guiInputArgb("Start color", &info->startColor);
+	guiInputArgb("Color start", &info->colorStart);
 	ImGui::SameLine();
-	guiInputArgb("+/-###Start color variance", &info->startColorVariance);
+	ImGui::Text("+/-");
+	ImGui::SameLine();
+	guiInputArgb("###Start color variance", &info->colorStartVariance);
 
-	guiInputArgb("End color", &info->endColor);
-	ImGui::SameLine();
-	guiInputArgb("+/-###End color variance", &info->endColorVariance);
+	if (info->animateColor) {
+		guiInputArgb("Color end", &info->colorEnd);
+		ImGui::SameLine();
+		ImGui::Text("+/-");
+		ImGui::SameLine();
+		guiInputArgb("###End color variance", &info->colorEndVariance);
+	}
+	ImGui::Checkbox("Animate color", &info->animateColor);
+
+	ImGui::SliderFloat("Fade in perc", &info->fadeInPerc, 0, 1);
 
 	ImGui::PopID();
 }
 
 void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
-	int version = 3;
+	auto writeFn = [](DataStream *stream, EmitterFnInfo *fnInfo) {
+		writeU8(stream, fnInfo->enabled);
+		writeFloat(stream, fnInfo->amplitude);
+		writeFloat(stream, fnInfo->frequency);
+	};
+
+	int version = 8;
 	writeU32(stream, version);
 
 	writeString(stream, info->name);
@@ -475,6 +565,9 @@ void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	writeFloat(stream, info->speedStartVariance);
 	writeFloat(stream, info->speedEnd);
 	writeFloat(stream, info->speedEndVariance);
+	writeU8(stream, info->animateSpeed);
+
+	writeFn(stream, &info->veloXFn);
 
 	writeVec2(stream, info->accel);
 	writeVec2(stream, info->accelVariance);
@@ -483,6 +576,9 @@ void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	writeFloat(stream, info->scaleStartVariance);
 	writeFloat(stream, info->scaleEnd);
 	writeFloat(stream, info->scaleEndVariance);
+	writeU8(stream, info->animateScale);
+
+	writeFn(stream, &info->scaleFn);
 
 	writeFloat(stream, info->rotation);
 	writeFloat(stream, info->rotationVariance);
@@ -490,17 +586,35 @@ void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	writeFloat(stream, info->angularSpeedStartVariance);
 	writeFloat(stream, info->angularSpeedEnd);
 	writeFloat(stream, info->angularSpeedEndVariance);
+	writeU8(stream, info->animateAngularSpeed);
 
 	writeFloat(stream, info->lifetime);
 	writeFloat(stream, info->lifetimeVariance);
 
-	writeU32(stream, info->startColor);
-	writeU32(stream, info->startColorVariance);
-	writeU32(stream, info->endColor);
-	writeU32(stream, info->endColorVariance);
+	writeFloat(stream, info->delay);
+	writeFloat(stream, info->delayVariance);
+
+	writeU32(stream, info->colorStart);
+	writeU32(stream, info->colorStartVariance);
+	writeU32(stream, info->colorEnd);
+	writeU32(stream, info->colorEndVariance);
+	writeU8(stream, info->animateColor);
+
+	writeFloat(stream, info->fadeInPerc);
 }
 
 void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
+	info->animateScale = true;
+	info->animateSpeed = true;
+	info->animateAngularSpeed = true;
+	info->animateColor = true;
+
+	auto readFn = [](DataStream *stream, EmitterFnInfo *fnInfo, int version) {
+		fnInfo->enabled = readU8(stream);
+		fnInfo->amplitude = readFloat(stream);
+		fnInfo->frequency = readFloat(stream);
+	};
+
 	int version = readU32(stream);
 
 	readStringInto(stream, info->name, EMITTER_INFO_NAME_MAX_LEN);
@@ -526,6 +640,9 @@ void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
 		info->speedEnd = readFloat(stream);
 		info->speedEndVariance = readFloat(stream);
 	}
+	if (version >= 4) info->animateSpeed = readU8(stream);
+
+	if (version >= 6) readFn(stream, &info->veloXFn, version);
 
 	info->accel = readVec2(stream);
 	info->accelVariance = readVec2(stream);
@@ -538,6 +655,9 @@ void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	info->scaleStartVariance = readFloat(stream);
 	info->scaleEnd = readFloat(stream);
 	info->scaleEndVariance = readFloat(stream);
+	if (version >= 4) info->animateScale = readU8(stream);
+
+	if (version >= 7) readFn(stream, &info->scaleFn, version);
 
 	info->rotation = readFloat(stream);
 	info->rotationVariance = readFloat(stream);
@@ -549,14 +669,23 @@ void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
 		readFloat(stream);
 		readFloat(stream);
 	}
+	if (version >= 4) info->animateAngularSpeed = readU8(stream);
 
 	info->lifetime = readFloat(stream);
 	info->lifetimeVariance = readFloat(stream);
 
-	info->startColor = readU32(stream);
-	info->startColorVariance = readU32(stream);
-	info->endColor = readU32(stream);
-	info->endColorVariance = readU32(stream);
+	if (version >= 5) {
+		info->delay = readFloat(stream);
+		info->delayVariance = readFloat(stream);
+	}
+
+	info->colorStart = readU32(stream);
+	info->colorStartVariance = readU32(stream);
+	info->colorEnd = readU32(stream);
+	info->colorEndVariance = readU32(stream);
+	if (version >= 4) info->animateColor = readU8(stream);
+
+	if (version >= 8) info->fadeInPerc = readFloat(stream);
 }
 
 bool saveLoadEmitterInfo(DataStream *stream, bool save, int version, EmitterInfo *info, int startVersion, int endVersion) {

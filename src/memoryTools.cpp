@@ -50,6 +50,7 @@ struct TaggedText {
 
 void *zalloc(u32 size);
 char *stringClone(const char *str);
+void *memClone(void *ptr, u32 size);
 bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
 bool strContains(const char *haystack, const char *needle, bool caseInsentitive=false);
 char *strrstr(char *haystack, const char *needle);
@@ -68,8 +69,10 @@ int getIntAtEndOfString(char *str);
 StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
 
-char **mallocSplitString(char *str, char *delim, int *outStringsNum);
 char **frameSplitString(char *str, char *delim, int *outStringsNum);
+char **mallocSplitString(char *str, char *delim, int *outStringsNum);
+
+char *getStringReplaced(char *string, char *from, char *to);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);
@@ -85,11 +88,22 @@ char *frameStringClone(const char *str);
 void freeFrameMemory();
 
 char *convertToHexString(void *data, int size);
+unsigned char hexCharToByte(unsigned char hex);
 void *convertFromHexString(char *hex, int *outputSize=NULL);
 u32 stringHash32(const char *s);
 u32 hashU32(u32 x);
 void printBinary(u32 n);
 void dumpHex(const void* data, size_t size);
+
+int bitExtract(int number, int start, int count);
+u32 bitMask(u32 a, u32 b);
+u8 reverseBits(u8 b);
+u32 reverseBits(u32 number, u32 bits);
+
+void *resizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount);
+void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount);
+
+void flipBitmapData(u8 *bitmapData, int width, int height);
 
 int indexOfU32(u32 *haystack, int needle);
 
@@ -98,6 +112,9 @@ char *epochToLocalTimeFrameString(u64 time);
 MemoryArena *createMemoryArena(int blockSize=Kilobytes(16), int blocksMax=8192);
 void *allocateMemory(MemoryArena *arena, int size);
 void destroyMemoryArena(MemoryArena *arena);
+
+TaggedText *parseTaggedText(char *inText);
+bool inTextTag(TaggedText *taggedText, char *tagName, int index);
 
 struct MemoryChunk {
 	u8 *data;
@@ -279,7 +296,6 @@ char *stringClone(const char *str) {
 	return ret;
 }
 
-void *memClone(void *ptr, u32 size);
 void *memClone(void *ptr, u32 size) {
 	void *ret = malloc(size);
 	memcpy(ret, ptr, size);
@@ -525,6 +541,42 @@ char **mallocSplitString(char *str, char *delim, int *outStringsNum) {
 	return mallocStrings;
 }
 
+char *getStringReplaced(char *orig, char *rep, char *with) {
+	if (!orig || !rep) return NULL;
+
+	int len_rep = strlen(rep);
+	if (len_rep == 0) return NULL;
+
+	if (!with) with = "";
+	int len_with = strlen(with);
+
+	// count the number of replacements needed
+	char *ins = orig;
+	int count = 0;
+	char *tmp;
+	for (count = 0; tmp = strstr(ins, rep); ++count) {
+		ins = tmp + len_rep;
+	}
+
+	char *result = (char *)malloc(strlen(orig) + (len_with - len_rep) * count + 1);
+	tmp = result;
+
+	// first time through the loop, all the variable are set correctly
+	// from here on,
+	//    tmp points to the end of the result string
+	//    ins points to the next occurrence of rep in orig
+	//    orig points to the remainder of orig after "end of rep"
+	while (count--) {
+		ins = strstr(orig, rep);
+		int len_front = ins - orig;
+		tmp = strncpy(tmp, orig, len_front) + len_front;
+		tmp = strcpy(tmp, with) + len_with;
+		orig += len_front + len_rep; // move to next "end of rep"
+	}
+	strcpy(tmp, orig);
+	return result;
+}
+
 unsigned char *elementBuffer = NULL;
 int elementBufferSize = -1;
 
@@ -581,6 +633,7 @@ bool arraySplice(void *array, int arraySize, int elementSize, void *element) {
 	return true;
 }
 
+// Maybe remove this, what if the array is too small?
 void arraySpread(void *array, int arrayNum, int elementSize, int afterIndex, int spreadAmount) {
 	void *dest = ((char *)array) + (afterIndex + spreadAmount)*elementSize;
 	void *src = ((char *)array) + (afterIndex)*elementSize;
@@ -610,7 +663,6 @@ char *convertToHexString(void *data, int size) {
 	return result;
 }
 
-unsigned char hexCharToByte(unsigned char hex);
 unsigned char hexCharToByte(unsigned char hex) {
 	if (hex >= '0' && hex <= '9') {
 		return hex - '0';
@@ -733,7 +785,6 @@ u32 reverseBits(u32 number, u32 bits) {
 	return r;
 }
 
-void *resizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount);
 void *resizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount) {
 	if (newCount == 0) {
 		logf("Called resizeArray with a newCount of 0\n");
@@ -755,7 +806,6 @@ void *resizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount) 
 	return newArray;
 }
 
-void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount);
 void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCount) {
 	if (newCount == 0) {
 		logf("Called frameResizeArray with a newCount of 0\n");
@@ -776,7 +826,6 @@ void *frameResizeArray(void *array, u64 elementSize, u64 currentCount, u64 newCo
 	return newArray;
 }
 
-void flipBitmapData(u8 *bitmapData, int width, int height);
 void flipBitmapData(u8 *bitmapData, int width, int height) {
 	u8 *tempRow = (u8 *)frameMalloc(width * 4);
 	for (int y = 0; y < height/2; y++) {
@@ -850,7 +899,6 @@ void destroyMemoryArena(MemoryArena *arena) {
 	free(arena);
 }
 
-TaggedText *parseTaggedText(char *inText);
 TaggedText *parseTaggedText(char *inText) {
 	TaggedText *taggedText = (TaggedText *)zalloc(sizeof(TaggedText));
 
@@ -910,7 +958,6 @@ TaggedText *parseTaggedText(char *inText) {
 	return taggedText;
 }
 
-bool inTextTag(TaggedText *taggedText, char *tagName, int index);
 bool inTextTag(TaggedText *taggedText, char *tagName, int index) {
 	for (int i = 0; i < taggedText->tagsNum; i++) {
 		TextTag *tag = &taggedText->tags[i];
