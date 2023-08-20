@@ -1,3 +1,7 @@
+# canvaskit:
+# ./compile.sh no_skottie no_particles no_font no_codecs no_encode_png no_woff2 no_alias_font no_embedded_font
+
+
 # ENGINE_TYPE := custom
 ENGINE_TYPE := raylib
 
