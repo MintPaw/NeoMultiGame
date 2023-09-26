@@ -22,9 +22,10 @@ GAME_NAME=horseGame
 # GAME_NAME=concreteJungleGame
 # GAME_NAME=rollerGame
 # GAME_NAME=turnBasedGame
-# GAME_NAME=catCardGame
 # GAME_NAME=destinyGame
 # GAME_NAME=swfTestGame
+# GAME_NAME=catCardGame
+# GAME_NAME=boxingGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -39,7 +40,8 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
 # GAME_NAME=horseGame
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
-GAME_NAME=catCardGame
+# GAME_NAME=catCardGame
+GAME_NAME=boxingGame
 endif
 
 
@@ -92,7 +94,6 @@ ifeq ($(GAME_NAME), horseGame)
 	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
 		set DEBUG_MODE=0&& \
-		set FAST_CLANG_MODE=1&& \
 		set OPTIMIZED_MODE=1&& \
 		set INTERNAL_MODE=0&& \
 		buildSystem\$(WIN_BUILD_BAT).bat\
@@ -121,7 +122,6 @@ ifeq ($(GAME_NAME), horseGame)
 	cp -r "/c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets" "/c/Dropbox/MultiGame/multiGame/horseGameAssets"
 	$(WIN_CMD) "\
 		set GAME_NAME=$(GAME_NAME)&& \
-		set FAST_CLANG_MODE=1&& \
 		set INTERNAL_MODE=1&& \
 		set DEBUG_MODE=1&& \
 		set OPTIMIZED_MODE=1&& \
@@ -482,7 +482,6 @@ shipHorseGameToSelf:
 	$(WIN_CMD) "\
 		set GAME_NAME=horseGame&& \
 		set DEBUG_MODE=0&& \
-		set FAST_CLANG_MODE=1&& \
 		set INTERNAL_MODE=0&& \
 		set OPTIMIZED_MODE=1&& \
 		buildSystem\$(WIN_BUILD_BAT).bat\

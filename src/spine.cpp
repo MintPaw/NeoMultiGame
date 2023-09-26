@@ -1,39 +1,6 @@
+//@incomplete Spine still uses Raylib directly, not the renderer abstraction
+
 #include "spine/spine.h"
-#if 0
-#include "spine/Animation.c"
-#include "spine/AnimationState.c"
-#include "spine/AnimationStateData.c"
-#include "spine/Atlas.c"
-#include "spine/AtlasAttachmentLoader.c"
-#include "spine/Attachment.c"
-#include "spine/AttachmentLoader.c"
-#include "spine/Bone.c"
-#include "spine/BoneData.c"
-#include "spine/BoundingBoxAttachment.c"
-#include "spine/Event.c"
-#include "spine/EventData.c"
-#include "spine/extension.c"
-#include "spine/IkConstraint.c"
-#include "spine/IkConstraintData.c"
-#include "spine/Json.c"
-#include "spine/MeshAttachment.c"
-#include "spine/PathAttachment.c"
-#include "spine/PathConstraint.c"
-#include "spine/PathConstraintData.c"
-#include "spine/RegionAttachment.c"
-#include "spine/Skeleton.c"
-// #include "spine/SkeletonBinary.c"
-#include "spine/SkeletonBounds.c"
-#include "spine/SkeletonData.c"
-#include "spine/SkeletonJson.c"
-#include "spine/Skin.c"
-#include "spine/Slot.c"
-#include "spine/SlotData.c"
-#include "spine/TransformConstraint.c"
-#include "spine/TransformConstraintData.c"
-#include "spine/VertexAttachment.c"
-#endif
-#if 0
 #include "spine/Animation.c"
 #include "spine/AnimationState.c"
 #include "spine/AnimationStateData.c"
@@ -47,7 +14,6 @@
 #include "spine/BoundingBoxAttachment.c"
 #include "spine/ClippingAttachment.c"
 #include "spine/Color.c"
-#include "spine/Debug.c"
 #include "spine/Event.c"
 #include "spine/EventData.c"
 #include "spine/extension.c"
@@ -74,7 +40,6 @@
 #include "spine/Triangulator.c"
 #include "spine/VertexAttachment.c"
 #include "spine/VertexEffect.c"
-#endif
 
 #define USING_SPINE_3_8_75 1
 
@@ -88,18 +53,23 @@ extern "C" char *_spUtil_readFile(const char *path, int *length) {
 
 extern "C" void _spAtlasPage_createTexture(spAtlasPage *self, const char *path) {
 	Texture *texture = createTexture(path);
-	if (!texture) return;
+	if (!texture) {
+		logf("Spine failed to load texture at %s\n", path);
+		return;
+	}
 
+	logf("Created texture %d (%d x %d)\n", texture->backendTexture.raylibTexture.id, texture->width, texture->height);
 	self->rendererObject = texture;
 	self->width = texture->width;
 	self->height = texture->height;
 }
 
 extern "C" void _spAtlasPage_disposeTexture(spAtlasPage *self) {
-   if (!self->rendererObject) return;
+	if (!self->rendererObject) return;
 
-   Texture *texture = (Texture *)self->rendererObject;
-	 destroyTexture(texture);
+	Texture *texture = (Texture *)self->rendererObject;
+	logf("Destroying texture %d\n", texture->backendTexture.raylibTexture.id);
+	destroyTexture(texture);
 }
 
 struct SpineBaseSkeleton {
@@ -137,6 +107,7 @@ struct BoneData {
 struct SpineSkeleton {
 	spSkeleton *spSkeletonInstance;
 	spAnimationState *animationState;
+	spSkeletonClipping *clipper;
 
 	BoneData *boneData;
 	int boneDataNum;
@@ -161,6 +132,7 @@ Matrix3 getBoneMatrix(SpineSkeleton *skeleton, const char *boneName);
 Line2 getBoneLine(SpineSkeleton *skeleton, const char *boneName);
 float getBoneLength(SpineSkeleton *skeleton, const char *boneName);
 
+void destroyBaseSkeleton(SpineBaseSkeleton *base);
 void destroySkeleton(SpineSkeleton *skeleton);
 
 void makeSureSpineGlobalVerticesIsBigEnough(int size);
@@ -185,6 +157,7 @@ SpineBaseSkeleton *loadSpineBaseSkeleton(char *path) {
 
 	int atlasLen;
 	void *atlasData = readFile(frameSprintf("%s.atlas", path), &atlasLen);
+	if (!atlasData) return NULL;
 	base->atlas = spAtlas_create((char *)atlasData, atlasLen, dir, NULL);
 	free(atlasData);
 	if (!base->atlas) {
@@ -214,6 +187,8 @@ SpineSkeleton *deriveSkeleton(SpineBaseSkeleton *base) {
 	skeleton->spSkeletonInstance = spSkeleton_create(base->skeletonData);
 	skeleton->animationState = spAnimationState_create(base->animationStateData);
 	skeleton->animationState->userData = skeleton;
+	skeleton->clipper = spSkeletonClipping_create();
+
 	skeleton->boneData = (BoneData *)zalloc(sizeof(BoneData) * skeleton->spSkeletonInstance->bonesCount);
 	skeleton->boneDataNum = skeleton->spSkeletonInstance->bonesCount;
 
@@ -232,12 +207,11 @@ void updateSkeletonAnimation(SpineSkeleton *skeleton, float elapsed) {
 	spAnimationState_update(skeleton->animationState, elapsed);
 	spAnimationState_apply(skeleton->animationState, skeleton->spSkeletonInstance);
 
-
 	spSkeleton_updateWorldTransform(skeleton->spSkeletonInstance);
 }
 
 void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed) {
-	spBone *root = spSkeleton_findBone(skeleton->spSkeletonInstance, "root");
+	// spBone *root = spSkeleton_findBone(skeleton->spSkeletonInstance, "root");
 	// if (root->scaleY > 0) root->scaleY *= -1;
 	spSkeleton_updateWorldTransform(skeleton->spSkeletonInstance);
 
@@ -343,43 +317,47 @@ float getBoneLength(SpineSkeleton *skeleton, const char *boneName) {
 void destroySkeleton(SpineSkeleton *skeleton) {
 	spSkeleton_dispose(skeleton->spSkeletonInstance);
 	spAnimationState_dispose(skeleton->animationState);
+	spSkeletonClipping_dispose(skeleton->clipper);
 	free(skeleton);
 }
 
-/// Drawing
-struct SpineVertex {
-	Vec2 position;
-	Vec2 uv;
-	// float r, g, b, a;
-};
+void destroyBaseSkeleton(SpineBaseSkeleton *base) {
+	spAtlas_dispose(base->atlas);
+	spSkeletonData_dispose(base->skeletonData);
+	spAnimationStateData_dispose(base->animationStateData);
+	free(base);
+}
 
+/// Drawing
 float *globalSpineWorldVerticesPositions = NULL;
-SpineVertex *globalSpineVertices = NULL;
 // u16 *globalSpineIndices = NULL;
 int globalSpineVerticesMax = 0;
+
+float *globalSpinePositions;
+float *globalSpineUvs;
 
 void makeSureSpineGlobalVerticesIsBigEnough(int size) {
 	size += 2;
 
 	if (globalSpineVerticesMax < size) {
-		if (globalSpineVertices) free(globalSpineVertices);
-		// if (globalSpineIndices) free(globalSpineIndices);
 		if (globalSpineWorldVerticesPositions) free(globalSpineWorldVerticesPositions);
+		if (globalSpinePositions) free(globalSpinePositions);
+		if (globalSpineUvs) free(globalSpineUvs);
 
 		globalSpineVerticesMax = size;
-		globalSpineVertices = (SpineVertex *)zalloc(sizeof(SpineVertex) * globalSpineVerticesMax);
-		// globalSpineIndices = (u16 *)zalloc(sizeof(u16) * globalSpineVerticesMax);
 		globalSpineWorldVerticesPositions = (float *)zalloc(sizeof(float) * globalSpineVerticesMax * 2);
+		globalSpinePositions = (float *)zalloc(sizeof(float) * globalSpineVerticesMax * 2);
+		globalSpineUvs = (float *)zalloc(sizeof(float) * globalSpineVerticesMax * 2);
 	}
 }
 
 void addSpineVertex(float x, float y, float u, float v, int index) {
 	if (index > globalSpineVerticesMax-1) Panic("Overflowed globalSpineVerticesMax");
-	SpineVertex *vertex = &globalSpineVertices[index];
-	vertex->position.x = x;
-	vertex->position.y = y;
-	vertex->uv.x = u;
-	vertex->uv.y = v;
+
+	globalSpinePositions[index*2 + 0] = x;
+	globalSpinePositions[index*2 + 1] = y;
+	globalSpineUvs[index*2 + 0] = u;
+	globalSpineUvs[index*2 + 1] = v;
 }
 
 Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachment, Matrix3 preBoneMatrix, Matrix3 postBoneMatrix, float alpha) {
@@ -414,7 +392,6 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 		texture = (Texture *)((spAtlasRegion *)mesh->rendererObject)->page->rendererObject;
 
 		makeSureSpineGlobalVerticesIsBigEnough(mesh->trianglesCount * 3);
-		// spVertexAttachment_computeWorldVertices(SUPER(mesh), slot, globalSpineWorldVerticesPositions);
 		spVertexAttachment_computeWorldVertices(&mesh->super, slot, 0, mesh->super.worldVerticesLength, globalSpineWorldVerticesPositions, 0, 2);
 
 		for (int i = 0; i < mesh->trianglesCount; i++) {
@@ -422,6 +399,9 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 			Vec2 vert = v2(globalSpineWorldVerticesPositions[index], globalSpineWorldVerticesPositions[index + 1]);
 			addSpineVertex(vert.x, vert.y, mesh->uvs[index], mesh->uvs[index + 1], vertexIndex++);
 		}
+	} else if (attachment->type == SP_ATTACHMENT_CLIPPING) {
+		spClippingAttachment *clip = (spClippingAttachment *) slot->attachment;
+		spSkeletonClipping_clipStart(skeleton->clipper, slot, clip);
 	}
 
 	int indsNum = vertexIndex;
@@ -430,8 +410,50 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 		inds[i] = i;
 	}
 
+	Vec2 *finalPositions = (Vec2 *)globalSpinePositions;
+	Vec2 *finalUvs = (Vec2 *)globalSpineUvs;
+
+	if (spSkeletonClipping_isClipping(skeleton->clipper)) {
+		spSkeletonClipping_clipTriangles(skeleton->clipper, globalSpinePositions, vertexIndex * 2, inds, indsNum, globalSpineUvs, 2);
+		finalPositions = (Vec2 *)skeleton->clipper->clippedVertices->items;
+		finalUvs = (Vec2 *)skeleton->clipper->clippedUVs->items;
+		inds = skeleton->clipper->clippedTriangles->items;
+		indsNum = skeleton->clipper->clippedTriangles->size;
+	}
+
 	Matrix3 finalMatrix = postBoneMatrix;
-	draw2dMesh((float *)globalSpineVertices, vertexIndex, inds, indsNum, finalMatrix, texture, alpha);
+
+	// finalMatrix = renderer->baseMatrix2d * finalMatrix;
+	// finalMatrix = finalMatrix * renderer->baseMatrix2d;
+	{
+		if (!texture) return makeRect();
+
+    Matrix3 matrix = finalMatrix;
+    matrix = renderer->baseMatrix2d * matrix;
+    // matrix = matrix * renderer->baseMatrix2d;
+
+		Raylib::rlSetTexture(texture->backendTexture.raylibTexture.id);
+		Raylib::rlBegin(RL_QUADS);
+
+		Raylib::rlColor4f(1, 1, 1, 1);
+
+		for (int i = 0; i < indsNum; i++) {
+			int ind = inds[i];
+			Vec2 pos = finalPositions[ind];
+			Vec2 uv = finalUvs[ind];
+
+      pos = matrix * pos;
+
+			Raylib::rlTexCoord2f(uv.x, 1.0 - uv.y);
+			Raylib::rlVertex2f(pos.x, pos.y);
+
+			if (i % 3 == 0) Raylib::rlVertex2f(pos.x, pos.y);
+		}
+		Raylib::rlEnd();
+		Raylib::rlDisableTexture();
+	}
+	// draw2dMesh((float *)globalSpineVertices, vertexIndex, inds, indsNum, finalMatrix, texture, alpha);
+	spSkeletonClipping_clipEnd(skeleton->clipper, slot);
 
 	return rect;
 }

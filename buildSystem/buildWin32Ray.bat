@@ -49,6 +49,12 @@ if "%GAME_NAME%" == "destinyGame" (
 if "%GAME_NAME%"=="deskGame" (
 	set USES_CURL=1
 )
+if "%GAME_NAME%" == "horseGame" (
+	set ASSETS_ARE_PRIVATE=1
+)
+if "%GAME_NAME%" == "boxingGame" (
+	set ASSETS_ARE_PRIVATE=1
+)
 
 
 if [%ASSETS_ARE_PRIVATE%]==[1] (
@@ -78,7 +84,7 @@ if [%DEBUG_MODE%]==[1] (
 )
 
 if [%CLANG_MODE%]==[1] (
-	set OPT_ARGS=-Od -RTCsu
+	set OPT_ARGS=-Od -RTCsu -D _DISABLE_VECTOR_ANNOTATION 
 ) else (
 	set OPT_ARGS=-Od
 )

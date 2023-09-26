@@ -30,6 +30,7 @@ struct Platform {
 	bool isInternalVersion;
 	bool disableGui;
 	bool useRealElapsed;
+  bool scissorDoesntRespectCamera;
 
 	bool running;
 
@@ -83,8 +84,10 @@ enum PlatformKey {
 	KEY_UP=Raylib::KEY_UP,
 	KEY_DOWN=Raylib::KEY_DOWN,
 	KEY_SHIFT=Raylib::KEY_LEFT_SHIFT,
+	KEY_RIGHT_SHIFT=Raylib::KEY_RIGHT_SHIFT,
 	KEY_BACKSPACE=Raylib::KEY_BACKSPACE,
 	KEY_CTRL=Raylib::KEY_LEFT_CONTROL,
+	KEY_RIGHT_CTRL=Raylib::KEY_RIGHT_CONTROL,
 	KEY_ALT=Raylib::KEY_LEFT_ALT,
 	KEY_RIGHT_ALT=Raylib::KEY_RIGHT_ALT,
 	KEY_BACKTICK=Raylib::KEY_GRAVE,
@@ -490,6 +493,8 @@ void logLastOSErrorCode(const char *fileName, int lineNum) {
 }
 
 ///- Renderer
+#include "rendererBackend.cpp"
+
 enum BlendMode {
 	BLEND_NORMAL,
 	BLEND_MULTIPLY,
@@ -501,20 +506,24 @@ enum BlendMode {
 };
 
 struct Texture {
-	Raylib::Texture2D raylibTexture;
+	BackendTexture backendTexture;
+	// Raylib::Texture2D raylibTexture;
 	int width;
 	int height;
 
-	bool clamped;
+	bool clampedX;
+	bool clampedY;
 	char *path;
 };
 
 struct RenderTexture {
-	Raylib::RenderTexture2D raylibRenderTexture;
+	// Raylib::RenderTexture2D raylibRenderTexture;
+	BackendRenderTexture backendRenderTexture;
 	int width;
 	int height;
 
-	bool clamped;
+	bool clampedX;
+	bool clampedY;
 };
 
 struct RenderProps {
@@ -547,21 +556,8 @@ struct Camera {
 	float farCull;
 };
 
-enum ShaderUniformType {
-	SHADER_UNIFORM_FLOAT,
-	SHADER_UNIFORM_VEC2,
-	SHADER_UNIFORM_VEC3,
-	SHADER_UNIFORM_VEC4,
-	SHADER_UNIFORM_MATRIX4,
-	SHADER_UNIFORM_INT,
-	SHADER_UNIFORM_IVEC2,
-	SHADER_UNIFORM_IVEC3,
-	SHADER_UNIFORM_IVEC4,
-	SHADER_UNIFORM_SAMPLER2D
-};
-
 struct Shader {
-	Raylib::Shader raylibShader;
+	BackendShader backendShader;
 	// int shaderId;
 	// int locs[RL_MAX_SHADER_LOCATIONS];
 };
@@ -590,11 +586,6 @@ enum LightType {
 static int lightsCount = 0;
 
 
-#define _F_TD_FLIP_Y           (1 << 1)
-#define _F_TD_SKIP_PREMULTIPLY (1 << 2)
-// #define _F_TD_SRGB8            (1 << 3)
-#define _F_TD_RGB16F           (1 << 4)
-#define _F_TD_RGBA32           (1 << 5)
 struct Renderer {
 	bool in3dPass;
 	bool disabled;
@@ -607,9 +598,6 @@ struct Renderer {
 	int lightingAnimatedShaderBoneTransformsLoc;
 
 	Shader *alphaDiscardShader;
-
-	Raylib::Shader danmakuShader;
-	int danmakuShaderHueShiftValueLoc;
 
 	Shader *outlineShader;
 	int outlineShaderResolutionLoc;
@@ -625,16 +613,12 @@ struct Renderer {
 #define CAMERA_2D_STACK_MAX 128
 	Matrix3 camera2dStack[CAMERA_2D_STACK_MAX];
 	int camera2dStackNum;
-	float current2dDrawDepth;
-	int currentDrawCount;
-	int maxDrawCallsPerBatch;
 
 #define ALPHA_STACK_MAX 128
 	float alphaStack[ALPHA_STACK_MAX];
 	int alphaStackNum;
 
 	Matrix3 baseMatrix2d;
-	Matrix3 currentCameraMatrix; // Is the same as baseMatrix2d for raylib!
 
 	Texture *whiteTexture;
 	Texture *circleTexture1024;
@@ -654,11 +638,10 @@ struct Renderer {
 Renderer *renderer = NULL;
 bool skip3dShaders = false;
 
-#define PASS_HEADER
-#include "pass.cpp"
-#include "pass.cpp"
+// #define PASS_HEADER
+// #include "pass.cpp"
+// #include "pass.cpp"
 
-Raylib::Color toRaylibColor(int color) { return Raylib::GetColor(argbToRgba(color)); }
 Raylib::Vector3 toRaylib(Vec3 vec) { return {vec.x, vec.y, vec.z}; }
 Raylib::Vector3 toRaylib(Vec2 vec) { return {vec.x, vec.y}; }
 Vec3 v3(Raylib::Vector3 vec) { return v3(vec.x, vec.y, vec.z); }
@@ -681,15 +664,19 @@ Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
 RenderTexture *createRenderTexture(const char *path, int flags=0);
 RenderTexture *createRenderTexture(int width, int height, void *data=NULL, int flags=0);
-Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags=0);
 Texture *renderTextureToTexture(RenderTexture *renderTexture);
+
 void setTextureSmooth(Texture *texture, bool smooth);
 void setTextureSmooth(RenderTexture *renderTexture, bool smooth);
 void setTextureClamped(Texture *texture, bool clamped);
 void setTextureClamped(RenderTexture *renderTexture, bool clamped);
+void setTextureClampedX(Texture *texture, bool clamped);
+void setTextureClampedY(Texture *texture, bool clamped);
+void setTextureClampedX(RenderTexture *texture, bool clamped);
+void setTextureClampedY(RenderTexture *texture, bool clamped);
+
 void setTextureData(RenderTexture *renderTexture, void *data, int width, int height, int flags=0);
 void setTextureData(Texture *texture, void *data, int width, int height, int flags=0);
-void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, int height, int flags);
 u8 *getTextureData(RenderTexture *renderTexture, int flags=0);
 u8 *getTextureData(Texture *texture, int flags=0);
 bool writeTextureToFile(Texture *texture, char *path);
@@ -705,11 +692,8 @@ void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0=v2
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
 void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
-void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
-void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
-void drawRaylibTexture(Raylib::Texture texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha, int flags);
-void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors);
-void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors);
+// void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
+// void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 
 void pushTargetTexture(RenderTexture *renderTexture);
 void popTargetTexture();
@@ -742,7 +726,7 @@ void startRenderingFrame();
 void endRenderingFrame();
 void start3d(Camera camera);
 void end3d();
-void startShader(Raylib::Shader shader);
+// void startShader(Raylib::Shader shader);
 void startShader(Shader *shader);
 void endShader();
 void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir);
@@ -753,7 +737,6 @@ bool usesAlphaDiscard = false;
 
 void initRenderer(int width, int height) {
 	renderer = (Renderer *)zalloc(sizeof(Renderer));
-	renderer->maxDrawCallsPerBatch = 20000;
 
 	pushCamera2d(mat3());
 	pushAlpha(1);
@@ -761,46 +744,33 @@ void initRenderer(int width, int height) {
 	setBackfaceCulling(false);
 
 	{ /// Setup shaders
-		if (!skip3dShaders) {
-			// renderer->alphaDiscardShader = loadShader(
-			// 	NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
-			// 	NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
-			// );
+		if (!skip3dShaders) for (int i = 0; i < 30; i++) logf("There's no 3d shaders to not skip\n");
+		// if (!skip3dShaders) {
+		// 	// renderer->alphaDiscardShader = loadShader(
+		// 	// 	NULL, "assets/common/shaders/raylib/glsl330/alphaDiscard.fs",
+		// 	// 	NULL, "assets/common/shaders/raylib/glsl100/alphaDiscard.fs"
+		// 	// );
 
-			{
-				renderer->lightingAnimatedShader = loadShader(
-					"assets/common/shaders/raylib/glsl330/lightingAnimated.vs",
-					"assets/common/shaders/raylib/glsl330/lightingAnimated.fs",
-					"assets/common/shaders/raylib/glsl100/lightingAnimated.vs",
-					"assets/common/shaders/raylib/glsl100/lightingAnimated.fs"
-				);
+		// 	{
+		// 		renderer->lightingAnimatedShader = loadShader(
+		// 			"assets/common/shaders/raylib/glsl330/lightingAnimated.vs",
+		// 			"assets/common/shaders/raylib/glsl330/lightingAnimated.fs",
+		// 			"assets/common/shaders/raylib/glsl100/lightingAnimated.vs",
+		// 			"assets/common/shaders/raylib/glsl100/lightingAnimated.fs"
+		// 		);
 
-				renderer->lightingAnimatedShaderBoneTransformsLoc = getUniformLocation(renderer->lightingAnimatedShader, "boneTransforms");
+		// 		renderer->lightingAnimatedShaderBoneTransformsLoc = getUniformLocation(renderer->lightingAnimatedShader, "boneTransforms");
 
-				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = getUniformLocation(renderer->lightingAnimatedShader, "viewPos");
-				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = getUniformLocation(renderer->lightingAnimatedShader, "ambient");
-				renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = getUniformLocation(renderer->lightingAnimatedShader, "colSpecular");
-				float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-				int loc = renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
-				setShaderUniform(renderer->lightingAnimatedShader, loc, ambientLightValue, SHADER_UNIFORM_VEC4, 1);
+		// 		renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW] = getUniformLocation(renderer->lightingAnimatedShader, "viewPos");
+		// 		renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT] = getUniformLocation(renderer->lightingAnimatedShader, "ambient");
+		// 		renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_SPECULAR] = getUniformLocation(renderer->lightingAnimatedShader, "colSpecular");
+		// 		float ambientLightValue[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
+		// 		int loc = renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_COLOR_AMBIENT];
+		// 		setShaderUniform(renderer->lightingAnimatedShader, loc, ambientLightValue, SHADER_UNIFORM_VEC4, 1);
 
-				renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
-			}
-
-			{
-#ifdef __EMSCRIPTEN__
-				char *glslFolder = "glsl100";
-#else
-				char *glslFolder = "glsl330";
-#endif
-
-				char *fs = (char *)readFile(frameSprintf("assets/common/shaders/raylib/%s/danmakuShader.fs", glslFolder));
-				renderer->danmakuShader = Raylib::LoadShaderFromMemory(NULL, fs);
-				free(fs);
-
-				renderer->danmakuShaderHueShiftValueLoc = Raylib::GetShaderLocation(renderer->danmakuShader, "hueShiftValue");
-			}
-		}
+		// 		renderer->lights[0] = createLight(0, LIGHT_DIRECTIONAL, { 1, -1, 1 }, {0, 0, 0}, Raylib::WHITE, renderer->lightingAnimatedShader);
+		// 	}
+		// }
 
 		renderer->outlineShader = loadShader(
 			NULL, "assets/common/shaders/raylib/glsl330/outline.fs",
@@ -822,7 +792,7 @@ void initRenderer(int width, int height) {
 }
 
 void clearRenderer(int color) {
-	Raylib::ClearBackground(toRaylibColor(color));
+	backendClearRenderer(color);
 }
 
 Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path) {
@@ -844,7 +814,7 @@ Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path)
 	char *fs = (char *)readFile(fsPath);
 
 	Shader *shader = (Shader *)zalloc(sizeof(Shader));
-	shader->raylibShader = Raylib::LoadShaderFromMemory(vs, fs);
+	backendLoadShader(&shader->backendShader, vs, fs);
 
 	free(vs);
 	free(fs);
@@ -852,42 +822,15 @@ Shader *loadShader(char *vsPath, char *fsPath, char *vs100Path, char *fs100Path)
 }
 
 int getUniformLocation(Shader *shader, char *uniformName) {
-	int loc = glGetUniformLocation(shader->raylibShader.id, uniformName);
-	return loc;
+	return backendGetUniformLocation(&shader->backendShader, uniformName);
 }
 
 int getVertextAttribLocation(Shader *shader, char *attribName) {
-	int loc = glGetAttribLocation(shader->raylibShader.id, attribName);
-	return loc;
+	return backendGetVertextAttribLocation(&shader->backendShader, attribName);
 }
 
 bool setShaderUniform(Shader *shader, int loc, void *ptr, ShaderUniformType type, int count) {
-	Raylib::rlEnableShader(shader->raylibShader.id);
-
-	if (type == SHADER_UNIFORM_FLOAT) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_FLOAT, count);
-	} else if (type == SHADER_UNIFORM_VEC2) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC2, count);
-	} else if (type == SHADER_UNIFORM_VEC3) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC3, count);
-	} else if (type == SHADER_UNIFORM_VEC4) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_VEC4, count);
-	} else if (type == SHADER_UNIFORM_MATRIX4) {
-		glUniformMatrix4fv(loc, count, true, (float *)ptr);
-	} else if (type == SHADER_UNIFORM_INT) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_INT, count);
-	} else if (type == SHADER_UNIFORM_IVEC2) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC2, count);
-	} else if (type == SHADER_UNIFORM_IVEC3) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC3, count);
-	} else if (type == SHADER_UNIFORM_IVEC4) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_IVEC4, count);
-	} else if (type == SHADER_UNIFORM_SAMPLER2D) {
-		Raylib::rlSetUniform(loc, ptr, Raylib::SHADER_UNIFORM_SAMPLER2D, count);
-	} else {
-		logf("Invalid shader uniform type\n");
-	}
-	return false;
+	return backendSetShaderUniform(&shader->backendShader, loc, ptr, type, count);
 }
 
 Texture *createTexture(const char *path, int flags) {
@@ -915,23 +858,11 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	texture->width = width;
 	texture->height = height;
 
-	Raylib::Image raylibImage = {};
-	raylibImage.width = width;
-	raylibImage.height = height;
-	if (flags & _F_TD_RGBA32) {
-		raylibImage.format = Raylib::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
-	} else {
-		raylibImage.format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-	}
-	raylibImage.mipmaps = 1;
-	raylibImage.data = (u8 *)zalloc(width * height * 4);
-
-	texture->raylibTexture = Raylib::LoadTextureFromImage(raylibImage);
-
-	free(raylibImage.data);
+	texture->backendTexture = backendCreateTexture(width, height, flags);
 
 	if (data) setTextureData(texture, data, width, height, flags);
 	setTextureSmooth(texture, true);
+	setTextureClamped(texture, true);
 
 	return texture;
 }
@@ -955,71 +886,14 @@ RenderTexture *createRenderTexture(const char *path, int flags) {
 	return texture;
 }
 
-Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags) {
-	processBatchDraws(); // Very important
-
-	Raylib::RenderTexture2D target = { 0 };
-
-	target.id = Raylib::rlLoadFramebuffer(width, height);   // Load an empty framebuffer
-
-	if (target.id > 0)
-	{
-		Raylib::rlEnableFramebuffer(target.id);
-
-		// Create color texture (default to RGBA)
-		int format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-		if (flags & _F_TD_RGBA32) {
-			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
-		} else {
-			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-		}
-		target.texture.id = Raylib::rlLoadTexture(NULL, width, height, format, 1);
-		target.texture.width = width;
-		target.texture.height = height;
-		target.texture.format = format;
-		target.texture.mipmaps = 1;
-
-		// Create depth renderbuffer/texture
-		target.depth.id = Raylib::rlLoadTextureDepth(width, height, true);
-		target.depth.width = width;
-		target.depth.height = height;
-		target.depth.format = 19;       //DEPTH_COMPONENT_24BIT?
-		target.depth.mipmaps = 1;
-
-		// Attach color texture and depth renderbuffer/texture to FBO
-		Raylib::rlFramebufferAttach(
-			target.id,
-			target.texture.id,
-			Raylib::RL_ATTACHMENT_COLOR_CHANNEL0,
-			Raylib::RL_ATTACHMENT_TEXTURE2D,
-			0
-		);
-		Raylib::rlFramebufferAttach(
-			target.id,
-			target.depth.id,
-			Raylib::RL_ATTACHMENT_DEPTH,
-			Raylib::RL_ATTACHMENT_RENDERBUFFER,
-			0
-		);
-
-		// Check if fbo is complete with attachments (valid)
-		if (Raylib::rlFramebufferComplete(target.id)) TRACELOG(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully", target.id);
-
-		Raylib::rlDisableFramebuffer();
-	} else {
-		TRACELOG(LOG_WARNING, "FBO: Framebuffer object can not be created");
-	}
-
-	return target;
-}
-
 RenderTexture *createRenderTexture(int width, int height, void *data, int flags) {
 	RenderTexture *renderTexture = (RenderTexture *)zalloc(sizeof(RenderTexture));
 	renderTexture->width = width;
 	renderTexture->height = height;
-	renderTexture->raylibRenderTexture = myLoadRenderTexture(width, height, flags);
+	renderTexture->backendRenderTexture = backendCreateRenderTexture(width, height, flags);
 	if (data) setTextureData(renderTexture, data, width, height, flags);
 	setTextureSmooth(renderTexture, true);
+	setTextureClamped(renderTexture, true);
 	return renderTexture;
 }
 
@@ -1032,118 +906,48 @@ Texture *renderTextureToTexture(RenderTexture *renderTexture) {
 }
 
 void setTextureSmooth(Texture *texture, bool smooth) {
-	Raylib::SetTextureFilter(texture->raylibTexture, smooth ? Raylib::TEXTURE_FILTER_BILINEAR : Raylib::TEXTURE_FILTER_POINT);
+	backendSetTextureSmooth(&texture->backendTexture, smooth);
 }
 void setTextureSmooth(RenderTexture *renderTexture, bool smooth) {
-	Raylib::SetTextureFilter(renderTexture->raylibRenderTexture.texture, smooth ? Raylib::TEXTURE_FILTER_BILINEAR : Raylib::TEXTURE_FILTER_POINT);
+	backendSetTextureSmooth(&renderTexture->backendRenderTexture, smooth);
 }
 
 void setTextureClamped(Texture *texture, bool clamped) {
-	if (texture->clamped == clamped) return;
-	texture->clamped = clamped;
-	Raylib::SetTextureWrap(texture->raylibTexture, clamped ? Raylib::TEXTURE_WRAP_CLAMP : Raylib::TEXTURE_WRAP_REPEAT);
+  setTextureClampedX(texture, clamped);
+  setTextureClampedY(texture, clamped);
 }
 void setTextureClamped(RenderTexture *renderTexture, bool clamped) {
-	if (renderTexture->clamped == clamped) return;
-	renderTexture->clamped = clamped;
-	Raylib::SetTextureWrap(renderTexture->raylibRenderTexture.texture, clamped ? Raylib::TEXTURE_WRAP_CLAMP : Raylib::TEXTURE_WRAP_REPEAT);
+  setTextureClampedX(renderTexture, clamped);
+  setTextureClampedY(renderTexture, clamped);
+}
+
+void setTextureClampedX(Texture *texture, bool clamped) {
+	backendSetTextureClampedX(&texture->backendTexture, clamped);
+}
+void setTextureClampedY(Texture *texture, bool clamped) {
+	backendSetTextureClampedY(&texture->backendTexture, clamped);
+}
+void setTextureClampedX(RenderTexture *texture, bool clamped) {
+	backendSetTextureClampedX(&texture->backendRenderTexture, clamped);
+}
+void setTextureClampedY(RenderTexture *texture, bool clamped) {
+	backendSetTextureClampedY(&texture->backendRenderTexture, clamped);
 }
 
 void setTextureData(Texture *texture, void *data, int width, int height, int flags) {
-	setRaylibTextureData(texture->raylibTexture, data, width, height, flags);
+	backendSetTextureData(&texture->backendTexture, data, width, height, flags);
 }
 
 void setTextureData(RenderTexture *renderTexture, void *data, int width, int height, int flags) {
-	setRaylibTextureData(renderTexture->raylibRenderTexture.texture, data, width, height, flags);
-}
-
-void setRaylibTextureData(Raylib::Texture raylibTexture, void *data, int width, int height, int flags) {
-	int neededTextureBufferSize = width * height * 4;
-	if (neededTextureBufferSize > renderer->tempTextureBufferSize) {
-		if (renderer->tempTextureBuffer) free(renderer->tempTextureBuffer);
-
-		renderer->tempTextureBufferSize = neededTextureBufferSize;
-		renderer->tempTextureBuffer = malloc(renderer->tempTextureBufferSize);
-	}
-
-	void *newData = renderer->tempTextureBuffer;
-	memcpy(newData, data, width * height * 4);
-	data = newData;
-
-	if ((flags & _F_TD_SKIP_PREMULTIPLY) == 0) {
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-#if 1
-				float a = ((u8 *)data)[(y*width+x)*4 + 3] / 255.0;
-				((u8 *)data)[(y*width+x)*4 + 2] *= a;
-				((u8 *)data)[(y*width+x)*4 + 1] *= a;
-				((u8 *)data)[(y*width+x)*4 + 0] *= a;
-#else
-				u8 a, r, g, b;
-				int index = (y*width+x) * 4;
-				a = ((u8 *)data)[index + 3];
-				r = ((u8 *)data)[index + 2];
-				g = ((u8 *)data)[index + 1];
-				b = ((u8 *)data)[index + 0];
-
-				r *= (float)a/255.0;
-				g *= (float)a/255.0;
-				b *= (float)a/255.0;
-
-				((u8 *)data)[index + 3] = a;
-				((u8 *)data)[index + 2] = r;
-				((u8 *)data)[index + 1] = g;
-				((u8 *)data)[index + 0] = b;
-#endif
-			}
-		}
-	}
-
-	if (flags & _F_TD_FLIP_Y) {
-		int neededTextureRowBufferSize = width * 4;
-		if (neededTextureRowBufferSize > renderer->tempTextureRowBufferSize) {
-			if (renderer->tempTextureRowBuffer) free(renderer->tempTextureRowBuffer);
-
-			renderer->tempTextureRowBufferSize = neededTextureRowBufferSize;
-			renderer->tempTextureRowBuffer = malloc(renderer->tempTextureRowBufferSize);
-		}
-
-		u8 *tempRow = (u8 *)renderer->tempTextureRowBuffer;
-		for (int y = 0; y < height/2; y++) {
-			int curTopRow = y;
-			int curBottomRow = height - y - 1;
-			u8 *topRowStart = (u8 *)data + curTopRow * width * 4;
-			u8 *bottomRowStart = (u8 *)data + curBottomRow * width * 4;
-
-			memcpy(tempRow, topRowStart, width * 4);
-			memcpy(topRowStart, bottomRowStart, width * 4);
-			memcpy(bottomRowStart, tempRow, width * 4);
-		}
-	}
-
-	Raylib::UpdateTexture(raylibTexture, data);
+	backendSetTextureData(&renderTexture->backendRenderTexture, data, width, height, flags);
 }
 
 u8 *getTextureData(RenderTexture *renderTexture, int flags) {
-	Texture texture;
-	texture.width = renderTexture->width;
-	texture.height = renderTexture->height;
-	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
-	return getTextureData(&texture, flags);
+	return backendGetTextureData(&renderTexture->backendRenderTexture);
 }
 
 u8 *getTextureData(Texture *texture, int flags) {
-	Raylib::rlDrawRenderBatchActive();
-	Raylib::Image raylibImage = Raylib::LoadImageFromTexture(texture->raylibTexture);
-	u8 *colors = (u8 *)Raylib::LoadImageColors(raylibImage);
-
-	u8 *data = (u8 *)zalloc(texture->width * texture->height * 4);
-	memcpy(data, colors, texture->width * texture->height * 4);
-
-	RL_FREE(colors);
-
-	Raylib::UnloadImage(raylibImage);
-	return data;
+	return backendGetTextureData(&texture->backendTexture);
 }
 
 bool writeTextureToFile(Texture *texture, char *path) {
@@ -1160,13 +964,13 @@ bool writeTextureToFile(Texture *texture, char *path) {
 }
 
 void destroyTexture(Texture *texture) {
-	Raylib::UnloadTexture(texture->raylibTexture);
 	if (texture->path) free(texture->path);
-	free(texture);
+	backendDestroyTexture(&texture->backendTexture);
+	// free(texture); //@incomplete Why can't I free this???
 }
 
 void destroyTexture(RenderTexture *renderTexture) {
-	Raylib::UnloadRenderTexture(renderTexture->raylibRenderTexture);
+	backendDestroyTexture(&renderTexture->backendRenderTexture);
 	free(renderTexture);
 }
 
@@ -1182,9 +986,11 @@ void drawTexture(RenderTexture *renderTexture, RenderProps props) {
 	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
 	float alpha = props.alpha;
 	int flags = props.flags;
-	Vec2 uv0 = props.uv0;
-	Vec2 uv1 = props.uv1;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, props.matrix, uv0, uv1, props.uvMatrix, tints, alpha, flags);
+	Vec2 uv0 = props.uvMatrix * props.uv0;
+	Vec2 uv1 = props.uvMatrix * props.uv1;
+	BackendTexture backendTexture = {}; //@hack
+	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
+	backendDrawTexture(&backendTexture, props.matrix, uv0, uv1, tints, alpha, flags);
 }
 
 void drawTexture(Texture *texture, RenderProps props) {
@@ -1200,261 +1006,138 @@ void drawTexture(Texture *texture, RenderProps props) {
 	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
 	float alpha = props.alpha;
 	int flags = props.flags;
-	Vec2 uv0 = props.uv0;
-	Vec2 uv1 = props.uv1;
-	drawRaylibTexture(texture->raylibTexture, props.matrix, uv0, uv1, props.uvMatrix, tints, alpha, flags);
+	Vec2 uv0 = props.uvMatrix * props.uv0;
+	Vec2 uv1 = props.uvMatrix * props.uv1;
+	backendDrawTexture(&texture->backendTexture, props.matrix, uv0, uv1, tints, alpha, flags);
 }
 
 void drawSimpleTexture(RenderTexture *renderTexture) {
 	Matrix3 matrix = mat3();
 	matrix.SCALE(getSize(renderTexture));
-	Matrix3 uvMatrix = mat3();
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+
+	BackendTexture backendTexture = {}; //@hack
+	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
+	backendDrawTexture(&backendTexture, matrix, uv0, uv1, tints, alpha, flags);
 }
 void drawSimpleTexture(Texture *texture) {
 	Matrix3 matrix = mat3();
 	matrix.SCALE(getSize(texture));
-	Matrix3 uvMatrix = mat3();
 	Vec2 uv0 = v2(0, 0);
 	Vec2 uv1 = v2(1, 1);
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int alpha = 1;
 	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+	backendDrawTexture(&texture->backendTexture, matrix, uv0, uv1, tints, alpha, flags);
 }
 void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
-	Matrix3 uvMatrix = mat3();
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int flags = 0;
-	drawRaylibTexture(renderTexture->raylibRenderTexture.texture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+
+	BackendTexture backendTexture = {}; //@hack
+	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
+	backendDrawTexture(&backendTexture, matrix, uv0, uv1, tints, alpha, flags);
 }
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
-	Matrix3 uvMatrix = mat3();
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
 	int flags = 0;
-	drawRaylibTexture(texture->raylibTexture, matrix, uv0, uv1, uvMatrix, tints, alpha, flags);
+	backendDrawTexture(&texture->backendTexture, matrix, uv0, uv1, tints, alpha, flags);
 }
 
 void drawRect(Rect rect, int color, int flags) {
-	unsigned char alphaByte = color >> 24; // This should be handled in drawRaylibTexture
-	if (alphaByte == 0) return;
-
 	Matrix3 matrix = mat3();
 	matrix.TRANSLATE(rect.x, rect.y);
 	matrix.SCALE(rect.width, rect.height);
 
-	Matrix3 uvMatrix = mat3();
 	float alpha = 1;
 	Vec4i tints = v4i(color, color, color, color);
-	drawRaylibTexture(renderer->whiteTexture->raylibTexture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
+	backendDrawTexture(&renderer->whiteTexture->backendTexture, matrix, v2(0, 0), v2(1, 1), tints, alpha, flags);
 }
 
 void drawCircle(Vec2 position, float radius, int color) {
-	unsigned char alphaByte = color >> 24;
-	if (alphaByte == 0) return;
-
 	Matrix3 matrix = mat3();
 	matrix.TRANSLATE(position - radius);
 	matrix.SCALE(radius*2);
 
 	Matrix3 uvMatrix = mat3();
-	float alpha = alphaByte/255.0;
+	float alpha = 1;
 	int flags = 0;
 	Vec4i tints = v4i(color, color, color, color);
 
 	Texture *texture = renderer->circleTexture1024;
 	if (radius < 45) texture = renderer->circleTexture32;
 
-	drawRaylibTexture(texture->raylibTexture, matrix, v2(0, 0), v2(1, 1), uvMatrix, tints, alpha, flags);
+	backendDrawTexture(&texture->backendTexture, matrix, v2(0, 0), v2(1, 1), tints, alpha, flags);
 }
 
-void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
-	Texture texture;
-	texture.width = renderTexture->width;
-	texture.height = renderTexture->height;
-	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
-	drawBillboard(camera, &texture, position, size, tint, source);
-}
+// void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
+// 	Texture texture;
+// 	texture.width = renderTexture->width;
+// 	texture.height = renderTexture->height;
+// 	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
+// 	drawBillboard(camera, &texture, position, size, tint, source);
+// }
 
-void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
-	if (renderer->disabled) return;
-	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
-	if (isZero(size)) size = v2(texture->width, texture->height);
+// void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
+// 	if (renderer->disabled) return;
+// 	if (isZero(source)) source = makeRect(0, 0, texture->width, texture->height);
+// 	if (isZero(size)) size = v2(texture->width, texture->height);
 
-	// I flipped uv.y
-	Vec2 uv0; // bl For some reason
-	uv0.x = source.x/texture->width;
-	uv0.y = (source.y + source.height)/texture->height;
+// 	// I flipped uv.y
+// 	Vec2 uv0; // bl For some reason
+// 	uv0.x = source.x/texture->width;
+// 	uv0.y = (source.y + source.height)/texture->height;
 
-	Vec2 uv1; // tr For some reason
-	uv1.x = (source.x + source.width)/texture->width;
-	uv1.y = source.y/texture->height;
+// 	Vec2 uv1; // tr For some reason
+// 	uv1.x = (source.x + source.width)/texture->width;
+// 	uv1.y = source.y/texture->height;
 
-	if (size.x < 0) {
-		float temp = uv0.x;
-		uv0.x = uv1.x;
-		uv1.x = temp;
-		size.x *= -1;
-	}
+// 	if (size.x < 0) {
+// 		float temp = uv0.x;
+// 		uv0.x = uv1.x;
+// 		uv1.x = temp;
+// 		size.x *= -1;
+// 	}
 
-	if (size.y < 0) logf("No y flip\n");
+// 	if (size.y < 0) logf("No y flip\n");
 
-	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+// 	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
-	Vec3 right = v3(matView.m0, matView.m4, matView.m8);
-	Vec3 left = v3(-matView.m0, -matView.m4, -matView.m8);
-	Vec3 up = v3(matView.m1, matView.m5, matView.m9);
-	// Vec3 up = v3(0, 0, 1);
+// 	Vec3 right = v3(matView.m0, matView.m4, matView.m8);
+// 	Vec3 left = v3(-matView.m0, -matView.m4, -matView.m8);
+// 	Vec3 up = v3(matView.m1, matView.m5, matView.m9);
+// 	// Vec3 up = v3(0, 0, 1);
 
-	Vec3 rightScaled = right * (size.x/2);
-	Vec3 upScaled = up * (size.y/2);
+// 	Vec3 rightScaled = right * (size.x/2);
+// 	Vec3 upScaled = up * (size.y/2);
 
-	Vec3 p1 = rightScaled + upScaled;
-	Vec3 p2 = rightScaled - upScaled;
+// 	Vec3 p1 = rightScaled + upScaled;
+// 	Vec3 p2 = rightScaled - upScaled;
 
-	Vec3 topLeft = -p2;
-	Vec3 topRight = p1;
-	Vec3 bottomRight = p2;
-	Vec3 bottomLeft = -p1;
+// 	Vec3 topLeft = -p2;
+// 	Vec3 topRight = p1;
+// 	Vec3 bottomRight = p2;
+// 	Vec3 bottomLeft = -p1;
 
-	// Rotation would happen here!
+// 	// Rotation would happen here!
 
-	topLeft += position;
-	topRight += position;
-	bottomRight += position;
-	bottomLeft += position;
+// 	topLeft += position;
+// 	topRight += position;
+// 	bottomRight += position;
+// 	bottomLeft += position;
 
-	Vec3 verts[4] = { topLeft, bottomLeft, bottomRight, topRight };
-	Vec2 uvs[4] = { v2(uv0.x, uv0.y), v2(uv0.x, uv1.y), v2(uv1.x, uv1.y), v2(uv1.x, uv0.y) };
-	int colors[4] = { tint, tint, tint, tint };
-	drawTexturedQuad(texture->raylibTexture.id, verts, uvs, colors);
-}
-
-void drawRaylibTexture(Raylib::Texture raylibTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Matrix3 uvMatrix, Vec4i tints, float alpha,int flags) {
-	alpha *= renderer->alphaStack[renderer->alphaStackNum-1];
-	if (renderer->disabled) return;
-	if (alpha == 0) return;
-
-	Vec2 verts[] = {
-		v2(0, 0),
-		v2(0, 1),
-		v2(1, 1),
-		v2(1, 0),
-	};
-
-	matrix = renderer->baseMatrix2d * matrix;
-
-	for (int i = 0; i < ArrayLength(verts); i++) {
-		verts[i] = matrix * verts[i];
-	}
-
-	Vec2 uvs[] = {
-		v2(uv0.x, uv0.y),
-		v2(uv0.x, uv1.y),
-		v2(uv1.x, uv1.y),
-		v2(uv1.x, uv0.y),
-	};
-
-	Matrix3 flipMatrix = {
-		1,  0,  0,
-		0, -1,  0,
-		0,  1,  1
-	};
-	uvMatrix = flipMatrix * uvMatrix;
-	for (int i = 0; i < ArrayLength(uvs); i++) {
-		uvs[i] = uvMatrix * uvs[i];
-	}
-
-	int colors[4];
-	for (int i = 0; i < 4; i++) {
-		int tint = ((int *)&tints.x)[i];
-		int a, r, g, b;
-		hexToArgb(tint, &a, &r, &g, &b);
-		a *= alpha;
-		// r *= a/255.0; // Very bad!
-		// g *= a/255.0;
-		// b *= a/255.0;
-		colors[i] = argbToHex(a, r, g, b);
-	}
-
-	drawTexturedQuad(raylibTexture.id, verts, uvs, colors);
-}
-
-void drawTexturedQuad(int textureId, Vec2 *verts, Vec2 *uvs, int *colors) {
-	Vec3 verts3[4];
-	verts3[0] = v3(verts[0], renderer->current2dDrawDepth);
-	verts3[1] = v3(verts[1], renderer->current2dDrawDepth);
-	verts3[2] = v3(verts[2], renderer->current2dDrawDepth);
-	verts3[3] = v3(verts[3], renderer->current2dDrawDepth);
-	drawTexturedQuad(textureId, verts3, uvs, colors);
-	renderer->current2dDrawDepth += 1.0/renderer->maxDrawCallsPerBatch; // Should really be a fraction of the far-near clip plane
-}
-
-void drawTexturedQuad(int textureId, Vec3 *verts, Vec2 *uvs, int *colors) {
-	Pass *pass = getCurrentPass();
-	if (pass) {
-		PassCmd *cmd = createPassCmd(pass);
-		if (!cmd) {
-			logf("Pass redirect overflow!\n");
-			pass->cmdsNum--;
-			cmd = createPassCmd(pass);
-		}
-
-		cmd->type = PASS_CMD_QUAD;
-		cmd->textureId = textureId;
-		cmd->verts[0] = verts[0];
-		cmd->verts[1] = verts[1];
-		cmd->verts[2] = verts[2];
-		cmd->verts[3] = verts[3];
-		cmd->uvs[0] = uvs[0];
-		cmd->uvs[1] = uvs[1];
-		cmd->uvs[2] = uvs[2];
-		cmd->uvs[3] = uvs[3];
-		cmd->colors[0] = colors[0];
-		cmd->colors[1] = colors[1];
-		cmd->colors[2] = colors[2];
-		cmd->colors[3] = colors[3];
-
-		return;
-	}
-
-	if (renderer->currentDrawCount > renderer->maxDrawCallsPerBatch-10) processBatchDraws(); // Magic -10 :/
-	renderer->currentDrawCount++;
-
-	Raylib::rlCheckRenderBatchLimit(4);
-
-	Raylib::rlSetTexture(textureId);
-
-	Raylib::rlBegin(RL_QUADS);
-
-	for (int i = 0; i < 4; i++) {
-		int color = colors[i];
-		int a, r, g, b;
-		hexToArgb(color, &a, &r, &g, &b);
-		r *= a/255.0;
-		g *= a/255.0;
-		b *= a/255.0;
-		color = argbToHex(a, r, g, b);
-		Raylib::Color raylibColor = toRaylibColor(color);
-
-		Raylib::rlColor4ub(raylibColor.r, raylibColor.g, raylibColor.b, raylibColor.a);
-		Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
-		Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
-	}
-
-	Raylib::rlEnd();
-
-	Raylib::rlSetTexture(0);
-}
+// 	Vec3 verts[4] = { topLeft, bottomLeft, bottomRight, topRight };
+// 	Vec2 uvs[4] = { v2(uv0.x, uv0.y), v2(uv0.x, uv1.y), v2(uv1.x, uv1.y), v2(uv1.x, uv0.y) };
+// 	int colors[4] = { tint, tint, tint, tint };
+// 	drawTexturedQuad(texture->raylibTexture.id, verts, uvs, colors);
+// }
 
 void pushTargetTexture(RenderTexture *renderTexture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");
-	if (getCurrentPass()) logf("Pushing target texture while in pass!\n");
 
 	renderer->targetTextureStack[renderer->targetTextureStackNum++] = renderTexture;
 
@@ -1462,8 +1145,6 @@ void pushTargetTexture(RenderTexture *renderTexture) {
 }
 
 void popTargetTexture() {
-	if (getCurrentPass()) logf("Popping target texture while in pass!\n");
-
 	renderer->targetTextureStackNum--;
 
 	if (renderer->targetTextureStackNum > 0) {
@@ -1475,10 +1156,10 @@ void popTargetTexture() {
 
 void setTargetTexture(RenderTexture *renderTexture) {
 	if (renderTexture == NULL) {
-		Raylib::EndTextureMode();
-		if (!isZero(platform->hackedWindowSize)) Raylib::rlViewport(0, 0, platform->hackedWindowSize.x, platform->hackedWindowSize.y);
+		backendSetTargetTexture(NULL);
+		if (!isZero(platform->hackedWindowSize)) Raylib::rlViewport(0, 0, platform->hackedWindowSize.x, platform->hackedWindowSize.y); //@hack
 	} else {
-		Raylib::BeginTextureMode(renderTexture->raylibRenderTexture);
+		backendSetTargetTexture(&renderTexture->backendRenderTexture);
 	}
 }
 
@@ -1498,31 +1179,29 @@ void popCamera2d() {
 
 void refreshGlobalMatrices() {
 	renderer->baseMatrix2d = mat3();
-
-	renderer->currentCameraMatrix = mat3();
-	for (int i = 0; i < renderer->camera2dStackNum; i++) renderer->currentCameraMatrix *= renderer->camera2dStack[i];
-
-	renderer->baseMatrix2d *= renderer->currentCameraMatrix;
+	for (int i = 0; i < renderer->camera2dStackNum; i++) renderer->baseMatrix2d *= renderer->camera2dStack[i];
+	backendSetCamera2d(renderer->baseMatrix2d);
 }
 
-void setScissor(Rect rect) { //@todo Untested
-	if (getCurrentPass()) logf("Setting scissor while in pass!\n");
-	Raylib::BeginScissorMode(rect.x, rect.y, rect.width, rect.height);
+void setScissor(Rect rect) {
+  if (!platform->scissorDoesntRespectCamera) rect = renderer->baseMatrix2d * rect;
+  backendSetScissor(rect);
 }
 
 void clearScissor() {
-	if (getCurrentPass()) logf("Clearing scissor while in pass!\n");
-	Raylib::EndScissorMode();
+  backendEndScissor();
 }
 
 void pushAlpha(float value) {
 	if (renderer->alphaStackNum > ALPHA_STACK_MAX-1) Panic("alpha overflow");
 	renderer->alphaStack[renderer->alphaStackNum++] = value;
+	backendSetAlpha(renderer->alphaStack[renderer->alphaStackNum-1]);
 }
 
 void popAlpha() {
 	if (renderer->alphaStackNum <= 1) Panic("alpha underflow");
 	renderer->alphaStackNum--;
+	backendSetAlpha(renderer->alphaStack[renderer->alphaStackNum-1]);
 }
 
 void setRendererBlendMode(BlendMode blendMode) {
@@ -1609,26 +1288,24 @@ void updateLightValues(Shader *shader, Light light) {
 }
 
 void updateLightingShader(Camera camera) {
-	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[0]);
-	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[1]);
-	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[2]);
-	updateLightValues(renderer->lightingAnimatedShader, renderer->lights[3]);
+	// updateLightValues(renderer->lightingAnimatedShader, renderer->lights[0]);
+	// updateLightValues(renderer->lightingAnimatedShader, renderer->lights[1]);
+	// updateLightValues(renderer->lightingAnimatedShader, renderer->lights[2]);
+	// updateLightValues(renderer->lightingAnimatedShader, renderer->lights[3]);
 
-	// This happens automatically because of drawMesh
-	// Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader->locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
-	setShaderUniform(
-		renderer->lightingAnimatedShader,
-		renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW],
-		&camera.position.x,
-		SHADER_UNIFORM_VEC3,
-		1
-	);
+	// // This happens automatically because of drawMesh
+	// // Raylib::SetShaderValue(renderer->lightingAnimatedShader, renderer->lightingAnimatedShader->locs[Raylib::SHADER_LOC_VECTOR_VIEW], &camera.position.x, Raylib::SHADER_UNIFORM_VEC3);
+	// setShaderUniform(
+	// 	renderer->lightingAnimatedShader,
+	// 	renderer->lightingAnimatedShader->raylibShader.locs[Raylib::SHADER_LOC_VECTOR_VIEW],
+	// 	&camera.position.x,
+	// 	SHADER_UNIFORM_VEC3,
+	// 	1
+	// );
 }
 
 void processBatchDraws() {
-	Raylib::rlDrawRenderBatchActive();
-	renderer->currentDrawCount = 0;
-	renderer->current2dDrawDepth = -1;
+	backendFlush();
 }
 
 void resetRenderContext() {
@@ -1646,125 +1323,122 @@ void startRenderingFrame() {
 void endRenderingFrame() {
 }
 
-void start3d(Camera camera) {
-	renderer->in3dPass = true;
+// void start3d(Camera camera) {
+// 	renderer->in3dPass = true;
 
-	processBatchDraws();
+// 	processBatchDraws();
 
-	Raylib::rlMatrixMode(RL_PROJECTION);
-	Raylib::rlPushMatrix();
-	Raylib::rlLoadIdentity();
+// 	Raylib::rlMatrixMode(RL_PROJECTION);
+// 	Raylib::rlPushMatrix();
+// 	Raylib::rlLoadIdentity();
 
-	if (isZero(camera.size)) logf("camera.size is 0,0\n");
-	if (camera.nearCull == 0) logf("camera.nearCull is 0\n");
-	if (camera.farCull == 0) logf("camera.far is 0\n");
-	if (!camera.isOrtho) {
-		if (camera.fovy == 0) logf("fovy is 0\n");
-		float aspect = camera.size.x/camera.size.y;
-		Raylib::Matrix matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
-		Raylib::rlMultMatrixf(MatrixToFloat(matProj));
-	} else {
-		if (camera.fovy != 0) logf("fovy does nothing currently\n");
-		double top = camera.size.y/2;
-		double right = camera.size.x/2;
-		// Raylib::Matrix matOrtho = Raylib::MatrixOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
-		Raylib::rlOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
-	}
+// 	if (isZero(camera.size)) logf("camera.size is 0,0\n");
+// 	if (camera.nearCull == 0) logf("camera.nearCull is 0\n");
+// 	if (camera.farCull == 0) logf("camera.far is 0\n");
+// 	if (!camera.isOrtho) {
+// 		if (camera.fovy == 0) logf("fovy is 0\n");
+// 		float aspect = camera.size.x/camera.size.y;
+// 		Raylib::Matrix matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+// 		Raylib::rlMultMatrixf(MatrixToFloat(matProj));
+// 	} else {
+// 		if (camera.fovy != 0) logf("fovy does nothing currently\n");
+// 		double top = camera.size.y/2;
+// 		double right = camera.size.x/2;
+// 		// Raylib::Matrix matOrtho = Raylib::MatrixOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
+// 		Raylib::rlOrtho(-right, right, -top, top, camera.nearCull, camera.farCull);
+// 	}
 
-	Raylib::rlMatrixMode(RL_MODELVIEW);
-	Raylib::rlLoadIdentity();
+// 	Raylib::rlMatrixMode(RL_MODELVIEW);
+// 	Raylib::rlLoadIdentity();
 
-	Raylib::Matrix raylibLookAt = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
-	Raylib::rlMultMatrixf(MatrixToFloat(raylibLookAt));
+// 	Raylib::Matrix raylibLookAt = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+// 	Raylib::rlMultMatrixf(MatrixToFloat(raylibLookAt));
 
-	setDepthTest(true);
-}
+// 	setDepthTest(true);
+// }
 
-void end3d() {
-	renderer->in3dPass = false;
-	processBatchDraws();
-	Raylib::EndMode3D();
-}
+// void end3d() {
+// 	renderer->in3dPass = false;
+// 	processBatchDraws();
+// 	Raylib::EndMode3D();
+// }
 
-void startShader(Raylib::Shader shader) {
-	Raylib::rlSetShader(shader.id, shader.locs);
-}
 void startShader(Shader *shader) {
-	Raylib::rlSetShader(shader->raylibShader.id, shader->raylibShader.locs);
+	backendStartShader(&shader->backendShader);
 }
 
 void endShader() {
-	Raylib::rlSetShader(Raylib::rlGetShaderIdDefault(), Raylib::rlGetShaderLocsDefault());
+	backendEndShader();
 }
 
-void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
-	float x = (2.0f*mouse.x)/platform->windowWidth - 1.0f;
-	float y = 1.0f - (2.0f*mouse.y)/platform->windowHeight;
-	float z = 1.0f;
+// void getMouseRay(Camera camera, Vec2 mouse, Vec3 *outPos, Vec3 *outDir) {
+// 	float x = (2.0f*mouse.x)/platform->windowWidth - 1.0f;
+// 	float y = 1.0f - (2.0f*mouse.y)/platform->windowHeight;
+// 	float z = 1.0f;
 
-	Raylib::Vector3 deviceCoords = { x, y, z };
+// 	Raylib::Vector3 deviceCoords = { x, y, z };
 
-	Raylib::Matrix matProj;
-	if (!camera.isOrtho) {
-		float aspect = camera.size.x / camera.size.y;
-		matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
-	} else {
-		matProj = Raylib::rlGetMatrixProjection();
-	}
-	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+// 	Raylib::Matrix matProj;
+// 	if (!camera.isOrtho) {
+// 		float aspect = camera.size.x / camera.size.y;
+// 		matProj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+// 	} else {
+// 		matProj = Raylib::rlGetMatrixProjection();
+// 	}
+// 	Raylib::Matrix matView = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
 
-	Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
-	Raylib::Vector3 farPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 1.0f }, matProj, matView);
+// 	Raylib::Vector3 nearPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 0.0f }, matProj, matView);
+// 	Raylib::Vector3 farPoint = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, 1.0f }, matProj, matView);
 
-	Raylib::Vector3 cameraPlanePointerPos = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, -1.0f }, matProj, matView);
+// 	Raylib::Vector3 cameraPlanePointerPos = Raylib::Vector3Unproject({ deviceCoords.x, deviceCoords.y, -1.0f }, matProj, matView);
 
-	Raylib::Vector3 direction = Raylib::Vector3Normalize(Raylib::Vector3Subtract(farPoint, nearPoint));
+// 	Raylib::Vector3 direction = Raylib::Vector3Normalize(Raylib::Vector3Subtract(farPoint, nearPoint));
 
-	Raylib::Ray raylibScreenRay = {};
-	Vec3 rayPos;
-	if (!camera.isOrtho) rayPos = camera.position;
-	else rayPos = v3(cameraPlanePointerPos);
-	raylibScreenRay.direction = direction;
+// 	Raylib::Ray raylibScreenRay = {};
+// 	Vec3 rayPos;
+// 	if (!camera.isOrtho) rayPos = camera.position;
+// 	else rayPos = v3(cameraPlanePointerPos);
+// 	raylibScreenRay.direction = direction;
 
-	*outPos = rayPos;
-	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
-}
+// 	*outPos = rayPos;
+// 	*outDir = v3(raylibScreenRay.direction.x, raylibScreenRay.direction.y, raylibScreenRay.direction.z);
+// }
 
-Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
-	Raylib::Matrix proj;
-	if (!camera.isOrtho) {
-		float aspect = camera.size.x / camera.size.y;
-		proj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
-	} else {
-		proj = Raylib::rlGetMatrixProjection();
-	}
-	Raylib::Matrix view = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
-#if 1
-	Raylib::Quaternion worldPos = { worldPosition.x, worldPosition.y, worldPosition.z, 1.0f };
+// Vec2 worldSpaceTo2dNDC01(Camera camera, Vec3 worldPosition) {
+// 	Raylib::Matrix proj;
+// 	if (!camera.isOrtho) {
+// 		float aspect = camera.size.x / camera.size.y;
+// 		proj = Raylib::MatrixPerspective(toRad(camera.fovy), aspect, camera.nearCull, camera.farCull);
+// 	} else {
+// 		proj = Raylib::rlGetMatrixProjection();
+// 	}
+// 	Raylib::Matrix view = Raylib::MatrixLookAt(toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up));
+// #if 1
+// 	Raylib::Quaternion worldPos = { worldPosition.x, worldPosition.y, worldPosition.z, 1.0f };
 
-	worldPos = Raylib::QuaternionTransform(worldPos, view);
-	worldPos = Raylib::QuaternionTransform(worldPos, proj);
+// 	worldPos = Raylib::QuaternionTransform(worldPos, view);
+// 	worldPos = Raylib::QuaternionTransform(worldPos, proj);
 
-	Raylib::Vector3 ndcPos = { worldPos.x/worldPos.w, -worldPos.y/worldPos.w, worldPos.z/worldPos.w };
-	Vec2 ndc = v2(ndcPos.x, ndcPos.y);
-	ndc.x++;
-	ndc.y++;
-	ndc /= 2;
-#else // This one used to work, with orthographic camera
-	Raylib::Matrix viewProj = Raylib::MatrixMultiply(view, proj);
+// 	Raylib::Vector3 ndcPos = { worldPos.x/worldPos.w, -worldPos.y/worldPos.w, worldPos.z/worldPos.w };
+// 	Vec2 ndc = v2(ndcPos.x, ndcPos.y);
+// 	ndc.x++;
+// 	ndc.y++;
+// 	ndc /= 2;
+// #else // This one used to work, with orthographic camera
+// 	Raylib::Matrix viewProj = Raylib::MatrixMultiply(view, proj);
 
-	Raylib::Matrix invViewProj = Raylib::MatrixInvert(viewProj);
+// 	Raylib::Matrix invViewProj = Raylib::MatrixInvert(viewProj);
 
-	Raylib::Vector3 raylibPosition = {worldPosition.x, worldPosition.y, worldPosition.z};
-	raylibPosition = Raylib::Vector3Transform(raylibPosition, viewProj);
+// 	Raylib::Vector3 raylibPosition = {worldPosition.x, worldPosition.y, worldPosition.z};
+// 	raylibPosition = Raylib::Vector3Transform(raylibPosition, viewProj);
 
-	Vec2 ndc = v2(raylibPosition.x, raylibPosition.y);
-	ndc /= 2;
-	ndc.x++;
-#endif
+// 	Vec2 ndc = v2(raylibPosition.x, raylibPosition.y);
+// 	ndc /= 2;
+// 	ndc.x++;
+// #endif
 
-	return ndc;
-}
+// 	return ndc;
+// }
 
 
 ///- Gui
@@ -2043,17 +1717,38 @@ void guiDraw() {
 }
 
 void guiTexture(Texture *texture) {
-	ImGui::Image((ImTextureID)(intptr_t)&texture->raylibTexture, ImVec2(texture->width, texture->height), ImVec2(0, 1), ImVec2(1, 0));
+	ImGui::Image(
+		(ImTextureID)(intptr_t)&texture->backendTexture.raylibTexture.id,
+		ImVec2(texture->width, texture->height),
+		ImVec2(0, 1),
+		ImVec2(1, 0)
+	);
 }
-void guiTexture(RenderTexture *renderTexture) {
-	ImGui::Image((ImTextureID)(intptr_t)&renderTexture->raylibRenderTexture.texture, ImVec2(renderTexture->width, renderTexture->height), ImVec2(0, 1), ImVec2(1, 0));
-}
+ void guiTexture(RenderTexture *renderTexture) {
+ 	ImGui::Image(
+		(ImTextureID)(intptr_t)&renderTexture->backendRenderTexture.raylibRenderTexture.texture.id,
+		ImVec2(renderTexture->width, renderTexture->height),
+		ImVec2(0, 1),
+		ImVec2(1, 0)
+ 	);
+ }
 
 bool guiImageButton(Texture *texture) {
-	return ImGui::ImageButton((ImTextureID)(intptr_t)&texture->raylibTexture, ImVec2(texture->width, texture->height), ImVec2(0, 1), ImVec2(1, 0));
+	return ImGui::ImageButton(
+		(ImTextureID)(intptr_t)&texture->backendTexture.raylibTexture.id,
+		ImVec2(texture->width, texture->height),
+		ImVec2(0, 1),
+		ImVec2(1, 0)
+	);
 }
 bool guiImageButton(RenderTexture *renderTexture) {
-	return ImGui::ImageButton((ImTextureID)(intptr_t)&renderTexture->raylibRenderTexture.texture, ImVec2(renderTexture->width, renderTexture->height), ImVec2(0, 1), ImVec2(1, 0));
+	return ImGui::ImageButton(
+		(ImTextureID)(intptr_t)&renderTexture->backendRenderTexture.raylibRenderTexture.texture.id,
+		ImVec2(renderTexture->width, renderTexture->height),
+		ImVec2(0, 1),
+		ImVec2(1, 0)
+	);
+	return false;
 }
 
 ///- Audio

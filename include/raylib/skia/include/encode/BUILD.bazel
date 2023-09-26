@@ -1,45 +1,16 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:macros.bzl", "exports_files_legacy")
 
 licenses(["notice"])
 
 exports_files_legacy()
 
-skia_filegroup(
-    name = "encode_hdrs",
-    srcs = [
-        "SkEncoder.h",
-        "SkICC.h",
-    ],
-)
-
-skia_filegroup(
-    name = "jpeg_hdrs",
-    srcs = [
-        "SkJpegEncoder.h",
-    ],
-)
-
-skia_filegroup(
-    name = "png_hdrs",
-    srcs = [
-        "SkPngEncoder.h",
-    ],
-)
-
-skia_filegroup(
-    name = "webp_hdrs",
-    srcs = [
-        "SkWebpEncoder.h",
-    ],
-)
-
-skia_filegroup(
+filegroup(
     name = "public_hdrs",
     srcs = [
-        ":encode_hdrs",
-        ":jpeg_hdrs",
-        ":png_hdrs",
-        ":webp_hdrs",
+        "SkEncoder.h",
+        "SkJpegEncoder.h",
+        "SkPngEncoder.h",
+        "SkWebpEncoder.h",
     ],
     visibility = ["//include:__pkg__"],
 )

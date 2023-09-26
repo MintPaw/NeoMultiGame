@@ -15,7 +15,7 @@
 namespace SkSL { struct ShaderCaps; }
 #endif
 
-#if defined(SK_GRAPHITE)
+#if defined(SK_GRAPHITE_ENABLED)
 namespace skgpu::graphite { class Caps; }
 #endif
 
@@ -28,7 +28,7 @@ public:
 #endif
 
 protected:
-#if defined(SK_GRAPHITE)
+#if defined(SK_GRAPHITE_ENABLED)
     friend class skgpu::graphite::Caps; // for ctor
 #endif
 

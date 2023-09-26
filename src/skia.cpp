@@ -217,6 +217,7 @@ Texture *getSkiaFrameAsTexture(Vec2 size);
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum);
 
 SpriteTransform *getSpriteTransform(SpriteTransform *transforms, int *transformsNum, char *pathName);
+SpriteTransform *getNewOrExistingSpriteTransform(SpriteTransform *transforms, int *transformsNum, char *pathName);
 
 #define CreateSpriteTransforms(varName, varNumName, count) \
 	SpriteTransform varName[count]; \
@@ -284,12 +285,45 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 			skiaSys->grDirectContext = grDirectContext.release();
 		}
 
+		sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
+		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
+
+#if 1
+		SkImageInfo imageInfo = SkImageInfo::MakeN32(skiaSys->width, skiaSys->height, SkAlphaType::kPremul_SkAlphaType);
+
+		sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(
+			skiaSys->grDirectContext, SkBudgeted::kNo,
+			imageInfo,
+			0, kBottomLeft_GrSurfaceOrigin,
+			&surfaceProps
+		);
+
+		if (!gpuSurface) logf("Failed to create gpu surface\n");
+
+		GrGLTextureInfo textureInfo = {};
+		auto grTexture = gpuSurface->getBackendTexture(SkSurface::BackendHandleAccess::kFlushRead_BackendHandleAccess);
+		grTexture.getGLTextureInfo(&textureInfo);
+
+		//@incomplete Skia also hacks the renderer api using Raylib
+		skiaSys->skiaTexture = (Texture *)zalloc(sizeof(Texture));
+		skiaSys->skiaTexture->width = imageInfo.width();
+		skiaSys->skiaTexture->height = imageInfo.height();
+		skiaSys->skiaTexture->backendTexture.raylibTexture.width = imageInfo.width();
+		skiaSys->skiaTexture->backendTexture.raylibTexture.height = imageInfo.height();
+		skiaSys->skiaTexture->backendTexture.raylibTexture.mipmaps = 1;
+		skiaSys->skiaTexture->backendTexture.raylibTexture.format = textureInfo.fFormat;
+		skiaSys->skiaTexture->backendTexture.raylibTexture.id = textureInfo.fID;
+		setTextureSmooth(skiaSys->skiaTexture, true);
+    // unsigned int id;        // OpenGL texture id
+    // int width;              // Texture base width
+    // int height;             // Texture base height
+    // int mipmaps;            // Mipmap levels, 1 by default
+    // int format;             // Data format (PixelFormat type)
+
+#else
 		if (skiaSys->skiaTexture) destroyTexture(skiaSys->skiaTexture);
 		skiaSys->skiaTexture = createTexture(skiaSys->width, skiaSys->height);
 		setTextureSmooth(skiaSys->skiaTexture, true);
-
-		sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
-		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
 
 		GrGLTextureInfo textureInfo = {};
 #if RAYLIB_MODE
@@ -303,8 +337,9 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 
 		GrBackendTexture backendTexture(skiaSys->skiaTexture->width, skiaSys->skiaTexture->height, GrMipmapped::kNo, textureInfo);
 
+		logf("Creating surface...\n");
 		// skiaSys->gpuSurface = SkSurfaces::WrapBackendTexture(
-		skiaSys->gpuSurface = SkSurface::MakeFromBackendTexture(
+		sk_sp<SkSurface> gpuSurface = SkSurface::MakeFromBackendTexture(
 			skiaSys->grDirectContext,
 			backendTexture,
 			kBottomLeft_GrSurfaceOrigin,
@@ -312,7 +347,11 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 			kRGBA_8888_SkColorType,
 			colorSpace,
 			&surfaceProps
-		).release();
+		);
+#endif
+
+		if (!gpuSurface || !gpuSurface.get()) logf("Failed to create gpu surface\n");
+		skiaSys->gpuSurface = gpuSurface.release();
 
 		if (!skiaSys->gpuSurface) {
 			if (msaaSamples == 16) {
@@ -840,6 +879,8 @@ void execCommands(VDrawCommandsList *cmdList) {
 		} else if (cmd->type == VDRAW_CLIP_PATH) {
 			skiaSys->canvas->clipPath(path);
 		} else if (cmd->type == VDRAW_DRAW_CACHED_PATH) {
+			// logf("Drawing path: %p\n", cmd->path);
+			// logf("path length: %d %d\n", cmd->path->countVerbs(), cmd->path->countPoints());
 			skiaSys->canvas->drawPath(*cmd->path, paint);
 		} else if (cmd->type == VDRAW_CLIP_CACHED_PATH) {
 			skiaSys->canvas->clipPath(*cmd->path, true);
@@ -983,20 +1024,9 @@ void execCommands(VDrawCommandsList *cmdList) {
 				logf("Missing bitmap\n");
 			}
 		} else if (cmd->type == VDRAW_TEXT) {
-			SkPaint outlinePaint = SkPaint();
-			outlinePaint.setStyle(SkPaint::Style::kStroke_Style);
-			outlinePaint.setColor(0xFFFF0000);
-			outlinePaint.setStrokeWidth(1);
-
-			SkPaint outlinePaint2 = SkPaint();
-			outlinePaint2.setStyle(SkPaint::Style::kStroke_Style);
-			outlinePaint2.setColor(0xFF0000FF);
-			outlinePaint2.setStrokeWidth(1);
-
-			SkPaint outlinePaint3 = SkPaint();
-			outlinePaint3.setStyle(SkPaint::Style::kStroke_Style);
-			outlinePaint3.setColor(0xFF00FF00);
-			outlinePaint3.setStrokeWidth(1);
+			SkPaint fontPaint = SkPaint();
+			fontPaint.setStyle(SkPaint::Style::kFill_Style);
+			fontPaint.setColor(cmd->colors[0]);
 
 			if (!cmd->font->skiaUserData) {
 				int fontDataSize;
@@ -1012,6 +1042,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 			sk_sp<SkTextBlob> skiaTextBlob = SkTextBlob::MakeFromString(cmd->text, *skiaFont);
 			SkRect skiaBounds = skiaTextBlob->bounds();
 
+			skiaFont->measureText(cmd->text, strlen(cmd->text), SkTextEncoding::kUTF8, &skiaBounds, &fontPaint);
 			Vec2 actualTextSize;
 			actualTextSize.x = skiaBounds.width();
 			actualTextSize.y = skiaBounds.height();
@@ -1020,21 +1051,37 @@ void execCommands(VDrawCommandsList *cmdList) {
 
 			Rect textRect = getInnerRectOfAspect(toFit, actualTextSize, cmd->gravity);
 
-			// skiaSys->canvas->drawRect(skiaBounds, outlinePaint);
-			// skiaSys->canvas->drawRect(SkRect::MakeXYWH(textRect.x, textRect.y, textRect.width, textRect.height), outlinePaint);
-			// skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlinePaint2);
+			{
+				// SkPaint outlineRed = SkPaint();
+				// outlineRed.setStyle(SkPaint::Style::kStroke_Style);
+				// outlineRed.setColor(0xFFFF0000);
+				// outlineRed.setStrokeWidth(1);
 
+				// SkPaint outlineBlue = SkPaint();
+				// outlineBlue.setStyle(SkPaint::Style::kStroke_Style);
+				// outlineBlue.setColor(0xFF0000FF);
+				// outlineBlue.setStrokeWidth(1);
+
+				// SkPaint outlineGreen = SkPaint();
+				// outlineGreen.setStyle(SkPaint::Style::kStroke_Style);
+				// outlineGreen.setColor(0xFF00FF00);
+				// outlineGreen.setStrokeWidth(1);
+
+				// skiaSys->canvas->drawRect(skiaBounds, outlineRed);
+				// skiaSys->canvas->drawRect(SkRect::MakeXYWH(textRect.x, textRect.y, textRect.width, textRect.height), outlineBlue);
+				// skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlineGreen);
+			}
+
+			Vec2 scaleRatio = getSize(textRect) / actualTextSize;
+
+			textRect.y += textRect.height/2 + actualTextSize.y/2*scaleRatio.y;
 			Matrix3 matrix = mat3();
-			matrix.SCALE(getSize(textRect) / actualTextSize);
-			matrix.TRANSLATE(getPosition(textRect) - v2(skiaBounds.x(), skiaBounds.y()));
+			matrix.TRANSLATE(getPosition(textRect));
+			matrix.SCALE(scaleRatio);
 
 			skiaSys->canvas->save();
 			skiaSys->canvas->concat(toSkMatrix(matrix));
-			// skiaSys->canvas->drawRect(skiaBounds, outlinePaint3);
 
-			SkPaint fontPaint = SkPaint();
-			fontPaint.setStyle(SkPaint::Style::kFill_Style);
-			fontPaint.setColor(cmd->colors[0]);
 			skiaSys->canvas->drawTextBlob(skiaTextBlob, 0, 0, fontPaint);
 
 			skiaSys->canvas->restore();
@@ -1063,6 +1110,7 @@ void startSkiaFrame() {
 void endSkiaFrame() {
 	if (skiaSys->useGpu) {
 		setRendererBlendMode(BLEND_SKIA);
+		GLint last_viewport[4]; glGetIntegerv(GL_VIEWPORT, last_viewport); //@speed This could be very slow
 
 		skiaSys->grDirectContext->resetContext();
 
@@ -1072,6 +1120,7 @@ void endSkiaFrame() {
 		skiaSys->grDirectContext->flushAndSubmit();
 
 		resetRenderContext();
+		glViewport(last_viewport[0], last_viewport[1], (GLsizei)last_viewport[2], (GLsizei)last_viewport[3]);
 		clearScissor();
 
 // #if RAYLIB_MODE
@@ -1175,6 +1224,17 @@ SpriteTransform *getSpriteTransform(SpriteTransform *transforms, int *transforms
 	transform->paths[transform->pathsNum++] = pathName;
 	return transform;
 };
+
+SpriteTransform *getNewOrExistingSpriteTransform(SpriteTransform *transforms, int *transformsNum, char *pathName) {
+	for (int i = 0; i < *transformsNum; i++) {
+		SpriteTransform *trans = &transforms[i];
+		for (int i = 0; i < trans->pathsNum; i++) {
+			if (streq(trans->paths[i], pathName)) return trans;
+		}
+	}
+
+	return getSpriteTransform(transforms, transformsNum, pathName);
+}
 
 void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 	struct SwfASys {

@@ -1,29 +1,16 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:macros.bzl", "exports_files_legacy")
 
 licenses(["notice"])
 
 exports_files_legacy()
 
-skia_filegroup(
+filegroup(
     name = "public_hdrs",
     srcs = [
         "SkAndroidCodec.h",
-        "SkAvifDecoder.h",
-        "SkBmpDecoder.h",
         "SkCodec.h",
         "SkCodecAnimation.h",
-        "SkEncodedImageFormat.h",
         "SkEncodedOrigin.h",
-        "SkGifDecoder.h",
-        "SkIcoDecoder.h",
-        "SkJpegDecoder.h",
-        "SkJpegxlDecoder.h",
-        "SkPixmapUtils.h",
-        "SkPngChunkReader.h",
-        "SkPngDecoder.h",
-        "SkRawDecoder.h",
-        "SkWbmpDecoder.h",
-        "SkWebpDecoder.h",
     ],
     visibility = ["//include:__pkg__"],
 )

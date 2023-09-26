@@ -37,6 +37,8 @@ enum NguiStyleType {
 	NGUI_STYLE_Y_POSITION_TINT=35,
 	NGUI_STYLE_SLIDER_SNAP_INTERVAL=36,
 	NGUI_STYLE_JUSTIFY_TEXT=37,
+	NGUI_STYLE_FONT=38,
+	NGUI_STYLE_LABEL_X_OFFSET=39,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -124,7 +126,6 @@ struct NguiElement {
 };
 
 struct Ngui {
-	Font *defaultFont;
 	Vec2 mouse;
 	Vec2 screenSize;
 	float time;
@@ -138,6 +139,7 @@ struct Ngui {
 	bool mouseJustDownThisFrame;
 	bool mouseHoveringThisFrame;
 	bool mouseHoveringLastFrame;
+	float timeSinceMouseDown;
 
 	int nextNguiElementId;
 	int currentOrderIndex;
@@ -246,7 +248,6 @@ bool saveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNa
 
 void nguiInit() {
 	ngui = (Ngui *)zalloc(sizeof(Ngui));
-	ngui->defaultFont = createFont("assets/common/arial.ttf", 80);
 	ngui->uiScale = v2(platform->windowScaling, platform->windowScaling);
 
 	ngui->elementsMax = 4096;
@@ -486,6 +487,17 @@ void nguiInit() {
 	info->dataType = NGUI_DATA_TYPE_INT;
 	nguiPushStyleInt(NGUI_STYLE_JUSTIFY_TEXT, 0);
 
+	info = &ngui->styleTypeInfos[NGUI_STYLE_FONT];
+	info->enumName = "NGUI_STYLE_FONT";
+	info->name = "Font";
+	info->dataType = NGUI_DATA_TYPE_PTR;
+	nguiPushStylePtr(NGUI_STYLE_FONT, createFont("assets/common/arial.ttf", 80));
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_X_OFFSET];
+	info->enumName = "NGUI_STYLE_LABEL_X_OFFSET";
+	info->name = "Label x offset";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_LABEL_X_OFFSET, 0);
 
 	Sound *sound;
 	sound = getSound("assets/common/audio/tickEffect.ogg");
@@ -655,6 +667,8 @@ void copyStyleVar(NguiStyleStack *dest, NguiStyleStack *src, NguiStyleType type)
 }
 
 void nguiDraw(float elapsed) {
+	ngui->timeSinceMouseDown += elapsed;
+
 	for (int i = 0; i < ngui->elementsNum; i++) { /// Splice dead elements
 		NguiElement *element = &ngui->elements[i];
 		if (element->alive <= 0) {
@@ -837,7 +851,10 @@ void nguiDraw(float elapsed) {
 
 			if (contains(windowRect, ngui->mouse)) {
 				ngui->mouseHoveringThisFrame = true;
-				if (platform->mouseJustDown) ngui->mouseJustDownThisFrame = true;
+				if (platform->mouseJustDown) {
+					ngui->mouseJustDownThisFrame = true;
+					ngui->timeSinceMouseDown = 0;
+				}
 			}
 
 			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
@@ -924,7 +941,7 @@ void nguiDraw(float elapsed) {
 				if (child->fgColor == 0) child->fgColor = fgColor;
 				child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
 
-				auto drawElementBg = [](NguiElement *child, Rect rect)->void {
+				auto drawElementBg = [](NguiElement *child, Rect rect, Rect *iconOutRect)->void {
 					{
 						RenderProps props = newRenderProps();
 						props.tint = child->bgColor;
@@ -951,6 +968,7 @@ void nguiDraw(float elapsed) {
 					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
 						Rect iconRect = getInnerRectOfAspect(rect, getSize(iconTexture) * nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE), iconGravity);
+						if (iconOutRect) *iconOutRect = iconRect;
 						// setScissor(iconRect);
 
 						Matrix3 matrix = mat3();
@@ -1019,12 +1037,18 @@ void nguiDraw(float elapsed) {
 						if (graphicsRect.y < 0) graphicsRect.y += -graphicsRect.y;
 					}
 
-					if (isZero(clippingRect) || contains(clippingRect, graphicsRect)) drawElementBg(child, graphicsRect);
+					Rect iconRect = {};
+					if (isZero(clippingRect) || contains(clippingRect, graphicsRect)) drawElementBg(child, graphicsRect, &iconRect);
 
 					{
+						float labelXOffset = nguiGetStyleFloat(NGUI_STYLE_LABEL_X_OFFSET);
+						Rect textFitRect = graphicsRect;
+						textFitRect.x += labelXOffset;
+						textFitRect.width -= labelXOffset;
+
 						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
-						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*labelSize, labelGravity);
-						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
+						Rect textRect = getInnerRectOfSize(textFitRect, getSize(textFitRect)*labelSize, labelGravity);
+						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), labelTextColor);
 						drawTextInRect(label, props, textRect, labelGravity, justify);
 					}
 
@@ -1033,18 +1057,18 @@ void nguiDraw(float elapsed) {
 						subTextColor = lerpColor(subTextColor, 0x00FFFFFF&subTextColor, 0.25);
 
 						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
-						DrawTextProps props = newDrawTextProps(ngui->defaultFont, subTextColor);
+						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), subTextColor);
 						drawTextInRect(child->subText, props, subTextRect, v2(1, 1), justify);
 					}
 				} else if (child->type == NGUI_ELEMENT_SLIDER) {
 					Rect graphicsRect = childRect;
 					bool vertical = nguiGetStyleInt(NGUI_STYLE_SLIDER_IS_VERTICAL);
 
-					drawElementBg(child, graphicsRect);
+					drawElementBg(child, graphicsRect, NULL);
 
 					{
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.6), v2(0, 0));
-						DrawTextProps props = newDrawTextProps(ngui->defaultFont, labelTextColor);
+						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), labelTextColor);
 						drawTextInRect(label, props, textRect, labelGravity, justify);
 					}
 
@@ -1203,7 +1227,7 @@ void nguiDraw(float elapsed) {
 	for (int i = 0; i < ngui->elementsNum; i++) {
 		NguiElement *element = &ngui->elements[i];
 		element->creationTime += elapsed;
-		element->alive -= 0.05;
+		element->alive -= 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED);
 	}
 
 	if (!platform->mouseDown) ngui->draggingId = 0;
@@ -1460,6 +1484,7 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_SIZE;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_GRAVITY;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_TEXT_COLOR;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_LABEL_X_OFFSET;
 
 		styleTypes[styleTypesNum++] = NGUI_STYLE_BUTTON_HOVER_OFFSET;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_BUTTON_HOVER_SCALE;
@@ -1483,6 +1508,7 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ACTIVE_SOUND_PATH_PTR;
 
 		styleTypes[styleTypesNum++] = NGUI_STYLE_SLIDER_IS_VERTICAL;
+		hiddenStyleTypes[hiddenStyleTypesNum++] = NGUI_STYLE_FONT;
 
 		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
 			NguiStyleType toAdd = (NguiStyleType)i;

@@ -65,7 +65,7 @@ public:
 
     GrD3DSurfaceInfo getSurfaceInfo(uint32_t sampleCount,
                                     uint32_t levelCount,
-                                    skgpu::Protected isProtected) const;
+                                    GrProtected isProtected) const;
 
 private:
     GrD3DTextureResourceSpec* fSpec;

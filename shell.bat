@@ -12,6 +12,9 @@ if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\
 
 call %VS_CMD_PATH% -arch=amd64 -host_arch=amd64 >NUL:
 
+call C:\emsdk\emsdk_env.bat
+call emsdk activate 3.1.44
+
 popd
 
 C:\msys64\msys2_shell.cmd -where . -full-path

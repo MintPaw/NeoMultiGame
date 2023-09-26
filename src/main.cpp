@@ -43,9 +43,6 @@
 // #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #endif
 
-
-#ifdef RAYLIB_MODE
-
 namespace Raylib {
 #include "raylib.h"
 #include "rlgl.h"
@@ -152,14 +149,15 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "textureSystem.cpp"
 #include "audio.cpp"
 #include "skeleton.cpp"
-#include "mesh.cpp"
-#include "models.cpp"
+// #include "mesh.cpp"
+// #include "models.cpp"
 #include "font.cpp"
 
 #include "threads.cpp"
 #include "stringSave.cpp"
 #include "reflectionTool.cpp"
 #include "animation.cpp"
+#include "spine.cpp"
 
 #include "saveLoadVersioning.cpp"
 #include "ngui.cpp"
@@ -172,206 +170,6 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "particles.cpp"
 
 #include "utils.cpp"
-
-#else // !RAYLIB_MODE
-
-#include <signal.h>
-#include <functional>
-#include <memory>
-
-#if defined(_WIN32) // <-----
-
-#define WriteFence() _WriteBarrier(); _mm_sfence()
-#define ReadFence() _ReadBarrier(); 
-#define IncMutex(mutex) \
-	do { \
-		for (;;) if (InterlockedCompareExchange(mutex, 1, 0) == 0) break; \
-	} while (0)
-
-#define DecMutex(mutex) \
-	do { \
-		for (;;) if (InterlockedCompareExchange(mutex, 0, 1) == 1) break; \
-	} while (0)
-
-#elif defined(__EMSCRIPTEN__) // <-----
-
-#include <wasm_simd128.h>
-#define WriteFence() __sync_synchronize()
-#define ReadFence() __sync_synchronize()
-#define IncMutex(mutex) \
-	do { \
-		for (;;) if (__sync_val_compare_and_swap(mutex, 0, 1) == 0) break; \
-	} while (0)
-
-#define DecMutex(mutex) \
-	do { \
-		for (;;) if (__sync_val_compare_and_swap(mutex, 1, 0) == 1) break; \
-	} while (0)
-
-#elif defined(__linux__) // <-----
-#define IncMutex(mutex) \
-	do { \
-		for (;;) if (__sync_val_compare_and_swap(mutex, 0, 1) == 0) break; \
-	} while (0)
-
-#define DecMutex(mutex) \
-	do { \
-		for (;;) if (__sync_val_compare_and_swap(mutex, 1, 0) == 1) break; \
-	} while (0)
-
-#define WriteFence() _mm_mfence()
-#define ReadFence() _mm_lfence()
-
-#endif // <-----
-
-#ifdef _WIN32
-# define FORCE_INLINE __forceinline
-# define FORCE_NO_INLINE __declspec(noinline)
-# define WIN32_LEAN_AND_MEAN
-
-# include <windows.h>
-# include <timeapi.h>
-# include <wchar.h>
-# include <tchar.h>
-# include <io.h>
-# include <psapi.h>
-
-#endif
-
-#ifdef __linux__
-# define FORCE_INLINE __attribute__((always_inline)) 
-# define FORCE_NO_INLINE 
-# include <dirent.h>
-# define GL_ES
-# include <semaphore.h>
-# include <pthread.h>
-
-// #undef register
-// #define register 
-// # include "mongoose.c"
-// #undef register
-// #define register register
-#endif
-
-#ifdef __EMSCRIPTEN__
-# define FORCE_INLINE __attribute__((always_inline)) 
-# include <emscripten.h>
-# include <emscripten/html5.h>
-# include <sys/types.h>
-# include <sys/stat.h>
-# include <dirent.h>
-# include <semaphore.h>
-
-# ifdef __EMSCRIPTEN_PTHREADS__ 
-#  include <pthread.h>
-# endif
-
-# define GL_ES
-#endif
-
-#include <GL/glew.h>
-#define IMGUI_IMPL_OPENGL_LOADER_GLEW
-#define FALLOW_IMGUI
-
-#ifndef STB_IMAGE_WRITE_OBJ
-# define STB_IMAGE_WRITE_IMPLEMENTATION
-#endif
-#include "stb_image_write.h"
-
-#ifndef STB_SPRINTF_OBJ
-# define STB_SPRINTF_IMPLEMENTATION
-#endif
-#define STB_SPRINTF_NOUNALIGNED
-#include "stb_sprintf.h"
-
-#ifndef STB_IMAGE_OBJ
-# define STB_IMAGE_IMPLEMENTATION
-#endif
-#include "stb_image.h"
-
-#if !defined(FALLOW_IMGUI) //@incomplete fix this by building all the stb libs yourself
-#ifndef STB_TRUETYPE_OBJ
-# define STB_TRUETYPE_IMPLEMENTATION
-#endif
-#include "imstb_truetype.h"
-
-#ifndef STB_RECTPACK_OBJ
-# define STB_RECTPACK_IMPLEMENTATION
-#endif
-#include "imstb_rectpack.h"
-#endif
-
-#include "miniz.c"
-#undef inflate
-int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); }
-
-#include "cJSON.c"
-
-struct LogfBuffer;
-void logf(const char *msg, ...); //@hack Because everything needs logf, actually in the logging code
-void infof(const char *msg, ...); //@hack Because everything needs info, actually in the logging code
-
-///
-/// //@hack This is here because stuff like memoryTools need it
-///
-void loggerAssert(bool expr, const char *fileName, int lineNum);
-void loggerPanic(const char *msg, const char *fileName, int lineNum);
-#define Assert(expr) loggerAssert(expr, __FILE__, __LINE__)
-#define Panic(msg) loggerPanic(msg, __FILE__, __LINE__)
-#define PATH_MAX_LEN 256
-char projectAssetDir[PATH_MAX_LEN] = {};
-char filePathPrefix[PATH_MAX_LEN] = {};
-char exeDir[PATH_MAX_LEN] = {};
-
-#include "memoryTools.cpp"
-#include "mathTools.cpp"
-
-#define DATA_STREAM_HEADER
-#include "dataStream.cpp"
-
-#include "rnd.cpp"
-#include "perlin.cpp"
-#include "ds.cpp"
-#include "compression.cpp"
-#include "logging.cpp"
-
-#include "platform.cpp"
-#include "threads.cpp"
-
-#include "file.cpp"
-#include "dataStream.cpp"
-#include "zip.cpp"
-#include "platformUtils.cpp"
-#include "renderer.cpp"
-#include "textureSystem.cpp"
-#include "audio.cpp"
-#include "stringSave.cpp"
-#include "reflectionTool.cpp"
-#include "skeleton.cpp"
-#include "font.cpp"
-#include "draw3d.cpp"
-#include "models.cpp"
-#include "tilemapGenerator.cpp"
-#include "waveGenerator.cpp"
-
-#include "animation.cpp"
-#include "spine.cpp"
-#include "dragonBones.cpp"
-#include "networking.cpp"
-
-#include "ngui.cpp"
-
-#define GUI_IMPL
-#include "gui.cpp"
-
-#if (!FALLOW_COMMAND_LINE_ONLY && !__LINUX__)
-#include "swf.cpp"
-#include "skia.cpp"
-#endif
-
-#include "utils.cpp"
-
-#endif // RAYLIB_MODE
 
 NanoTime mainNano;
 
@@ -477,6 +275,10 @@ NanoTime mainNano;
 
 #if defined(PLAYING_swfTestGame)
 # include "swfTestGame.cpp"
+#endif
+
+#if defined(PLAYING_boxingGame)
+# include "../../multiGamePrivate/src/boxingGame.cpp"
 #endif
 
 #ifdef _WIN32

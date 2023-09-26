@@ -14,20 +14,39 @@ struct SpriteSheetImage {
 };
 
 struct SpriteSheet {
+	char path[PATH_MAX_LEN];
 	Texture *texture;
 
 	SpriteSheetImage *images;
 	int imagesNum;
 };
 
+#define CACHED_SPRITE_SHEETS_MAX 128
+SpriteSheet *_cachedSpriteSheets[CACHED_SPRITE_SHEETS_MAX];
+int _cachedSpriteSheetsNum;
+
+SpriteSheet *getSpriteSheet(char *dir);
 SpriteSheet *createSpriteSheet(char *dir);
 void destroySpriteSheet(SpriteSheet *sheet);
+void clearSpriteSheetCache();
 /// FUNCTIONS ^
+
+SpriteSheet *getSpriteSheet(char *dir) {
+  for (int i = 0; i < _cachedSpriteSheetsNum; i++) {
+    SpriteSheet *cachedSpriteSheet = _cachedSpriteSheets[i];
+    if (streq(cachedSpriteSheet->path, dir)) {
+      return cachedSpriteSheet;
+    }
+  }
+
+  return createSpriteSheet(dir);
+}
 
 SpriteSheet *createSpriteSheet(char *dir) {
 	if (!directoryExists(dir)) return NULL;
 
 	SpriteSheet *sheet = (SpriteSheet *)zalloc(sizeof(SpriteSheet));
+  strcpy(sheet->path, dir);
 
 	int pathsNum;
 	char **paths = getFrameDirectoryList(dir, &pathsNum, false, true, true);
@@ -35,7 +54,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
 	bool goodDir = true;
 	for (int i = 0; i < pathsNum; i++) {
 		char *path = paths[i];
-		if (!strstr(path, ".png")) goodDir = false;
+		if (!stringEndsWith(path, ".png")) goodDir = false;
 	}
 	if (!goodDir) return NULL;
 
@@ -124,6 +143,8 @@ SpriteSheet *createSpriteSheet(char *dir) {
 	setTextureData(sheet->texture, bitmapData, SPRITE_SHEET_WIDTH_MAX, SPRITE_SHEET_HEIGHT_MAX, _F_TD_FLIP_Y);
 	free(bitmapData);
 
+  _cachedSpriteSheets[_cachedSpriteSheetsNum++] = sheet;
+
 	return sheet;
 }
 
@@ -131,4 +152,13 @@ void destroySpriteSheet(SpriteSheet *sheet) {
 	destroyTexture(sheet->texture);
 	free(sheet->images);
 	free(sheet);
+}
+
+void clearSpriteSheetCache() {
+  for (int i = 0; i < _cachedSpriteSheetsNum; i++) {
+    SpriteSheet *cachedSpriteSheet = _cachedSpriteSheets[i];
+    destroySpriteSheet(cachedSpriteSheet);
+  }
+
+  _cachedSpriteSheetsNum = 0;
 }

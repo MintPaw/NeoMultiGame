@@ -1,18 +1,13 @@
+load("//bazel:macros.bzl", "exports_files_legacy")
+
 licenses(["notice"])
 
-# aka exports_files_legacy()
-exports_files(
-    ["SkUserConfig.h"],
-    visibility = ["//visibility:public"],
-)
+exports_files_legacy()
 
-cc_library(
-    name = "user_config",
-    hdrs = [
+filegroup(
+    name = "public_hdrs",
+    srcs = [
         "SkUserConfig.h",
     ],
-    defines = [
-        "SK_USE_BAZEL_CONFIG_HEADER",
-    ],
-    visibility = ["//visibility:public"],
+    visibility = ["//include:__pkg__"],
 )

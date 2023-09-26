@@ -53,6 +53,7 @@ struct EmitterInfo {
 	EmitterShape shape;
 	float shapeInnerCutPerc;
 	bool explode;
+  int defaultExplodeCount;
 	float rate;
 
 	Vec2 dir, dirVariance;
@@ -87,8 +88,9 @@ struct EmitterInfo {
 };
 
 struct Emitter {
-	EmitterInfo *info;
+	EmitterInfo info;
 	char prevTextureDir[PATH_MAX_LEN];
+  int id;
 
 	Vec2 position;
 	Line2 line;
@@ -103,6 +105,11 @@ struct Emitter {
 	Particle *particles;
 	int particlesNum;
 	int particlesMax;
+
+  bool destroyWhenDone;
+
+  bool reloadInfo;
+  float timeSinceReloadedInfo;
 };
 
 struct EmitterSystem {
@@ -114,13 +121,27 @@ struct EmitterSystem {
 	float debugTimeTillNextExplode;
 };
 
+int _nextEmitterId = 0;
+
+#define HANGING_EMITTERS_MAX 1024
+Emitter *_hangingEmitters[HANGING_EMITTERS_MAX];
+int _hangingEmittersNum;
+
+EmitterInfo *_referenceEmitterInfos;
+int _referenceEmitterInfosNum;
+
 void checkEmitterSystemInit();
-Emitter *createEmitter();
+Emitter *createEmitter(char *infoName=NULL);
 void updateEmitter(Emitter *emitter, float elapsed);
 Particle *emit(Emitter *emitter);
 void drawEmitter(Emitter *emitter);
 void updateAndDrawEmitter(Emitter *emitter, float elapsed);
 void destroy(Emitter *emitter);
+
+EmitterInfo *getEmitterInfo(char *name);
+Emitter *createHangingEmitter(char *infoName=NULL);
+Emitter *getHangingEmitter(int id);
+void updateAndDrawHangingEmitters(float elapsed);
 
 void guiInputEmitter(Emitter *emitter, float elapsed);
 void guiInputEmitterInfo(EmitterInfo *info);
@@ -137,12 +158,19 @@ void checkEmitterSystemInit() {
 	emitterSys->sizeScale = v2(1, 1);
 }
 
-Emitter *createEmitter() {
+Emitter *createEmitter(char *infoName) {
 	checkEmitterSystemInit();
 
 	Emitter *emitter = (Emitter *)zalloc(sizeof(Emitter));
 	emitter->particlesMax = 128;
 	emitter->particles = (Particle *)zalloc(sizeof(Particle) * emitter->particlesMax);
+	emitter->id = ++_nextEmitterId;
+
+  if (infoName) {
+    EmitterInfo *info = getEmitterInfo(infoName);
+    if (info) emitter->info = *info;
+  }
+
 	return emitter;
 }
 
@@ -156,16 +184,28 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 		}
 	};
 
-	EmitterInfo *info = emitter->info;
+	EmitterInfo *info = &emitter->info;
 	if (!info) {
 		logf("Updating emitter with no info!\n");
 		return;
 	}
+	if (info->rate < 0.001) info->rate = 0.001;
+
+  if (emitter->reloadInfo) {
+#ifdef FALLOW_DEBUG
+    emitter->timeSinceReloadedInfo -= elapsed;
+#endif
+
+    if (emitter->timeSinceReloadedInfo < 0) {
+      emitter->timeSinceReloadedInfo = 0.25;
+      EmitterInfo *newInfo = getEmitterInfo(info->name);
+      if (newInfo) emitter->info = *newInfo;
+    }
+  }
 
 	if (!streq(emitter->prevTextureDir, info->textureDir)) {
 		strcpy(emitter->prevTextureDir, info->textureDir);
-		if (emitter->sheet) destroySpriteSheet(emitter->sheet);
-		emitter->sheet = createSpriteSheet(info->textureDir);
+		emitter->sheet = getSpriteSheet(info->textureDir);
 	}
 
 	if (!info->explode) {
@@ -210,6 +250,12 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 		particle->color = lerpColor(particle->colorStart, particle->colorEnd, perc);
 		if (!info->animateColor) particle->color = particle->colorStart;
 
+    if (info->fadeInPerc) {
+      int a = getAofArgb(particle->color);
+      a *= clampMap(perc, 0, info->fadeInPerc, 0, 1);
+      particle->color = setAofArgb(particle->color, a);
+    }
+
 		popRndSeed();
 
 		particle->time += elapsed;
@@ -225,7 +271,7 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 Particle *emit(Emitter *emitter) {
 	checkEmitterSystemInit();
 
-	EmitterInfo *info = emitter->info;
+	EmitterInfo *info = &emitter->info;
 
 	if (emitter->particlesNum > emitter->particlesMax-1) {
 		emitter->particles = (Particle *)resizeArray(emitter->particles, sizeof(Particle), emitter->particlesMax, emitter->particlesMax*2);
@@ -328,7 +374,7 @@ Particle *emit(Emitter *emitter) {
 }
 
 void drawEmitter(Emitter *emitter) {
-	EmitterInfo *info = emitter->info;
+	EmitterInfo *info = &emitter->info;
 	if (!info) {
 		logf("Drawing emitter with no info!\n");
 		return;
@@ -337,8 +383,6 @@ void drawEmitter(Emitter *emitter) {
 	for (int i = 0; i < emitter->particlesNum; i++) {
 		Particle *particle = &emitter->particles[i];
 		if (particle->delay > 0) continue;
-
-		float perc = particle->time / particle->lifetime;
 
 		Vec2 scale = v2(particle->scale, particle->scale);
 
@@ -372,7 +416,6 @@ void drawEmitter(Emitter *emitter) {
 			props.uv1.y = (float)(image->srcY+image->srcHeight) / (float)sheet->texture->height;
 
 			props.tint = particle->color;
-			if (info->fadeInPerc) props.alpha = clampMap(perc, 0, info->fadeInPerc, 0, 1);
 
 			drawTexture(emitter->sheet->texture, props);
 		} else {
@@ -390,9 +433,70 @@ void updateAndDrawEmitter(Emitter *emitter, float elapsed) {
 }
 
 void destroy(Emitter *emitter) {
-	if (emitter->sheet) destroySpriteSheet(emitter->sheet);
 	free(emitter->particles);
+
+  for (int i = 0; i < _hangingEmittersNum; i++) {
+    if (emitter->id == _hangingEmitters[i]->id) {
+      arraySpliceIndex(_hangingEmitters, _hangingEmittersNum, sizeof(Emitter *), i);
+      _hangingEmittersNum--;
+      break;
+    }
+  }
+
 	free(emitter);
+}
+
+EmitterInfo *getEmitterInfo(char *name) {
+	checkEmitterSystemInit();
+
+  for (int i = 0; i < _referenceEmitterInfosNum; i++) {
+    EmitterInfo *info = &_referenceEmitterInfos[i];
+    if (streq(info->name, name)) return info;
+  }
+
+	logf("Can't find emitter info %s\n", name);
+	return NULL;
+}
+
+Emitter *createHangingEmitter(char *infoName) {
+	checkEmitterSystemInit();
+
+  if (_hangingEmittersNum > HANGING_EMITTERS_MAX-1) {
+    Emitter *emitter = _hangingEmitters[_hangingEmittersNum-1];
+    emitter->enabled = false;
+    emitter->destroyWhenDone = true;
+    _hangingEmittersNum--;
+  }
+
+  Emitter *emitter = createEmitter(infoName);
+  _hangingEmitters[_hangingEmittersNum++] = emitter;
+
+  return emitter;
+}
+
+Emitter *getHangingEmitter(int id) {
+	checkEmitterSystemInit();
+
+	for (int i = 0; i < _hangingEmittersNum; i++) {
+    Emitter *emitter = _hangingEmitters[i];
+    if (emitter->id == id) return emitter;
+	}
+
+	return NULL;
+}
+
+void updateAndDrawHangingEmitters(float elapsed) {
+	checkEmitterSystemInit();
+
+  for (int i = 0; i < _hangingEmittersNum; i++) {
+    Emitter *emitter = _hangingEmitters[i];
+    updateAndDrawEmitter(emitter, elapsed);
+    if (emitter->particlesNum == 0 && emitter->destroyWhenDone) {
+      destroy(emitter);
+      i--;
+      continue;
+    }
+  }
 }
 
 void guiInputEmitter(Emitter *emitter, float elapsed) {
@@ -404,7 +508,7 @@ void guiInputEmitter(Emitter *emitter, float elapsed) {
 	ImGui::Text("Size scale: %.2f,%.2f", emitterSys->sizeScale.x, emitterSys->sizeScale.y);
 	ImGui::Text("Particles: %d/%d", emitter->particlesNum, emitter->particlesMax);
 
-	EmitterInfo *info = emitter->info;
+	EmitterInfo *info = &emitter->info;
 	if (info) {
 		if (info->shape == EMITTER_SHAPE_POINT) {
 			ImGui::DragFloat2("Position", &emitter->position.x);
@@ -420,12 +524,13 @@ void guiInputEmitter(Emitter *emitter, float elapsed) {
 	}
 
 	if (info->explode) {
+    int explodeCount = emitterSys->debugExplodeCount;
+    if (explodeCount == 0) explodeCount = info->defaultExplodeCount;
+
 		ImGui::InputInt("Explode count", &emitterSys->debugExplodeCount);
 		ImGui::SameLine();
 		if (ImGui::Button("Explode")) {
-			for (int i = 0; i < emitterSys->debugExplodeCount; i++) {
-				emit(emitter);
-			}
+			for (int i = 0; i < explodeCount; i++) emit(emitter);
 		}
 
 		ImGui::Checkbox("Explode repeatedly", &emitterSys->debugExplodingRepeatedly);
@@ -437,9 +542,8 @@ void guiInputEmitter(Emitter *emitter, float elapsed) {
 			emitterSys->debugTimeTillNextExplode -= elapsed;
 			if (emitterSys->debugTimeTillNextExplode < 0) {
 				emitterSys->debugTimeTillNextExplode = emitterSys->debugExplodingRepeatedlyDelay;
-				for (int i = 0; i < emitterSys->debugExplodeCount; i++) {
-					emit(emitter);
-				}
+
+				for (int i = 0; i < explodeCount; i++) emit(emitter);
 			}
 		}
 	}
@@ -491,8 +595,11 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 		}
 	};
 
-	ImGui::DragFloat("Rate", &info->rate, 0.001);
-	if (info->rate < 0.001) info->rate = 0.001;
+  if (info->explode) {
+    ImGui::InputInt("Default explode count", &info->defaultExplodeCount);
+  } else {
+    ImGui::DragFloat("Rate", &info->rate, 0.0001, 0.001, 3, "%.4f");
+  }
 
 	setVec2WithVariance("Direction", &info->dir, &info->dirVariance, 0.001);
 	setFloatWithVariance("Speed start", &info->speedStart, &info->speedStartVariance, 0.1);
@@ -514,7 +621,11 @@ void guiInputEmitterInfo(EmitterInfo *info) {
 	ImGui::Checkbox("Animate angular speed", &info->animateAngularSpeed);
 
 	setFloatWithVariance("Lifetime", &info->lifetime, &info->lifetimeVariance, 0.01);
-	setFloatWithVariance("Delay", &info->delay, &info->delayVariance, 0.01);
+  if (info->explode) {
+    setFloatWithVariance("Delay", &info->delay, &info->delayVariance, 0.01);
+  } else {
+    info->delay = 0;
+  }
 
 	guiInputArgb("Color start", &info->colorStart);
 	ImGui::SameLine();
@@ -543,7 +654,7 @@ void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
 		writeFloat(stream, fnInfo->frequency);
 	};
 
-	int version = 8;
+	int version = 9;
 	writeU32(stream, version);
 
 	writeString(stream, info->name);
@@ -556,6 +667,7 @@ void writeEmitterInfo(DataStream *stream, EmitterInfo *info) {
 	writeFloat(stream, info->shapeInnerCutPerc);
 	writeU8(stream, info->explode);
 
+	writeU32(stream, info->defaultExplodeCount);
 	writeFloat(stream, info->rate);
 
 	writeVec2(stream, info->dir);
@@ -619,16 +731,13 @@ void readEmitterInfo(DataStream *stream, EmitterInfo *info) {
 
 	readStringInto(stream, info->name, EMITTER_INFO_NAME_MAX_LEN);
 
-	readStringInto(stream, info->textureDir, PATH_MAX_LEN);
-	if (version >= 3) {
-		info->animated = readU8(stream);
-		info->frameRate = readFloat(stream);
-		info->shape = (EmitterShape)readU32(stream);
-		info->shapeInnerCutPerc = readFloat(stream);
-		info->explode = readU8(stream);
-	} else {
-		readU32(stream);
-	}
+  readStringInto(stream, info->textureDir, PATH_MAX_LEN);
+  info->animated = readU8(stream);
+  info->frameRate = readFloat(stream);
+  info->shape = (EmitterShape)readU32(stream);
+  info->shapeInnerCutPerc = readFloat(stream);
+  info->explode = readU8(stream);
+  if (version >= 9) info->defaultExplodeCount = readU32(stream);
 	info->rate = readFloat(stream);
 
 	info->dir = readVec2(stream);

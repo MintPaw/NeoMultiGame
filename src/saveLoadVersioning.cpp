@@ -15,7 +15,7 @@ bool saveLoadBytes(DataStream *stream, bool save, int version, void *ptr, int si
 /// FUNCTIONS ^
 
 bool saveLoadVersionCheck(int version, int startVersion, int endVersion, bool save) {
-	// save doesn't matter
+	// save arg doesn't matter except for logging
 	if (startVersion > version) {
 		logf("Member variable starts in the future? (%d-%d, %d) [%s]\n", startVersion, endVersion, version, save?"save":"load");
 		return false;

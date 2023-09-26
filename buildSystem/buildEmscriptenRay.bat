@@ -11,15 +11,17 @@ REM set EMSDK_PYTHON=c:\emsdk\python\3.7.4-pywin32_64bit\python.exe
 REM set JAVA_HOME=c:\emsdk\java\8.152_64bit
 REM set EM_CACHE=c:/emsdk/upstream/emscripten\cache
 
-set PATH=%PATH%;c:\emsdk
-set PATH=%PATH%;c:\emsdk\upstream\emscripten
+REM set PATH=%PATH%;c:\emsdk
+REM set PATH=%PATH%;c:\emsdk\upstream\emscripten
 
-set EMSDK=c:/emsdk
-REM set EM_CONFIG=c:/emsdk/.emscripten
-set EMSDK_NODE=C:/emsdk/node/16.20.0_64bit/bin/node.exe
-set EMSDK_PYTHON=C:/emsdk/python/3.9.2-nuget_64bit/python.exe
-set JAVA_HOME=C:/emsdk/java/8.152_64bit
-REM set EM_CACHE=c:/emsdk/upstream/emscripten/cache
+REM set EMSDK=c:/emsdk
+REM set EMSDK_NODE=C:/emsdk/node/16.20.0_64bit/bin/node.exe
+REM set EMSDK_PYTHON=C:/emsdk/python/3.9.2-nuget_64bit/python.exe
+REM set JAVA_HOME=C:/emsdk/java/8.152_64bit
+
+REM call C:/emsdk/emsdk_env.bat
+REM emsdk list
+REM exit 0
 
 cd /d "%~dp0.."
 
@@ -117,6 +119,7 @@ call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_
 	-s LLD_REPORT_UNDEFINED=1 ^
 	-s ERROR_ON_UNDEFINED_SYMBOLS=0 ^
 	-s INITIAL_MEMORY=64MB ^
+	-s STACK_SIZE=10MB ^
 	--preload-file ..\assetsEmbed@assets
 
 xcopy %LIB_DIR%\*.js . /sy

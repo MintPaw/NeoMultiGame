@@ -134,6 +134,7 @@ Vec4 argbToRgba(Vec4 argb);
 Vec4 argbToRgbaFloat(int argb);
 int getAofArgb(int src);
 int setAofArgb(int src, int newA);
+int getBofArgb(int src);
 int setBofArgb(int src, int newB);
 int tintColor(int color, int tint);
 int alphaColor(int color, float alpha);
@@ -2041,6 +2042,12 @@ int setAofArgb(int src, int newA) {
 	a = newA;
 	int ret = argbToHex(a, r, g, b);
 	return ret;
+}
+
+int getBofArgb(int src) {
+	int a, r, g, b;
+	hexToArgb(src, &a, &r, &g, &b);
+	return b;
 }
 
 int setBofArgb(int src, int newB) {

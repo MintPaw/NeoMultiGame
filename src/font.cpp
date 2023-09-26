@@ -61,14 +61,12 @@ Vec2 getTextSize(char *string, DrawTextProps props);
 Vec2 getTextSize(Font *font, const char *string, float maxWidth=9999);
 Vec2 drawText(Font *font, const char *text, Vec2 position, int color=0xFF000000, float maxWidth=9999, bool skipDraw=false, Vec2 scale=v2(1, 1));
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5), bool justify=false);
-void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
 
 DrawTextProps newDrawTextProps();
 DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
 DrawTextProps createDrawTextProps() { return newDrawTextProps(); }
 DrawTextProps createDrawTextProps(Font *font, int color, Vec2 position=v2()) { return newDrawTextProps(font, color, position); }
 Vec2 drawText(const char *text, DrawTextProps props);
-void passText(char *text, DrawTextProps drawTextProps);
 
 Font *getFont(const char *ttfPath, int fontSize);
 void drawOnScreenLog();
@@ -370,44 +368,6 @@ Vec2 drawText(const char *text, DrawTextProps drawTextProps) {
 	return textSize - drawTextProps.position;
 }
 
-void passText(char *text, DrawTextProps drawTextProps) {
-	if (fontSys->disabled) return;
-	if (!text) return;
-	if (!drawTextProps.font) {
-		logf("Tried to draw text '%s' with no font\n", text);
-		return;
-	}
-	Pass *pass = getCurrentPass();
-
-	bool oldYIsUp = fontSys->yIsUp;
-	fontSys->yIsUp = pass->yIsUp;
-
-	Vec2 textSize = v2();
-
-	TextProps textProps = startText(text, drawTextProps.position);
-	textProps.font = drawTextProps.font;
-	textProps.maxWidth = drawTextProps.maxWidth;
-	textProps.scale = drawTextProps.scale;
-	textProps.color = drawTextProps.color;
-
-	Matrix3 charMatrix;
-	Matrix3 charUvMatrix;
-	bool charDisabled;
-	while (nextTextChar(&textProps, &charMatrix, &charUvMatrix, &charDisabled)) {
-		if (textSize.x < textProps.cursor.x) textSize.x = textProps.cursor.x;
-		if (drawTextProps.skipDraw || charDisabled) continue;
-
-		Vec2 uv0 = charUvMatrix * v2(0, 0);
-		Vec2 uv1 = charUvMatrix * v2(1, 1);
-		passTexture(textProps.font->texture, charMatrix, textProps.color, uv0, uv1);
-	}
-
-	textSize.y = textProps.cursor.y + textProps.font->lineSpacing * drawTextProps.scale.y;
-	textSize -= drawTextProps.position;
-
-	fontSys->yIsUp = oldYIsUp;
-}
-
 void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity, bool justify) {
 	Vec2 size = getTextSize(props.font, text);
 	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
@@ -441,17 +401,6 @@ void drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity, b
 
 		props.position.y += lineSize[i].y;
 	}
-}
-
-void passTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
-	Vec2 size = getTextSize(props.font, text);
-
-	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
-
-	props.scale.x = textRect.width / size.x;
-	props.scale.y = textRect.height / size.y;
-	props.position = getPosition(textRect);
-	passText(text, props);
 }
 
 Font *getFont(const char *ttfPath, int fontSize) {

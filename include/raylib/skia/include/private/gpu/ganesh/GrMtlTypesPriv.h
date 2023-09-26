@@ -18,11 +18,7 @@
 #include <TargetConditionals.h>
 
 #if defined(SK_BUILD_FOR_MAC)
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 130000
-#define GR_METAL_SDK_VERSION 300
-#elif __MAC_OS_X_VERSION_MAX_ALLOWED >= 120000
-#define GR_METAL_SDK_VERSION 240
-#elif __MAC_OS_X_VERSION_MAX_ALLOWED >= 110000
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 110000
 #define GR_METAL_SDK_VERSION 230
 #elif __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
 #define GR_METAL_SDK_VERSION 220
@@ -32,11 +28,7 @@
 #error Must use at least 10.14 SDK to build Metal backend for MacOS
 #endif
 #else
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 160000 || __TV_OS_VERSION_MAX_ALLOWED >= 160000
-#define GR_METAL_SDK_VERSION 300
-#elif __IPHONE_OS_VERSION_MAX_ALLOWED >= 150000 || __TV_OS_VERSION_MAX_ALLOWED >= 150000
-#define GR_METAL_SDK_VERSION 240
-#elif __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000 || __TV_OS_VERSION_MAX_ALLOWED >= 140000
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000 || __TV_OS_VERSION_MAX_ALLOWED >= 140000
 #define GR_METAL_SDK_VERSION 230
 #elif __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000 || __TV_OS_VERSION_MAX_ALLOWED >= 130000
 #define GR_METAL_SDK_VERSION 220
@@ -76,7 +68,7 @@ struct GrMtlTextureSpec {
 GrMtlSurfaceInfo GrMtlTextureSpecToSurfaceInfo(const GrMtlTextureSpec& mtlSpec,
                                                uint32_t sampleCount,
                                                uint32_t levelCount,
-                                               skgpu::Protected isProtected);
+                                               GrProtected isProtected);
 
 #endif  // __APPLE__
 

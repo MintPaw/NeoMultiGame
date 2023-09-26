@@ -1,12 +1,21 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:macros.bzl", "exports_files_legacy")
 
 licenses(["notice"])
 
 exports_files_legacy()
 
-# Maintain SkPicture files in separate skia_filegroup so that the legacy
+# Mapped to skia_precompile_public variable in //gn/core.gni.
+filegroup(
+    name = "precompile_public_hdrs",
+    srcs = [
+        "SkCombinationBuilder.h",
+    ],
+    visibility = ["//include:__pkg__"],
+)
+
+# Maintain SkPicture files in separate filegroup so that the legacy
 # skia_skpicture_public GNI file list can be created.
-skia_filegroup(
+filegroup(
     name = "skpicture_public_hdrs",
     srcs = [
         "SkPicture.h",
@@ -15,7 +24,7 @@ skia_filegroup(
     visibility = ["//include:__pkg__"],
 )
 
-skia_filegroup(
+filegroup(
     name = "public_hdrs",
     srcs = [
         "SkAlphaType.h",
@@ -33,18 +42,18 @@ skia_filegroup(
         "SkColorFilter.h",
         "SkColorPriv.h",
         "SkColorSpace.h",
-        "SkColorTable.h",
         "SkColorType.h",
         "SkContourMeasure.h",
         "SkCoverageMode.h",
         "SkCubicMap.h",
         "SkData.h",
         "SkDataTable.h",
-        "SkDeferredDisplayList.h",  # TODO(kjlubick) remove this shim
-        "SkDeferredDisplayListRecorder.h",  # TODO(kjlubick) remove this shim
+        "SkDeferredDisplayList.h",
+        "SkDeferredDisplayListRecorder.h",
         "SkDocument.h",
+        "SkDrawLooper.h",
         "SkDrawable.h",
-        "SkEncodedImageFormat.h",  # TODO(kjlubick) remove this shim
+        "SkEncodedImageFormat.h",
         "SkExecutor.h",
         "SkFlattenable.h",
         "SkFont.h",
@@ -55,14 +64,16 @@ skia_filegroup(
         "SkFontStyle.h",
         "SkFontTypes.h",
         "SkGraphics.h",
-        "SkICC.h",  # Remove shim
+        "SkICC.h",
         "SkImage.h",
+        "SkImageEncoder.h",
         "SkImageFilter.h",
         "SkImageGenerator.h",
         "SkImageInfo.h",
         "SkM44.h",
         "SkMallocPixelRef.h",
         "SkMaskFilter.h",
+        "SkMath.h",
         "SkMatrix.h",
         "SkMesh.h",
         "SkMilestone.h",
@@ -74,12 +85,12 @@ skia_filegroup(
         "SkPathEffect.h",
         "SkPathMeasure.h",
         "SkPathTypes.h",
-        "SkPathUtils.h",
         "SkPixelRef.h",
         "SkPixmap.h",
+        "SkPngChunkReader.h",
         "SkPoint.h",
         "SkPoint3.h",
-        "SkPromiseImageTexture.h",  # TODO(kjlubick) remove this shim
+        "SkPromiseImageTexture.h",
         "SkRRect.h",
         "SkRSXform.h",
         "SkRasterHandleAllocator.h",
@@ -96,12 +107,10 @@ skia_filegroup(
         "SkString.h",
         "SkStrokeRec.h",
         "SkSurface.h",
-        "SkSurfaceCharacterization.h",  # TODO(kjlubick) remove this shim
+        "SkSurfaceCharacterization.h",
         "SkSurfaceProps.h",
         "SkSwizzle.h",
         "SkTextBlob.h",
-        "SkTextureCompressionType.h",
-        "SkTiledImageUtils.h",
         "SkTileMode.h",
         "SkTime.h",
         "SkTraceMemoryDump.h",
@@ -114,48 +123,4 @@ skia_filegroup(
         ":skpicture_public_hdrs",
     ],
     visibility = ["//include:__pkg__"],
-)
-
-skia_filegroup(
-    name = "legacy_draw_looper",
-    srcs = [
-        "SkDrawLooper.h",
-    ],
-)
-
-# This filegroup is for the (experimental) buffet build
-skia_filegroup(
-    name = "core_hdrs",
-    srcs = [
-        "SkAlphaType.h",
-        "SkBlendMode.h",
-        "SkBlender.h",
-        "SkColor.h",
-        "SkColorPriv.h",
-        "SkData.h",
-        "SkFlattenable.h",
-        "SkImageFilter.h",
-        "SkM44.h",
-        "SkMaskFilter.h",
-        "SkMatrix.h",
-        "SkPath.h",
-        "SkPathBuilder.h",
-        "SkPathEffect.h",
-        "SkPathTypes.h",
-        "SkPoint.h",
-        "SkPoint3.h",
-        "SkRRect.h",
-        "SkRSXform.h",
-        "SkRect.h",
-        "SkRefCnt.h",
-        "SkSamplingOptions.h",
-        "SkScalar.h",
-        "SkShader.h",
-        "SkSize.h",
-        "SkStream.h",
-        "SkString.h",
-        "SkStrokeRec.h",
-        "SkTypes.h",
-    ],
-    visibility = ["//src:__pkg__"],
 )

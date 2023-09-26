@@ -68,6 +68,7 @@ int getIntAtEndOfString(char *str);
 
 StringBuilder createStringBuilder(int startingMaxLen=128);
 void addText(StringBuilder *builder, char *string, int count=-1);
+void destroy(StringBuilder builder);
 
 char **frameSplitString(char *str, char *delim, int *outStringsNum);
 char **mallocSplitString(char *str, char *delim, int *outStringsNum);
