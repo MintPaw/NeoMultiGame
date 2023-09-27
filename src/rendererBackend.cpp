@@ -27,10 +27,6 @@ struct BackendTexture {
 	Raylib::Texture2D raylibTexture;
 };
 
-struct BackendRenderTexture {
-	Raylib::RenderTexture2D raylibRenderTexture;
-};
-
 void backendClearRenderer(int color);
 void backendLoadShader(BackendShader *backendShader, char *vs, char *fs);
 
@@ -49,14 +45,6 @@ void backendSetTextureClampedY(BackendTexture *backendTexture, bool clamped);
 void backendSetTextureData(BackendTexture *backendTexture, void *data, int width, int height, int flags);
 u8 *backendGetTextureData(BackendTexture *backendTexture);
 void backendDestroyTexture(BackendTexture *backendTexture);
-
-BackendRenderTexture backendCreateRenderTexture(int width, int height, int flags);
-void backendSetTextureSmooth(BackendRenderTexture *backendRenderTexture, bool smooth);
-void backendSetTextureClampedX(BackendRenderTexture *backendRenderTexture, bool clamped);
-void backendSetTextureClampedY(BackendRenderTexture *backendRenderTexture, bool clamped);
-void backendSetTextureData(BackendRenderTexture *backendRenderTexture, void *data, int width, int height, int flags);
-u8 *backendGetTextureData(BackendRenderTexture *backendRenderTexture);
-void backendDestroyTexture(BackendRenderTexture *backendRenderTexture);
 
 void backendSetTargetTexture(BackendTexture *backendTexture);
 
@@ -259,88 +247,6 @@ u8 *backendGetTextureData(BackendTexture *backendTexture) {
 void backendDestroyTexture(BackendTexture *backendTexture) {
 	Raylib::UnloadTexture(backendTexture->raylibTexture);
 	free(backendTexture);
-}
-
-Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags=0);
-Raylib::RenderTexture2D myLoadRenderTexture(int width, int height, int flags) {
-	backendFlush(); // Very important
-
-	Raylib::RenderTexture2D target = { 0 };
-
-	target.id = Raylib::rlLoadFramebuffer(width, height);   // Load an empty framebuffer
-
-	if (target.id > 0)
-	{
-		Raylib::rlEnableFramebuffer(target.id);
-
-		// Create color texture (default to RGBA)
-		int format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-		if (flags & _F_TD_RGBA32) {
-			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
-		} else {
-			format = Raylib::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-		}
-		target.texture.id = Raylib::rlLoadTexture(NULL, width, height, format, 1);
-		target.texture.width = width;
-		target.texture.height = height;
-		target.texture.format = format;
-		target.texture.mipmaps = 1;
-
-		// Create depth renderbuffer/texture
-		target.depth.id = Raylib::rlLoadTextureDepth(width, height, true);
-		target.depth.width = width;
-		target.depth.height = height;
-		target.depth.format = 19;       //DEPTH_COMPONENT_24BIT?
-		target.depth.mipmaps = 1;
-
-		// Attach color texture and depth renderbuffer/texture to FBO
-		Raylib::rlFramebufferAttach(target.id, target.texture.id, Raylib::RL_ATTACHMENT_COLOR_CHANNEL0, Raylib::RL_ATTACHMENT_TEXTURE2D, 0);
-		Raylib::rlFramebufferAttach(target.id, target.depth.id, Raylib::RL_ATTACHMENT_DEPTH, Raylib::RL_ATTACHMENT_RENDERBUFFER, 0);
-
-		// Check if fbo is complete with attachments (valid)
-#ifdef FALLOW_DEBUG
-		if (Raylib::rlFramebufferComplete(target.id)) TRACELOG(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully", target.id);
-#endif
-
-		Raylib::rlDisableFramebuffer();
-	} else {
-		TRACELOG(LOG_WARNING, "FBO: Framebuffer object can not be created");
-	}
-
-	return target;
-}
-
-BackendRenderTexture backendCreateRenderTexture(int width, int height, int flags) {
-	BackendRenderTexture backendRenderTexture = {};
-	backendRenderTexture.raylibRenderTexture = myLoadRenderTexture(width, height, flags);
-	return backendRenderTexture;
-}
-
-void backendSetTextureSmooth(BackendRenderTexture *backendRenderTexture, bool smooth) {
-	Raylib::SetTextureFilter(backendRenderTexture->raylibRenderTexture.texture, smooth ? Raylib::TEXTURE_FILTER_BILINEAR : Raylib::TEXTURE_FILTER_POINT);
-}
-
-void backendSetTextureClampedX(BackendRenderTexture *backendRenderTexture, bool clamped) {
-  int mode = clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT;
-  Raylib::rlTextureParameters(backendRenderTexture->raylibRenderTexture.texture.id, RL_TEXTURE_WRAP_S, mode);
-}
-
-void backendSetTextureClampedY(BackendRenderTexture *backendRenderTexture, bool clamped) {
-  int mode = clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT;
-  Raylib::rlTextureParameters(backendRenderTexture->raylibRenderTexture.texture.id, RL_TEXTURE_WRAP_T, mode);
-}
-
-void backendSetTextureData(BackendRenderTexture *backendRenderTexture, void *data, int width, int height, int flags) {
-	backendSetTextureDataByRaylibTexture(backendRenderTexture->raylibRenderTexture.texture, data, width, height, flags);
-}
-
-u8 *backendGetTextureData(BackendRenderTexture *backendRenderTexture) {
-	backendFlush();
-	return backendGetTextureDataByRaylibTexture(backendRenderTexture->raylibRenderTexture.texture);
-}
-
-void backendDestroyTexture(BackendRenderTexture *backendRenderTexture) {
-	Raylib::UnloadRenderTexture(backendRenderTexture->raylibRenderTexture);
 }
 
 void backendSetTargetTexture(BackendTexture *backendTexture) {

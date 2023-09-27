@@ -510,16 +510,6 @@ struct Texture {
 	char *path;
 };
 
-struct RenderTexture {
-	// Raylib::RenderTexture2D raylibRenderTexture;
-	BackendRenderTexture backendRenderTexture;
-	int width;
-	int height;
-
-	bool clampedX;
-	bool clampedY;
-};
-
 struct RenderProps {
 	bool disabled;
 
@@ -601,7 +591,7 @@ struct Renderer {
 	int outlineShaderOutlineFadeInnerLoc;
 
 #define TARGET_TEXTURE_LIMIT 16
-	RenderTexture *targetTextureStack[TARGET_TEXTURE_LIMIT];
+	Texture *targetTextureStack[TARGET_TEXTURE_LIMIT];
 	int targetTextureStackNum;
 
 #define CAMERA_2D_STACK_MAX 128
@@ -656,40 +646,26 @@ bool setShaderUniform(Shader *shader, int loc, void *ptr, ShaderUniformType type
 
 Texture *createTexture(const char *path, int flags=0);
 Texture *createTexture(int width, int height, void *data=NULL, int flags=0);
-RenderTexture *createRenderTexture(const char *path, int flags=0);
-RenderTexture *createRenderTexture(int width, int height, void *data=NULL, int flags=0);
-Texture *renderTextureToTexture(RenderTexture *renderTexture);
 
 void setTextureSmooth(Texture *texture, bool smooth);
-void setTextureSmooth(RenderTexture *renderTexture, bool smooth);
 void setTextureClamped(Texture *texture, bool clamped);
-void setTextureClamped(RenderTexture *renderTexture, bool clamped);
 void setTextureClampedX(Texture *texture, bool clamped);
 void setTextureClampedY(Texture *texture, bool clamped);
-void setTextureClampedX(RenderTexture *texture, bool clamped);
-void setTextureClampedY(RenderTexture *texture, bool clamped);
 
-void setTextureData(RenderTexture *renderTexture, void *data, int width, int height, int flags=0);
 void setTextureData(Texture *texture, void *data, int width, int height, int flags=0);
-u8 *getTextureData(RenderTexture *renderTexture, int flags=0);
 u8 *getTextureData(Texture *texture, int flags=0);
 bool writeTextureToFile(Texture *texture, char *path);
 
 void destroyTexture(Texture *texture);
-void destroyTexture(RenderTexture *renderTexture);
 
-void drawTexture(RenderTexture *renderTexture, RenderProps props);
 void drawTexture(Texture *texture, RenderProps props);
 void drawSimpleTexture(Texture *texture);
-void drawSimpleTexture(RenderTexture *renderTexture);
-void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
 void drawRect(Rect rect, int color, int flags=0);
 void drawCircle(Vec2 position, float radius, int color);
-// void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 // void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size=v2(), int tint=0xFFFFFFFF, Rect source=makeRect());
 
-void pushTargetTexture(RenderTexture *renderTexture);
+void pushTargetTexture(Texture *renderTexture);
 void popTargetTexture();
 
 void pushCamera2d(Matrix3 mat);
@@ -862,58 +838,13 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	return texture;
 }
 
-RenderTexture *createRenderTexture(const char *path, int flags) {
-	int pngSize;
-	void *pngData = readFile(path, &pngSize);
-
-	int width, height, channels;
-	stbi_set_flip_vertically_on_load(true);
-	stbi_uc *img = stbi_load_from_memory((unsigned char *)pngData, pngSize, &width, &height, &channels, 4);
-
-	if (!img) return NULL;
-
-	RenderTexture *texture = createRenderTexture(width, height, img, flags);
-	if (!texture) Panic(frameSprintf("Failed to load image %s\n", path));
-
-	free(img);
-	free(pngData);
-
-	return texture;
-}
-
-RenderTexture *createRenderTexture(int width, int height, void *data, int flags) {
-	RenderTexture *renderTexture = (RenderTexture *)zalloc(sizeof(RenderTexture));
-	renderTexture->width = width;
-	renderTexture->height = height;
-	renderTexture->backendRenderTexture = backendCreateRenderTexture(width, height, flags);
-	if (data) setTextureData(renderTexture, data, width, height, flags);
-	setTextureSmooth(renderTexture, true);
-	setTextureClamped(renderTexture, true);
-	return renderTexture;
-}
-
-Texture *renderTextureToTexture(RenderTexture *renderTexture) {
-	u8 *data = getTextureData(renderTexture);
-	Texture *texture = createTexture(renderTexture->width, renderTexture->height, data);
-	free(data);
-	destroyTexture(renderTexture);
-	return texture;
-}
-
 void setTextureSmooth(Texture *texture, bool smooth) {
 	backendSetTextureSmooth(&texture->backendTexture, smooth);
-}
-void setTextureSmooth(RenderTexture *renderTexture, bool smooth) {
-	backendSetTextureSmooth(&renderTexture->backendRenderTexture, smooth);
 }
 
 void setTextureClamped(Texture *texture, bool clamped) {
   setTextureClampedX(texture, clamped);
   setTextureClampedY(texture, clamped);
-}
-void setTextureClamped(RenderTexture *renderTexture, bool clamped) {
-  setTextureClampedX(renderTexture, clamped);
-  setTextureClampedY(renderTexture, clamped);
 }
 
 void setTextureClampedX(Texture *texture, bool clamped) {
@@ -922,23 +853,9 @@ void setTextureClampedX(Texture *texture, bool clamped) {
 void setTextureClampedY(Texture *texture, bool clamped) {
 	backendSetTextureClampedY(&texture->backendTexture, clamped);
 }
-void setTextureClampedX(RenderTexture *texture, bool clamped) {
-	backendSetTextureClampedX(&texture->backendRenderTexture, clamped);
-}
-void setTextureClampedY(RenderTexture *texture, bool clamped) {
-	backendSetTextureClampedY(&texture->backendRenderTexture, clamped);
-}
 
 void setTextureData(Texture *texture, void *data, int width, int height, int flags) {
 	backendSetTextureData(&texture->backendTexture, data, width, height, flags);
-}
-
-void setTextureData(RenderTexture *renderTexture, void *data, int width, int height, int flags) {
-	backendSetTextureData(&renderTexture->backendRenderTexture, data, width, height, flags);
-}
-
-u8 *getTextureData(RenderTexture *renderTexture, int flags) {
-	return backendGetTextureData(&renderTexture->backendRenderTexture);
 }
 
 u8 *getTextureData(Texture *texture, int flags) {
@@ -964,30 +881,6 @@ void destroyTexture(Texture *texture) {
 	// free(texture); //@incomplete Why can't I free this???
 }
 
-void destroyTexture(RenderTexture *renderTexture) {
-	backendDestroyTexture(&renderTexture->backendRenderTexture);
-	free(renderTexture);
-}
-
-void drawTexture(RenderTexture *renderTexture, RenderProps props) {
-	if (props.alpha == 0) return;
-	if (props.disabled) return;
-	if (!renderTexture) Panic("drawTexture called with null renderTexture!");
-
-	if (props.srcWidth == 0) props.srcWidth = renderTexture->width;
-	if (props.srcHeight == 0) props.srcHeight = renderTexture->height;
-	props.matrix.SCALE(props.srcWidth, props.srcHeight);
-
-	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
-	float alpha = props.alpha;
-	int flags = props.flags;
-	Vec2 uv0 = props.uvMatrix * props.uv0;
-	Vec2 uv1 = props.uvMatrix * props.uv1;
-	BackendTexture backendTexture = {}; //@hack
-	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
-	backendDrawTexture(&backendTexture, props.matrix, uv0, uv1, tints, alpha, flags);
-}
-
 void drawTexture(Texture *texture, RenderProps props) {
 	if (props.alpha == 0) return;
 	if (props.disabled) return;
@@ -1006,19 +899,6 @@ void drawTexture(Texture *texture, RenderProps props) {
 	backendDrawTexture(&texture->backendTexture, props.matrix, uv0, uv1, tints, alpha, flags);
 }
 
-void drawSimpleTexture(RenderTexture *renderTexture) {
-	Matrix3 matrix = mat3();
-	matrix.SCALE(getSize(renderTexture));
-	Vec2 uv0 = v2(0, 0);
-	Vec2 uv1 = v2(1, 1);
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	int alpha = 1;
-	int flags = 0;
-
-	BackendTexture backendTexture = {}; //@hack
-	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
-	backendDrawTexture(&backendTexture, matrix, uv0, uv1, tints, alpha, flags);
-}
 void drawSimpleTexture(Texture *texture) {
 	Matrix3 matrix = mat3();
 	matrix.SCALE(getSize(texture));
@@ -1028,14 +908,6 @@ void drawSimpleTexture(Texture *texture) {
 	int alpha = 1;
 	int flags = 0;
 	backendDrawTexture(&texture->backendTexture, matrix, uv0, uv1, tints, alpha, flags);
-}
-void drawSimpleTexture(RenderTexture *renderTexture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	int flags = 0;
-
-	BackendTexture backendTexture = {}; //@hack
-	backendTexture.raylibTexture.id = renderTexture->backendRenderTexture.raylibRenderTexture.texture.id;
-	backendDrawTexture(&backendTexture, matrix, uv0, uv1, tints, alpha, flags);
 }
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
 	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
@@ -1068,14 +940,6 @@ void drawCircle(Vec2 position, float radius, int color) {
 
 	backendDrawTexture(&texture->backendTexture, matrix, v2(0, 0), v2(1, 1), tints, alpha, flags);
 }
-
-// void drawBillboard(Camera camera, RenderTexture *renderTexture, Vec3 position, Vec2 size, int tint, Rect source) {
-// 	Texture texture;
-// 	texture.width = renderTexture->width;
-// 	texture.height = renderTexture->height;
-// 	texture.raylibTexture = renderTexture->raylibRenderTexture.texture;
-// 	drawBillboard(camera, &texture, position, size, tint, source);
-// }
 
 // void drawBillboard(Camera camera, Texture *texture, Vec3 position, Vec2 size, int tint, Rect source) {
 // 	if (renderer->disabled) return;
@@ -1131,21 +995,17 @@ void drawCircle(Vec2 position, float radius, int color) {
 // 	drawTexturedQuad(texture->raylibTexture.id, verts, uvs, colors);
 // }
 
-void pushTargetTexture(RenderTexture *renderTexture) {
+void pushTargetTexture(Texture *texture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");
-	renderer->targetTextureStack[renderer->targetTextureStackNum++] = renderTexture;
-	BackendTexture backendTexture = {}; //@hack
-	backendTexture.raylibTexture = renderTexture->backendRenderTexture.raylibRenderTexture.texture;
-  backendSetTargetTexture(&backendTexture);
+	renderer->targetTextureStack[renderer->targetTextureStackNum++] = texture;
+  backendSetTargetTexture(&texture->backendTexture);
 }
 
 void popTargetTexture() {
 	renderer->targetTextureStackNum--;
 	if (renderer->targetTextureStackNum > 0) {
-		RenderTexture *renderTexture = renderer->targetTextureStack[renderer->targetTextureStackNum-1];
-		BackendTexture backendTexture = {}; //@hack
-		backendTexture.raylibTexture = renderTexture->backendRenderTexture.raylibRenderTexture.texture;
-		backendSetTargetTexture(&backendTexture);
+		Texture *texture = renderer->targetTextureStack[renderer->targetTextureStackNum-1];
+		backendSetTargetTexture(&texture->backendTexture);
 	} else {
 		backendSetTargetTexture(NULL);
 	}
@@ -1431,7 +1291,6 @@ void endShader() {
 
 void guiTexture(Texture *texture);
 bool guiImageButton(Texture *texture);
-bool guiImageButton(RenderTexture *texture);
 // bool guiInputRgb(const char *name, int *argb, bool showInputs=false);
 // bool guiInputArgb(const char *name, int *argb, bool showInputs=false);
 // void guiPushStyleColor(ImGuiCol style, int color);
@@ -1710,15 +1569,6 @@ void guiTexture(Texture *texture) {
 		ImVec2(1, 0)
 	);
 }
- void guiTexture(RenderTexture *renderTexture) {
- 	ImGui::Image(
-		(ImTextureID)(intptr_t)&renderTexture->backendRenderTexture.raylibRenderTexture.texture.id,
-		ImVec2(renderTexture->width, renderTexture->height),
-		ImVec2(0, 1),
-		ImVec2(1, 0)
- 	);
- }
-
 bool guiImageButton(Texture *texture) {
 	return ImGui::ImageButton(
 		(ImTextureID)(intptr_t)&texture->backendTexture.raylibTexture.id,
@@ -1726,15 +1576,6 @@ bool guiImageButton(Texture *texture) {
 		ImVec2(0, 1),
 		ImVec2(1, 0)
 	);
-}
-bool guiImageButton(RenderTexture *renderTexture) {
-	return ImGui::ImageButton(
-		(ImTextureID)(intptr_t)&renderTexture->backendRenderTexture.raylibRenderTexture.texture.id,
-		ImVec2(renderTexture->width, renderTexture->height),
-		ImVec2(0, 1),
-		ImVec2(1, 0)
-	);
-	return false;
 }
 
 ///- Audio

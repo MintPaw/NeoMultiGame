@@ -171,7 +171,7 @@ struct SkiaSystem {
 	bool useGpu;
 	int msaaSamples;
 
-	RenderTexture *backTexture;
+	Texture *backTexture;
 
 #define MATRIX_STACK_MAX 256
 	Matrix3 matrixStack[MATRIX_STACK_MAX];
@@ -211,7 +211,7 @@ void endSkiaFrame();
 void startSkiaSubFrame(float scale);
 void endSkiaSubFrame();
 
-void drawSkiaFrameOnRenderTexture(RenderTexture *renderTexture, bool doClear=false);
+void drawSkiaFrameOnTexture(Texture *Texture, bool doClear=false);
 Texture *getSkiaFrameAsTexture(Vec2 size);
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum);
@@ -258,7 +258,7 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 	skiaSys->msaaSamples = msaaSamples;
 
 	if (skiaSys->backTexture) destroyTexture(skiaSys->backTexture);
-	skiaSys->backTexture = createRenderTexture(size.x, size.y);
+	skiaSys->backTexture = createTexture(size.x, size.y);
 
 	bool oldUseGpu = skiaSys->useGpu;
 	skiaSys->useGpu = useGpu;
@@ -1188,17 +1188,13 @@ void endSkiaSubFrame() {
 }
 
 Texture *getSkiaFrameAsTexture(Vec2 size) {
-	RenderTexture *renderTexture = createRenderTexture(size.x, size.y);
-
-	drawSkiaFrameOnRenderTexture(renderTexture);
-
-	Texture *texture = renderTextureToTexture(renderTexture);
-	setTextureClamped(texture, true);
+	Texture *texture = createTexture(size.x, size.y);
+	drawSkiaFrameOnTexture(texture);
 	return texture;
 }
 
-void drawSkiaFrameOnRenderTexture(RenderTexture *renderTexture, bool doClear) {
-	pushTargetTexture(renderTexture);
+void drawSkiaFrameOnTexture(Texture *texture, bool doClear) {
+	pushTargetTexture(texture);
 	if (doClear) clearRenderer();
 	drawSimpleTexture(skiaSys->backTexture);
 	popTargetTexture();
@@ -1245,13 +1241,13 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 		int selectedSpriteFrame;
 		Vec2 spriteOffset;
 		float spriteScale;
-		RenderTexture *spriteTexture;
+		Texture *spriteTexture;
 		int selectedDrawable;
 
 		int selectedShape;
 		Vec2 shapeOffset;
 		float shapeScale;
-		RenderTexture *shapeTexture;
+		Texture *shapeTexture;
 
 		bool showUnnamedSprites;
 		bool recordFrame;
@@ -1260,10 +1256,10 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 	static SwfASys *aSys = NULL;
 	if (!aSys) {
 		aSys = (SwfASys *)zalloc(sizeof(SwfASys));
-		aSys->spriteTexture = createRenderTexture(512, 512);
+		aSys->spriteTexture = createTexture(512, 512);
 		aSys->spriteScale = 1;
 
-		aSys->shapeTexture = createRenderTexture(512, 512);
+		aSys->shapeTexture = createTexture(512, 512);
 		aSys->shapeScale = 1;
 
 		if (!basePath) basePath = "assets/swf/Shared.swf";
@@ -1392,7 +1388,7 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			resetSkia(size, v2(1, 1), true, 16);
 			// game->skiaFlagsDirty = true;
 
-			RenderTexture *texture = createRenderTexture(size.x, size.y);
+			Texture *texture = createTexture(size.x, size.y);
 			if (directoryExists("c:/bin/dump")) removeDirectory("c:/bin/dump");
 			if (!createDirectory("c:/bin/dump")) logf("Failed to create dump dir\n");
 

@@ -1,19 +1,15 @@
 RenderProps newRenderProps();
-RenderProps newRenderProps(RenderTexture *texture, Rect rect);
 RenderProps newRenderProps(Texture *texture, Rect rect);
 void drawLine(Vec2 start, Vec2 end, int thickness, int color);
 void drawLine(Line2 line, int thickness, int color) { drawLine(line.start, line.end, thickness, color); }
 void drawRectOutline(Rect rect, float outlineSize, int color);
 void drawRect(float x, float y, float width, float height, int color, int flags=0) { drawRect(makeRect(x, y, width, height), color, flags); }
 void drawCircle(Circle circle, int color) { drawCircle(circle.position, circle.radius, color); }
-Vec2 getSize(RenderTexture *renderTexture);
 Vec2 getSize(Texture *texture);
-Rect makeRect(RenderTexture *renderTexture);
 Rect makeRect(Texture *texture);
 
 void initRendererUtils();
 Texture *createFrameTexture(int width, int height, void *data=NULL);
-RenderTexture *createFrameRenderTexture(int width, int height, void *data=NULL);
 void freeFrameTextures();
 
 void drawLine(Vec2 start, Vec2 end, int thickness, int color) {
@@ -56,15 +52,6 @@ RenderProps newRenderProps() {
 	return props;
 }
 
-RenderProps newRenderProps(RenderTexture *texture, Rect rect) {
-	if (!texture) return newRenderProps();
-
-	RenderProps props = newRenderProps();
-	props.matrix.TRANSLATE(rect.x, rect.y);
-	props.matrix.SCALE(rect.width/(float)texture->width, rect.height/(float)texture->height);
-	return props;
-}
-
 RenderProps newRenderProps(Texture *texture, Rect rect) {
 	if (!texture) return newRenderProps();
 
@@ -72,11 +59,6 @@ RenderProps newRenderProps(Texture *texture, Rect rect) {
 	props.matrix.TRANSLATE(rect.x, rect.y);
 	props.matrix.SCALE(rect.width/(float)texture->width, rect.height/(float)texture->height);
 	return props;
-}
-
-Vec2 getSize(RenderTexture *renderTexture) { 
-	if (!renderTexture) Panic("getSize of NULL renderTexture");
-	return v2(renderTexture->width, renderTexture->height);
 }
 
 Vec2 getSize(Texture *texture) {
@@ -87,11 +69,6 @@ Vec2 getSize(Texture *texture) {
 Rect makeRect(Texture *texture) {
 	if (!texture) Panic("makeRect of NULL texture");
 	return makeRect(0, 0, texture->width, texture->height);
-}
-
-Rect makeRect(RenderTexture *renderTexture) {
-	if (!renderTexture) Panic("makeRect of NULL renderTexture");
-	return makeRect(0, 0, renderTexture->width, renderTexture->height);
 }
 
 void drawCapsule(Capsule2 cap, int color);
@@ -113,10 +90,6 @@ struct RendererUtils {
 #define FRAME_TEXTURES_MAX 512
 	Texture *frameTextures[FRAME_TEXTURES_MAX];
 	int frameTexturesNum;
-
-#define FRAME_RENDER_TEXTURES_MAX 512
-	RenderTexture *frameRenderTextures[FRAME_RENDER_TEXTURES_MAX];
-	int frameRenderTexturesNum;
 };
 RendererUtils *rendererUtils = NULL;
 
@@ -145,21 +118,7 @@ Texture *createFrameTexture(int width, int height, void *data) {
 	return texture;
 }
 
-RenderTexture *createFrameRenderTexture(int width, int height, void *data) {
-	RenderTexture *texture = createRenderTexture(width, height, data);
-	if (rendererUtils->frameRenderTexturesNum > FRAME_RENDER_TEXTURES_MAX-1) {
-		logf("Too many frame render textures, render texture will leak\n");
-		return texture;
-	}
-
-	rendererUtils->frameRenderTextures[rendererUtils->frameRenderTexturesNum++] = texture;
-	return texture;
-}
-
 void freeFrameTextures() {
 	for (int i = 0; i < rendererUtils->frameTexturesNum; i++) destroyTexture(rendererUtils->frameTextures[i]);
 	rendererUtils->frameTexturesNum = 0;
-
-	for (int i = 0; i < rendererUtils->frameRenderTexturesNum; i++) destroyTexture(rendererUtils->frameRenderTextures[i]);
-	rendererUtils->frameRenderTexturesNum = 0;
 }

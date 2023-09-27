@@ -24,7 +24,7 @@ struct Frame {
 	int height;
 
 /// Unserialized
-	RenderTexture *texture;
+	Texture *texture;
 	int indexInAnim;
 };
 
@@ -55,7 +55,7 @@ struct AnimationSystem {
 	unsigned char *bitmapDatas[SPRITE_SHEETS_MAX];
 	int bitmapDatasNum;
 
-	RenderTexture *sheetTextures[SPRITE_SHEETS_MAX];
+	Texture *sheetTextures[SPRITE_SHEETS_MAX];
 	int sheetTexturesNum;
 
 	struct Buffer {
@@ -73,7 +73,7 @@ struct AnimationSystem {
 	ThreadSafeQueue *spritePathsQueue;
 	ThreadSafeQueue *spriteBitmapsOut;
 
-	RenderTexture *garbageTexture;
+	Texture *garbageTexture;
 	Animation emptyAnim;
 };
 
@@ -96,7 +96,7 @@ void initAnimations() {
 	animSys = (AnimationSystem *)zalloc(sizeof(AnimationSystem));
 	animSys->frameRate = 10.0;
 
-	animSys->garbageTexture = createRenderTexture(1, 1);
+	animSys->garbageTexture = createTexture(1, 1);
 	strcpy(animSys->emptyAnim.name, "Empty");
 }
 
@@ -234,7 +234,7 @@ void packSpriteSheet(const char *dirName) {
 			free(image);
 		}
 
-		RenderTexture *texture = createRenderTexture(SHEET_WIDTH_LIMIT, SHEET_HEIGHT_LIMIT, NULL); // This used to srgb to linear?
+		Texture *texture = createTexture(SHEET_WIDTH_LIMIT, SHEET_HEIGHT_LIMIT, NULL); // This used to srgb to linear?
 		setTextureData(texture, bitmapData, SHEET_WIDTH_LIMIT, SHEET_HEIGHT_LIMIT, _F_TD_FLIP_Y);
 		animSys->sheetTextures[animSys->sheetTexturesNum++] = texture;
 		for (int i = 0; i < rectsNum; i++) {
@@ -462,7 +462,7 @@ void saveSpriteSheets(char *dir) {
 	for (int i = 0; i < animSys->sheetTexturesNum; i++) {
 		char *path = frameSprintf("%s/sheet%d.png", dir, i);
 
-		RenderTexture *texture = animSys->sheetTextures[i];
+		Texture *texture = animSys->sheetTextures[i];
 		u8 *bitmapData = getTextureData(texture); // Alpha is purposely not unmultiplied
 
 		stbi_flip_vertically_on_write(true);
@@ -507,7 +507,7 @@ void loadSpriteSheet(char *sheetDataPath) {
 
 	animSys->sheetTexturesNum = readU32(stream);
 	for (int i = 0; i < animSys->sheetTexturesNum; i++) {
-		animSys->sheetTextures[i] = createRenderTexture(frameSprintf("%s/sheet%d.png", dir, i), _F_TD_SKIP_PREMULTIPLY);
+		animSys->sheetTextures[i] = createTexture(frameSprintf("%s/sheet%d.png", dir, i), _F_TD_SKIP_PREMULTIPLY);
 	}
 
 	animSys->framesNum = readU32(stream);
