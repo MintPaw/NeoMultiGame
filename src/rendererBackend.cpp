@@ -58,7 +58,7 @@ void backendSetTextureData(BackendRenderTexture *backendRenderTexture, void *dat
 u8 *backendGetTextureData(BackendRenderTexture *backendRenderTexture);
 void backendDestroyTexture(BackendRenderTexture *backendRenderTexture);
 
-void backendSetTargetTexture(BackendRenderTexture *backendRenderTexture);
+void backendSetTargetTexture(BackendTexture *backendTexture);
 
 void backendSetAlpha(float alpha);
 void backendSetCamera2d(Matrix3 camera2d);
@@ -77,6 +77,12 @@ int _currentDrawCount;
 
 float _backendAlpha = 1;
 Matrix3 _backendCamera2d = mat3();
+
+int _renderTextureFbId;
+
+void backendInit() {
+	_renderTextureFbId = Raylib::rlLoadFramebuffer(0, 0); // The size here doesn't mater??
+}
 
 void backendClearRenderer(int color) {
 	Raylib::ClearBackground(toRaylibColor(color));
@@ -337,11 +343,46 @@ void backendDestroyTexture(BackendRenderTexture *backendRenderTexture) {
 	Raylib::UnloadRenderTexture(backendRenderTexture->raylibRenderTexture);
 }
 
-void backendSetTargetTexture(BackendRenderTexture *backendRenderTexture) {
-	if (backendRenderTexture == NULL) {
-		Raylib::EndTextureMode();
+void backendSetTargetTexture(BackendTexture *backendTexture) {
+	backendFlush();
+
+	if (backendTexture) {
+		Raylib::rlEnableFramebuffer(_renderTextureFbId);
+
+		Raylib::rlFramebufferAttach(
+			_renderTextureFbId,
+			backendTexture->raylibTexture.id,
+			Raylib::RL_ATTACHMENT_COLOR_CHANNEL0,
+			Raylib::RL_ATTACHMENT_TEXTURE2D,
+			0
+		);
+
+#ifdef FALLOW_DEBUG
+		if (!Raylib::rlFramebufferComplete(_renderTextureFbId)) TRACELOG(LOG_INFO, "Failed to complete FBO %d", _renderTextureFbId);
+#endif
+
+		Raylib::rlEnableFramebuffer(_renderTextureFbId);
+
+		Raylib::rlViewport(0, 0, backendTexture->raylibTexture.width, backendTexture->raylibTexture.height);
+
+		Raylib::rlMatrixMode(RL_PROJECTION);
+		Raylib::rlLoadIdentity();
+
+		Raylib::rlOrtho(0, backendTexture->raylibTexture.width, backendTexture->raylibTexture.height, 0, 0.0f, 1.0f);
+
+		Raylib::rlMatrixMode(RL_MODELVIEW);
+		Raylib::rlLoadIdentity();
 	} else {
-		Raylib::BeginTextureMode(backendRenderTexture->raylibRenderTexture);
+		Raylib::rlDisableFramebuffer();
+
+		Raylib::rlViewport(0, 0, platform->windowWidth, platform->windowHeight);
+		Raylib::rlMatrixMode(RL_PROJECTION);
+		Raylib::rlLoadIdentity();
+
+		Raylib::rlOrtho(0, platform->windowWidth, platform->windowHeight, 0, 0.0f, 1.0f);
+
+		Raylib::rlMatrixMode(RL_MODELVIEW);
+		Raylib::rlLoadIdentity();
 	}
 }
 

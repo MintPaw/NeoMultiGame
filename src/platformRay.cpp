@@ -39,7 +39,6 @@ struct Platform {
 	int windowHeight;
 	Vec2i windowSize;
 	float windowScaling;
-	Vec2 hackedWindowSize;
 
 	float realElapsed;
 	float elapsed;
@@ -244,11 +243,6 @@ void platformUpdate() {
 
 	platform->windowWidth = Raylib::GetScreenWidth();
 	platform->windowHeight = Raylib::GetScreenHeight();
-
-	if (!isZero(platform->hackedWindowSize)) {
-		platform->windowWidth = platform->hackedWindowSize.x;
-		platform->windowHeight = platform->hackedWindowSize.y;
-	}
 
 #ifdef __EMSCRIPTEN__
 		// float windowScaling = emscripten_get_device_pixel_ratio();
@@ -697,7 +691,6 @@ void drawCircle(Vec2 position, float radius, int color);
 
 void pushTargetTexture(RenderTexture *renderTexture);
 void popTargetTexture();
-void setTargetTexture(RenderTexture *renderTexture);
 
 void pushCamera2d(Matrix3 mat);
 void popCamera2d();
@@ -737,6 +730,8 @@ bool usesAlphaDiscard = false;
 
 void initRenderer(int width, int height) {
 	renderer = (Renderer *)zalloc(sizeof(Renderer));
+
+	backendInit();
 
 	pushCamera2d(mat3());
 	pushAlpha(1);
@@ -1138,41 +1133,32 @@ void drawCircle(Vec2 position, float radius, int color) {
 
 void pushTargetTexture(RenderTexture *renderTexture) {
 	if (renderer->targetTextureStackNum >= TARGET_TEXTURE_LIMIT-1) Panic("Target texture overflow");
-
 	renderer->targetTextureStack[renderer->targetTextureStackNum++] = renderTexture;
-
-	setTargetTexture(renderTexture);
+	BackendTexture backendTexture = {}; //@hack
+	backendTexture.raylibTexture = renderTexture->backendRenderTexture.raylibRenderTexture.texture;
+  backendSetTargetTexture(&backendTexture);
 }
 
 void popTargetTexture() {
 	renderer->targetTextureStackNum--;
-
 	if (renderer->targetTextureStackNum > 0) {
-		setTargetTexture(renderer->targetTextureStack[renderer->targetTextureStackNum-1]);
+		RenderTexture *renderTexture = renderer->targetTextureStack[renderer->targetTextureStackNum-1];
+		BackendTexture backendTexture = {}; //@hack
+		backendTexture.raylibTexture = renderTexture->backendRenderTexture.raylibRenderTexture.texture;
+		backendSetTargetTexture(&backendTexture);
 	} else {
-		setTargetTexture(NULL);
-	}
-}
-
-void setTargetTexture(RenderTexture *renderTexture) {
-	if (renderTexture == NULL) {
 		backendSetTargetTexture(NULL);
-		if (!isZero(platform->hackedWindowSize)) Raylib::rlViewport(0, 0, platform->hackedWindowSize.x, platform->hackedWindowSize.y); //@hack
-	} else {
-		backendSetTargetTexture(&renderTexture->backendRenderTexture);
 	}
 }
 
 void pushCamera2d(Matrix3 mat) {
 	if (renderer->camera2dStackNum > CAMERA_2D_STACK_MAX-1) Panic("camera2d overflow");
-
 	renderer->camera2dStack[renderer->camera2dStackNum++] = mat;
 	refreshGlobalMatrices();
 }
 
 void popCamera2d() {
 	if (renderer->camera2dStackNum <= 1) Panic("camera2d underflow");
-
 	renderer->camera2dStackNum--;
 	refreshGlobalMatrices();
 }
