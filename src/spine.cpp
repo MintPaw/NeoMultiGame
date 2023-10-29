@@ -1,4 +1,6 @@
-//@incomplete Spine still uses Raylib directly, not the renderer abstraction
+#ifndef PI
+#define PI M_PI
+#endif
 
 #include "spine/spine.h"
 #include "spine/Animation.c"
@@ -58,7 +60,6 @@ extern "C" void _spAtlasPage_createTexture(spAtlasPage *self, const char *path) 
 		return;
 	}
 
-	logf("Created texture %d (%d x %d)\n", texture->backendTexture.raylibTexture.id, texture->width, texture->height);
 	self->rendererObject = texture;
 	self->width = texture->width;
 	self->height = texture->height;
@@ -68,7 +69,6 @@ extern "C" void _spAtlasPage_disposeTexture(spAtlasPage *self) {
 	if (!self->rendererObject) return;
 
 	Texture *texture = (Texture *)self->rendererObject;
-	logf("Destroying texture %d\n", texture->backendTexture.raylibTexture.id);
 	destroyTexture(texture);
 }
 
@@ -93,24 +93,30 @@ char *boneEffectTypeStrings[] = {
 	"Spring end",
 };
 struct BoneData {
+#define SPINE_BONE_NAME_MAX_LEN 64
+	char path[SPINE_BONE_NAME_MAX_LEN];
 	BoneEffectType boneEffect;
-
-	Vec2 prevWorldStart;
-	Vec2 prevWorldEnd;
-	float prevWorldRotation;
-	Vec2 velo;
 
 	float easeAmount;
 	float tension;
 	float damping;
+
+	/// Unserialized
+	Vec2 prevWorldStart;
+	Vec2 prevWorldEnd;
+	float prevWorldRotation;
+	Vec2 velo;
 };
 struct SpineSkeleton {
+	bool disableEffects;
+
 	spSkeleton *spSkeletonInstance;
 	spAnimationState *animationState;
 	spSkeletonClipping *clipper;
 
-	BoneData *boneData;
-	int boneDataNum;
+#define SPINE_BONES_MAX 128
+	BoneData boneDatas[SPINE_BONES_MAX];
+	int boneDatasNum;
 };
 
 struct SpineSystem {
@@ -127,10 +133,12 @@ SpineSkeleton *deriveSkeleton(SpineBaseSkeleton *base);
 void updateSkeletonAnimation(SpineSkeleton *skeleton, float elapsed);
 void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed);
 
-bool boneExists(SpineSkeleton *skeleton, const char *boneName);
-Matrix3 getBoneMatrix(SpineSkeleton *skeleton, const char *boneName);
-Line2 getBoneLine(SpineSkeleton *skeleton, const char *boneName);
-float getBoneLength(SpineSkeleton *skeleton, const char *boneName);
+char *getBonePath(spBone *bone); // Only exists for one frame
+spBone *getBoneByPath(SpineSkeleton *skeleton, char *bonePath);
+bool boneExists(SpineSkeleton *skeleton, char *bonePath);
+Matrix3 getBoneMatrix(SpineSkeleton *skeleton, char *bonePath);
+Line2 getBoneLine(SpineSkeleton *skeleton, char *bonePath);
+float getBoneLength(SpineSkeleton *skeleton, char *bonePath);
 
 void destroyBaseSkeleton(SpineBaseSkeleton *base);
 void destroySkeleton(SpineSkeleton *skeleton);
@@ -189,15 +197,15 @@ SpineSkeleton *deriveSkeleton(SpineBaseSkeleton *base) {
 	skeleton->animationState->userData = skeleton;
 	skeleton->clipper = spSkeletonClipping_create();
 
-	skeleton->boneData = (BoneData *)zalloc(sizeof(BoneData) * skeleton->spSkeletonInstance->bonesCount);
-	skeleton->boneDataNum = skeleton->spSkeletonInstance->bonesCount;
+	// skeleton->boneDatas = (BoneData *)zalloc(sizeof(BoneData) * skeleton->spSkeletonInstance->bonesCount);
+	// skeleton->boneDatasNum = skeleton->spSkeletonInstance->bonesCount;
 
-	for (int i = 0; i < skeleton->spSkeletonInstance->bonesCount; i++) {
-		BoneData *data = &skeleton->boneData[i];
-		data->easeAmount = 0.5;
-		data->tension = 10;
-		data->damping = 0.5;
-	}
+	// for (int i = 0; i < skeleton->spSkeletonInstance->bonesCount; i++) {
+	// 	BoneData *data = &skeleton->boneDatas[i];
+	// 	data->easeAmount = 0.5;
+	// 	data->tension = 10;
+	// 	data->damping = 0.5;
+	// }
 
 	return skeleton;
 }
@@ -217,16 +225,27 @@ void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed) {
 
 	if (elapsed) {
 		for (int i = 0; i < skeleton->spSkeletonInstance->bonesCount; i++) {
+			if (skeleton->disableEffects) break;
 			spBone *bone = skeleton->spSkeletonInstance->bones[i];
-			BoneData *data = &skeleton->boneData[i];
+			char *bonePath = getBonePath(bone);
+
+			BoneData *data = &skeleton->boneDatas[i];
+			for (int i = 0; i < skeleton->boneDatasNum; i++) {
+				BoneData *possibleData = &skeleton->boneDatas[i];
+				if (streq(possibleData->path, bonePath)) {
+					data = possibleData;
+					break;
+				}
+			}
+			if (!data) continue;
 
 			if (data->boneEffect == BONE_EFFECT_EASE_START) {
-				Vec2 currentWorldStart = getPosition(getBoneMatrix(skeleton, bone->data->name));
+				Vec2 currentWorldStart = getPosition(getBoneMatrix(skeleton, bonePath));
 				data->prevWorldStart = lerp(data->prevWorldStart, currentWorldStart, data->easeAmount);
 
 				spBone_worldToLocal(bone->parent, data->prevWorldStart.x, data->prevWorldStart.y, &bone->x, &bone->y);
 			} else if (data->boneEffect == BONE_EFFECT_EASE_END) {
-				Line2 worldLine = getBoneLine(skeleton, bone->data->name);
+				Line2 worldLine = getBoneLine(skeleton, bonePath);
 
 				data->prevWorldEnd = lerp(data->prevWorldEnd, worldLine.end, data->easeAmount);
 				Vec2 angle = vectorBetween(data->prevWorldEnd, worldLine.start);
@@ -234,7 +253,7 @@ void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed) {
 				bone->rotation = spBone_worldToLocalRotation(bone, toDeg(angle));
 			} else if (data->boneEffect == BONE_EFFECT_SPRING_START) {
 				float mass = 1;
-				Vec2 currentWorldStart = getPosition(getBoneMatrix(skeleton, bone->data->name));
+				Vec2 currentWorldStart = getPosition(getBoneMatrix(skeleton, bonePath));
 
 				Vec2 force = data->tension * (currentWorldStart - data->prevWorldStart);
 				// force += v2(0, 0.98); // Gravity
@@ -245,7 +264,7 @@ void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed) {
 				spBone_worldToLocal(bone->parent, data->prevWorldStart.x, data->prevWorldStart.y, &bone->x, &bone->y);
 			} else if (data->boneEffect == BONE_EFFECT_SPRING_END) {
 				float mass = 1;
-				Line2 worldLine = getBoneLine(skeleton, bone->data->name);
+				Line2 worldLine = getBoneLine(skeleton, bonePath);
 
 				Vec2 force = data->tension * (worldLine.end - data->prevWorldEnd);
 				// force += v2(0, 0.98); // Gravity
@@ -263,18 +282,34 @@ void updateSkeletonPhysics(SpineSkeleton *skeleton, float elapsed) {
 	}
 }
 
-bool boneExists(SpineSkeleton *skeleton, const char *boneName) {
-	spBone *bone = spSkeleton_findBone(skeleton->spSkeletonInstance, boneName);
+char *getBonePath(spBone *bone) {
+	char *str = (char *)bone->data->name;
+	if (bone->parent) {
+		str = frameSprintf("%s.%s", getBonePath(bone->parent), str);
+	}
+	return str;
+}
+
+spBone *getBoneByPath(SpineSkeleton *skeleton, char *bonePath) {
+	for (int i = 0; i < skeleton->spSkeletonInstance->bonesCount; i++) {
+		spBone *bone = skeleton->spSkeletonInstance->bones[i];
+		if (streq(getBonePath(bone), bonePath)) return bone;
+	}
+	return NULL;
+}
+
+bool boneExists(SpineSkeleton *skeleton, char *bonePath) {
+	spBone *bone = getBoneByPath(skeleton, bonePath);
 	if (bone) return true;
 	return false;
 }
 
-Matrix3 getBoneMatrix(SpineSkeleton *skeleton, const char *boneName) {
-	spBone *bone = spSkeleton_findBone(skeleton->spSkeletonInstance, boneName);
+Matrix3 getBoneMatrix(SpineSkeleton *skeleton, char *bonePath) {
+	spBone *bone = getBoneByPath(skeleton, bonePath);
 	Matrix3 matrix = mat3();
 
 	if (!bone) {
-		logf("No bone called %s\n", boneName);
+		logf("No bone called %s\n", bonePath);
 		return matrix;
 	}
 
@@ -290,14 +325,14 @@ Matrix3 getBoneMatrix(SpineSkeleton *skeleton, const char *boneName) {
 	return matrix;
 }
 
-Line2 getBoneLine(SpineSkeleton *skeleton, const char *boneName) {
-	spBone *bone = spSkeleton_findBone(skeleton->spSkeletonInstance, boneName);
+Line2 getBoneLine(SpineSkeleton *skeleton, char *bonePath) {
+	spBone *bone = getBoneByPath(skeleton, bonePath);
 	if (!bone) {
-		logf("No bone called %s\n", boneName);
+		logf("No bone called %s\n", bonePath);
 		return makeLine2();
 	}
 
-	Matrix3 matrix = getBoneMatrix(skeleton, boneName);
+	Matrix3 matrix = getBoneMatrix(skeleton, bonePath);
 	Line2 line;
 	line.start = matrix * v2();
 	line.end = matrix * v2(bone->data->length, 0);
@@ -305,10 +340,10 @@ Line2 getBoneLine(SpineSkeleton *skeleton, const char *boneName) {
 	return line;
 }
 
-float getBoneLength(SpineSkeleton *skeleton, const char *boneName) {
-	spBone *bone = spSkeleton_findBone(skeleton->spSkeletonInstance, boneName);
+float getBoneLength(SpineSkeleton *skeleton, char *bonePath) {
+	spBone *bone = getBoneByPath(skeleton, bonePath);
 	if (!bone) {
-		logf("No bone called %s\n", boneName);
+		logf("No bone called %s\n", bonePath);
 		return 0;
 	}
 	return bone->data->length;
@@ -370,7 +405,8 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 		texture = (Texture *)((spAtlasRegion *)regionAttachment->rendererObject)->page->rendererObject;
 
 		makeSureSpineGlobalVerticesIsBigEnough(4);
-		mySpRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, preBoneMatrix);
+		// mySpRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, preBoneMatrix);
+		spRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, 0, sizeof(float)*2);
 
 		float *verts = globalSpineWorldVerticesPositions;
 		addSpineVertex(verts[0], verts[1], regionAttachment->uvs[0], regionAttachment->uvs[1], vertexIndex++);
@@ -423,36 +459,29 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 
 	Matrix3 finalMatrix = postBoneMatrix;
 
-	// finalMatrix = renderer->baseMatrix2d * finalMatrix;
-	// finalMatrix = finalMatrix * renderer->baseMatrix2d;
-	{
-		if (!texture) return makeRect();
+	if (!texture) return makeRect();
 
-    Matrix3 matrix = finalMatrix;
-    matrix = renderer->baseMatrix2d * matrix;
-    // matrix = matrix * renderer->baseMatrix2d;
+	Vec2 *linearVerts = (Vec2 *)frameMalloc(sizeof(Vec2) * indsNum);
+	int linearVertsNum = 0;
+	Vec2 *linearUvs = (Vec2 *)frameMalloc(sizeof(Vec2) * indsNum);
+	int *linearColors = (int *)frameMalloc(sizeof(int) * indsNum);
 
-		Raylib::rlSetTexture(texture->backendTexture.raylibTexture.id);
-		Raylib::rlBegin(RL_QUADS);
+	Matrix3 matrix = renderer->baseMatrix2d * finalMatrix;
 
-		Raylib::rlColor4f(1, 1, 1, 1);
+	int color = setAofArgb(0xFFFFFFFF, alpha*255.0);
+	for (int i = 0; i < indsNum; i++) {
+		int ind = inds[i];
+		Vec2 pos = finalPositions[ind];
+		Vec2 uv = finalUvs[ind];
 
-		for (int i = 0; i < indsNum; i++) {
-			int ind = inds[i];
-			Vec2 pos = finalPositions[ind];
-			Vec2 uv = finalUvs[ind];
+		uv.y = 1 - uv.y;
 
-      pos = matrix * pos;
-
-			Raylib::rlTexCoord2f(uv.x, 1.0 - uv.y);
-			Raylib::rlVertex2f(pos.x, pos.y);
-
-			if (i % 3 == 0) Raylib::rlVertex2f(pos.x, pos.y);
-		}
-		Raylib::rlEnd();
-		Raylib::rlDisableTexture();
+		linearVerts[linearVertsNum] = pos;
+		linearUvs[linearVertsNum] = uv;
+		linearColors[linearVertsNum] = color;
+		linearVertsNum++;
 	}
-	// draw2dMesh((float *)globalSpineVertices, vertexIndex, inds, indsNum, finalMatrix, texture, alpha);
+	drawVerts(linearVerts, linearUvs, linearColors, linearVertsNum, texture);
 	spSkeletonClipping_clipEnd(skeleton->clipper, slot);
 
 	return rect;

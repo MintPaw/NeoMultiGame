@@ -74,7 +74,9 @@ void destroyFont(Font *font);
 /// FUNCTIONS ^
 
 void initFonts() {
-	if (platform->isCommandLineOnly) return;
+#if defined(FALLOW_COMMAND_LINE_ONLY)
+	return;
+#endif
 
 	fontSys = (FontSystem *)zalloc(sizeof(FontSystem));
 
@@ -151,8 +153,8 @@ bool nextTextChar(TextProps *textProps, Matrix3 *outMatrix, Matrix3 *outUvMatrix
 			textProps->cursor.y += textProps->font->lineSpacing * textProps->scale.y;
 		}
 		*outDisabled = true;
-	} else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) { // Para holdover?
-		*outDisabled = true;
+	// } else if (curChar == ' ' && textProps->cursor.x == textProps->position.x) { // Para holdover?
+	// 	*outDisabled = true;
 	} else {
 		stbtt_packedchar *charData = &textProps->font->charData[curChar];
 

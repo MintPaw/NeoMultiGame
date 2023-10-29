@@ -1,0 +1,2 @@
+interceptor_via_lib:dsound.dll
+interceptor_via_lib:*dsound*

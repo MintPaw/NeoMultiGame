@@ -29,6 +29,7 @@ void renameFile(const char *currentName, const char *newName);
 void appendFile(const char *fileName, void *data, int length);
 bool writeFile(const char *fileName, void *data, int length);
 void *readFile(const char *fileName, int *outSize=NULL);
+void *frameReadFile(const char *fileName, int *outSize=NULL);
 void deleteFile(const char *fileName);
 void loadRemoteZip(const char *url, const char *path);
 void loadedRemoteFile(const char *result);
@@ -63,31 +64,22 @@ void initFileOperations() {
 	char *lastSlash = strrchr(exeDir, '\\');
 	if (!lastSlash) Panic("No last slash found in exe path");
 	*lastSlash = 0;
+
+	if (!projectAssetDir[0]) Panic("projectAssetDir is empty\n");
+
+	strcpy(filePathPrefix, projectAssetDir);
+	strcat(filePathPrefix, "/");
 #elif defined(__linux__)
 	strcpy(exeDir, "./");
 #elif defined(__EMSCRIPTEN__)
 	strcpy(exeDir, "./");
 	strcpy(filePathPrefix, "");
 
-	int canSave = EM_ASM_INT(
-		if (typeof(Storage) !== "undefined") {
-			return 1;
-		} else {
-			return 0;
-		}
+	cantSaveTempFiles = EM_ASM_INT(
+		if (typeof(Storage) === "undefined") return 0;
+		return 1;
 	);
 
-	if (!canSave) cantSaveTempFiles = true;
-#endif
-
-	if (!projectAssetDir[0]) {
-		strcpy(projectAssetDir, STRINGIFY(PROJECT_ASSET_DIR));
-	}
-
-	strcpy(filePathPrefix, projectAssetDir);
-	strcat(filePathPrefix, "/");
-
-#if defined(__EMSCRIPTEN__)
 	if (fileExists("assets/preloader.zip")) {
 		logf("Unzipping assets\n");
 		int preloadSize;
@@ -222,9 +214,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 	dirNames[dirNamesNum++] = stringClone(realRootDir);
 
 	for (int i = 0; i < dirNamesNum; i++) {
-		logf("Getting index: %d/%d\n", i, dirNamesNum);
-		logf("Got: %s\n", dirNames[i]);
-		char realDirName[PATH_MAX] = {};
+		char realDirName[PATH_MAX_LEN] = {};
 		if (!stringStartsWith(dirNames[i], filePathPrefix)) strcpy(realDirName, filePathPrefix);
 		strcat(realDirName, dirNames[i]);
 		DIR *dir = opendir(realDirName);
@@ -245,7 +235,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 			if (ent->d_name[0] == '.') continue;
 
 			if (ent->d_type == DT_DIR) {
-				char newDirName[PATH_MAX];
+				char newDirName[PATH_MAX_LEN];
 				strcpy(newDirName, realDirName+strlen(filePathPrefix));
 				strcat(newDirName, "/");
 				strcat(newDirName, ent->d_name);
@@ -253,14 +243,12 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 					// logf("Skipping dir %s\n", newDirName);
 				} else {
 					if (!shallow) {
-						logf("String cloned dir: %s\n", newDirName);
 						dirNames[dirNamesNum++] = stringClone(newDirName);
-						logf("Repeating: %s\n", dirNames[dirNamesNum-1]);
 					}
 					if (includeFolders) fileNames[fileNamesNum++] = newDirName;
 				}
 			} else {
-				char newFileName[PATH_MAX];
+				char newFileName[PATH_MAX_LEN];
 				if (stringStartsWith(dirNames[i], filePathPrefix)) {
 					// if (fileNamesNum > 2000) logf("%d: adding post prefix to %s\n", fileNamesNum, filePathPrefix);
 					strcpy(newFileName, dirNames[i]+strlen(filePathPrefix));
@@ -672,7 +660,6 @@ void appendFile(const char *fileName, void *data, int length) {
 	fclose(filePtr);
 }
 
-bool readFileDirect(const char *fileName, u8 *outData, int outDataSize, int *outSize);
 bool readFileDirect(const char *fileName, u8 *outData, int outDataSize, int *outSize) {
 	char realName[PATH_MAX_LEN] = {};
 	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
@@ -706,36 +693,10 @@ void *readFile(const char *fileName, int *outSize) {
 	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, fileName);
 
-// #if defined(_WIN32)
-// 	HANDLE hFile = CreateFile(
-// 		realName,
-// 		GENERIC_READ,          // open for reading
-// 		FILE_SHARE_READ,       // share for reading
-// 		NULL,                  // default security
-// 		OPEN_EXISTING,         // existing file only
-// 		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, // normal file
-// 		NULL                   // no attr. template
-// 	);
-
-// 	if (hFile == INVALID_HANDLE_VALUE) { 
-// 		logf("Cannot find file %s\n", realName);
-// 		Assert(0);
-// 	}
-
-// 	int fileSize = GetFileSize(hFile, NULL);
-
-// 	char *str = (char *)malloc(fileSize + 1);
-
-// 	OVERLAPPED ol = {0};
-// 	bool good = ReadFileEx(hFile, str, fileSize, &ol, NULL);
-
-// 	CloseHandle(hFile);
-// #else
 	FILE *filePtr = fopen(realName, "rb");
 	if (!filePtr) {
 		logf("Cannot find file %s\n", realName);
 		return NULL;
-		// Assert(0);
 	}
 
 	fseek(filePtr, 0, SEEK_END);
@@ -745,7 +706,30 @@ void *readFile(const char *fileName, int *outSize) {
 	char *str = (char *)malloc(fileSize + 1);
 	fread(str, fileSize, 1, filePtr);
 	fclose(filePtr);
-// #endif
+
+	str[fileSize] = 0; 
+	if (outSize) *outSize = fileSize;
+	return str;
+}
+
+void *frameReadFile(const char *fileName, int *outSize) {
+	char realName[PATH_MAX_LEN] = {};
+	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
+	strcat(realName, fileName);
+
+	FILE *filePtr = fopen(realName, "rb");
+	if (!filePtr) {
+		logf("Cannot find file %s\n", realName);
+		return NULL;
+	}
+
+	fseek(filePtr, 0, SEEK_END);
+	long fileSize = ftell(filePtr);
+	fseek(filePtr, 0, SEEK_SET);
+
+	char *str = (char *)frameMalloc(fileSize + 1);
+	fread(str, fileSize, 1, filePtr);
+	fclose(filePtr);
 
 	str[fileSize] = 0; 
 	if (outSize) *outSize = fileSize;

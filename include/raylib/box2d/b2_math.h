@@ -590,20 +590,20 @@ inline b2Vec2 b2MulT(const b2Transform& T, const b2Vec2& v)
 //    = (A.q * B.q).Rot(v1) + A.q.Rot(B.p) + A.p
 inline b2Transform b2Mul(const b2Transform& A, const b2Transform& B)
 {
-	b2Transform C;
-	C.q = b2Mul(A.q, B.q);
-	C.p = b2Mul(A.q, B.p) + A.p;
-	return C;
+	b2Transform out;
+	out.q = b2Mul(A.q, B.q);
+	out.p = b2Mul(A.q, B.p) + A.p;
+	return out;
 }
 
 // v2 = A.q' * (B.q * v1 + B.p - A.p)
 //    = A.q' * B.q * v1 + A.q' * (B.p - A.p)
 inline b2Transform b2MulT(const b2Transform& A, const b2Transform& B)
 {
-	b2Transform C;
-	C.q = b2MulT(A.q, B.q);
-	C.p = b2MulT(A.q, B.p - A.p);
-	return C;
+	b2Transform out;
+	out.q = b2MulT(A.q, B.q);
+	out.p = b2MulT(A.q, B.p - A.p);
+	return out;
 }
 
 template <typename T>

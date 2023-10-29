@@ -1,6 +1,8 @@
 bool saveLoadVersionCheck(int version, int startVersion, int endVersion, bool save);
 bool saveLoadBool(DataStream *stream, bool save, int version, bool *ptr, int startVersion, int endVersion);
 bool saveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion);
+bool saveLoadU64(DataStream *stream, bool save, int version, u32 *ptr, int startVersion, int endVersion);
+bool saveLoadS64(DataStream *stream, bool save, int version, s64 *ptr, int startVersion, int endVersion);
 bool saveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion);
 bool saveLoadInt64To32(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion);
 bool saveLoadFloat(DataStream *stream, bool save, int version, float *ptr, int startVersion, int endVersion);
@@ -40,6 +42,17 @@ bool saveLoadU32(DataStream *stream, bool save, int version, u32 *ptr, int start
 	if (save) writeU32(stream, *ptr);
 	else *ptr = readU32(stream);
 	return true;
+}
+
+bool saveLoadU64(DataStream *stream, bool save, int version, u64 *ptr, int startVersion, int endVersion) {
+	if (!saveLoadVersionCheck(version, startVersion, endVersion, save)) return false;
+	if (save) writeU64(stream, *ptr);
+	else *ptr = readU64(stream);
+	return true;
+}
+
+bool saveLoadS64(DataStream *stream, bool save, int version, s64 *ptr, int startVersion, int endVersion) {
+	return saveLoadU64(stream, save, version, (u64 *)ptr, startVersion, endVersion);
 }
 
 bool saveLoadInt(DataStream *stream, bool save, int version, int *ptr, int startVersion, int endVersion) {

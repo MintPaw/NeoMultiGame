@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cmath>
+// #include <cmath>
 #include <stdio.h>
 #include <time.h>
 #define USES_THREADS 1
@@ -43,11 +43,13 @@
 // #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #endif
 
+#ifdef RAYLIB_MODE
 namespace Raylib {
 #include "raylib.h"
 #include "rlgl.h"
 #include "raymath.h"
 };
+#endif
 
 #undef RED
 #undef ORANGE
@@ -59,6 +61,7 @@ namespace Raylib {
 #undef VIOLET
 #undef MAGENTA
 
+#include "imconfig.h"
 #ifdef IMGUI_OBJ
 #include "imgui.h"
 #include "imstb_rectpack.h"
@@ -71,12 +74,24 @@ namespace Raylib {
 #include "imgui_demo.cpp"
 #endif
 
+#include "imguiNodes/crude_json.cpp"
+#include "imguiNodes/imgui_bezier_math.inl"
+#include "imguiNodes/imgui_canvas.cpp"
+#include "imguiNodes/imgui_extra_math.inl"
+#include "imguiNodes/imgui_node_editor.cpp"
+#include "imguiNodes/imgui_node_editor_api.cpp"
+#include "imguiNodes/imgui_node_editor_internal.inl"
+namespace ImNode = ax::NodeEditor;
+
 #ifndef STB_SPRINTF_OBJ
 # define STB_SPRINTF_IMPLEMENTATION
 #endif
 #define STB_SPRINTF_NOUNALIGNED
 #include "stb_sprintf.h"
 
+#ifndef RAYLIB_MODE
+#define STB_IMAGE_IMPLEMENTATION
+#endif
 #include "stb_image.h"
 
 #include "stb_image_write.h"
@@ -115,8 +130,6 @@ int inflate(mz_streamp pStream, int flush) { return mz_inflate(pStream, flush); 
 #endif
 
 
-#define STB_VORBIS_HEADER_ONLY // This matters later for audio.cpp
-
 #define LOGGING_HEADER
 #include "logging.cpp"
 
@@ -143,7 +156,31 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "memoryTracking.cpp"
 #include "file.cpp"
 #include "dataStream.cpp"
-#include "platformRay.cpp"
+
+#ifdef __EMSCRIPTEN__
+	#include "platformBackendHtml.cpp"
+#else
+	#ifdef GLFW_MODE
+		#include "platformBackendGlfw.cpp"
+	#else
+		#include "platformBackendRay.cpp"
+	#endif
+#endif
+
+#include "platformFrontend.cpp"
+
+#ifdef __EMSCRIPTEN__
+#include "rendererBackendWebgl.cpp"
+#else
+	#ifdef GLFW_MODE
+		#include "rendererBackendWebgl.cpp"
+	#else
+		#include "rendererBackendRay.cpp"
+	#endif
+#endif
+
+#include "rendererFrontend.cpp"
+
 #include "platformUtils.cpp"
 #include "zip.cpp"
 #include "textureSystem.cpp"
@@ -169,7 +206,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "spriteSheets.cpp"
 #include "particles.cpp"
 
-#include "utils.cpp"
+#include "equations.cpp"
 
 NanoTime mainNano;
 
@@ -279,6 +316,10 @@ NanoTime mainNano;
 
 #if defined(PLAYING_boxingGame)
 # include "../../multiGamePrivate/src/boxingGame.cpp"
+#endif
+
+#if defined(PLAYING_catAnimGame)
+# include "../../multiGamePrivate/src/catAnimGame.cpp"
 #endif
 
 #ifdef _WIN32

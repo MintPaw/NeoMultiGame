@@ -77,9 +77,9 @@ char *getStringReplaced(char *string, char *from, char *to);
 
 #define ArraySwap(array, index1, index2) arraySwap((array), sizeof((array)), sizeof((array)[0]), index1, index2)
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2);
-#define ArraySplice(array, element) arraySplice((array), sizeof((array)), sizeof((array)[0]), element);
-#define ArraySpliceIndex(array, arrayMaxLength, index) arraySpliceIndex((array), (arrayMaxLength), sizeof((array)[0]), (index));
-bool arraySplice(void *array, int arraySize, int elementSize, void *element);
+// #define ArraySplice(array, element) arraySplice((array), sizeof((array)), sizeof((array)[0]), element);
+// #define ArraySpliceIndex(array, arrayMaxLength, index) arraySpliceIndex((array), (arrayMaxLength), sizeof((array)[0]), (index));
+// bool arraySplice(void *array, int arraySize, int elementSize, void *element);
 bool arraySpliceIndex(void *array, int arrayMaxLength, int elementSize, int index);
 
 char *frameMalloc(int size);
@@ -161,11 +161,11 @@ int startingFrameMemory = Megabytes(1);
 MemorySystem *memSys = NULL;
 
 void initMemory() {
-	memSys = (MemorySystem *)(malloc)(sizeof(MemorySystem));
+	memSys = (MemorySystem *)malloc(sizeof(MemorySystem));
 	memset(memSys, 0, sizeof(MemorySystem));
 
 	memSys->frameMemoryMax = startingFrameMemory;
-	memSys->frameMemory = (malloc)(memSys->frameMemoryMax);
+	memSys->frameMemory = malloc(memSys->frameMemoryMax);
 }
 
 void *allocateFrom(Allocator *allocator, int size) {
@@ -555,7 +555,7 @@ char *getStringReplaced(char *orig, char *rep, char *with) {
 	char *ins = orig;
 	int count = 0;
 	char *tmp;
-	for (count = 0; tmp = strstr(ins, rep); ++count) {
+	for (count = 0; (tmp = strstr(ins, rep)); ++count) {
 		ins = tmp + len_rep;
 	}
 
@@ -583,8 +583,8 @@ int elementBufferSize = -1;
 
 bool arraySwap(void *array, int arrayMaxElementsCount, int elementSize, int index1, int index2) {
 	if (elementSize > elementBufferSize) {
-		if (elementBuffer) (free)(elementBuffer);
-		elementBuffer = (unsigned char *)(malloc)(elementSize+1);
+		if (elementBuffer) free(elementBuffer);
+		elementBuffer = (unsigned char *)malloc(elementSize+1);
 		elementBufferSize = elementSize;
 	}
 
@@ -616,23 +616,23 @@ bool arraySpliceIndex(void *array, int arrayMaxLength, int elementSize, int inde
 	return true;
 }
 
-bool arraySplice(void *array, int arraySize, int elementSize, void *element) {
-	if (arraySize <= 8) Panic("This is probably a pointer, not an array\n");
+// bool arraySplice(void *array, int arraySize, int elementSize, void *element) {
+// 	if (arraySize <= 8) Panic("This is probably a pointer, not an array\n");
 
-	int elementIndex = ((unsigned char *)element - (unsigned char *)array) / elementSize;
-	if (elementIndex < 0) {
-		logf("Can't splice element that isn't in array!\n");
-		return false;
-	}
+// 	int elementIndex = ((unsigned char *)element - (unsigned char *)array) / elementSize;
+// 	if (elementIndex < 0) {
+// 		logf("Can't splice element that isn't in array!\n");
+// 		return false;
+// 	}
 
-	void *dest = element;
-	void *src = (unsigned char *)element + elementSize;
-	int size = (arraySize - ((elementIndex+1)*elementSize));
+// 	void *dest = element;
+// 	void *src = (unsigned char *)element + elementSize;
+// 	int size = (arraySize - ((elementIndex+1)*elementSize));
 
-	memmove(dest, src, size);
+// 	memmove(dest, src, size);
 
-	return true;
-}
+// 	return true;
+// }
 
 // Maybe remove this, what if the array is too small?
 void arraySpread(void *array, int arrayNum, int elementSize, int afterIndex, int spreadAmount) {

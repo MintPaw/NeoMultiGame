@@ -1,13 +1,22 @@
-ImVec4 guiGetImVec4Color(int color);
+ImColor toImColor(int argb);
+int fromImColor(ImColor imColor);
 bool guiInputRgb(const char *name, int *argb, bool showInputs=false);
 bool guiInputArgb(const char *name, int *argb, bool showInputs=false);
 void guiPushStyleColor(ImGuiCol style, int color);
 void guiPopStyleColor(int amount=1);
 int guiGetStyleColor(ImGuiCol style);
+bool guiColoredTreeNodeEx(char *label, ImGuiTreeNodeFlags flags=0);
+void guiColoredTreePop();
+void guiMapVec4(char *srcName, char *destName, Vec4 *vec);
 
-ImVec4 guiGetImVec4Color(int color) {
-	Vec4 vecColor = hexToArgbFloat(color);
-	return ImVec4(vecColor.y, vecColor.z, vecColor.w, vecColor.x);
+ImColor toImColor(int argb) {
+	Vec4 vec = hexToArgbFloat(argb);
+	return ImColor(ImVec4(vec.y, vec.z, vec.w, vec.x));
+}
+
+int fromImColor(ImColor imColor) {
+	ImVec4 col = imColor.Value;
+	return argbToHex(v4(col.w, col.x, col.y, col.z));
 }
 
 bool guiInputRgb(const char *name, int *argb, bool showInputs) {
@@ -70,27 +79,23 @@ void guiPopStyleColor(int amount) {
 
 int guiGetStyleColor(ImGuiCol style) {
 	ImVec4 col = ImGui::GetStyleColorVec4(style);
-	return argbToHex(col.w, col.x, col.y, col.z);
+	return argbToHex(v4(col.w, col.x, col.y, col.z));
 }
 
-bool guiColoredTreeNodeEx(char *label, ImGuiTreeNodeFlags flags=0);
 bool guiColoredTreeNodeEx(char *label, ImGuiTreeNodeFlags flags) {
 	bool result = ImGui::TreeNodeEx(label, flags);
 	if (!result) return false;
-	ImVec4 imColor = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
 
-	int baseColor = argbToHex(v4(imColor.w, imColor.x, imColor.y, imColor.z));
-	int color = lerp(baseColor, stringHash32(label), 0.25);
+	int baseColor = guiGetStyleColor(ImGuiCol_FrameBg);
+	int color = lerp(baseColor, stringHash32(label), 0.15);
 	guiPushStyleColor(ImGuiCol_FrameBg, color);
 	return true;
 }
-void guiColoredTreePop();
 void guiColoredTreePop() { 
 	guiPopStyleColor();
 	ImGui::TreePop();
 }
 
-void guiMapVec4(char *srcName, char *destName, Vec4 *vec);
 void guiMapVec4(char *srcName, char *destName, Vec4 *vec) {
 	ImGui::PushID(frameSprintf("%s mapped to %s", srcName, destName));
 	ImGui::PushItemWidth(120);

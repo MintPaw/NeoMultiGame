@@ -696,3 +696,92 @@ void freePool(ResizingPool *pool) {
 //
 /// Resizing pool end
 //
+
+//
+/// Bucket array start
+//
+
+struct BucketArrayBucket {
+	u8 *data;
+	int elementsNum;
+};
+struct BucketArray {
+	BucketArrayBucket *buckets;
+	int bucketsNum;
+
+	int elementSize;
+	int elementsPerBucket;
+
+	int count;
+};
+
+BucketArray *createBucketArray(int elementSize, int elementsPerBucket, int startingBuckets=1);
+BucketArrayBucket *addBucket(BucketArray *bucketArray);
+void *getNext(BucketArray *bucketArray);
+void *get(BucketArray *bucketArray, int index);
+void destroy(BucketArray *bucketArray);
+// void clear(BucketArray *bucketArray);
+
+BucketArray *createBucketArray(int elementSize, int elementsPerBucket, int startingBuckets) {
+	BucketArray *bucketArray = (BucketArray *)zalloc(sizeof(BucketArray));
+	bucketArray->elementSize = elementSize;
+	bucketArray->elementsPerBucket = elementsPerBucket;
+
+	for (int i = 0; i < startingBuckets; i++) addBucket(bucketArray);
+	return bucketArray;
+}
+
+BucketArrayBucket *addBucket(BucketArray *bucketArray) {
+	bucketArray->buckets = (BucketArrayBucket *)resizeArray(
+		bucketArray->buckets, sizeof(BucketArrayBucket),
+		bucketArray->bucketsNum, bucketArray->bucketsNum+1
+	);
+	BucketArrayBucket *bucket = &bucketArray->buckets[bucketArray->bucketsNum++];
+	bucket->data = (u8 *)malloc(bucketArray->elementSize * bucketArray->elementsPerBucket);
+	return bucket;
+}
+
+void *getNext(BucketArray *bucketArray) {
+	BucketArrayBucket *bucket = &bucketArray->buckets[bucketArray->bucketsNum-1];
+	if (bucket->elementsNum > bucketArray->elementsPerBucket-1) {
+		bucket = addBucket(bucketArray);
+	}
+
+	void *ptr = bucket->data + bucket->elementsNum*bucketArray->elementSize;
+	bucket->elementsNum++;
+	memset(ptr, 0, bucketArray->elementSize);
+
+	bucketArray->count++;
+	return ptr;
+}
+
+void *get(BucketArray *bucketArray, int index) {
+	int bucketIndex = index / bucketArray->elementsPerBucket;
+	if (bucketIndex > bucketArray->bucketsNum) {
+		logf("Tried to access bucket %d/%d (%d)\n", bucketIndex, bucketArray->bucketsNum, index);
+		return NULL;
+	}
+
+	BucketArrayBucket *bucket = &bucketArray->buckets[bucketIndex];
+	int elementIndex = index % bucketArray->elementsPerBucket;
+
+	if (elementIndex > bucket->elementsNum-1) {
+		logf("Tried to access bucket element %d/%d (%d)\n", elementIndex, bucket->elementsNum, index);
+		return NULL;
+	}
+	return bucket->data + elementIndex*bucketArray->elementSize;
+}
+
+void destroy(BucketArray *bucketArray) {
+	for (int i = 0; i < bucketArray->bucketsNum; i++) {
+		BucketArrayBucket *bucket = &bucketArray->buckets[i];
+		free(bucket->data);
+	}
+
+	free(bucketArray->buckets);
+	free(bucketArray);
+}
+
+//
+/// Bucket array end
+//

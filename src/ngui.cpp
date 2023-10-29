@@ -39,6 +39,7 @@ enum NguiStyleType {
 	NGUI_STYLE_JUSTIFY_TEXT=37,
 	NGUI_STYLE_FONT=38,
 	NGUI_STYLE_LABEL_X_OFFSET=39,
+	NGUI_STYLE_ELEMENT_DEATH_SPEED=40,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -148,6 +149,7 @@ struct Ngui {
 	Vec2 draggingCurrentPos;
 
 	Vec2 uiScale;
+  float sfxVolume;
 
 	NguiStyleTypeInfo styleTypeInfos[NGUI_STYLE_TYPES_MAX];
 
@@ -499,11 +501,13 @@ void nguiInit() {
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 	nguiPushStyleFloat(NGUI_STYLE_LABEL_X_OFFSET, 0);
 
-	Sound *sound;
-	sound = getSound("assets/common/audio/tickEffect.ogg");
-	sound->tweakVolume = 0.1;
-	sound = getSound("assets/common/audio/clickEffect.ogg");
-	sound->tweakVolume = 0.1;
+	info = &ngui->styleTypeInfos[NGUI_STYLE_ELEMENT_DEATH_SPEED];
+	info->enumName = "NGUI_STYLE_ELEMENT_DEATH_SPEED";
+	info->name = "Element death speed";
+	info->dataType = NGUI_DATA_TYPE_FLOAT;
+	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_DEATH_SPEED, 1);
+
+  ngui->sfxVolume = 0.1;
 }
 
 void nguiStartFrame() {
@@ -851,10 +855,8 @@ void nguiDraw(float elapsed) {
 
 			if (contains(windowRect, ngui->mouse)) {
 				ngui->mouseHoveringThisFrame = true;
-				if (platform->mouseJustDown) {
-					ngui->mouseJustDownThisFrame = true;
-					ngui->timeSinceMouseDown = 0;
-				}
+				if (keyJustPressed(MOUSE_LEFT)) ngui->mouseJustDownThisFrame = true;
+				if (keyPressed(MOUSE_LEFT)) ngui->timeSinceMouseDown = 0;
 			}
 
 			window->visualScroll = lerp(window->visualScroll, window->scroll, 0.2);
@@ -997,13 +999,15 @@ void nguiDraw(float elapsed) {
 
 					if (mouseInClipRect && contains(childRect, ngui->mouse) && !disabled) {
 						if (child->hoveringTime == 0) {
-							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+							Channel *channel = playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+              channel->userVolume = ngui->sfxVolume;
 						}
 
 						child->bgColor = tintColor(child->bgColor, hoverTint);
 
-						if (platform->mouseJustDown) {
-							playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
+						if (keyJustPressed(MOUSE_LEFT)) {
+							Channel *channel = playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
+              channel->userVolume = ngui->sfxVolume;
 							child->bgColor = tintColor(child->bgColor, activeTint);
 
 							child->justActive = true;
@@ -1148,7 +1152,7 @@ void nguiDraw(float elapsed) {
 								if (snapInterval > 0) value = roundToNearest(value, snapInterval);
 								*(float *)child->valuePtr = value;
 							}
-							if (platform->mouseJustDown) {
+							if (keyJustPressed(MOUSE_LEFT)) {
 								if (hoveredBar && !hoveredButton) {
 									*(float *)child->valuePtr = lerp(child->valueMin, child->valueMax, getPercFromMouseClick(barRect, ngui->mouse, vertical));
 								}
@@ -1182,12 +1186,16 @@ void nguiDraw(float elapsed) {
 					} else {
 
 						if (mouseInClipRect && contains(childRect, ngui->mouse) && !disabled) {
-							if (child->hoveringTime == 0) playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+              if (child->hoveringTime == 0) {
+                Channel *channel = playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_HOVER_SOUND_PATH_PTR)));
+                channel->userVolume = ngui->sfxVolume;
+              }
 
 							child->bgColor = tintColor(child->bgColor, hoverTint);
 
-							if (platform->mouseJustDown) {
-								playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
+							if (keyJustPressed(MOUSE_LEFT)) {
+                Channel *channel = playSound(getSound(nguiGetStyleStringPtr(NGUI_STYLE_ACTIVE_SOUND_PATH_PTR)));
+                channel->userVolume = ngui->sfxVolume;
 								child->bgColor = tintColor(child->bgColor, activeTint);
 
 								child->justActive = true;
@@ -1211,6 +1219,14 @@ void nguiDraw(float elapsed) {
 			ngui->currentStyleStack = &window->styleStack; // @windowStyleStack
 			ngui->lastWindowRect = windowRect;
 
+			for (int i = 0; i < childrenNum; i++) {
+				NguiElement *child = children[i];
+				child->creationTime += elapsed;
+				child->alive -= 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_DEATH_SPEED);
+			}
+			window->creationTime += elapsed;
+			window->alive -= 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_DEATH_SPEED);
+
 			arraySpliceIndex(elementsLeft, elementsLeftNum, sizeof(NguiElement *), windowIndex);
 			i--;
 			elementsLeftNum--;
@@ -1224,13 +1240,7 @@ void nguiDraw(float elapsed) {
 	}
 	ngui->currentStyleStack = &ngui->globalStyleStack;
 
-	for (int i = 0; i < ngui->elementsNum; i++) {
-		NguiElement *element = &ngui->elements[i];
-		element->creationTime += elapsed;
-		element->alive -= 0.05 * nguiGetStyleFloat(NGUI_STYLE_ELEMENT_SPEED);
-	}
-
-	if (!platform->mouseDown) ngui->draggingId = 0;
+	if (!keyPressed(MOUSE_LEFT)) ngui->draggingId = 0;
 	ngui->afterElementBgDraw = NULL;
 	ngui->time += elapsed;
 }
@@ -1475,6 +1485,7 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENTS_IN_ROW;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SIZE;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_SPEED;
+		styleTypes[styleTypesNum++] = NGUI_STYLE_ELEMENT_DEATH_SPEED;
 
 		hiddenStyleTypes[styleTypesNum++] = NGUI_STYLE_INDENT;
 		styleTypes[styleTypesNum++] = NGUI_STYLE_BG_COLOR;

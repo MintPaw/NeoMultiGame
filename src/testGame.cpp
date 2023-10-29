@@ -23,22 +23,17 @@ void runGame() {
 #if !defined(FALLOW_INTERNAL) // This needs to be a macro
 	snprintf(projectAssetDir, PATH_MAX_LEN, "%s", exeDir);
 #else
-	// if (directoryExists("C:/Dropbox")) strcpy(projectAssetDir, "C:/Dropbox/???");
+	if (directoryExists("C:/Dropbox")) strcpy(projectAssetDir, "C:/Dropbox/MultiGame/multiGame/testGameAssets");
 #endif
 #endif
 
 	initFileOperations();
 
 	initPlatform(1280, 720, "A game?");
-	platform->sleepWait = true;
 	initAudio();
 	initRenderer(1280, 720);
-	// initMesh();
-	// initModel();
-	// initSkeleton();
 	initFonts();
 	initTextureSystem();
-	// if (!initNetworking()) logf("Failed to init networking\n");
 
 	platformUpdateLoop(updateGame);
 }
@@ -49,7 +44,7 @@ void updateGame() {
 
 		// RegMem(Globals, );
 		// loadStruct("Globals", "assets/info/globals.txt", &game->globals);
-		maximizeWindow();
+		// maximizeWindow();
 	}
 
 	// {
@@ -57,15 +52,21 @@ void updateGame() {
 	// 	data->boneEffect = BONE_EFFECT_EASE_END;
 	// }
 
-	// drawRect(0, 0, 500, 500, 0xFFFF0000);
-
 	Globals *globals = &game->globals;
 	float elapsed = platform->elapsed;
 	float secondPhase = timePhase(platform->time);
 
-	clearRenderer(0xFFFFFFFF);
+	clearRenderer(0xFF000000);
 
-	if (keyJustPressed(KEY_BACKTICK)) game->debugMode = !game->debugMode;
+	// drawRect(0, 0, 500, 500, 0xFFFF0000);
+	// if (keyJustPressed('A')) {
+	// 	logf("You pressed a!\n");
+	// 	drawRect(0, 0, 500, 500, 0xFF00FF00);
+	// }
+
+	// if (platform->frameCount % 30 == 0) logf("Hello\n");
+
+	// if (keyJustPressed(KEY_BACKTICK)) game->debugMode = !game->debugMode;
 	if (game->debugMode) {
 	}
 
@@ -81,7 +82,7 @@ void updateGame() {
 #endif
 
 #if 0
-	if (platform->frameCount == 1) {
+	if (platform->frameCount == 0) {
 		SpineBaseSkeleton *base = loadSpineBaseSkeleton("assets/spine/JiggleTest");
 		game->skeleton = deriveSkeleton(base);
 	}
@@ -152,8 +153,61 @@ void updateGame() {
 #endif
 #endif
 
+#if 1
+	SkPaint paint = SkPaint();
+	paint.setShader(NULL);
+
+	if (platform->frameCount == 0) {
+		resetSkia(v2(platform->windowWidth, platform->windowHeight), v2(1, 1), true, 16);
+	}
+
+	// if (game->debugMode) {
+	// 	ImGui::Begin("Debug", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+	// 	if (ImGui::TreeNode("Swf analyzer")) {
+	// 		drawSwfAnalyzer();
+	// 		ImGui::TreePop();
+	// 	}
+	// 	ImGui::End();
+	// }
+
+	static Swf *sharedSwf = NULL;
+	static Swf *sofiSwf = NULL;
+	static Swf *zuJoSwf = NULL;
+	if (!sharedSwf) sharedSwf = loadSwf("C:/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/swf/Shared.swf");
+	// if (!sofiSwf) sofiSwf = loadSwf("C:/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/swf/SofiAnim.swf");
+	// if (!zuJoSwf) zuJoSwf = loadSwf("C:/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/swf/ZuJo.swf");
+
+	startSkiaFrame();
+
+	// SwfSprite *sofiSprite = getSpriteByName(sofiSwf, "SofiAnim");
+	// SwfSprite *zuSprite = getSpriteByName(zuJoSwf, "ZuAnim");
+	// SwfSprite *joSprite = getSpriteByName(zuJoSwf, "JoAnim");
+	SwfSprite *dummyRect = getSpriteByName(sharedSwf, "SkiaDummyRect");
+
+	auto doDrawSprite = [](SwfSprite *sprite, Vec2 offset) {
+		CreateSpriteTransforms(transforms, transformsNum, 16);
+		SpriteTransform *mainTrans = getSpriteTransform(transforms, &transformsNum, "_");
+		mainTrans->frame = (int)(platform->time * 24.0) % sprite->framesNum-1;
+		mainTrans->matrix.TRANSLATE(getSize(skiaSys->backTexture)/2 + offset);
+		drawSprite(sprite, transforms, transformsNum);
+	};
+
+	// doDrawSprite(sofiSprite, v2());
+	// doDrawSprite(zuSprite, v2());
+	// doDrawSprite(joSprite, v2(-100, 0));
+	if (keyPressed('A')) doDrawSprite(dummyRect, v2(0, 0));
+
+	endSkiaFrame();
+
+	{
+		RenderProps props = newRenderProps();
+		props.matrix.SCALE(getSize(skiaSys->backTexture));
+		drawTexture(skiaSys->backTexture, props);
+	}
+#endif
+
 #if 0
-	if (platform->frameCount == 1) {
+	if (platform->frameCount == -) {
 		resetSkia(v2(platform->windowWidth, platform->windowHeight), v2(1, 1), true, 16);
 	}
 	if (game->debugMode) {
@@ -164,23 +218,10 @@ void updateGame() {
 		}
 		ImGui::End();
 	}
-
-	static Swf *swf = NULL;
-	if (!swf) swf = loadSwf("assets/swf/test.swf");
-
-	startSkiaFrame();
-	SwfSprite *sprite = getSpriteByName(swf, "TestSymbol");
-	drawSprite(sprite, transforms, transformsNum);
-	endSkiaFrame();
-
-	{
-		RenderProps props = newRenderProps();
-		drawTexture(skiaSys->backTexture, props);
-	}
 #endif
 
 #if 0
-	if (platform->frameCount == 1) {
+	if (platform->frameCount == -) {
 		SpineBaseSkeleton *base = loadSpineBaseSkeleton("assets/spine/syrth");
 		game->skeleton = deriveSkeleton(base);
 	}
@@ -767,7 +808,7 @@ void updateGame() {
 	drawSimpleTexture(soundTexture);
 #endif
 
-#if 1
+#if 0
 	char *url = "http://192.168.0.106/rss-bridge/?action=display&bridge=Youtube&context=Search+result&s=vsauce+reaction&pa=&duration_min=2&duration_max=100&format=Atom";
 	char *hexStr = convertToHexString(url, strlen(url)+1);
 	logf("http://192.168.0.106/rssGame.bin?URLyt_hyperpop_reaction__X__%s\n", hexStr);
@@ -775,9 +816,6 @@ void updateGame() {
 	// 	Sound *sound = getSound();
 	// }
 #endif
-
-
-
 
 	game->time += elapsed;
 

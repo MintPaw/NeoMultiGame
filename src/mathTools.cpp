@@ -16,7 +16,9 @@ float MathClamp(float x, float min, float max) { return x < min ? min : x > max 
 # define FORCE_INLINE
 #endif
 
+#ifdef PLAYING_horseGame
 #define USE_BAD_COORDS
+#endif
 
 struct Rect;
 struct Matrix3;
@@ -38,7 +40,8 @@ enum Ease {
 	EXP_IN, EXP_OUT, EXP_IN_OUT,
 	ELASTIC_IN, ELASTIC_OUT, ELASTIC_IN_OUT,
 	BACK_IN, BACK_OUT, BACK_IN_OUT,
-	BOUNCE_IN, BOUNCE_OUT, BOUNCE_IN_OUT
+	BOUNCE_IN, BOUNCE_OUT, BOUNCE_IN_OUT,
+	EASES_MAX,
 };
 
 const char *easeStrings[] = {
@@ -130,6 +133,7 @@ void hexToArgb(int argbHex, int *a, int *r, int *g, int *b);
 void hexToArgbFloat(int argbHex, float *a, float *r, float *g, float *b);
 Vec4 hexToArgbFloat(int argbHex);
 int argbToRgba(int argb);
+int rgbaToArgb(int rgba);
 Vec4 argbToRgba(Vec4 argb);
 Vec4 argbToRgbaFloat(int argb);
 int getAofArgb(int src);
@@ -718,9 +722,6 @@ Vec2 getPosition(Matrix3 matrix) {
 float FORCE_INLINE getRotationDeg(Matrix3 matrix);
 float getRotationDeg(Matrix3 matrix) {
 	float ret = matrix.getRotationDeg();
-#if defined(USE_BAD_COORDS)
-	ret *= -1;
-#endif
 	return ret;
 }
 
@@ -2020,6 +2021,12 @@ int argbToRgba(int argb) {
 	return argbToHex(r, g, b, a);
 }
 
+int rgbaToArgb(int rgba) {
+	int a, r, g, b;
+	hexToArgb(rgba, &r, &g, &b, &a);
+	return argbToHex(r, g, b, a);
+}
+
 Vec4 argbToRgba(Vec4 argb) {
 	return v4(argb.y, argb.z, argb.w, argb.x);
 }
@@ -2522,7 +2529,7 @@ Matrix3 getProjectionMatrix(float width, float height) {
 #else
 	Matrix3 ret = {
 		(float)2.0/width,  0,                   0,
-		0,                 (float)-2.0/height,  0,
+		0,                 -(float)2.0/height,  0,
 		-1,                1,                   1
 	};
 #endif
@@ -2530,6 +2537,9 @@ Matrix3 getProjectionMatrix(float width, float height) {
 }
 
 float Matrix3::getRotationDeg() {
+#if 0
+	return toDeg(atan2(this->data[3], this->data[1]));
+#else
 	float a = this->data[0];
 	float b = this->data[3];
 	float c = this->data[1];
@@ -2552,6 +2562,7 @@ float Matrix3::getRotationDeg() {
 	}
 
 	return toDeg(rotation);
+#endif
 }
 
 Matrix3 Matrix3::multiply(Matrix3 other) {

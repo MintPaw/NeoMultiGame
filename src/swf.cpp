@@ -657,7 +657,7 @@ struct SwfSubShape {
 	int fillStyleIndex;
 	int lineStyleIndex;
 
-	void *runtimeCachedPath;
+	SkPath *runtimeCachedPath;
 };
 struct SwfShape {
 	int version;
@@ -1404,8 +1404,8 @@ Swf *loadSwf(char *path) {
 			clearPool(swf->shapePool);
 
 			{ /// Build sub shapes
-				int lineStyleIndex = 0;
-				int fillStyleIndex = 0;
+				int lineStyleIndex = -1;
+				int fillStyleIndex = -1;
 				for (int i = 0; i < tag->drawEdgesNum; i++) {
 					DrawEdgeRecord *edge = &tag->drawEdges[i];
 					if (edge->fillStyleIndex != fillStyleIndex || edge->lineStyleIndex != lineStyleIndex) {
@@ -1418,11 +1418,11 @@ Swf *loadSwf(char *path) {
 				tag->subShapes = (SwfSubShape *)zalloc(sizeof(SwfSubShape) * tag->subShapesNum);
 				int subShapeIndex = -1;
 				SwfSubShape *subShape = NULL;
-				lineStyleIndex = 0;
-				fillStyleIndex = 0;
+				lineStyleIndex = -1;
+				fillStyleIndex = -1;
 
 				Vec2 cursor = v2();
-				SkPath *currentPath;
+				SwfSubShape *currentSubShape = NULL;
 				for (int i = 0; i < tag->drawEdgesNum; i++) {
 					DrawEdgeRecord *edge = &tag->drawEdges[i];
 					if (edge->fillStyleIndex != fillStyleIndex || edge->lineStyleIndex != lineStyleIndex) {
@@ -1442,20 +1442,20 @@ Swf *loadSwf(char *path) {
 						subShape->lineStyleIndex = lineStyleIndex;
 						subShape->fillStyleIndex = fillStyleIndex;
 						subShape->runtimeCachedPath = new SkPath();
-						currentPath = (SkPath *)subShape->runtimeCachedPath;
+						currentSubShape = subShape;
 					}
 
 					if (!cursor.equal(edge->start)) {
 						cursor = edge->start;
-						currentPath->moveTo(edge->start.x, edge->start.y);
+						currentSubShape->runtimeCachedPath->moveTo(edge->start.x, edge->start.y);
 					}
 
 					if (edge->type == DRAW_EDGE_STRAIGHT_EDGE) {
 						cursor = edge->control;
-						currentPath->lineTo(edge->control.x, edge->control.y);
+						currentSubShape->runtimeCachedPath->lineTo(edge->control.x, edge->control.y);
 					} else if (edge->type == DRAW_EDGE_CURVED_EDGE) {
 						cursor = edge->anchor;
-						currentPath->quadTo(edge->control.x, edge->control.y, edge->anchor.x, edge->anchor.y);
+						currentSubShape->runtimeCachedPath->quadTo(edge->control.x, edge->control.y, edge->anchor.x, edge->anchor.y);
 					}
 				}
 
@@ -2432,6 +2432,10 @@ void destroySwf(Swf *swf) {
 }
 
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
+	if (!sprite) {
+		logf("Null sprite in getSpriteFrameForLabel %s\n", label);
+		return -1;
+	}
 	for (int i = afterFrame; i < sprite->framesNum; i++) {
 		int frameIndex = i;
 		SwfFrame *frame = &sprite->frames[frameIndex]; 

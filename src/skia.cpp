@@ -21,6 +21,8 @@ struct DrawSpriteRecurseData {
 	VDrawPaletteSwap *swaps;
 	int swapsNum;
 
+	Matrix3 parentMatrix;
+
 	HashMap *nameTransformMap;
 };
 
@@ -53,6 +55,7 @@ struct SpriteTransform {
 	Font *font;
 
 	Matrix3 outMatrix;
+	Matrix3 outPreTransformMatrix;
 
 	DrawSpriteCall *drawSpriteCalls;
 	int drawSpriteCallsNum;
@@ -232,8 +235,6 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize);
 
 void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 	if (!skiaSys) {
-		platform->usingSkia = true;
-
 		skiaSys = (SkiaSystem *)zalloc(sizeof(SkiaSystem));
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
 		skiaSys->superSampleScale = 2;
@@ -288,7 +289,6 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
 		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
 
-#if 1
 		SkImageInfo imageInfo = SkImageInfo::MakeN32(skiaSys->width, skiaSys->height, SkAlphaType::kPremul_SkAlphaType);
 
 		sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(
@@ -308,47 +308,23 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 		skiaSys->skiaTexture = (Texture *)zalloc(sizeof(Texture));
 		skiaSys->skiaTexture->width = imageInfo.width();
 		skiaSys->skiaTexture->height = imageInfo.height();
+#if defined(RAYLIB_MODE)
 		skiaSys->skiaTexture->backendTexture.raylibTexture.width = imageInfo.width();
 		skiaSys->skiaTexture->backendTexture.raylibTexture.height = imageInfo.height();
 		skiaSys->skiaTexture->backendTexture.raylibTexture.mipmaps = 1;
 		skiaSys->skiaTexture->backendTexture.raylibTexture.format = textureInfo.fFormat;
 		skiaSys->skiaTexture->backendTexture.raylibTexture.id = textureInfo.fID;
-		setTextureSmooth(skiaSys->skiaTexture, true);
-    // unsigned int id;        // OpenGL texture id
-    // int width;              // Texture base width
-    // int height;             // Texture base height
-    // int mipmaps;            // Mipmap levels, 1 by default
-    // int format;             // Data format (PixelFormat type)
-
 #else
-		if (skiaSys->skiaTexture) destroyTexture(skiaSys->skiaTexture);
-		skiaSys->skiaTexture = createTexture(skiaSys->width, skiaSys->height);
+		skiaSys->skiaTexture->backendTexture.width = imageInfo.width();
+		skiaSys->skiaTexture->backendTexture.height = imageInfo.height();
+		skiaSys->skiaTexture->backendTexture.id = textureInfo.fID;
+#endif
 		setTextureSmooth(skiaSys->skiaTexture, true);
-
-		GrGLTextureInfo textureInfo = {};
-#if RAYLIB_MODE
-		int skiaTextureId = skiaSys->skiaTexture->raylibTexture.id;
-#else
-		int skiaTextureId = skiaSys->skiaTexture->id;
-#endif
-		textureInfo.fTarget = GL_TEXTURE_2D;
-		textureInfo.fID = skiaTextureId;
-		textureInfo.fFormat = GL_RGBA8;
-
-		GrBackendTexture backendTexture(skiaSys->skiaTexture->width, skiaSys->skiaTexture->height, GrMipmapped::kNo, textureInfo);
-
-		logf("Creating surface...\n");
-		// skiaSys->gpuSurface = SkSurfaces::WrapBackendTexture(
-		sk_sp<SkSurface> gpuSurface = SkSurface::MakeFromBackendTexture(
-			skiaSys->grDirectContext,
-			backendTexture,
-			kBottomLeft_GrSurfaceOrigin,
-			0,
-			kRGBA_8888_SkColorType,
-			colorSpace,
-			&surfaceProps
-		);
-#endif
+		// unsigned int id;        // OpenGL texture id
+		// int width;              // Texture base width
+		// int height;             // Texture base height
+		// int mipmaps;            // Mipmap levels, 1 by default
+		// int format;             // Data format (PixelFormat type)
 
 		if (!gpuSurface || !gpuSurface.get()) logf("Failed to create gpu surface\n");
 		skiaSys->gpuSurface = gpuSurface.release();
@@ -539,7 +515,7 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 		} ///
 
 		VDrawCommand *cmd = createCommand(cmdList, props.useClip ? VDRAW_CLIP_CACHED_PATH : VDRAW_DRAW_CACHED_PATH);
-		cmd->path = (SkPath *)subShape->runtimeCachedPath;
+		cmd->path = subShape->runtimeCachedPath;
 
 		createCommand(cmdList, VDRAW_END_SHAPE);
 	}
@@ -629,6 +605,8 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 		if (frameIndex > sprite->framesNum-1) frameIndex = sprite->framesNum-1;
 		if (frameIndex < 0) frameIndex = 0;
 	}
+
+	if (matchingTransform) matchingTransform->outPreTransformMatrix = skiaSys->matrixStack[skiaSys->matrixStackNum-1];
 
 	pushSpriteMatrix(cmdList, localMatrix);
 
@@ -813,10 +791,10 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					"%d: %s (%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f)\n",
 					i,
 					vDrawCommandTypeStrings[cmd->type],
-					cmd->colors[0], cmd->colors[1], cmd->colors[2], cmd->colors[3], cmd->colors[4],
-					cmd->colors[5], cmd->colors[6], cmd->colors[7], cmd->colors[8], cmd->colors[9],
-					cmd->colors[10], cmd->colors[11], cmd->colors[12], cmd->colors[13], cmd->colors[14],
-					cmd->colors[15], cmd->colors[16], cmd->colors[17], cmd->colors[18], cmd->colors[19]
+					cmd->colors+0, cmd->colors+1, cmd->colors+2, cmd->colors+3, cmd->colors+4,
+					cmd->colors+5, cmd->colors+6, cmd->colors+7, cmd->colors+8, cmd->colors+9,
+					cmd->colors+10, cmd->colors+11, cmd->colors+12, cmd->colors+13, cmd->colors+14,
+					cmd->colors+15, cmd->colors+16, cmd->colors+17, cmd->colors+18, cmd->colors+19
 				);
 			} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
 				str = frameSprintf("%d: %s (%d)\n", i, vDrawCommandTypeStrings[cmd->type], cmd->blendMode);
@@ -831,7 +809,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 			wholeStr = frameSprintf("%s%s", wholeStr, str);
 		}
 
-		Raylib::SetClipboardText(wholeStr);
+		setClipboard(wholeStr);
 	};
 
 	if (matchingTransform) {
@@ -874,6 +852,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 
 	for (int i = 0; i < cmdList->cmdsNum; i++) {
 		VDrawCommand *cmd = &cmdList->cmds[i];
+		// logf("Cmd %d\n", i);
 		if (cmd->type == VDRAW_SET_MATRIX) {
 			skiaSys->canvas->setMatrix(toSkMatrix(cmd->matrix));
 		} else if (cmd->type == VDRAW_CLIP_PATH) {
@@ -1109,7 +1088,7 @@ void startSkiaFrame() {
 
 void endSkiaFrame() {
 	if (skiaSys->useGpu) {
-		setRendererBlendMode(BLEND_SKIA);
+		setRendererBlendMode(BLEND_NORMAL);
 		GLint last_viewport[4]; glGetIntegerv(GL_VIEWPORT, last_viewport); //@speed This could be very slow
 
 		skiaSys->grDirectContext->resetContext();
@@ -1154,13 +1133,13 @@ void endSkiaFrame() {
 			memcpy(outPixels + (y1*w)*4, inPixels + (y*w)*4, w * 4);
 		}
 
-#if RAYLIB_MODE
+// #if RAYLIB_MODE
 		setTextureData(skiaSys->backTexture, outPixels, skiaSys->width, skiaSys->height);
-#else
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, skiaSys->backTexture->texture->id);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
-#endif
+// #else
+// 		glActiveTexture(GL_TEXTURE0);
+// 		glBindTexture(GL_TEXTURE_2D, skiaSys->backTexture->texture->id);
+// 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
+// #endif
 	}
 
 	if (skiaSys->recordFrame) {
@@ -1204,9 +1183,6 @@ void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {
 	memset(transforms, 0, sizeof(SpriteTransform) * transformsNum);
 
 	for (int i = 0; i < transformsNum; i++) {
-		//
-		/// RcAnim inits sprite transforms manually!
-		//
 		SpriteTransform *transform = &transforms[i];
 		transform->matrix = mat3();
 		transform->alpha = 1;
@@ -1356,7 +1332,7 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			logf("Wrote recording\n");
 		}
 
-		guiTexture(aSys->spriteTexture);
+		imGuiTexture(aSys->spriteTexture);
 		ImGui::DragFloat2("spriteOffset", &aSys->spriteOffset.x);
 		ImGui::DragFloat("spriteScale", &aSys->spriteScale, 0.01);
 		Vec2 size = getSize(sprite->bounds);
@@ -1517,7 +1493,7 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			drawSimpleTexture(skiaSys->backTexture);
 			popTargetTexture();
 
-			guiTexture(aSys->shapeTexture);
+			imGuiTexture(aSys->shapeTexture);
 			Rect bounds = toRect(shape->shapeBounds);
 			ImGui::DragFloat2("shapeOffset", &aSys->shapeOffset.x);
 			ImGui::DragFloat("shapeScale", &aSys->shapeScale, 0.01);

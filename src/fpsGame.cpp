@@ -653,7 +653,7 @@ void updateGame() {
 		pushTargetTexture(game->gameTexture);
 		setTargetTextureEx(1, game->gameBloomTexture);
 		setTargetTexturesNum(2);
-		if (platform->frameCount == 1 || resolutionChanged) attachDepthBuffer(gameWidth, gameHeight); //@incomplete Unsure when this actually has to get called
+		if (platform->frameCount == 0 || resolutionChanged) attachDepthBuffer(gameWidth, gameHeight); //@incomplete Unsure when this actually has to get called
 	}
 
 	if (game->inEditor) clearRenderer();

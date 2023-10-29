@@ -1,3 +1,7 @@
+#ifdef RAYLIB_MODE
+#define STB_VORBIS_HEADER_ONLY
+#endif
+
 #include "stb_vorbis.c"
 
 #include <AL/al.h>
@@ -91,6 +95,8 @@ struct Audio {
 	int storedSamplesPosition;
 
 	int sampleBufferLimit;
+
+	NanoTime frameNano;
 };
 
 Audio *audio = NULL;
@@ -98,7 +104,7 @@ Audio *audio = NULL;
 void initAudio();
 
 void initSound(Sound *sound);
-void updateAudio(float elapsed);
+void updateAudio();
 Channel *playSound(Sound *sound, bool looping=false);
 void stopChannel(int channelId);
 void stopChannel(Channel *channel);
@@ -127,10 +133,10 @@ void initAudio() {
 	// audio->sampleBufferLimit = 1470;
 	// audio->sampleBufferLimit = 1024;
 
-	if (platform->isCommandLineOnly) {
-		audio->disabled = true;
-		return;
-	}
+#if defined(FALLOW_COMMAND_LINE_ONLY)
+	audio->disabled = true;
+	return;
+#endif
 
 	reconnectAudioDevice();
 
@@ -238,8 +244,12 @@ Channel *playSound(Sound *sound, bool looping) {
 		return NULL;
 	}
 
-	if (sound->maxConcurrentInstances != 0 && sound->concurrentInstances > sound->maxConcurrentInstances-1) {
-		return playSound(getSound("assets/common/audio/silence.ogg"), looping);
+	if (!strstr(sound->path, "silence")) {
+		if (sound->maxConcurrentInstances != 0 && sound->concurrentInstances > sound->maxConcurrentInstances-1) {
+			Sound *silenceSound = getSound("assets/common/audio/silence.ogg");
+			if (!silenceSound) Panic("Missing silence sound\n");
+			return playSound(silenceSound, looping);
+		}
 	}
 
 	Channel *channel = &audio->channels[audio->channelsNum++];
@@ -266,8 +276,16 @@ void stopChannel(Channel *channel) {
 	channel->markedForDeletion = true;
 }
 
-void updateAudio(float elapsed) {
+void updateAudio() {
 	if (!audio || audio->disabled) return;
+
+	float elapsed;
+	if (platform->frameCount == 0) {
+		elapsed = 1.0/60.0;
+	} else {
+		elapsed = getMsPassed(audio->frameNano) / 1000.0;
+	}
+	platform->frameNano = getNanoTime();
 
 #if defined(__EMSCRIPTEN__)
 	if (platform->frameCount % 8 == 0) {
