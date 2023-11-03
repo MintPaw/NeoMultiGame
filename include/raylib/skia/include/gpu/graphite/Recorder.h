@@ -11,17 +11,21 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
-#include "include/private/SingleOwner.h"
-#include "include/private/SkTHash.h"
+#include "include/gpu/graphite/Recording.h"
+#include "include/private/base/SingleOwner.h"
+#include "include/private/base/SkTArray.h"
 
+#include <chrono>
 #include <vector>
 
-class SkRuntimeEffect;
-class SkTextureDataBlock;
-class SkUniformDataBlock;
-class SkUniformDataBlockPassThrough;  // TODO: remove
+class SkCanvas;
+struct SkImageInfo;
+class SkPixmap;
 
-namespace skgpu { class TokenTracker; }
+namespace skgpu {
+class RefCntedCallback;
+class TokenTracker;
+}
 
 namespace sktext::gpu {
 class StrikeCache;
@@ -30,32 +34,40 @@ class TextBlobRedrawCoordinator;
 
 namespace skgpu::graphite {
 
-class AtlasManager;
+class AtlasProvider;
 class BackendTexture;
 class Caps;
+class Context;
 class Device;
 class DrawBufferManager;
 class GlobalCache;
 class ImageProvider;
+class ProxyCache;
 class RecorderPriv;
-class Recording;
 class ResourceProvider;
+class RuntimeEffectDictionary;
 class SharedContext;
 class Task;
 class TaskGraph;
+class TextureDataBlock;
 class TextureInfo;
+class UniformDataBlock;
 class UploadBufferManager;
 
-template<typename StorageT, typename BaseT> class PipelineDataCache;
-using UniformDataCache = PipelineDataCache<SkUniformDataBlockPassThrough, SkUniformDataBlock>;
-using TextureDataCache = PipelineDataCache<std::unique_ptr<SkTextureDataBlock>, SkTextureDataBlock>;
+template<typename T> class PipelineDataCache;
+using UniformDataCache = PipelineDataCache<UniformDataBlock>;
+using TextureDataCache = PipelineDataCache<TextureDataBlock>;
 
 struct SK_API RecorderOptions final {
-    RecorderOptions() = default;
-    RecorderOptions(const RecorderOptions&) = default;
+    RecorderOptions();
+    RecorderOptions(const RecorderOptions&);
     ~RecorderOptions();
 
     sk_sp<ImageProvider> fImageProvider;
+
+    const size_t kDefaultRecorderBudget = 256 * (1 << 20);
+    // What is the budget for GPU resources allocated and held by this Recorder.
+    size_t fGpuBudgetInBytes = kDefaultRecorderBudget;
 };
 
 class SK_API Recorder final {
@@ -69,9 +81,8 @@ public:
 
     std::unique_ptr<Recording> snap();
 
-    ImageProvider* clientImageProvider() const {
-        return fClientImageProvider.get();
-    }
+    ImageProvider* clientImageProvider() { return fClientImageProvider.get(); }
+    const ImageProvider* clientImageProvider() const { return fClientImageProvider.get(); }
 
     /**
      * Creates a new backend gpu texture matching the dimensions and TextureInfo. If an invalid
@@ -80,11 +91,30 @@ public:
      * if it succeeded or not.
      *
      * If this does return a valid BackendTexture, the caller is required to use
-     * Recorder::deleteBackendTexture or Context::deleteBAckendTexture to delete the texture. It is
+     * Recorder::deleteBackendTexture or Context::deleteBackendTexture to delete the texture. It is
      * safe to use the Context that created this Recorder or any other Recorder created from the
      * same Context to call deleteBackendTexture.
      */
     BackendTexture createBackendTexture(SkISize dimensions, const TextureInfo&);
+
+    /**
+     * If possible, updates a backend texture with the provided pixmap data. The client
+     * should check the return value to see if the update was successful. The client is required
+     * to insert a Recording into the Context and call `submit` to send the upload work to the gpu.
+     * The backend texture must be compatible with the provided pixmap(s). Compatible, in this case,
+     * means that the backend format is compatible with the base pixmap's colortype. The src data
+     * can be deleted when this call returns.
+     * If the backend texture is mip mapped, the data for all the mipmap levels must be provided.
+     * In the mipmapped case all the colortypes of the provided pixmaps must be the same.
+     * Additionally, all the miplevels must be sized correctly (please see
+     * SkMipmap::ComputeLevelSize and ComputeLevelCount).
+     * Note: the pixmap's alphatypes and colorspaces are ignored.
+     * For the Vulkan backend after a successful update the layout of the created VkImage will be:
+     *      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+     */
+    bool updateBackendTexture(const BackendTexture&,
+                              const SkPixmap srcData[],
+                              int numLevels);
 
     /**
      * Called to delete the passed in BackendTexture. This should only be called if the
@@ -95,22 +125,45 @@ public:
      * Otherwise this will delete/release the backend object that is wrapped in the BackendTexture.
      * The BackendTexture will be reset to an invalid state and should not be used again.
      */
-    void deleteBackendTexture(BackendTexture&);
+    void deleteBackendTexture(const BackendTexture&);
+
+    // Adds a proc that will be moved to the Recording upon snap, subsequently attached to the
+    // CommandBuffer when the Recording is added, and called when that CommandBuffer is submitted
+    // and finishes. If the Recorder or Recording is deleted before the proc is added to the
+    // CommandBuffer, it will be called with result Failure.
+    void addFinishInfo(const InsertFinishInfo&);
+
+    // Returns a canvas that will record to a proxy surface, which must be instantiated on replay.
+    // This can only be called once per Recording; subsequent calls will return null until a
+    // Recording is snapped. Additionally, the returned SkCanvas is only valid until the next
+    // Recording snap, at which point it is deleted.
+    SkCanvas* makeDeferredCanvas(const SkImageInfo&, const TextureInfo&);
+
+    /**
+     * Frees GPU resources created and held by the Recorder. Can be called to reduce GPU memory
+     * pressure. Any resources that are still in use (e.g. being used by work submitted to the GPU)
+     * will not be deleted by this call. If the caller wants to make sure all resources are freed,
+     * then they should first make sure to submit and wait on any outstanding work.
+     */
+    void freeGpuResources();
+
+    /**
+     * Purge GPU resources on the Recorder that haven't been used in the past 'msNotUsed'
+     * milliseconds or are otherwise marked for deletion, regardless of whether the context is under
+     * budget.
+     */
+    void performDeferredCleanup(std::chrono::milliseconds msNotUsed);
 
     // Provides access to functions that aren't part of the public API.
     RecorderPriv priv();
     const RecorderPriv priv() const;  // NOLINT(readability-const-return-type)
-
-#if GR_TEST_UTILS
-    bool deviceIsRegistered(Device*);
-#endif
 
 private:
     friend class Context; // For ctor
     friend class Device; // For registering and deregistering Devices;
     friend class RecorderPriv; // for ctor and hidden methods
 
-    Recorder(sk_sp<SharedContext>, sk_sp<GlobalCache>, const RecorderOptions&);
+    Recorder(sk_sp<SharedContext>, const RecorderOptions&);
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 
@@ -138,6 +191,7 @@ private:
 
     sk_sp<SharedContext> fSharedContext;
     std::unique_ptr<ResourceProvider> fResourceProvider;
+    std::unique_ptr<RuntimeEffectDictionary> fRuntimeEffectDict;
 
     std::unique_ptr<TaskGraph> fGraph;
     std::unique_ptr<UniformDataCache> fUniformDataCache;
@@ -146,8 +200,9 @@ private:
     std::unique_ptr<UploadBufferManager> fUploadBufferManager;
     std::vector<Device*> fTrackedDevices;
 
-    uint32_t fRecorderID;  // Needed for MessageBox handling for text
-    std::unique_ptr<AtlasManager> fAtlasManager;
+    uint32_t fUniqueID;  // Needed for MessageBox handling for text
+    uint32_t fNextRecordingID = 1;
+    std::unique_ptr<AtlasProvider> fAtlasProvider;
     std::unique_ptr<TokenTracker> fTokenTracker;
     std::unique_ptr<sktext::gpu::StrikeCache> fStrikeCache;
     std::unique_ptr<sktext::gpu::TextBlobRedrawCoordinator> fTextBlobCache;
@@ -157,6 +212,17 @@ private:
     // This guard is passed to the ResourceCache.
     // TODO: Should we also pass this to Device, DrawContext, and similar classes?
     mutable SingleOwner fSingleOwner;
+
+    sk_sp<Device> fTargetProxyDevice;
+    std::unique_ptr<SkCanvas> fTargetProxyCanvas;
+    std::unique_ptr<Recording::LazyProxyData> fTargetProxyData;
+
+    skia_private::TArray<sk_sp<RefCntedCallback>> fFinishedProcs;
+
+#if defined(GRAPHITE_TEST_UTILS)
+    // For testing use only -- the Context used to create this Recorder
+    Context* fContext = nullptr;
+#endif
 };
 
 } // namespace skgpu::graphite

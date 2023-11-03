@@ -8,6 +8,7 @@
 #define _F_TD_RGBA32           (1 << 5)
 
 enum BlendMode {
+	BLEND_INVALID=0,
 	BLEND_NORMAL,
 	BLEND_MULTIPLY,
 	BLEND_SCREEN,
@@ -32,6 +33,15 @@ enum ShaderUniformType {
 struct BackendShader;
 struct BackendTexture;
 
+#pragma pack(push, 1)
+struct GpuVertex {
+	Vec3 position;
+	Vec2 uv;
+	Vec3 normal;
+	Vec4 color;
+};
+#pragma pack(pop)
+
 void backendInit();
 void backendStartFrame();
 void backendEndFrame();
@@ -44,13 +54,14 @@ int backendGetUniformLocation(BackendShader *backendShader, char *uniformName);
 void backendSetShaderUniform(BackendShader *backendShader, int loc, void *ptr, ShaderUniformType type, int count);
 
 void backendSetShader(BackendShader *backendShader);
+void backendSetTexture(BackendTexture *backendTexture, int slot=0);
 void backendFlush();
 
 BackendTexture backendCreateTexture(int width, int height, int flags);
-void backendSetTextureSmooth(BackendTexture *backendTexture, bool smooth);
-void backendSetTextureClampedX(BackendTexture *backendTexture, bool clamped);
-void backendSetTextureClampedY(BackendTexture *backendTexture, bool clamped);
-void backendSetTextureData(BackendTexture *backendTexture, void *data, int width, int height, int flags);
+void backendSetTextureSmooth(bool smooth);
+void backendSetTextureClampedX(bool clamped);
+void backendSetTextureClampedY(bool clamped);
+void backendSetTextureData(void *data, int width, int height, int flags);
 u8 *backendGetTextureData(BackendTexture *backendTexture);
 void backendDestroyTexture(BackendTexture *backendTexture);
 
@@ -64,7 +75,7 @@ void backendSetDepthMask(bool enabled);
 void backendSetBlending(bool enabled);
 void backendSetBackfaceCulling(bool enabled);
 
-void backendDrawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, BackendTexture *backendTexture);
+void backendDrawVerts(GpuVertex *verts, int vertsNum);
 
 void backendResetRenderContext();
 

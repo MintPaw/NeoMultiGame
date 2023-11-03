@@ -4,7 +4,6 @@ in vec4 fragColor;
 
 // Input uniform values
 uniform sampler2D texture0;
-uniform vec4 colDiffuse;
 
 uniform vec2 resolution;
 uniform float outlineSize;
@@ -19,7 +18,7 @@ void main()
 {
 	// https://www.shadertoy.com/view/XlsXRB
 
-	vec3 texelRgb = texture(texture0, fragTexCoord).rgb * colDiffuse.rgb;
+	vec3 texelRgb = texture(texture0, fragTexCoord).rgb;
 
 	float texelAlpha = texture(texture0, fragTexCoord).a;
 	bool alphaIsOver50 = bool(step(0.5, texelAlpha) == 1.0);

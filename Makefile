@@ -1,6 +1,4 @@
-# canvaskit:
-# ./compile.sh no_skottie no_particles no_font no_codecs no_encode_png no_woff2 no_alias_font no_embedded_font
-BACKEND_TYPE=glfw
+BACKEND_TYPE=raylib
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=parametersGame
@@ -19,9 +17,9 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=turnBasedGame
 # GAME_NAME=destinyGame
 # GAME_NAME=swfTestGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=catCardGame
-# GAME_NAME=boxingGame
+GAME_NAME=boxingGame
 # GAME_NAME=gladiators2Game
 # GAME_NAME=catAnimGame
 endif
@@ -354,7 +352,6 @@ shipHorseGameToSelf:
 		cd /c/bin; \
 			$(SEVEN_ZIP) a -tzip selfShip.zip selfShip
 
-		# for file in `find /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio -type f -name "*.wav" -printf '%p\0'`; do
 encodeHorseGameAudio:
 	rm -rf /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio
 	cp -r /c/Dropbox/FallowCandy/HorseProjects/raw/audio /c/Dropbox/FallowCandy/HorseProjects/horseGameAssets/assets/audio

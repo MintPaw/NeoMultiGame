@@ -56,7 +56,7 @@ cd /d C:\bin\webgl
 @echo on
 
 if [%INTERNAL_MODE%]==[1] (
-	set INTERNAL_ARGS=-DFALLOW_INTERNAL -s GL_ASSERTIONS=1 -s ASSERTIONS=1 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=2 -s DEMANGLE_SUPPORT=1
+	set INTERNAL_ARGS=-DFALLOW_INTERNAL -s GL_ASSERTIONS=1 -s ASSERTIONS=1 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=2 -s DEMANGLE_SUPPORT=1 -s VERBOSE=1
 ) else (
 	set INTERNAL_ARGS=
 )
@@ -74,8 +74,9 @@ if [%OPTIMIZED_MODE%]==[1] (
 	set OPT_ARGS=
 )
 
-call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html %SRC_DIR%\main.cpp ^
-	%LIB_DIR%\libskia.a %LIB_DIR%\libbox2d.a -I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
+call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html ^
+	%SRC_DIR%\main.cpp %LIB_DIR%\libskia.a %LIB_DIR%\libbox2d.a ^
+	-I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
 	-lidbfs.js ^
 	-fno-rtti -fno-exceptions -Wno-c++11-compat-deprecated-writable-strings -Wno-writable-strings ^
 	-DPLAYING_%GAME_NAME% ^

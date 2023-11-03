@@ -11,20 +11,25 @@
 #include "include/core/SkFontArguments.h"
 #include "include/core/SkFontParameters.h"
 #include "include/core/SkFontStyle.h"
-#include "include/core/SkFontTypes.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
-#include "include/private/SkOnce.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkWeakRefCnt.h"
+#include "include/private/base/SkOnce.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 
 class SkData;
 class SkDescriptor;
-class SkFontData;
 class SkFontDescriptor;
 class SkScalerContext;
 class SkStream;
 class SkStreamAsset;
 class SkWStream;
+enum class SkTextEncoding;
 struct SkAdvancedTypefaceMetrics;
 struct SkScalerContextEffects;
 struct SkScalerContextRec;
@@ -360,6 +365,12 @@ public:
         return this->onGetCTFontRef();
     }
 
+    /* Skia reserves all tags that begin with a lower case letter and 0 */
+    using FactoryId = SkFourByteTag;
+    static void Register(
+            FactoryId id,
+            sk_sp<SkTypeface> (*make)(std::unique_ptr<SkStreamAsset>, const SkFontArguments&));
+
 protected:
     explicit SkTypeface(const SkFontStyle& style, bool isFixedPitch = false);
     ~SkTypeface() override;
@@ -435,7 +446,8 @@ private:
      *  typefaces that contain a COLR table.
      */
     bool glyphMaskNeedsCurrentColor() const;
-    friend class SkStrikeServerImpl; // glyphMaskNeedsCurrentColor
+    friend class SkStrikeServerImpl;  // glyphMaskNeedsCurrentColor
+    friend class SkTypefaceProxyPrototype;  // glyphMaskNeedsCurrentColor
 
     /** Retrieve detailed typeface metrics.  Used by the PDF backend.  */
     std::unique_ptr<SkAdvancedTypefaceMetrics> getAdvancedMetrics() const;

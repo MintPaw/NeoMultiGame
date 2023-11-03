@@ -901,7 +901,7 @@ void nguiDraw(float elapsed) {
 				float alpha = 1;
 				alpha *= child->alive;
 				alpha *= clampMap(child->creationTime, 0, 0.05, 0, 1);
-				pushAlpha(alpha);
+				pushColor(v4(alpha, 1, 1, 1));
 
 				Rect childRect = child->childRect;
 
@@ -1211,7 +1211,7 @@ void nguiDraw(float elapsed) {
 					}
 				}
 
-				popAlpha();
+				popColor();
 			}
 
 			if (!isZero(clippingRect)) clearScissor();

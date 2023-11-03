@@ -16,6 +16,7 @@
 #endif
 
 #ifndef NO_SKIA
+#define NEW_SKIA
 #define SK_GL
 #define SK_GANESH
 #include "include/core/SkFont.h"
@@ -24,10 +25,15 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkSurface.h"
+#ifdef NEW_SKIA
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "include/gpu/GrBackendSurface.h"
+#endif
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkEncodedImageFormat.h"
+// #include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkPixelRef.h"
@@ -170,10 +176,10 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "platformFrontend.cpp"
 
 #ifdef __EMSCRIPTEN__
-#include "rendererBackendWebgl.cpp"
+#include "rendererBackendOpengl.cpp"
 #else
 	#ifdef GLFW_MODE
-		#include "rendererBackendWebgl.cpp"
+		#include "rendererBackendOpengl.cpp"
 	#else
 		#include "rendererBackendRay.cpp"
 	#endif
@@ -183,7 +189,6 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 
 #include "platformUtils.cpp"
 #include "zip.cpp"
-#include "textureSystem.cpp"
 #include "audio.cpp"
 #include "skeleton.cpp"
 // #include "mesh.cpp"

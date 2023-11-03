@@ -8,6 +8,9 @@
 #include "gl.h"
 #endif
 
+#define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+#include "backends/imgui_impl_opengl3.cpp"
+
 struct BackendNanoTime {
 	double time;
 };
@@ -146,6 +149,16 @@ void backendPlatformUpdateLoop() {
     event->keyCode = MOUSE_RIGHT;
   }
 
+  if (Raylib::IsMouseButtonPressed(Raylib::MOUSE_BUTTON_MIDDLE)) {
+    PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_KEY_DOWN);
+    event->keyCode = MOUSE_MIDDLE;
+  }
+
+  if (Raylib::IsMouseButtonReleased(Raylib::MOUSE_BUTTON_MIDDLE)) {
+    PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_KEY_UP);
+    event->keyCode = MOUSE_MIDDLE;
+  }
+
 	{
 		PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_MOUSE_MOVE);
 		event->position = v2(Raylib::GetMouseX(), Raylib::GetMouseY());
@@ -154,6 +167,16 @@ void backendPlatformUpdateLoop() {
 	{
 		PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_MOUSE_WHEEL);
 		event->wheelValue = Raylib::GetMouseWheelMove();
+	}
+
+	for (;;) {
+		int character = Raylib::GetCharPressed();
+		if (character == 0) break;
+		if (character <= 0) continue;
+		if (character >= 255) continue;
+
+		PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_INPUT_CHARACTER);
+		event->keyCode = character;
 	}
 
 	_platformFrontendUpdateCallback();
@@ -256,6 +279,9 @@ void backendPlatformImGuiInit() {
 
 	io.ClipboardUserData = NULL;
 
+#if 1
+	ImGui_ImplOpenGL3_Init("#version 300 es");
+#else
 	{ /// Reload fonts
 		ImGuiIO &io = ImGui::GetIO();
 		u8 *pixels = NULL;
@@ -271,13 +297,20 @@ void backendPlatformImGuiInit() {
 		Raylib::UnloadImage(image);
 		io.Fonts->TexID = &_imGuiFontTexture;
 	}
+#endif
 }
 
 void backendPlatformImGuiStartFrame(int windowWidth, int windowHeight) {
-	// Nothing...
+	ImGui_ImplOpenGL3_NewFrame();
 }
 
 void backendPlatformImGuiDraw() {
+#if 1
+	ImDrawData *data = ImGui::GetDrawData();
+	if (data->CmdListsCount == 0) return;
+
+	ImGui_ImplOpenGL3_RenderDrawData(data);
+#else
   { /// rlImGuiEnd();
     void processBatchDraws(); //@headerHack
     processBatchDraws();
@@ -380,6 +413,7 @@ void backendPlatformImGuiDraw() {
     if (last_enable_stencil_test) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
     if (last_enable_scissor_test) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
   }
+#endif
 }
 
 PlatformEvent *createPlatformEvent(PlatformEventType type) {

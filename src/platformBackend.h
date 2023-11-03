@@ -7,7 +7,7 @@ enum PlatformKey {
 	KEY_CTRL, KEY_RIGHT_CTRL,
 	KEY_ALT, KEY_RIGHT_ALT,
 	KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_F11, KEY_F12,
-	MOUSE_LEFT, MOUSE_RIGHT,
+	MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE,
 	KEY_INSERT, KEY_DELETE, 
 	KEY_HOME, KEY_END, 
 	KEY_PAGE_UP, KEY_PAGE_DOWN, 
@@ -19,6 +19,7 @@ enum PlatformEventType {
 	PLATFORM_EVENT_KEY_UP,
 	PLATFORM_EVENT_MOUSE_MOVE,
 	PLATFORM_EVENT_MOUSE_WHEEL,
+	PLATFORM_EVENT_INPUT_CHARACTER,
 };
 struct PlatformEvent {
 	PlatformEventType type;
@@ -37,6 +38,7 @@ void backendPlatformExit();
 
 int backendPlatformGetWindowWidth();
 int backendPlatformGetWindowHeight();
+int backendPlatformGetKeyboardInputChars();
 
 void backendPlatformMaximizeWindow();
 void backendPlatformMinimizeWindow();

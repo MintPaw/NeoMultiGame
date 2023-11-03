@@ -1,5 +1,3 @@
-#define USE_MSAA_RENDERBUFFER 1
-
 struct VDrawPaletteSwap {
 	int from;
 	int to;
@@ -291,18 +289,32 @@ void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
 
 		SkImageInfo imageInfo = SkImageInfo::MakeN32(skiaSys->width, skiaSys->height, SkAlphaType::kPremul_SkAlphaType);
 
+#ifdef NEW_SKIA
+		sk_sp<SkSurface> gpuSurface = SkSurfaces::RenderTarget(
+			skiaSys->grDirectContext, skgpu::Budgeted::kNo,
+			imageInfo,
+			0, kBottomLeft_GrSurfaceOrigin,
+			&surfaceProps
+		);
+#else
 		sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(
 			skiaSys->grDirectContext, SkBudgeted::kNo,
 			imageInfo,
 			0, kBottomLeft_GrSurfaceOrigin,
 			&surfaceProps
 		);
+#endif
 
 		if (!gpuSurface) logf("Failed to create gpu surface\n");
 
 		GrGLTextureInfo textureInfo = {};
+#ifdef NEW_SKIA
+		GrBackendTexture backendTexture = SkSurfaces::GetBackendTexture(gpuSurface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
+		GrBackendTextures::GetGLTextureInfo(backendTexture, &textureInfo);
+#else
 		auto grTexture = gpuSurface->getBackendTexture(SkSurface::BackendHandleAccess::kFlushRead_BackendHandleAccess);
 		grTexture.getGLTextureInfo(&textureInfo);
+#endif
 
 		//@incomplete Skia also hacks the renderer api using Raylib
 		skiaSys->skiaTexture = (Texture *)zalloc(sizeof(Texture));
@@ -759,7 +771,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				int colorsToCheck = 16;
 
 				//@speed You can only do colors[0] if it's a non-gradient, but lines can have gradients?
-				// if (cmd->type == VDRAW_SET_SOLID_FILL || cmd->type == VDRAW_SET_LINE_STYLE) colorsToCheck = 1;
+				if (cmd->type == VDRAW_SET_SOLID_FILL || cmd->type == VDRAW_SET_LINE_STYLE) colorsToCheck = 1;
 
 				for (int i = 0; i < colorsToCheck; i++) {
 					u8 alphaByte = getAofArgb(cmd->colors[i]);

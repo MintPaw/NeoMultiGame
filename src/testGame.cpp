@@ -29,11 +29,10 @@ void runGame() {
 
 	initFileOperations();
 
-	initPlatform(1280, 720, "A game?");
+	initPlatform(1920, 1080, "A game?");
 	initAudio();
-	initRenderer(1280, 720);
+	initRenderer(1920, 1080);
 	initFonts();
-	initTextureSystem();
 
 	platformUpdateLoop(updateGame);
 }
@@ -69,6 +68,26 @@ void updateGame() {
 	// if (keyJustPressed(KEY_BACKTICK)) game->debugMode = !game->debugMode;
 	if (game->debugMode) {
 	}
+
+#if 1
+	{
+		Texture *texture = getTexture("assets/images/card.png");
+		RenderProps props = newRenderProps();
+		props.matrix.TRANSLATE(0, 0);
+		props.matrix.SCALE(getSize(texture));
+		drawTexture(texture, props);
+	}
+
+	// {
+	// 	pushColor(v4(0.5, 1, 1, 1));
+	// 	Texture *texture = getTexture("assets/images/card.png");
+	// 	RenderProps props = newRenderProps();
+	// 	props.matrix.TRANSLATE(100, 0);
+	// 	props.matrix.SCALE(getSize(texture) * 5);
+	// 	drawTexture(texture, props);
+	// 	popColor();
+	// }
+#endif
 
 #if 0
 
@@ -153,7 +172,7 @@ void updateGame() {
 #endif
 #endif
 
-#if 1
+#if 0
 	SkPaint paint = SkPaint();
 	paint.setShader(NULL);
 

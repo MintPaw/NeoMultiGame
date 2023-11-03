@@ -100,8 +100,9 @@ void backendPlatformInit(int windowWidth, int windowHeight, char *windowTitle) {
 	auto mouseButtonCallback = [](GLFWwindow *window, int button, int action, int mods) {
 		if (button == GLFW_MOUSE_BUTTON_LEFT) button = MOUSE_LEFT;
 		if (button == GLFW_MOUSE_BUTTON_RIGHT) button = MOUSE_RIGHT;
+		if (button == GLFW_MOUSE_BUTTON_MIDDLE) button = MOUSE_MIDDLE;
 
-		if (button == MOUSE_LEFT || button == MOUSE_RIGHT) {
+		if (button == MOUSE_LEFT || button == MOUSE_RIGHT || button == MOUSE_MIDDLE) {
 			if (action == GLFW_PRESS) {
 				PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_KEY_DOWN);
 				event->keyCode = button;
@@ -118,6 +119,12 @@ void backendPlatformInit(int windowWidth, int windowHeight, char *windowTitle) {
 		event->wheelValue = yoffset;
 	};
 	glfwSetScrollCallback(_glfwWindow, scrollCallback);
+
+	auto charCallback = [](GLFWwindow *window, u32 character) {
+		PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_INPUT_CHARACTER);
+		event->keyCode = character;
+	};
+	glfwSetCharCallback(_glfwWindow, charCallback);
 }
 
 float backendPlatformGetWindowScaling() {
@@ -163,6 +170,7 @@ void backendPlatformRestoreWindow() { glfwRestoreWindow(_glfwWindow); }
 void backendPlatformResizeWindow(int width, int height) { glfwSetWindowSize(_glfwWindow, width, height); }
 void backendHideCursor() { glfwSetInputMode(_glfwWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN); }
 void backendShowCursor() { glfwSetInputMode(_glfwWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL); }
+
 void backendPlatformSleep(int ms) { Sleep(ms); }
 
 BackendNanoTime backendPlatformGetNanoTime() {

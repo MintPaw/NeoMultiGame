@@ -1,5 +1,6 @@
-
-///- END Platform Backend Ray
+#if defined(_WIN32) && defined(FALLOW_DEBUG)
+#include <dbghelp.h>
+#endif
 
 #include "guiUtils.cpp"
 
@@ -40,6 +41,10 @@ struct Platform {
 
 	int memoryUsage;
 
+#define PLATFORM_INPUT_CHARACTERS_MAX 128
+	char inputCharacters[PLATFORM_INPUT_CHARACTERS_MAX];
+	int inputCharactersNum;
+
 	void (*gameUpdateCallback)();
 };
 
@@ -78,6 +83,10 @@ void imGuiInit();
 void imGuiStartFrame();
 void imGuiDraw();
 
+#if defined(_WIN32) && defined(FALLOW_DEBUG)
+LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS *e);
+#endif
+
 /// FUNCTIONS ^
 
 void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
@@ -87,6 +96,10 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 
 #if defined(FALLOW_DEBUG)
 	platform->isDebugVersion = true;
+#endif
+
+#if defined(_WIN32) && defined(FALLOW_DEBUG)
+	SetUnhandledExceptionFilter(win32ExceptionHandler);
 #endif
 
 #if defined(FALLOW_INTERNAL)
@@ -119,6 +132,7 @@ void platformUpdate() {
 		if (platform->keys[i] == KEY_STATE_JUST_RELEASED) platform->keys[i] = KEY_STATE_RELEASED;
 	}
 	platform->mouseWheel = 0;
+	platform->inputCharactersNum = 0;
 
 	for (int i = 0; i < _platformEventsNum; i++) {
 		PlatformEvent *event = &_platformEvents[i];
@@ -130,9 +144,12 @@ void platformUpdate() {
 			platform->mouse = event->position;
 		} else if (event->type == PLATFORM_EVENT_MOUSE_WHEEL) {
 			platform->mouseWheel = event->wheelValue;
+		} else if (event->type == PLATFORM_EVENT_INPUT_CHARACTER) {
+			if (platform->inputCharactersNum > PLATFORM_INPUT_CHARACTERS_MAX-1) platform->inputCharactersNum--;
+			platform->inputCharacters[platform->inputCharactersNum++] = event->keyCode;
 		}
 	}
-	_platformEventsNum = 0;
+	_platformEventsNum = 0; //@incomplete backendPlatformGetEvents()
 
 	void updateAudio(); //@headerHack
 	updateAudio();
@@ -320,7 +337,7 @@ void imGuiStartFrame() {
 
 		io.MouseDown[0] = keyPressed(MOUSE_LEFT);
 		io.MouseDown[1] = keyPressed(MOUSE_RIGHT);
-		// io.MouseDown[2] = Raylib::IsMouseButtonDown(Raylib::MOUSE_MIDDLE_BUTTON); //@todo
+		io.MouseDown[2] = keyPressed(MOUSE_MIDDLE);
 
 		io.MouseWheel = platform->mouseWheel;
 
@@ -353,43 +370,12 @@ void imGuiStartFrame() {
 			ImGuiIO& io = ImGui::GetIO();
 			for (int i = 0; i < ArrayLength(_keysThatImGuiCaresAbout); i++) {
 				int key = _keysThatImGuiCaresAbout[i];
-
 				io.KeysDown[key] = keyPressed(key);
-
-				if (keyJustPressed(key)) {
-					if (key == ' ') {
-						io.AddInputCharacter(' ');
-					} else if (isalpha(key)) {
-						io.AddInputCharacter(keyPressed(KEY_SHIFT) ? key : toLowerCase(key));
-					} else if (isgraph(key)) {
-						if (key == '1' && keyPressed(KEY_SHIFT)) key = '!';
-						if (key == '2' && keyPressed(KEY_SHIFT)) key = '@';
-						if (key == '3' && keyPressed(KEY_SHIFT)) key = '#';
-						if (key == '4' && keyPressed(KEY_SHIFT)) key = '$';
-						if (key == '5' && keyPressed(KEY_SHIFT)) key = '%';
-						if (key == '6' && keyPressed(KEY_SHIFT)) key = '^';
-						if (key == '7' && keyPressed(KEY_SHIFT)) key = '&';
-						if (key == '8' && keyPressed(KEY_SHIFT)) key = '*';
-						if (key == '9' && keyPressed(KEY_SHIFT)) key = '(';
-						if (key == '0' && keyPressed(KEY_SHIFT)) key = ')';
-						if (key == '-' && keyPressed(KEY_SHIFT)) key = '_';
-						if (key == '=' && keyPressed(KEY_SHIFT)) key = '+';
-						if (key == '`' && keyPressed(KEY_SHIFT)) key = '~';
-						if (key == '[' && keyPressed(KEY_SHIFT)) key = '{';
-						if (key == ']' && keyPressed(KEY_SHIFT)) key = '}';
-						if (key == '\\' && keyPressed(KEY_SHIFT)) key = '|';
-						if (key == ';' && keyPressed(KEY_SHIFT)) key = ':';
-						if (key == '\'' && keyPressed(KEY_SHIFT)) key = '"';
-						if (key == ',' && keyPressed(KEY_SHIFT)) key = '<';
-						if (key == '.' && keyPressed(KEY_SHIFT)) key = '>';
-						if (key == '/' && keyPressed(KEY_SHIFT)) key = '?';
-						io.AddInputCharacter(key);
-					}
-				}
 			}
 
-			// unsigned int pressed = Raylib::GetCharPressed();
-			// if (pressed != 0) io.AddInputCharacter(pressed);
+			for (int i = 0; i < platform->inputCharactersNum; i++) {
+				io.AddInputCharacter(platform->inputCharacters[i]);
+			}
 
 			_imGuiHoveringGui = io.WantCaptureMouse;
 			_imGuiTypingGui = io.WantTextInput;
@@ -411,6 +397,46 @@ void imGuiDraw() {
 	ImGui::Render();
   backendPlatformImGuiDraw();
 }
+
+#if defined(_WIN32) && defined(FALLOW_DEBUG)
+LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS* e) {
+	auto hDbgHelp = LoadLibraryA("dbghelp");
+	if (!hDbgHelp) return EXCEPTION_CONTINUE_SEARCH;
+
+	auto pMiniDumpWriteDump = (decltype(&MiniDumpWriteDump))GetProcAddress(hDbgHelp, "MiniDumpWriteDump");
+	if (!pMiniDumpWriteDump) return EXCEPTION_CONTINUE_SEARCH;
+
+	char name[MAX_PATH];
+	{
+		auto nameEnd = name + GetModuleFileNameA(GetModuleHandleA(0), name, MAX_PATH);
+		SYSTEMTIME t;
+		GetSystemTime(&t);
+		wsprintfA(nameEnd - strlen(".exe"), "_%4d%02d%02d_%02d%02d%02d.dmp", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+	}
+
+	auto hFile = CreateFileA(name, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+	if (hFile == INVALID_HANDLE_VALUE) return EXCEPTION_CONTINUE_SEARCH;
+
+	MINIDUMP_EXCEPTION_INFORMATION exceptionInfo;
+	exceptionInfo.ThreadId = GetCurrentThreadId();
+	exceptionInfo.ExceptionPointers = e;
+	exceptionInfo.ClientPointers = FALSE;
+
+	auto dumped = pMiniDumpWriteDump(
+		GetCurrentProcess(),
+		GetCurrentProcessId(),
+		hFile,
+		MINIDUMP_TYPE(MiniDumpWithIndirectlyReferencedMemory | MiniDumpScanMemory),
+		e ? &exceptionInfo : nullptr,
+		nullptr,
+		nullptr);
+
+	CloseHandle(hFile);
+
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 
 ///- Audio
 

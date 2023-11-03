@@ -8,16 +8,26 @@
 #ifndef SkFont_DEFINED
 #define SkFont_DEFINED
 
-#include "include/core/SkFontTypes.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/base/SkTypeTraits.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
 #include <vector>
 
 class SkMatrix;
 class SkPaint;
 class SkPath;
+enum class SkFontHinting;
+enum class SkTextEncoding;
 struct SkFontMetrics;
+struct SkPoint;
 
 /** \class SkFont
     SkFont controls options applied when drawing and measuring text.
@@ -498,6 +508,8 @@ public:
      */
     void dump() const;
 
+    using sk_is_trivially_relocatable = std::true_type;
+
 private:
     enum PrivFlags {
         kForceAutoHinting_PrivFlag      = 1 << 0,
@@ -522,6 +534,8 @@ private:
     uint8_t     fFlags;
     uint8_t     fEdging;
     uint8_t     fHinting;
+
+    static_assert(::sk_is_trivially_relocatable<decltype(fTypeface)>::value);
 
     SkScalar setupForAsPaths(SkPaint*);
     bool hasSomeAntiAliasing() const;

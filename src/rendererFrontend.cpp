@@ -3,6 +3,7 @@ struct Texture {
 	int width;
 	int height;
 
+	bool smooth;
 	bool clampedX;
 	bool clampedY;
 	char *path;
@@ -38,17 +39,24 @@ struct Renderer {
 	Shader *defaultShader;
 	int defaultMvpLoc;
 	int defaultTexture0Loc;
-	int defaultColDiffuseLoc;
 
 	Shader *outlineShader;
+	int outlineShaderMvpLoc;
 	int outlineShaderResolutionLoc;
 	int outlineShaderOutlineSizeLoc;
 	int outlineShaderOutlineColorLoc;
 	int outlineShaderOutlineFadeOuterLoc;
 	int outlineShaderOutlineFadeInnerLoc;
-	int outlineShaderColDiffuse;
 
 	Shader *currentShader;
+	BlendMode currentBlendMode;
+	bool currentDepthTest;
+	bool currentDepthMask;
+	bool currentBlending;
+	bool currentBackfaceCulling;
+#define TEXTURE_SLOTS_MAX 8
+	Texture *textureSlots[TEXTURE_SLOTS_MAX];
+	int activeTextureSlot;
 
 #define TARGET_TEXTURE_LIMIT 16
 	Texture *targetTextureStack[TARGET_TEXTURE_LIMIT];
@@ -59,10 +67,10 @@ struct Renderer {
 	int camera2dStackNum;
 	Matrix3 baseMatrix2d;
 
-#define ALPHA_STACK_MAX 128
-	float alphaStack[ALPHA_STACK_MAX];
-	int alphaStackNum;
-	float currentAlpha;
+#define COLOR_STACK_MAX 128
+	int colorStack[COLOR_STACK_MAX];
+	int colorStackNum;
+	int currentColor;
 
 	Texture *whiteTexture;
 	Texture *circleTexture1024;
@@ -75,6 +83,13 @@ struct Renderer {
 
 	float current2dDrawDepth;
 	int currentDrawCount;
+
+#define BATCH_VERTS_MAX 6000
+	GpuVertex batchVerts[BATCH_VERTS_MAX];
+	int batchVertsNum;
+
+	Allocator textureMapAllocator;
+	HashMap *textureMap;
 
   bool useBadSrcSize;
 };
@@ -107,29 +122,36 @@ void setTextureData(Texture *texture, void *data, int width, int height, int fla
 u8 *getTextureData(Texture *texture, int flags=0);
 bool writeTextureToFile(Texture *texture, char *path);
 
+Texture *getTexture(char *path, int flags=0);
 void destroyTexture(Texture *texture);
+void clearTextureCache();
 
 void drawTexture(Texture *texture, RenderProps props);
 void drawSimpleTexture(Texture *texture);
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
-void drawRect(Rect rect, int color, int flags=0);
+void drawRect(Rect rect, int color);
 void drawCircle(Circle circle, int color);
-void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Vec4i tints, float alpha, int flags);
+void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), int tint=0xFFFFFFFF, int flags=0);
 void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
+void drawVerts(GpuVertex *verts, int vertsNum);
+
+void processBatchDraws();
 
 void pushTargetTexture(Texture *renderTexture);
 void popTargetTexture();
 
-void refreshGlobalMatrices();
 void pushCamera2d(Matrix3 mat);
 void popCamera2d();
+
+void refreshGlobalMatrices();
 
 void setScissor(Rect rect);
 void clearScissor();
 
-void pushAlpha(float alpha); //@incomplete change to pushColor/popColor
-void popAlpha();
+void pushColor(int color);
+void pushColor(Vec4 color) { pushColor(argbToHex(color)); }
+void popColor();
 
 void setRendererBlendMode(BlendMode blendMode);
 void setDepthTest(bool enabled);
@@ -138,8 +160,8 @@ void setBlending(bool enabled);
 void setBackfaceCulling(bool enabled);
 
 void setShader(Shader *shader);
+void setTexture(Texture *texture, int slot=0);
 
-void processBatchDraws();
 void resetRenderContext();
 
 void imGuiTexture(Texture *texture, Vec2 scale=v2(1, 1));
@@ -152,25 +174,24 @@ void initRenderer(int width, int height) {
 
 	backendInit();
 
-	pushCamera2d(mat3());
-	pushAlpha(1);
+	setBlending(true);
 	setRendererBlendMode(BLEND_NORMAL);
-	setBackfaceCulling(false);
+	setDepthMask(true);
+	pushColor(0xFFFFFFFF);
 	renderer->scissorScale = v2(1, 1);
 
 	{ /// Setup shaders
 		renderer->defaultShader = loadShader(NULL, NULL);
 		renderer->defaultMvpLoc = getUniformLocation(renderer->defaultShader, "mvp");
 		renderer->defaultTexture0Loc = getUniformLocation(renderer->defaultShader, "texture0");
-		renderer->defaultColDiffuseLoc = getUniformLocation(renderer->defaultShader, "colDiffuse");
 
 		renderer->outlineShader = loadShader(NULL, "assets/common/shaders/outline.fs");
+		renderer->outlineShaderMvpLoc = getUniformLocation(renderer->outlineShader, "mvp");
 		renderer->outlineShaderResolutionLoc = getUniformLocation(renderer->outlineShader, "resolution");
 		renderer->outlineShaderOutlineSizeLoc = getUniformLocation(renderer->outlineShader, "outlineSize");
 		renderer->outlineShaderOutlineColorLoc = getUniformLocation(renderer->outlineShader, "outlineColor");
 		renderer->outlineShaderOutlineFadeOuterLoc = getUniformLocation(renderer->outlineShader, "outlineFadeOuter");
 		renderer->outlineShaderOutlineFadeInnerLoc = getUniformLocation(renderer->outlineShader, "outlineFadeInner");
-		renderer->outlineShaderColDiffuse = getUniformLocation(renderer->outlineShader, "colDiffuse");
 	} ///
 	setShader(NULL);
 
@@ -204,7 +225,7 @@ void endRenderingFrame() {
 }
 
 void clearRenderer(int color) {
-	processBatchDraws();
+	processBatchDraws(); // I probably don't really need to do this
 	backendClearRenderer(color);
 }
 
@@ -225,28 +246,34 @@ int getUniformLocation(Shader *shader, char *uniformName) {
 }
 
 void setShaderUniform(Shader *shader, int loc, float value) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_FLOAT, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_FLOAT, 1);
 }
 void setShaderUniform(Shader *shader, int loc, Vec2 value) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC2, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC2, 1);
 }
 void setShaderUniform(Shader *shader, int loc, Vec3 value) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC3, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC3, 1);
 }
 void setShaderUniform(Shader *shader, int loc, Vec4 value) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC4, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_VEC4, 1);
 }
 void setShaderUniform(Shader *shader, int loc, Matrix4 value) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_MATRIX4, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &value, SHADER_UNIFORM_MATRIX4, 1);
 }
 void setShaderUniform(Shader *shader, int loc, Texture *texture) {
+	processBatchDraws();
 	setShader(shader);
-	return backendSetShaderUniform(&shader->backendShader, loc, &texture->backendTexture, SHADER_UNIFORM_TEXTURE, 1);
+	backendSetShaderUniform(&shader->backendShader, loc, &texture->backendTexture, SHADER_UNIFORM_TEXTURE, 1);
 }
 
 Texture *createTexture(const char *path, int flags) {
@@ -279,7 +306,7 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	texture->backendTexture = backendCreateTexture(width, height, flags);
 
 	if (data) setTextureData(texture, data, width, height, flags);
-	setTextureSmooth(texture, true);
+	texture->smooth = true;
 	setTextureClampedX(texture, true);
 	setTextureClampedY(texture, true);
 
@@ -297,10 +324,69 @@ Texture *createFrameTexture(int width, int height, void *data, int flags) {
 	return texture;
 }
 
-void setTextureSmooth(Texture *texture, bool smooth) { backendSetTextureSmooth(&texture->backendTexture, smooth); }
-void setTextureClampedX(Texture *texture, bool clamped) { backendSetTextureClampedX(&texture->backendTexture, clamped); }
-void setTextureClampedY(Texture *texture, bool clamped) { backendSetTextureClampedY(&texture->backendTexture, clamped); }
-void setTextureData(Texture *texture, void *data, int width, int height, int flags) { backendSetTextureData(&texture->backendTexture, data, width, height, flags); }
+void setTextureSmooth(Texture *texture, bool smooth) {
+	if (texture->smooth == smooth) return;
+	texture->smooth = smooth;
+
+	processBatchDraws();
+
+	backendSetTexture(&texture->backendTexture);
+	backendSetTextureSmooth(smooth);
+}
+void setTextureClampedX(Texture *texture, bool clamped) {
+	if (texture->clampedX == clamped) return;
+	texture->clampedX = clamped;
+
+	processBatchDraws();
+
+	backendSetTexture(&texture->backendTexture);
+	backendSetTextureClampedX(clamped);
+}
+void setTextureClampedY(Texture *texture, bool clamped) {
+	if (texture->clampedY == clamped) return;
+	texture->clampedY = clamped;
+
+	processBatchDraws();
+
+	backendSetTexture(&texture->backendTexture);
+	backendSetTextureClampedY(clamped);
+}
+
+void *_tempTextureBuffer;
+int _tempTextureBufferSize;
+void setTextureData(Texture *texture, void *data, int width, int height, int flags) {
+	processBatchDraws();
+
+	int neededTextureBufferSize = width * height * 4;
+	if (neededTextureBufferSize > _tempTextureBufferSize) {
+		if (_tempTextureBuffer) free(_tempTextureBuffer);
+		_tempTextureBufferSize = neededTextureBufferSize;
+		_tempTextureBuffer = malloc(_tempTextureBufferSize);
+	}
+
+	void *newData = _tempTextureBuffer;
+	memcpy(newData, data, width * height * 4);
+	data = newData;
+
+	if ((flags & _F_TD_SKIP_PREMULTIPLY) == 0) {
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				float a = ((u8 *)data)[(y*width+x)*4 + 3] / 255.0;
+				((u8 *)data)[(y*width+x)*4 + 0] *= a;
+				((u8 *)data)[(y*width+x)*4 + 1] *= a;
+				((u8 *)data)[(y*width+x)*4 + 2] *= a;
+			}
+		}
+	}
+
+	if (flags & _F_TD_FLIP_Y) {
+		flipBitmapData((u8 *)data, width, height);
+	}
+
+
+	backendSetTexture(&texture->backendTexture);
+	backendSetTextureData(data, width, height, flags);
+}
 
 u8 *getTextureData(Texture *texture, int flags) {
 	processBatchDraws();
@@ -320,14 +406,61 @@ bool writeTextureToFile(Texture *texture, char *path) {
 	return true;
 }
 
+Texture *getTexture(char *path, int flags) {
+  if (!renderer->textureMap) {
+    renderer->textureMapAllocator.type = ALLOCATOR_DEFAULT;
+    renderer->textureMap = createHashMap(sizeof(char *), sizeof(Texture *), 64, &renderer->textureMapAllocator);
+    renderer->textureMap->usesStreq = true;
+  }
+
+	if (!path) return NULL;
+	{
+		Texture *texture;
+		void *pathAsVoid = path;
+		void *pathPtr = &pathAsVoid;
+		if (hashMapGet(renderer->textureMap, pathPtr, stringHash32(path), &texture)) {
+			return texture;
+		}
+	}
+
+	if (!fileExists(path)) return NULL;
+
+	Texture *texture = createTexture(path, flags);
+	if (!texture) return NULL;
+
+	void *pathAsVoid = texture->path;
+	void *pathPtr = &pathAsVoid;
+	hashMapSet(renderer->textureMap, pathPtr, stringHash32(texture->path), &texture);
+	return texture;
+}
+
 void destroyTexture(Texture *texture) {
+	processBatchDraws();
 	if (texture->path) free(texture->path);
 	backendDestroyTexture(&texture->backendTexture);
 	// free(texture); //@incomplete Why can't I free this???
 }
 
+void clearTextureCache() {
+  HashMapIterator iter;
+
+  HashMapNode *node = init(&iter, renderer->textureMap);
+  for (;;) {
+    if (!node) break;
+
+    Texture *texture = *(Texture **)node->value;
+    destroyTexture(texture);
+
+    node = next(&iter);
+  }
+
+  destroyHashMap(renderer->textureMap);
+  renderer->textureMap = NULL;
+}
+
 void drawTexture(Texture *texture, RenderProps props) {
 	if (props.alpha == 0) return;
+	if (getAofArgb(props.tint) == 0) return;
 	if (props.disabled) return;
 	if (renderer->disabled) return;
 	if (!texture) Panic("drawTexture called with null texture!");
@@ -338,59 +471,48 @@ void drawTexture(Texture *texture, RenderProps props) {
 		props.matrix.SCALE(props.srcWidth, props.srcHeight);
 	}
 
-	Vec4i tints = v4i(props.tint, props.tint, props.tint, props.tint);
-	float alpha = props.alpha;
+	props.tint = setAofArgb(props.tint, getAofArgb(props.tint) * props.alpha);
 	int flags = props.flags;
 	Vec2 uv0 = props.uvMatrix * props.uv0;
 	Vec2 uv1 = props.uvMatrix * props.uv1;
-	drawQuadVerts(texture, props.matrix, uv0, uv1, tints, alpha, flags);
+	drawQuadVerts(texture, props.matrix, uv0, uv1, props.tint, flags);
 }
 
 void drawSimpleTexture(Texture *texture) {
 	Matrix3 matrix = mat3();
 	matrix.SCALE(getSize(texture));
-	Vec2 uv0 = v2(0, 0);
-	Vec2 uv1 = v2(1, 1);
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	int alpha = 1;
-	int flags = 0;
-	drawQuadVerts(texture, matrix, uv0, uv1, tints, alpha, flags);
+	drawQuadVerts(texture, matrix);
 }
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, float alpha) {
-	Vec4i tints = v4i(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-	int flags = 0;
-	drawQuadVerts(texture, matrix, uv0, uv1, tints, alpha, flags);
+	int tint = setAofArgb(0xFFFFFFFF, alpha * 255.0);
+	drawQuadVerts(texture, matrix, uv0, uv1, tint);
 }
 
-void drawRect(Rect rect, int color, int flags) {
+void drawRect(Rect rect, int color) {
+	if (getAofArgb(color) == 0) return;
+
 	Matrix3 matrix = mat3();
 	matrix.TRANSLATE(rect.x, rect.y);
 	matrix.SCALE(rect.width, rect.height);
-
-	float alpha = 1;
-	Vec4i tints = v4i(color, color, color, color);
-	drawQuadVerts(renderer->whiteTexture, matrix, v2(0, 0), v2(1, 1), tints, alpha, flags);
+	drawQuadVerts(renderer->whiteTexture, matrix, v2(0, 0), v2(1, 1), color);
 }
 
 void drawCircle(Circle circle, int color) {
+	if (getAofArgb(color) == 0) return;
+
 	Matrix3 matrix = mat3();
 	matrix.TRANSLATE(circle.position - circle.radius);
 	matrix.SCALE(circle.radius*2);
 
-	Matrix3 uvMatrix = mat3();
-	float alpha = 1;
-	int flags = 0;
-	Vec4i tints = v4i(color, color, color, color);
-
 	Texture *texture = renderer->circleTexture1024;
 	if (circle.radius < 45) texture = renderer->circleTexture32;
 
-	drawQuadVerts(texture, matrix, v2(0, 0), v2(1, 1), tints, alpha, flags);
+	drawQuadVerts(texture, matrix, v2(0, 0), v2(1, 1), color);
 }
 
-void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Vec4i tints, float alpha, int flags) {
-	alpha *= renderer->currentAlpha;
-	if (alpha == 0) return;
+void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, int tint, int flags) {
+	tint = multiplyColors(tint, renderer->currentColor);
+	if (getAofArgb(tint) == 0) return;
 
 	Vec2 verts[] = {
 		v2(0, 0),
@@ -418,14 +540,7 @@ void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, Vec4i t
 		v2(uv1.x, uv0.y),
 	};
 
-	int colors[4];
-	for (int i = 0; i < 4; i++) {
-		int tint = ((int *)&tints.x)[i];
-		int a, r, g, b;
-		hexToArgb(tint, &a, &r, &g, &b);
-		a *= alpha;
-		colors[i] = argbToHex(a, r, g, b);
-	}
+	int colors[4] = {tint, tint, tint, tint};
 
 	{
 		Vec2 triVerts[6];
@@ -472,16 +587,43 @@ void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *textu
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture) {
 	if (renderer->currentDrawCount > RENDERER_BACKEND_MAX_DRAWS_PER_BATCH-10) processBatchDraws(); // Magic -10 :/
 	renderer->currentDrawCount++;
+	setTexture(texture);
+
+	GpuVertex *gpuVerts = (GpuVertex *)frameMalloc(sizeof(GpuVertex) * vertsNum);
+	for (int i = 0; i < vertsNum; i++) {
+		gpuVerts[i].position = verts[i];
+		gpuVerts[i].uv = uvs[i];
+		gpuVerts[i].color = hexToArgbFloat(colors[i]);
+	}
+	drawVerts(gpuVerts, vertsNum);
+}
+
+void drawVerts(GpuVertex *verts, int vertsNum) {
+	if (vertsNum > BATCH_VERTS_MAX-1) {
+		logf("Too many gpu verts!\n");
+		return;
+	}
+
+	if (renderer->batchVertsNum + vertsNum > BATCH_VERTS_MAX-1) processBatchDraws();
+
+	for (int i = 0; i < vertsNum; i++) {
+		renderer->batchVerts[renderer->batchVertsNum++] = verts[i];
+	}
+}
+
+void processBatchDraws() {
+	if (renderer->batchVertsNum == 0) return;
+	renderer->currentDrawCount = 0;
+	renderer->current2dDrawDepth = -1;
+
 	if (renderer->currentShader == renderer->defaultShader) {
 		Matrix4 matrix = mat4();
-		setShaderUniform(renderer->defaultShader, renderer->defaultMvpLoc, matrix);
-		// int tex = 0;
-		// setShaderUniform(renderer->defaultShader, renderer->defaultTexture0Loc, tex);
-		setShaderUniform(renderer->defaultShader, renderer->defaultColDiffuseLoc, v4(1, 1, 1, 1));
-		//@incomplete I should set colDiffuse, but it's not used and I think I want to remove it
-		// Also, other shaders need to set these two uniforms at least, Raylib sets them automatically
+		backendSetShaderUniform(&renderer->defaultShader->backendShader, renderer->defaultMvpLoc, &matrix, SHADER_UNIFORM_MATRIX4, 1);
 	}
-	backendDrawVerts(verts, uvs, colors, vertsNum, &texture->backendTexture);
+
+	backendDrawVerts(renderer->batchVerts, renderer->batchVertsNum);
+	renderer->batchVertsNum = 0;
+	backendFlush();
 }
 
 void pushTargetTexture(Texture *texture) {
@@ -496,7 +638,7 @@ void pushTargetTexture(Texture *texture) {
 void popTargetTexture() {
 	processBatchDraws();
 
-	renderer->targetTextureStackNum--;
+	renderer->targetTextureStackNum--; //@robustness Why is there no error check for underflow?
 	if (renderer->targetTextureStackNum > 0) {
 		Texture *texture = renderer->targetTextureStack[renderer->targetTextureStackNum-1];
 		backendSetTargetTexture(&texture->backendTexture);
@@ -506,13 +648,6 @@ void popTargetTexture() {
 	refreshGlobalMatrices();
 }
 
-void refreshGlobalMatrices() {
-	renderer->baseMatrix2d = mat3();
-	for (int i = 0; i < renderer->camera2dStackNum; i++) renderer->baseMatrix2d *= renderer->camera2dStack[i];
-
-	// glViewport(0, 0, targetSize.x, targetSize.y);
-}
-
 void pushCamera2d(Matrix3 mat) {
 	if (renderer->camera2dStackNum > CAMERA_2D_STACK_MAX-1) Panic("camera2d overflow");
 	renderer->camera2dStack[renderer->camera2dStackNum++] = mat;
@@ -520,9 +655,17 @@ void pushCamera2d(Matrix3 mat) {
 }
 
 void popCamera2d() {
-	if (renderer->camera2dStackNum <= 1) Panic("camera2d underflow");
+	if (renderer->camera2dStackNum <= 0) {
+		logf("camera2d underflow");
+		return;
+	}
 	renderer->camera2dStackNum--;
 	refreshGlobalMatrices();
+}
+
+void refreshGlobalMatrices() {
+	renderer->baseMatrix2d = mat3();
+	for (int i = 0; i < renderer->camera2dStackNum; i++) renderer->baseMatrix2d *= renderer->camera2dStack[i];
 }
 
 void setScissor(Rect rect) {
@@ -540,64 +683,117 @@ void setScissor(Rect rect) {
 
 void clearScissor() {
 	processBatchDraws();
-
   backendEndScissor();
 }
 
-void pushAlpha(float value) {
-	if (renderer->alphaStackNum > ALPHA_STACK_MAX-1) Panic("alpha overflow");
-	renderer->alphaStack[renderer->alphaStackNum++] = value;
-	renderer->currentAlpha = renderer->alphaStack[renderer->alphaStackNum-1];
+void pushColor(int color) {
+	if (renderer->colorStackNum > COLOR_STACK_MAX-1) Panic("color overflow");
+	renderer->colorStack[renderer->colorStackNum++] = color;
+	renderer->currentColor = 0xFFFFFFFF;
+	for (int i = 0; i < renderer->colorStackNum; i++) renderer->currentColor = multiplyColors(renderer->currentColor, renderer->colorStack[i]);
 }
 
-void popAlpha() {
-	if (renderer->alphaStackNum <= 1) Panic("alpha underflow");
-	renderer->alphaStackNum--;
-	renderer->currentAlpha = renderer->alphaStack[renderer->alphaStackNum-1];
+void popColor() {
+	if (renderer->colorStackNum <= 0) Panic("color underflow");
+	renderer->colorStackNum--;
+	renderer->currentColor = 0xFFFFFFFF;
+	for (int i = 0; i < renderer->colorStackNum; i++) renderer->currentColor = multiplyColors(renderer->currentColor, renderer->colorStack[i]);
 }
 
 void setRendererBlendMode(BlendMode blendMode) {
+	if (renderer->currentBlendMode == blendMode) return;
+	renderer->currentBlendMode = blendMode;
+
 	processBatchDraws();
 	backendSetBlendMode(blendMode);
 }
 
 void setDepthTest(bool enabled) {
+	if (renderer->currentDepthTest == enabled) return;
+	renderer->currentDepthTest = enabled;
+
 	processBatchDraws();
 	backendSetDepthTest(enabled);
 }
 
 void setDepthMask(bool enabled) {
+	if (renderer->currentDepthMask == enabled) return;
+	renderer->currentDepthMask = enabled;
+
 	processBatchDraws();
 	backendSetDepthMask(enabled);
 }
 
 void setBlending(bool enabled) {
+	if (renderer->currentBlending == enabled) return;
+	renderer->currentBlending = enabled;
+
 	processBatchDraws();
 	backendSetBlending(enabled);
 }
 
 void setBackfaceCulling(bool enabled) {
+	if (renderer->currentBackfaceCulling == enabled) return;
+	renderer->currentBackfaceCulling = enabled;
+
 	processBatchDraws();
 	backendSetBackfaceCulling(enabled);
 }
 
 void setShader(Shader *shader) {
-	processBatchDraws();
 	if (!shader) shader = renderer->defaultShader;
 
+	if (renderer->currentShader == shader) return;
 	renderer->currentShader = shader;
+
+	processBatchDraws();
+
 	backendSetShader(&shader->backendShader);
 }
 
-void processBatchDraws() {
-	renderer->currentDrawCount = 0;
-	renderer->current2dDrawDepth = -1;
-	backendFlush();
+void setTexture(Texture *texture, int slot) {
+	if (renderer->textureSlots[slot] == texture) return;
+	renderer->textureSlots[slot] = texture;
+	renderer->activeTextureSlot = slot;
+
+	processBatchDraws();
+	backendSetTexture(&texture->backendTexture, slot);
 }
 
 void resetRenderContext() {
 	processBatchDraws();
-	setRendererBlendMode(BLEND_NORMAL);
+
+	Shader *currentShader = renderer->currentShader;
+	renderer->currentShader = NULL;
+	setShader(currentShader);
+
+	BlendMode currentBlendMode = renderer->currentBlendMode;
+	renderer->currentBlendMode = BLEND_INVALID;
+	setRendererBlendMode(currentBlendMode);
+
+	bool currentDepthTest = renderer->currentDepthTest;
+	renderer->currentDepthTest ^= 1;
+	setDepthTest(currentDepthTest);
+
+	bool currentDepthMask = renderer->currentDepthMask;
+	renderer->currentDepthMask ^= 1;
+	setDepthMask(currentDepthMask);
+
+	bool currentBlending = renderer->currentBlending;
+	renderer->currentBlending ^= 1;
+	setBlending(currentBlending);
+
+	bool currentBackfaceCulling = renderer->currentBackfaceCulling;
+	renderer->currentBackfaceCulling ^= 1;
+	setBackfaceCulling(currentBackfaceCulling);
+
+	for (int i = 0; i < TEXTURE_SLOTS_MAX; i++) {
+		if (!renderer->textureSlots[i]) continue;
+		Texture *currentTexture = renderer->textureSlots[i];
+		renderer->textureSlots[i] = NULL;
+		setTexture(currentTexture, i);
+	}
+
 	backendResetRenderContext();
 }
 

@@ -1,13 +1,14 @@
 RenderProps newRenderProps();
 RenderProps newRenderProps(Texture *texture, Rect rect);
 RenderProps createRenderProps() { return newRenderProps(); } // One day changed everything to this?
-void drawRect(float x, float y, float width, float height, int color, int flags=0) { drawRect(makeRect(x, y, width, height), color, flags); }
+void drawRect(float x, float y, float width, float height, int color) { drawRect(makeRect(x, y, width, height), color); }
 void drawCircle(Vec2 position, float radius, int color) { drawCircle(makeCircle(position, radius), color); }
 void drawLine(Vec2 start, Vec2 end, int thickness, int color);
 void drawLine(Line2 line, int thickness, int color) { drawLine(line.start, line.end, thickness, color); }
 void drawRectOutline(Rect rect, float outlineSize, int color);
 Vec2 getSize(Texture *texture);
 Rect makeRect(Texture *texture);
+void drawCapsule(Capsule2 cap, int color);
 
 RenderProps newRenderProps() {
 	RenderProps props = {};
@@ -67,7 +68,6 @@ Rect makeRect(Texture *texture) {
 	return makeRect(0, 0, texture->width, texture->height);
 }
 
-void drawCapsule(Capsule2 cap, int color);
 void drawCapsule(Capsule2 cap, int color) {
 	drawCircle(cap.start, cap.radius, color);
 	drawCircle(cap.end, cap.radius, color);

@@ -145,6 +145,7 @@ int alphaColor(int color, float alpha);
 int getComplement(int color);
 float FORCE_INLINE srgbToLinear(float value);
 float FORCE_INLINE linearToSrgb(float value);
+int multiplyColors(int color1, int color2);
 
 float toDeg(float rads);
 float toDeg(Vec2 vec);
@@ -2037,11 +2038,7 @@ Vec4 argbToRgbaFloat(int argb) {
 	return v4(r/255.0, g/255.0, b/255.0, a/255.0);
 }
 
-int getAofArgb(int src) {
-	int a, r, g, b;
-	hexToArgb(src, &a, &r, &g, &b);
-	return a;
-}
+int getAofArgb(int src) { return (src >> 24) & 0xFF; }
 
 int setAofArgb(int src, int newA) {
 	int a, r, g, b;
@@ -2116,6 +2113,11 @@ float linearToSrgb(float value) {
 	else if (value < 0.0031308f) return value * 12.92f;
 	else return powf(value, 1.0f / 2.4f) * 1.055f - 0.055f;
 #endif
+}
+
+int multiplyColors(int color1, int color2) {
+	Vec4 vec = hexToArgbFloat(color1) * hexToArgbFloat(color2);
+	return argbToHex(vec);
 }
 
 float toDeg(float rads) {

@@ -1,5 +1,8 @@
 #include "rendererBackend.h"
 
+BackendTexture *_textureSlots[8];
+int _activeSlot = 0;
+
 struct BackendShader {
 	Raylib::Shader raylibShader;
 };
@@ -12,6 +15,7 @@ int _renderTextureFbId;
 
 void backendInit() {
 	_renderTextureFbId = Raylib::rlLoadFramebuffer(0, 0); // The size here doesn't mater??
+	backendSetBackfaceCulling(false); // Conform to opengl defaults
 }
 
 void backendStartFrame() {
@@ -104,6 +108,11 @@ void backendSetShader(BackendShader *backendShader) {
 	Raylib::rlSetShader(backendShader->raylibShader.id, backendShader->raylibShader.locs);
 }
 
+void backendSetTexture(BackendTexture *backendTexture, int slot) {
+	_textureSlots[slot] = backendTexture;
+	_activeSlot = slot;
+}
+
 void backendFlush() {
 	Raylib::rlDrawRenderBatchActive();
 }
@@ -125,71 +134,39 @@ BackendTexture backendCreateTexture(int width, int height, int flags) {
 
 	free(raylibImage.data);
 
+	backendSetTexture(&backendTexture);
+	backendSetTextureSmooth(true);
+	backendSetTextureClampedX(false);
+	backendSetTextureClampedY(false);
+
 	return backendTexture;
 }
 
-void backendSetTextureSmooth(BackendTexture *backendTexture, bool smooth) {
-	Raylib::SetTextureFilter(backendTexture->raylibTexture, smooth ? Raylib::TEXTURE_FILTER_BILINEAR : Raylib::TEXTURE_FILTER_POINT);
+void backendSetTextureSmooth(bool smooth) {
+	Raylib::SetTextureFilter(
+		_textureSlots[_activeSlot]->raylibTexture,
+		smooth ? Raylib::TEXTURE_FILTER_BILINEAR : Raylib::TEXTURE_FILTER_POINT
+	);
 }
 
-void backendSetTextureClampedX(BackendTexture *backendTexture, bool clamped) {
-  Raylib::rlTextureParameters(backendTexture->raylibTexture.id, RL_TEXTURE_WRAP_S, clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT);
+void backendSetTextureClampedX(bool clamped) {
+  Raylib::rlTextureParameters(
+		_textureSlots[_activeSlot]->raylibTexture.id,
+		RL_TEXTURE_WRAP_S,
+		clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT
+  );
 }
 
-void backendSetTextureClampedY(BackendTexture *backendTexture, bool clamped) {
-  Raylib::rlTextureParameters(backendTexture->raylibTexture.id, RL_TEXTURE_WRAP_T, clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT);
+void backendSetTextureClampedY(bool clamped) {
+  Raylib::rlTextureParameters(
+		_textureSlots[_activeSlot]->raylibTexture.id,
+		RL_TEXTURE_WRAP_T,
+		clamped ? RL_TEXTURE_WRAP_CLAMP : RL_TEXTURE_WRAP_REPEAT
+  );
 }
 
-void *_backendTempTextureBuffer;
-int _backendTempTextureBufferSize;
-void *_backendTempTextureRowBuffer;
-int _backendTempTextureRowBufferSize;
-void backendSetTextureData(BackendTexture *backendTexture, void *data, int width, int height, int flags) {
-	int neededTextureBufferSize = width * height * 4;
-	if (neededTextureBufferSize > _backendTempTextureBufferSize) {
-		if (_backendTempTextureBuffer) free(_backendTempTextureBuffer);
-		_backendTempTextureBufferSize = neededTextureBufferSize;
-		_backendTempTextureBuffer = malloc(_backendTempTextureBufferSize);
-	}
-
-	void *newData = _backendTempTextureBuffer;
-	memcpy(newData, data, width * height * 4);
-	data = newData;
-
-	if ((flags & _F_TD_SKIP_PREMULTIPLY) == 0) {
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				float a = ((u8 *)data)[(y*width+x)*4 + 3] / 255.0;
-				((u8 *)data)[(y*width+x)*4 + 2] *= a;
-				((u8 *)data)[(y*width+x)*4 + 1] *= a;
-				((u8 *)data)[(y*width+x)*4 + 0] *= a;
-			}
-		}
-	}
-
-	if (flags & _F_TD_FLIP_Y) {
-		int neededTextureRowBufferSize = width * 4;
-		if (neededTextureRowBufferSize > _backendTempTextureRowBufferSize) {
-			if (_backendTempTextureRowBuffer) free(_backendTempTextureRowBuffer);
-
-			_backendTempTextureRowBufferSize = neededTextureRowBufferSize;
-			_backendTempTextureRowBuffer = malloc(_backendTempTextureRowBufferSize);
-		}
-
-		u8 *tempRow = (u8 *)_backendTempTextureRowBuffer;
-		for (int y = 0; y < height/2; y++) {
-			int curTopRow = y;
-			int curBottomRow = height - y - 1;
-			u8 *topRowStart = (u8 *)data + curTopRow * width * 4;
-			u8 *bottomRowStart = (u8 *)data + curBottomRow * width * 4;
-
-			memcpy(tempRow, topRowStart, width * 4);
-			memcpy(topRowStart, bottomRowStart, width * 4);
-			memcpy(bottomRowStart, tempRow, width * 4);
-		}
-	}
-
-	Raylib::UpdateTexture(backendTexture->raylibTexture, data);
+void backendSetTextureData(void *data, int width, int height, int flags) {
+	Raylib::UpdateTexture(_textureSlots[_activeSlot]->raylibTexture, data);
 }
 
 u8 *backendGetTextureData(BackendTexture *backendTexture) {
@@ -286,20 +263,23 @@ void backendSetBackfaceCulling(bool enabled) {
 	if (enabled) Raylib::rlEnableBackfaceCulling(); else Raylib::rlDisableBackfaceCulling();
 }
 
-void backendDrawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, BackendTexture *backendTexture) {
+void backendDrawVerts(GpuVertex *verts, int vertsNum) {
 	Raylib::rlCheckRenderBatchLimit(vertsNum);
-	if (backendTexture) Raylib::rlSetTexture(backendTexture->raylibTexture.id);
+	if (_textureSlots[_activeSlot]) Raylib::rlSetTexture(_textureSlots[_activeSlot]->raylibTexture.id);
 	Raylib::rlBegin(RL_QUADS);
 
 	for (int i = 0; i < vertsNum; i++) {
-		int a, r, g, b;
-		hexToArgb(colors[i], &a, &r, &g, &b);
+		GpuVertex *gpuVert = &verts[i];
+		Vec4 color = gpuVert->color;
+		float a = color.x;
+		float r = color.y;
+		float g = color.z;
+		float b = color.w;
 
-		float alphaPerc = a / 255.0;
-		Raylib::rlColor4ub(r*alphaPerc, g*alphaPerc, b*alphaPerc, a);
-		Raylib::rlTexCoord2f(uvs[i].x, uvs[i].y);
-		Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
-		if ((i-1)%3 == 0) Raylib::rlVertex3f(verts[i].x, verts[i].y, verts[i].z);
+		Raylib::rlColor4f(r*a, g*a, b*a, a);
+		Raylib::rlTexCoord2f(gpuVert->uv.x, gpuVert->uv.y);
+		Raylib::rlVertex3f(gpuVert->position.x, gpuVert->position.y, gpuVert->position.z);
+		if ((i-1)%3 == 0) Raylib::rlVertex3f(gpuVert->position.x, gpuVert->position.y, gpuVert->position.z);
 	}
 
 	Raylib::rlEnd();
@@ -311,7 +291,7 @@ void backendResetRenderContext() {
 
 void backendImGuiTexture(BackendTexture *backendTexture, Vec2 scale) {
 	ImGui::Image(
-		(ImTextureID)(intptr_t)&backendTexture->raylibTexture.id,
+		(ImTextureID)(intptr_t)backendTexture->raylibTexture.id,
 		ImVec2(backendTexture->raylibTexture.width * scale.x, backendTexture->raylibTexture.height * scale.y),
 		ImVec2(0, 1),
 		ImVec2(1, 0)
@@ -320,7 +300,7 @@ void backendImGuiTexture(BackendTexture *backendTexture, Vec2 scale) {
 
 bool backendImGuiImageButton(BackendTexture *backendTexture) {
 	return ImGui::ImageButton(
-		(ImTextureID)(intptr_t)&backendTexture->raylibTexture.id,
+		(ImTextureID)(intptr_t)backendTexture->raylibTexture.id,
 		ImVec2(backendTexture->raylibTexture.width, backendTexture->raylibTexture.height),
 		ImVec2(0, 1),
 		ImVec2(1, 0)
