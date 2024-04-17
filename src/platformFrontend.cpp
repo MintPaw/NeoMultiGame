@@ -27,10 +27,10 @@ struct Platform {
 	Vec2 mouse;
 	int mouseWheel;
 
-  KeyState keys[KEYS_MAX];
-
 	float time;
 	int frameCount;
+
+  KeyState keys[KEYS_MAX];
 
 	NanoTime frameNano;
 
@@ -39,10 +39,8 @@ struct Platform {
 	float frameTimeAvg;
 	float frameTimeHighest;
 
-	int memoryUsage;
-
 #define PLATFORM_INPUT_CHARACTERS_MAX 128
-	char inputCharacters[PLATFORM_INPUT_CHARACTERS_MAX];
+	int inputCharacters[PLATFORM_INPUT_CHARACTERS_MAX];
 	int inputCharactersNum;
 
 	void (*gameUpdateCallback)();
@@ -61,29 +59,32 @@ void platformUpdateLoop(void (*gameUpdateCallback)());
 void platformUpdate();
 
 void maximizeWindow() { backendPlatformMaximizeWindow(); }
-void minimizeWindow() { backendPlatformMaximizeWindow(); }
-void restoreWindow() { backendPlatformMaximizeWindow(); }
+void minimizeWindow() { backendPlatformMinimizeWindow(); }
+void restoreWindow() { backendPlatformRestoreWindow(); }
+void fullscreenWindow() { backendPlatformFullscreenWindow(); }
+bool isWindowFullscreen() { return backendPlatformIsWindowFullscreen(); }
+void resizeWindow(int width, int height);
 void hideCursor() { backendHideCursor(); }
 void showCursor() { backendShowCursor(); }
 
 bool keyPressed(int key, bool ignoreImGuiTest=false);
 bool keyJustPressed(int key, bool ignoreImGuiTest=false);
 bool keyJustReleased(int key, bool ignoreImGuiTest=false);
-void setClipboard(char *str);
-void resizeWindow(int width, int height);
-void platformSleep(int ms);
+u64 getMemoryUsage() { return backendPlatformGetMemoryUsage(); };
+void setClipboard(char *str) { backendPlatformSetClipboard(str); }
+void platformSleep(int ms) { backendPlatformSleep(ms); }
 NanoTime getNanoTime();
-float getMsPassed(NanoTime startTime);
-void navigateToUrl(char *url);
-void showErrorWindow(char *msg);
-void logLastOSErrorCode(const char *fileName, int lineNum);
+float getMsPassed(NanoTime startTime) { return backendPlatformGetMsPassed(startTime.backendNanoTime); }
+void navigateToUrl(char *url) { backendPlatformNavigateToUrl(url); }
+void showErrorWindow(char *msg) { backendPlatformShowErrorWindow(msg); }
+void logLastOSError() { logf("%s\n", backendPlatformGetLastErrorMessage()); }
 
 // Internal:
 void imGuiInit();
 void imGuiStartFrame();
 void imGuiDraw();
 
-#if defined(_WIN32) && defined(FALLOW_DEBUG)
+#if defined(_WIN32)
 LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS *e);
 #endif
 
@@ -98,17 +99,21 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform->isDebugVersion = true;
 #endif
 
-#if defined(_WIN32) && defined(FALLOW_DEBUG)
-	SetUnhandledExceptionFilter(win32ExceptionHandler);
-#endif
-
 #if defined(FALLOW_INTERNAL)
 	platform->isInternalVersion = true;
 #endif
 
+#if defined(_WIN32)
+	SetUnhandledExceptionFilter(win32ExceptionHandler);
+#endif
+
+	setbuf(stdout, NULL);
+
   backendPlatformInit(platform->windowWidth, platform->windowHeight, windowTitle);
 	platform->windowScaling = backendPlatformGetWindowScaling();
 	pushRndSeed(time(NULL));
+
+	if (platform->windowScaling != 1) resizeWindow(platform->windowWidth, platform->windowHeight);
 
 	imGuiInit();
 }
@@ -124,8 +129,10 @@ void platformUpdate() {
 
 	platform->frameNano = getNanoTime();
 
-	platform->windowWidth = backendPlatformGetWindowWidth();
-	platform->windowHeight = backendPlatformGetWindowHeight();
+	if (backendPlatformGetWindowWidth() != 0) {
+		platform->windowWidth = backendPlatformGetWindowWidth();
+		platform->windowHeight = backendPlatformGetWindowHeight();
+	}
 
 	for (int i = 0; i < KEYS_MAX; i++) {
 		if (platform->keys[i] == KEY_STATE_JUST_PRESSED) platform->keys[i] = KEY_STATE_PRESSED;
@@ -146,7 +153,7 @@ void platformUpdate() {
 			platform->mouseWheel = event->wheelValue;
 		} else if (event->type == PLATFORM_EVENT_INPUT_CHARACTER) {
 			if (platform->inputCharactersNum > PLATFORM_INPUT_CHARACTERS_MAX-1) platform->inputCharactersNum--;
-			platform->inputCharacters[platform->inputCharactersNum++] = event->keyCode;
+			platform->inputCharacters[platform->inputCharactersNum++] = event->inputUTF;
 		}
 	}
 	_platformEventsNum = 0; //@incomplete backendPlatformGetEvents()
@@ -158,6 +165,7 @@ void platformUpdate() {
 	startRenderingFrame();
 
 	imGuiStartFrame();
+	if (_imGuiHoveringGui) platform->mouseWheel = 0;
 
 	void nguiStartFrame(); //@headerHack
 	nguiStartFrame();
@@ -183,20 +191,16 @@ void platformUpdate() {
 		platform->frameTimeAvg /= (float)PLATFORM_FRAME_TIMES_MAX;
 	}
 
-  platform->memoryUsage = backendPlatformGetMemoryUsage();
-
 	platform->frameCount++;
 	platform->time += platform->elapsed;
-	if (logSys) logSys->time = platform->time;
 
 	freeFrameMemory();
 }
 
-void setClipboard(char *str) {
-  backendPlatformSetClipboard(str);
-}
-
 void resizeWindow(int width, int height) {
+	width *= platform->windowScaling;
+	height *= platform->windowScaling;
+	logf("Resizing to %d %d (%f)\n", width, height, platform->windowScaling);
 	backendPlatformResizeWindow(width, height);
 }
 
@@ -205,7 +209,7 @@ bool keyPressed(int key, bool ignoreImGuiTest) {
     if (_imGuiTypingGui) return false;
     if ((key == MOUSE_LEFT || key == MOUSE_RIGHT) && _imGuiHoveringGui) return false;
   }
-  return platform->keys[key] == KEY_STATE_PRESSED;
+  return platform->keys[key] == KEY_STATE_PRESSED || platform->keys[key] == KEY_STATE_JUST_PRESSED;
 }
 
 bool keyJustPressed(int key, bool ignoreImGuiTest) {
@@ -224,32 +228,10 @@ bool keyJustReleased(int key, bool ignoreImGuiTest) {
   return platform->keys[key] == KEY_STATE_JUST_RELEASED;
 }
 
-void platformSleep(int ms) {
-  backendPlatformSleep(ms);
-}
-
 NanoTime getNanoTime() {
 	NanoTime time = {};
 	time.backendNanoTime = backendPlatformGetNanoTime();
 	return time;
-}
-
-float getMsPassed(NanoTime startTime) {
-  return backendPlatformGetMsPassed(startTime.backendNanoTime);
-}
-
-void navigateToUrl(char *url) {
-  backendPlatformNavigateToUrl(url);
-}
-
-void showErrorWindow(char *msg) {
-	logf("Error window: %s\n", msg);
-  backendPlatformShowErrorWindow(msg);
-}
-
-void logLastOSErrorCode(const char *fileName, int lineNum) {
-  char *msg = backendPlatformGetLastErrorMessage();
-	logf("Error (%s:%d): %s\n", fileName, lineNum, msg);
 }
 
 void imGuiInit() {
@@ -374,7 +356,7 @@ void imGuiStartFrame() {
 			}
 
 			for (int i = 0; i < platform->inputCharactersNum; i++) {
-				io.AddInputCharacter(platform->inputCharacters[i]);
+				io.AddInputCharacterUTF16(platform->inputCharacters[i]);
 			}
 
 			_imGuiHoveringGui = io.WantCaptureMouse;
@@ -398,8 +380,9 @@ void imGuiDraw() {
   backendPlatformImGuiDraw();
 }
 
-#if defined(_WIN32) && defined(FALLOW_DEBUG)
+#if defined(_WIN32)
 LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS* e) {
+#if defined(FALLOW_DEBUG)
 	auto hDbgHelp = LoadLibraryA("dbghelp");
 	if (!hDbgHelp) return EXCEPTION_CONTINUE_SEARCH;
 
@@ -432,10 +415,20 @@ LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS* e) {
 		nullptr);
 
 	CloseHandle(hFile);
+#endif
+
+	showLogfBufferErrorWindow();
+	writeCrashLog();
 
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
+
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
 
 
 ///- Audio

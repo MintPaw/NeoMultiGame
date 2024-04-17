@@ -848,6 +848,7 @@ Matrix4 operator* (Matrix4 a, float b) { return a.multiply(b); }
 Matrix4 getPerspectiveMatrix(float fovYDeg, float aspect, float nearPlane, float farPlane);
 
 Matrix3 FORCE_INLINE mat3();
+Matrix3 mat3(Rect rect);
 Matrix4 FORCE_INLINE mat4();
 Rect makeRect(float x=0, float y=0, float width=0, float height=0);
 Rect makeRect(Vec2 xy, Vec2 size);
@@ -910,6 +911,13 @@ Matrix3 mat3() {
 		0, 0, 1
 	};
 	return mat;
+}
+
+Matrix3 mat3(Rect rect) {
+	Matrix3 matrix = mat3();
+	matrix.TRANSLATE(getPosition(rect));
+	matrix.SCALE(getSize(rect));
+	return matrix;
 }
 
 Matrix4 mat4() {
@@ -2542,6 +2550,7 @@ float Matrix3::getRotationDeg() {
 #if 0
 	return toDeg(atan2(this->data[3], this->data[1]));
 #else
+	//@todo This can return nan for 0 matrices
 	float a = this->data[0];
 	float b = this->data[3];
 	float c = this->data[1];
@@ -2554,16 +2563,13 @@ float Matrix3::getRotationDeg() {
 	float rad  = acos(a / scaleX);
 	float deg  = toDeg(rad);
 
-	float rotation;
 	if (deg > 90 && sign > 0) {
-		rotation = toRad(360.0 - deg);
+		deg = 360.0 - deg;
 	} else if (deg < 90 && sign < 0) {
-		rotation = toRad(360.0 - deg);
-	} else {
-		rotation = rad;
+		deg = 360.0 - deg;
 	}
 
-	return toDeg(rotation);
+	return deg;
 #endif
 }
 
@@ -3235,7 +3241,9 @@ float tweenEase(float p, Ease ease) {
 	} else if (ease == SINE_IN_OUT) {
 		return 0.5 * (1 - cos(p * M_PI));
 	} else if (ease == CIRC_IN) {
-		return 1 - sqrt(1 - (p * p));
+		float value = 1 - sqrt(1 - (p * p));
+		if (isnan(value)) value = 1;
+		return value;
 	} else if (ease == CIRC_OUT) {
 		return sqrt((2 - p) * p);
 	} else if (ease == CIRC_IN_OUT) {
@@ -4755,3 +4763,33 @@ bool overlaps(AABB aabb, Sphere sphere) {
 	return d <= r*r;
 } 
 
+struct GradientColorMarker {
+	float position;
+	Vec3 color;
+	float intensity;
+};
+struct GradientAlphaMarker {
+	float position;
+	float alpha;
+};
+struct Gradient {
+#define GRADIENT_MARKERS_MAX 8
+	GradientColorMarker colorMarkers[GRADIENT_MARKERS_MAX];
+	int colorMarkersNum;
+
+	GradientAlphaMarker alphaMarkers[GRADIENT_MARKERS_MAX];
+	int alphaMarkersNum;
+
+	ImGradientHDRTemporaryState imTempState;
+};
+
+struct CurvePlot {
+#define CURVE_PLOT_POINTS_MAX 32
+	Vec2 points[CURVE_PLOT_POINTS_MAX];
+	int pointsNum;
+
+	float min;
+	float max;
+
+	int imSelected;
+};

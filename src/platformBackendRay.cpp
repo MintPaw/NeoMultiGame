@@ -260,7 +260,7 @@ char *backendPlatformGetLastErrorMessage() {
   return "No error";
 }
 
-int backendPlatformGetMemoryUsage() {
+u64 backendPlatformGetMemoryUsage() {
 #if defined(_WIN32) && defined(FALLOW_DEBUG)
   PROCESS_MEMORY_COUNTERS pmc;
   if (GetProcessMemoryInfo(_processHandle, &pmc, sizeof(pmc))) return pmc.WorkingSetSize;

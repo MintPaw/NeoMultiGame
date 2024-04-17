@@ -306,13 +306,13 @@ bool boneExists(SpineSkeleton *skeleton, char *bonePath) {
 
 Matrix3 getBoneMatrix(SpineSkeleton *skeleton, char *bonePath) {
 	spBone *bone = getBoneByPath(skeleton, bonePath);
-	Matrix3 matrix = mat3();
 
 	if (!bone) {
 		logf("No bone called %s\n", bonePath);
-		return matrix;
+		return mat3();
 	}
 
+	Matrix3 matrix = mat3();
 	matrix.data[0] = bone->a;
 	matrix.data[1] = bone->c;
 	matrix.data[2] = 0;
@@ -406,7 +406,7 @@ Rect drawAttachment(SpineSkeleton *skeleton, spSlot *slot, spAttachment *attachm
 
 		makeSureSpineGlobalVerticesIsBigEnough(4);
 		// mySpRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, preBoneMatrix);
-		spRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, 0, sizeof(float)*2);
+		spRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, globalSpineWorldVerticesPositions, 0, 2);
 
 		float *verts = globalSpineWorldVerticesPositions;
 		addSpineVertex(verts[0], verts[1], regionAttachment->uvs[0], regionAttachment->uvs[1], vertexIndex++);

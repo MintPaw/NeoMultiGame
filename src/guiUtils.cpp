@@ -9,6 +9,15 @@ bool guiColoredTreeNodeEx(char *label, ImGuiTreeNodeFlags flags=0);
 void guiColoredTreePop();
 void guiMapVec4(char *srcName, char *destName, Vec4 *vec);
 
+void toGradient(ImGradientHDRState *imGradState, Gradient *gradient);
+void toImGradState(Gradient *gradient, ImGradientHDRState *imGradState);
+void guiGradientEditor(char *name, Gradient *gradient);
+int sampleGradient(Gradient gradient, float perc);
+float sampleGradientFloat(Gradient gradient, float perc);
+
+bool guiInputCurvePlot(char *label, CurvePlot *plot, Vec2 size=v2(800, 300));
+float sampleCurvePlot(CurvePlot plot, float perc, bool flipY=false);
+
 ImColor toImColor(int argb) {
 	Vec4 vec = hexToArgbFloat(argb);
 	return ImColor(ImVec4(vec.y, vec.z, vec.w, vec.x));
@@ -145,4 +154,141 @@ void guiMapVec4(char *srcName, char *destName, Vec4 *vec) {
 
 	ImGui::PopItemWidth();
 	ImGui::PopID();
+}
+
+void toGradient(ImGradientHDRState *imGradState, Gradient *gradient) {
+	gradient->colorMarkersNum = 0;
+	for (int i = 0; i < imGradState->ColorCount; i++) {
+		auto imColorMarker = imGradState->Colors[i];
+
+		GradientColorMarker *colorMarker = &gradient->colorMarkers[gradient->colorMarkersNum++];
+		colorMarker->position = imColorMarker.Position;
+		colorMarker->color.x = imColorMarker.Color[0];
+		colorMarker->color.y = imColorMarker.Color[1];
+		colorMarker->color.z = imColorMarker.Color[2];
+		colorMarker->intensity = imColorMarker.Intensity;
+	}
+
+	gradient->alphaMarkersNum = 0;
+	for (int i = 0; i < imGradState->AlphaCount; i++) {
+		auto imAlphaMarker = imGradState->Alphas[i];
+
+		GradientAlphaMarker *alphaMarker = &gradient->alphaMarkers[gradient->alphaMarkersNum++];
+		alphaMarker->position = imAlphaMarker.Position;
+		alphaMarker->alpha = imAlphaMarker.Alpha;
+	}
+}
+
+void toImGradState(Gradient *gradient, ImGradientHDRState *imGradState) {
+	while (imGradState->ColorCount > 0) imGradState->RemoveColorMarker(0);
+	for (int i = 0; i < gradient->colorMarkersNum; i++) {
+		GradientColorMarker *colorMarker = &gradient->colorMarkers[i];
+		imGradState->AddColorMarker(colorMarker->position, {colorMarker->color.x, colorMarker->color.y, colorMarker->color.z}, colorMarker->intensity);
+	}
+
+	while (imGradState->AlphaCount > 0) imGradState->RemoveAlphaMarker(0);
+	for (int i = 0; i < gradient->alphaMarkersNum; i++) {
+		GradientAlphaMarker *alphaMarker = &gradient->alphaMarkers[i];
+		imGradState->AddAlphaMarker(alphaMarker->position, alphaMarker->alpha);
+	}
+}
+
+void guiInputGradient(char *name, Gradient *gradient) {
+	ImGradientHDRState imGradState;
+	toImGradState(gradient, &imGradState);
+
+	ImGui::PushID(frameSprintf("Gradient_Input_%s", name));
+	ImGui::Separator();
+	ImGui::Text("%s", name);
+	ImGradientHDR(stringHash32(name), imGradState, gradient->imTempState, true);
+	if (ImGui::IsItemClicked()) gradient->imTempState.selectedMarkerType = ImGradientHDRMarkerType::Unknown;
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Deselect");
+
+	bool markerDeleted = false;
+	if (gradient->imTempState.selectedMarkerType != ImGradientHDRMarkerType::Unknown) {
+		if (ImGui::Button("Delete marker")) {
+			markerDeleted = true;
+			if (gradient->imTempState.selectedMarkerType == ImGradientHDRMarkerType::Color) {
+				imGradState.RemoveColorMarker(gradient->imTempState.selectedIndex);
+				gradient->imTempState = ImGradientHDRTemporaryState{};
+			} else if (gradient->imTempState.selectedMarkerType == ImGradientHDRMarkerType::Alpha) {
+				imGradState.RemoveAlphaMarker(gradient->imTempState.selectedIndex);
+				gradient->imTempState = ImGradientHDRTemporaryState{};
+			}
+		}
+	}
+
+	if (!markerDeleted) {
+		if (gradient->imTempState.selectedMarkerType == ImGradientHDRMarkerType::Color) {
+			auto selectedColorMarker = imGradState.GetColorMarker(gradient->imTempState.selectedIndex);
+			if (selectedColorMarker != nullptr) {
+				ImGui::ColorEdit3("Color", selectedColorMarker->Color.data(), ImGuiColorEditFlags_DisplayHex);
+				ImGui::SliderFloat("Intensity", &selectedColorMarker->Intensity, 0, 1);
+			}
+		}
+
+		if (gradient->imTempState.selectedMarkerType == ImGradientHDRMarkerType::Alpha) {
+			auto selectedAlphaMarker = imGradState.GetAlphaMarker(gradient->imTempState.selectedIndex);
+			if (selectedAlphaMarker != nullptr) {
+				ImGui::SliderFloat("Alpha", &selectedAlphaMarker->Alpha, 0, 1);
+			}
+		}
+	}
+
+	toGradient(&imGradState, gradient);
+	ImGui::PopID();
+}
+
+int sampleGradient(Gradient gradient, float perc) {
+	ImGradientHDRState imGradState;
+	toImGradState(&gradient, &imGradState);
+	auto combinedColor = imGradState.GetCombinedColor(perc);
+	return argbToHex(combinedColor[3] * 255, combinedColor[0] * 255, combinedColor[1] * 255, combinedColor[2] * 255);
+}
+
+float sampleGradientFloat(Gradient gradient, float perc) {
+	ImGradientHDRState imGradState;
+	toImGradState(&gradient, &imGradState);
+	auto combinedColor = imGradState.GetCombinedColor(perc);
+	return combinedColor[1];
+}
+
+bool guiInputCurvePlot(char *label, CurvePlot *plot, Vec2 size) {
+	ImGui::PushID(label);
+	bool ret = false;
+	if (plot->pointsNum < CURVE_PLOT_POINTS_MAX-1) plot->points[plot->pointsNum].x = ImGui::CurveTerminator;
+	if (ImGui::Curve(label, ImVec2(size.x, size.y), CURVE_PLOT_POINTS_MAX, (ImVec2 *)plot->points, &plot->imSelected)) {
+		plot->pointsNum = 0;
+		for (int i = 0; i < CURVE_PLOT_POINTS_MAX; i++) {
+			if (plot->points[i].x != ImGui::CurveTerminator) plot->pointsNum++;
+		}
+
+		ret = true;
+	}
+
+	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::SameLine();
+	ImGui::BeginGroup();
+	ImGui::PushItemWidth(io.DisplaySize.x * 0.03);
+	ImGui::DragFloat("Max", &plot->max, 0.01);
+	ImGui::DragFloat("Min", &plot->min, 0.01);
+	ImGui::PopItemWidth();
+	ImGui::EndGroup();
+
+	ImGui::PopID();
+	return ret;
+}
+
+float sampleCurvePlot(CurvePlot plot, float perc, bool flipY) {
+	if (plot.pointsNum == 0) {
+		plot.points[plot.pointsNum++] = v2(0, 0);
+		plot.points[plot.pointsNum++] = v2(1, 1);
+	}
+
+	perc = ImGui::CurveValueSmooth(perc, plot.pointsNum, (ImVec2 *)plot.points);
+
+	if (flipY) perc = 1 - perc;
+
+	return lerp(plot.min, plot.max, perc);
 }

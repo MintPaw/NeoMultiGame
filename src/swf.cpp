@@ -263,7 +263,7 @@ struct GradeCord {
 	u8 ratio;
 	int color;
 };
-struct Gradient {
+struct SwfGradient {
 	bool isFocal;
 	u8 spreadMode;
 	u8 interpolationMode;
@@ -272,8 +272,8 @@ struct Gradient {
 
 	float focalPoint;
 };
-Gradient readGradient(SwfDataStream *stream, int shapeNum, bool isFocal) {
-	Gradient ret = {};
+SwfGradient readSwfGradient(SwfDataStream *stream, int shapeNum, bool isFocal) {
+	SwfGradient ret = {};
 	ret.spreadMode = readUB(stream, 2);
 	ret.interpolationMode = readUB(stream, 2);
 	int numGradients = readUB(stream, 4);
@@ -322,7 +322,7 @@ struct FillStyle {
 	FillStyleType fillStyleType;
 	int color;
 	Matrix3 matrix;
-	Gradient gradient;
+	SwfGradient gradient;
 	u16 bitmapId;
 	SwfBitmap *bitmap;
 };
@@ -341,7 +341,7 @@ FillStyle readFillStyle(SwfDataStream *stream, int shapeNum) {
 	) {
 		bool isFocal = ret.fillStyleType == FILL_STYLE_FOCAL_RADIAL_GRADIENT;
 		ret.matrix = readMatrix(stream);
-		ret.gradient = readGradient(stream, shapeNum, isFocal);
+		ret.gradient = readSwfGradient(stream, shapeNum, isFocal);
 	} else if (
 		ret.fillStyleType == FILL_STYLE_REPEATING_BITMAP ||
 		ret.fillStyleType == FILL_STYLE_CLIPPED_BITMAP ||
@@ -371,6 +371,7 @@ struct LineStyle {
 	float miterLimitFactor;
 	u8 startCapStyle;
 	u8 joinStyle;
+	FillStyle fillStyle;
 };
 LineStyle readLineStyle(SwfDataStream *stream, int shapeNum) {
 	LineStyle ret = {};
@@ -397,7 +398,8 @@ LineStyle readLineStyle(SwfDataStream *stream, int shapeNum) {
 		}
 
 		if (hasFillFlag) {
-			// fillStyle = readFillStyle(stream, shapeNum); //@incomplete I don't use this fill style?
+			logf("WARNING: You're using a fill style on a line, that's not currently supported!\n");
+			FillStyle fillStyle = readFillStyle(stream, shapeNum); //@incomplete I don't use this fill style?
 		} else {
 			ret.color = readRgba(stream);
 		}
@@ -906,6 +908,9 @@ struct Swf {
 	Swf *loadedSwfs[LOADED_SWFS_MAX];
 	int loadedSwfsNum;
 
+	u8 *globalJpegTable;
+	int globalJpegTableSize;
+
 	SwfShape **allShapes;
 	int allShapesNum;
 
@@ -929,6 +934,7 @@ Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
+void destroySwf(Swf *swf);
 
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
@@ -936,7 +942,9 @@ void printDrawEdges(DrawEdgeRecord *edges, int edgesNum);
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 int getFrameForLabel(SwfSprite *sprite, char *label, int afterFrame=0);
 Rect getFrameBounds(SwfSprite *sprite, int frameIndex);
-void destroySwf(Swf *swf);
+
+void swapDepths(SwfFrame *frame, char *name1, char *name2);
+void bringToTop(SwfFrame *frame, char *name1);
 /// FUNCTIONS ^
 
 Swf *loadSwf(char *path) {
@@ -1903,16 +1911,55 @@ Swf *loadSwf(char *path) {
 			swf->loadedSwfs[swf->loadedSwfsNum++] = loadSwf(frameSprintf("%s/%s", dir, url));
 		} else if (recordHeader.type == SWF_TAG_DEFINE_BITS_JPEG2) {
 			logf("Saw JpegBits2\n");
-			skipTag = true; // #soon
+			skipTag = true;
 		} else if (recordHeader.type == SWF_TAG_DEFINE_BITS_JPEG3) {
-			logf("Saw JpegBits3\n");
-			skipTag = true; // #soon
+			SwfBitmap *bitmap = (SwfBitmap *)zalloc(sizeof(SwfBitmap));
+			tagPointer->tag = bitmap;
+			tagPointer->header.type = SWF_TAG_DEFINE_BITS_JPEG3;
+
+			bitmap->characterId = readU16(&stream);
+			int alphaDataOffset = readU32(&stream);
+
+			int bytesLeft = recordHeader.length - 6;
+
+			int compressedImageDataSize = alphaDataOffset;
+
+			int channels;
+			bitmap->pixels = stbi_load_from_memory(&stream.data[stream.byteIndex], compressedImageDataSize, &bitmap->width, &bitmap->height, &channels, 4);
+			flipBitmapData(bitmap->pixels, bitmap->width, bitmap->height);
+
+			// int characterId;
+			// int width;
+			// int height;
+			// u8 *pixels;
+
+			// void *bitmapRuntimePointer;
+
+			// u64 uncompressedDataSize = Megabytes(5);
+			// u8 *uncompressedData = (u8 *)malloc(uncompressedDataSize);
+			// int err = uncompress(uncompressedData, (unsigned long *)&uncompressedDataSize, &stream.data[stream.byteIndex], bytesLeft);
+			// if (err != Z_OK) {
+			// 	showErrorWindow(frameSprintf("zlib error: %d (file: %s)\n", err, path));
+			// 	Panic("RIP");
+			// }
+
+			// SwfDataStream subStream = {};
+			// subStream.data = uncompressedData;
+			// subStream.size = uncompressedDataSize;
+
+			// free(uncompressedData);
+
+			skipBytes(&stream, bytesLeft);
 		} else if (recordHeader.type == SWF_TAG_DEFINE_BITS) {
 			logf("Saw DefineBits\n");
 			skipTag = true; // #soon
 		} else if (recordHeader.type == SWF_TAG_JPEG_TABELS) {
-			logf("Saw JpegTabels\n");
+			logf("Saw JpegTables\n");
 			skipTag = true; // #soon
+			// swf->globalJpegTable = (u8 *)malloc(recordHeader.length);
+			// for (int i = 0; i < recordHeader.length; i++) {
+			// 	swf->globalJpegTable[i] = read(&stream);
+			// }
 		} else if (recordHeader.type == SWF_TAG_CSM_TEXT_SETTINGS) {
 			skipTag = true; // We don't need super advanced text handling... yet
 		} else if (recordHeader.type == SWF_TAG_DEFINE_MORPH_SHAPE) {
@@ -1937,7 +1984,7 @@ Swf *loadSwf(char *path) {
 			recordHeader.type == SWF_TAG_DO_ACTION ||
 			recordHeader.type == SWF_TAG_DEFINE_BUTTON2
 		) {
-			skipTag = true; // Fuck action script
+			skipTag = true; // No action script
 		} else if (
 			recordHeader.type == SWF_TAG_SOUND_STREAM_BLOCK ||
 			recordHeader.type == SWF_TAG_SOUND_STREAM_HEAD ||
@@ -1950,7 +1997,8 @@ Swf *loadSwf(char *path) {
 			break;
 		} else {
 			showErrorWindow(frameSprintf("Failed to parse code: %d, len: %d, pos: %d (%s)\n", recordHeader.type, recordHeader.length, stream.byteIndex, path));
-			skipTag = true;
+			Panic("RIP");
+			// skipTag = true;
 		}
 
 		if (skipTag) {
@@ -1983,7 +2031,7 @@ Swf *loadSwf(char *path) {
 				DefineEditText *text = (DefineEditText *)tagPointer->tag;
 				hashMapSet(characterMap, &text->characterId, (int)text->characterId, &tagPointer);
 			}
-			if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS) {
+			if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS || tagPointer->header.type == SWF_TAG_DEFINE_BITS_JPEG3) {
 				SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
 				hashMapSet(characterMap, &bitmap->characterId, (int)bitmap->characterId, &tagPointer);
 			}
@@ -2015,9 +2063,27 @@ Swf *loadSwf(char *path) {
 						if (hashMapGet(swf->characterMap, &fill->bitmapId, (int)fill->bitmapId, &tagPointer)) {
 							SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
 							fill->bitmap = bitmap;
+						} else {
+							fill->bitmap = NULL;
 						}
 					}
 				}
+
+				if (!platform->isInternalVersion) {
+					for (int i = 0; i < shape->subShapesNum; i++) {
+						SwfSubShape *subShape = &shape->subShapes[i];
+						if (subShape->runtimeCachedPath) {
+							SkPath *newPath = new SkPath();
+							int oldCount = subShape->runtimeCachedPath->countPoints();
+							if (Simplify(*subShape->runtimeCachedPath, newPath)) {
+								free(subShape->runtimeCachedPath);
+								subShape->runtimeCachedPath = newPath;
+								int newCount = subShape->runtimeCachedPath->countPoints();
+							}
+						}
+					}
+				}
+
 				swf->allShapes[swf->allShapesNum++] = shape;
 			}
 		}
@@ -2303,7 +2369,8 @@ SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject) {
 	return drawable;
 }
 
-SwfSprite *getSpriteByName(Swf *swf, char *spriteName) {
+SwfSprite *getSpriteByName(Swf *swf, char *spriteName, bool depth=0);
+SwfSprite *getSpriteByName(Swf *swf, char *spriteName, bool depth) {
 	for (int i = 0; i < swf->allSpritesNum; i++) {
 		SwfSprite *sprite = swf->allSprites[i];
 		if (streq(sprite->name, spriteName)) {
@@ -2313,10 +2380,13 @@ SwfSprite *getSpriteByName(Swf *swf, char *spriteName) {
 
 	for (int i = 0; i < swf->loadedSwfsNum; i++) {
 		Swf *loadedSwf = swf->loadedSwfs[i];
-		SwfSprite *sprite = getSpriteByName(loadedSwf, spriteName);
+		SwfSprite *sprite = getSpriteByName(loadedSwf, spriteName, depth+1);
 		if (sprite) return sprite;
 	}
 
+	if (depth == 0) {
+		logf("Can't find sprite %s\n", spriteName);
+	}
 	return NULL;
 }
 
@@ -2335,6 +2405,44 @@ SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf) {
 	}
 
 	return NULL;
+}
+
+void destroySwf(Swf *swf) {
+	for (int i = 0; i < swf->tagsNum; i++) {
+		SwfTagPointer *tagPointer = &swf->tags[i];
+		if (tagPointer->header.type == SWF_TAG_DEFINE_SHAPE) {
+			SwfShape *shape = (SwfShape *)tagPointer->tag;
+			free(shape->fillStyles);
+			free(shape->lineStyles);
+		} else if (tagPointer->header.type == SWF_TAG_DEFINE_SPRITE) {
+			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
+			for (int i = 0; i < sprite->framesNum; i++) {
+				SwfFrame *frame = &sprite->frames[i];
+				for (int i = 0; i < frame->labelsNum; i++) free(frame->labels[i]);
+				if (frame->labels) free(frame->labels);
+			}
+			free(sprite->frames);
+			if (sprite->labelsInOrder) free(sprite->labelsInOrder);
+		} else if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS) {
+			SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
+			free(bitmap->pixels);
+		} else if (tagPointer->header.type == SWF_TAG_DEFINE_EDIT_TEXT) {
+			DefineEditText *editText = (DefineEditText *)tagPointer->tag;
+			if (editText->fontClass) free(editText->fontClass);
+			if (editText->variableName) free(editText->variableName); // I think this always exists
+			if (editText->initialText) free(editText->initialText);
+		}
+
+		free(tagPointer->tag);
+	}
+
+	free(swf->allShapes);
+	free(swf->allSprites);
+	free(swf->tags);
+	destroyMemoryArena(swf->drawablesArena);
+
+	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
+	free(swf);
 }
 
 bool hasLabel(SwfSprite *sprite, char *label) {
@@ -2393,44 +2501,6 @@ void printDrawEdges(DrawEdgeRecord *edges, int edgesNum) {
 	}
 }
 
-void destroySwf(Swf *swf) {
-	for (int i = 0; i < swf->tagsNum; i++) {
-		SwfTagPointer *tagPointer = &swf->tags[i];
-		if (tagPointer->header.type == SWF_TAG_DEFINE_SHAPE) {
-			SwfShape *shape = (SwfShape *)tagPointer->tag;
-			free(shape->fillStyles);
-			free(shape->lineStyles);
-		} else if (tagPointer->header.type == SWF_TAG_DEFINE_SPRITE) {
-			SwfSprite *sprite = (SwfSprite *)tagPointer->tag;
-			for (int i = 0; i < sprite->framesNum; i++) {
-				SwfFrame *frame = &sprite->frames[i];
-				for (int i = 0; i < frame->labelsNum; i++) free(frame->labels[i]);
-				if (frame->labels) free(frame->labels);
-			}
-			free(sprite->frames);
-			if (sprite->labelsInOrder) free(sprite->labelsInOrder);
-		} else if (tagPointer->header.type == SWF_TAG_DEFINE_BITS_LOSSLESS) {
-			SwfBitmap *bitmap = (SwfBitmap *)tagPointer->tag;
-			free(bitmap->pixels);
-		} else if (tagPointer->header.type == SWF_TAG_DEFINE_EDIT_TEXT) {
-			DefineEditText *editText = (DefineEditText *)tagPointer->tag;
-			if (editText->fontClass) free(editText->fontClass);
-			if (editText->variableName) free(editText->variableName); // I think this always exists
-			if (editText->initialText) free(editText->initialText);
-		}
-
-		free(tagPointer->tag);
-	}
-
-	free(swf->allShapes);
-	free(swf->allSprites);
-	free(swf->tags);
-	destroyMemoryArena(swf->drawablesArena);
-
-	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
-	free(swf);
-}
-
 int getSpriteFrameForLabel(SwfSprite *sprite, char *label, int afterFrame) {
 	if (!sprite) {
 		logf("Null sprite in getSpriteFrameForLabel %s\n", label);
@@ -2474,4 +2544,46 @@ Rect getFrameBounds(SwfSprite *sprite, int frameIndex) {
 	}
 
 	return bounds;
+}
+
+void swapDepths(SwfFrame *frame, char *name1, char *name2) {
+	SwfDrawable *drawable1 = NULL;
+	SwfDrawable *drawable2 = NULL;
+
+	for (int i = 0; i < frame->depthsNum; i++) {
+		SwfDrawable *drawable = &frame->depths[i];
+		if (streq(drawable->name, name1)) drawable1 = drawable;
+		if (streq(drawable->name, name2)) drawable2 = drawable;
+	}
+
+	if (!drawable1) {
+		logf("No drawable called %s\n", name1);
+		return;
+	}
+
+	if (!drawable2) {
+		logf("No drawable called %s\n", name2);
+		return;
+	}
+
+	SwfDrawable temp = *drawable1;
+	*drawable1 = *drawable2;
+	*drawable2 = temp;
+}
+void bringToTop(SwfFrame *frame, char *name1) {
+	SwfDrawable *drawable1 = NULL;
+
+	for (int i = 0; i < frame->depthsNum; i++) {
+		SwfDrawable *drawable = &frame->depths[i];
+		if (streq(drawable->name, name1)) drawable1 = drawable;
+	}
+
+	if (!drawable1) {
+		logf("No drawable called %s\n", name1);
+		return;
+	}
+
+	SwfDrawable temp = frame->depths[frame->depthsNum-1];
+	frame->depths[frame->depthsNum-1] = *drawable1;
+	*drawable1 = temp;
 }

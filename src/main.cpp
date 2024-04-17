@@ -1,7 +1,9 @@
+#pragma warning(error: 4553)
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <cmath>
+#include <cmath>
 #include <stdio.h>
 #include <time.h>
 #define USES_THREADS 1
@@ -16,20 +18,18 @@
 #endif
 
 #ifndef NO_SKIA
-#define NEW_SKIA
 #define SK_GL
 #define SK_GANESH
+#define SK_EMBEDDED_FONTS
 #include "include/core/SkFont.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkSurface.h"
-#ifdef NEW_SKIA
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "include/gpu/GrBackendSurface.h"
-#endif
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkStream.h"
@@ -44,6 +44,7 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
+#include "include/pathops/SkPathOps.h"
 
 // #include "include/gpu/GrBackendSurface.h"
 // #include "include/gpu/ganesh/SkSurfaceGanesh.h"
@@ -88,6 +89,9 @@ namespace Raylib {
 #include "imguiNodes/imgui_node_editor_api.cpp"
 #include "imguiNodes/imgui_node_editor_internal.inl"
 namespace ImNode = ax::NodeEditor;
+
+#include "ImGradientHDR.cpp"
+#include "imgui_curve.hpp"
 
 #ifndef STB_SPRINTF_OBJ
 # define STB_SPRINTF_IMPLEMENTATION
@@ -144,9 +148,8 @@ char projectAssetDir[PATH_MAX_LEN] = {};
 char filePathPrefix[PATH_MAX_LEN] = {};
 char exeDir[PATH_MAX_LEN] = {};
 
-//@hack new raylib only hack
-void logLastOSErrorCode(const char *fileName, int lineNum);
-#define logLastOSError() logLastOSErrorCode(__FILE__, __LINE__)
+//@hack
+void logLastOSError();
 
 #include "memoryTools.cpp"
 #include "mathTools.cpp"
@@ -158,7 +161,6 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 #include "perlin.cpp"
 #include "ds.cpp"
 #include "compression.cpp"
-#include "logging.cpp"
 #include "memoryTracking.cpp"
 #include "file.cpp"
 #include "dataStream.cpp"
@@ -187,6 +189,7 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 
 #include "rendererFrontend.cpp"
 
+#include "logging.cpp"
 #include "platformUtils.cpp"
 #include "zip.cpp"
 #include "audio.cpp"
@@ -209,7 +212,12 @@ void logLastOSErrorCode(const char *fileName, int lineNum);
 # include "skia.cpp"
 #endif
 #include "spriteSheets.cpp"
-#include "particles.cpp"
+
+#if defined(PLAYING_boxingGame)
+#include "oldEmitter.cpp"
+#else
+#include "emitter.cpp"
+#endif
 
 #include "equations.cpp"
 
@@ -325,6 +333,14 @@ NanoTime mainNano;
 
 #if defined(PLAYING_catAnimGame)
 # include "../../multiGamePrivate/src/catAnimGame.cpp"
+#endif
+
+#if defined(PLAYING_neoTestGame)
+# include "neoTestGame.cpp"
+#endif
+
+#if defined(PLAYING_ALT_CORE)
+# include STRINGIFY(ALT_CORE_PATH)
 #endif
 
 #ifdef _WIN32

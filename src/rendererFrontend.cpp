@@ -28,6 +28,7 @@ struct RenderProps {
 };
 
 struct Shader {
+	int mvpLoc;
 	BackendShader backendShader;
 };
 
@@ -37,11 +38,8 @@ struct Renderer {
   Vec2 scissorScale;
 
 	Shader *defaultShader;
-	int defaultMvpLoc;
-	int defaultTexture0Loc;
 
 	Shader *outlineShader;
-	int outlineShaderMvpLoc;
 	int outlineShaderResolutionLoc;
 	int outlineShaderOutlineSizeLoc;
 	int outlineShaderOutlineColorLoc;
@@ -56,7 +54,6 @@ struct Renderer {
 	bool currentBackfaceCulling;
 #define TEXTURE_SLOTS_MAX 8
 	Texture *textureSlots[TEXTURE_SLOTS_MAX];
-	int activeTextureSlot;
 
 #define TARGET_TEXTURE_LIMIT 16
 	Texture *targetTextureStack[TARGET_TEXTURE_LIMIT];
@@ -87,6 +84,7 @@ struct Renderer {
 #define BATCH_VERTS_MAX 6000
 	GpuVertex batchVerts[BATCH_VERTS_MAX];
 	int batchVertsNum;
+	int batchTextureSlotsNum;
 
 	Allocator textureMapAllocator;
 	HashMap *textureMap;
@@ -96,7 +94,7 @@ struct Renderer {
 
 Renderer *renderer = NULL;
 
-void initRenderer(int width, int height);
+void initRenderer();
 void startRenderingFrame();
 void endRenderingFrame();
 void clearRenderer(int color=0);
@@ -131,6 +129,7 @@ void drawSimpleTexture(Texture *texture);
 void drawSimpleTexture(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), float alpha=1);
 void drawRect(Rect rect, int color);
 void drawCircle(Circle circle, int color);
+
 void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), int tint=0xFFFFFFFF, int flags=0);
 void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
@@ -169,7 +168,7 @@ bool imGuiImageButton(Texture *texture);
 
 #include "rendererUtils.cpp"
 
-void initRenderer(int width, int height) {
+void initRenderer() {
 	renderer = (Renderer *)zalloc(sizeof(Renderer));
 
 	backendInit();
@@ -182,11 +181,8 @@ void initRenderer(int width, int height) {
 
 	{ /// Setup shaders
 		renderer->defaultShader = loadShader(NULL, NULL);
-		renderer->defaultMvpLoc = getUniformLocation(renderer->defaultShader, "mvp");
-		renderer->defaultTexture0Loc = getUniformLocation(renderer->defaultShader, "texture0");
 
 		renderer->outlineShader = loadShader(NULL, "assets/common/shaders/outline.fs");
-		renderer->outlineShaderMvpLoc = getUniformLocation(renderer->outlineShader, "mvp");
 		renderer->outlineShaderResolutionLoc = getUniformLocation(renderer->outlineShader, "resolution");
 		renderer->outlineShaderOutlineSizeLoc = getUniformLocation(renderer->outlineShader, "outlineSize");
 		renderer->outlineShaderOutlineColorLoc = getUniformLocation(renderer->outlineShader, "outlineColor");
@@ -235,6 +231,8 @@ Shader *loadShader(char *vsPath, char *fsPath) {
 
 	Shader *shader = (Shader *)zalloc(sizeof(Shader));
 	backendLoadShader(&shader->backendShader, (char *)frameReadFile(vsPath), (char *)frameReadFile(fsPath));
+
+	shader->mvpLoc = getUniformLocation(shader, "mvp");
 
 	return shader;
 }
@@ -303,7 +301,9 @@ Texture *createTexture(int width, int height, void *data, int flags) {
 	texture->width = width;
 	texture->height = height;
 
+	processBatchDraws();
 	texture->backendTexture = backendCreateTexture(width, height, flags);
+	setTexture(texture);
 
 	if (data) setTextureData(texture, data, width, height, flags);
 	texture->smooth = true;
@@ -463,7 +463,9 @@ void drawTexture(Texture *texture, RenderProps props) {
 	if (getAofArgb(props.tint) == 0) return;
 	if (props.disabled) return;
 	if (renderer->disabled) return;
-	if (!texture) Panic("drawTexture called with null texture!");
+	if (!texture) {
+		Panic("drawTexture called with null texture!");
+	}
 
 	if (renderer->useBadSrcSize) {
 		if (props.srcWidth == 0) props.srcWidth = texture->width;
@@ -587,6 +589,7 @@ void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *textu
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture) {
 	if (renderer->currentDrawCount > RENDERER_BACKEND_MAX_DRAWS_PER_BATCH-10) processBatchDraws(); // Magic -10 :/
 	renderer->currentDrawCount++;
+
 	setTexture(texture);
 
 	GpuVertex *gpuVerts = (GpuVertex *)frameMalloc(sizeof(GpuVertex) * vertsNum);
@@ -615,11 +618,7 @@ void processBatchDraws() {
 	if (renderer->batchVertsNum == 0) return;
 	renderer->currentDrawCount = 0;
 	renderer->current2dDrawDepth = -1;
-
-	if (renderer->currentShader == renderer->defaultShader) {
-		Matrix4 matrix = mat4();
-		backendSetShaderUniform(&renderer->defaultShader->backendShader, renderer->defaultMvpLoc, &matrix, SHADER_UNIFORM_MATRIX4, 1);
-	}
+	renderer->batchTextureSlotsNum = 0;
 
 	backendDrawVerts(renderer->batchVerts, renderer->batchVertsNum);
 	renderer->batchVertsNum = 0;
@@ -744,17 +743,19 @@ void setShader(Shader *shader) {
 	if (!shader) shader = renderer->defaultShader;
 
 	if (renderer->currentShader == shader) return;
-	renderer->currentShader = shader;
 
 	processBatchDraws();
 
+	renderer->currentShader = shader;
+
 	backendSetShader(&shader->backendShader);
+
+	setShaderUniform(shader, shader->mvpLoc, mat4());
 }
 
 void setTexture(Texture *texture, int slot) {
 	if (renderer->textureSlots[slot] == texture) return;
 	renderer->textureSlots[slot] = texture;
-	renderer->activeTextureSlot = slot;
 
 	processBatchDraws();
 	backendSetTexture(&texture->backendTexture, slot);
@@ -793,6 +794,14 @@ void resetRenderContext() {
 		renderer->textureSlots[i] = NULL;
 		setTexture(currentTexture, i);
 	}
+
+	if (renderer->targetTextureStackNum > 0) {
+		Texture *texture = renderer->targetTextureStack[renderer->targetTextureStackNum-1];
+		backendSetTargetTexture(&texture->backendTexture);
+	} else {
+		backendSetTargetTexture(NULL);
+	}
+	refreshGlobalMatrices();
 
 	backendResetRenderContext();
 }

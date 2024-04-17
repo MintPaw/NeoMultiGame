@@ -6,6 +6,8 @@
 #define ArrayLength(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 #define ConsumeBytes(dest, src, count) do {memcpy(dest, src, count); src += count;}while(0);
 
+#define IS_BIT_SET(n,x)   (((n & (1 << x)) != 0) ? 1 : 0)
+
 #ifndef IncMutex
 # define IncMutex
 # define DecMutex
@@ -54,7 +56,7 @@ void *memClone(void *ptr, u32 size);
 bool streq(const char *str1, const char *str2, bool caseInsentitive=false);
 bool strContains(const char *haystack, const char *needle, bool caseInsentitive=false);
 char *strrstr(char *haystack, const char *needle);
-int countChar(const char *src, char value);
+int countChar(const char *src, char value, int len=0);
 int countString(char *src, char *value);
 bool stringStartsWith(const char *hayStack, const char *needle);
 bool stringEndsWith(char *hayStack, char *needle);
@@ -367,10 +369,13 @@ char *strrstr(char *haystack, const char *needle) {
 	return result;
 }
 
-int countChar(const char *src, char value) {
+int countChar(const char *src, char value, int len) {
 	int total = 0;
 
+	int loopCount = 0;
 	for (int i = 0; ; i++) {
+		loopCount++;
+		if (len && loopCount == len) break;
 		if (src[i] == 0) break;
 		if (src[i] == value) total++;
 	}
@@ -493,7 +498,7 @@ void addText(StringBuilder *builder, char *string, int count) {
 	strncpy(&builder->string[builder->count], string, count);
 	// strncat(builder->string, string, count);
 	builder->count += count;
-	builder->string[builder->count+1] = 0;
+	builder->string[builder->count] = 0;
 }
 
 void destroy(StringBuilder builder) {
@@ -904,6 +909,7 @@ TaggedText *parseTaggedText(char *inText) {
 	TaggedText *taggedText = (TaggedText *)zalloc(sizeof(TaggedText));
 
 	StringBuilder builder = createStringBuilder();
+	int builderCount = 0;
 
 	int tokenMaxLen = TEXT_TAG_NAME_MAX_LEN;
 	char *token = (char *)frameMalloc(TEXT_TAG_NAME_MAX_LEN);
@@ -918,6 +924,7 @@ TaggedText *parseTaggedText(char *inText) {
 
 		int charsToCopy = inTextEnd - inTextStart;
 		addText(&builder, inTextStart, charsToCopy);
+		builderCount += charsToCopy + countChar(inTextStart, '\n', charsToCopy);
 		if (shouldBreak) break;
 
 		char *tokenStart = inTextEnd+1;
@@ -943,11 +950,11 @@ TaggedText *parseTaggedText(char *inText) {
 		if (token[0] == '/') {
 			TextTag *tag = &taggedText->tags[taggedText->tagsNum-1];
 			if (tag->endIndex != -1) logf("Double ending %s tag???\n", tag->name);
-			tag->endIndex = builder.count;
+			tag->endIndex = builderCount;
 		} else {
 			TextTag *tag = &taggedText->tags[taggedText->tagsNum++];
 			strcpy(tag->name, token);
-			tag->startIndex = builder.count;
+			tag->startIndex = builderCount;
 			tag->endIndex = -1;
 		}
 

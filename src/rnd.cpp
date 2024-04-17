@@ -7,6 +7,8 @@ bool FORCE_INLINE rndBool();
 bool FORCE_INLINE rndPerc(float perc);
 int rndPick(int *weights, int weightsNum);
 int rndPick(float *weights, int weightsNum);
+Vec2 getRandomPoint(Tri2 tri);
+
 void rndTest();
 
 #define LCG_SEED_STACK_MAX 4096
@@ -85,6 +87,15 @@ int rndPick(float *weights, int weightsNum) {
 	}
 
 	return 0;
+}
+
+Vec2 getRandomPoint(Tri2 tri) {
+	float r1 = rndFloat(0, 1);
+	float r2 = rndFloat(0, 1);
+	Vec2 point;
+	point.x = (1 - sqrt(r1)) * tri.verts[0].x + (sqrt(r1) * (1 - r2)) * tri.verts[1].x + (sqrt(r1) * r2) * tri.verts[2].x;
+	point.y = (1 - sqrt(r1)) * tri.verts[0].y + (sqrt(r1) * (1 - r2)) * tri.verts[1].y + (sqrt(r1) * r2) * tri.verts[2].y;
+	return point;
 }
 
 void rndTest() {

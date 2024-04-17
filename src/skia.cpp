@@ -31,7 +31,7 @@ struct SpriteLayerProps {
 
 struct DrawSpriteCall;
 struct SpriteTransform {
-#define SPRITE_TRANSFORM_PATHS_MAX 32
+#define SPRITE_TRANSFORM_PATHS_MAX 64
 	char *paths[SPRITE_TRANSFORM_PATHS_MAX];
 	int pathsNum;
 
@@ -169,10 +169,6 @@ struct SkiaSystem {
 	GrDirectContext *grDirectContext;
 	SkSurface *gpuSurface;
 	Texture *skiaTexture;
-	bool useGpu;
-	int msaaSamples;
-
-	Texture *backTexture;
 
 #define MATRIX_STACK_MAX 256
 	Matrix3 matrixStack[MATRIX_STACK_MAX];
@@ -180,21 +176,22 @@ struct SkiaSystem {
 
 	int width;
 	int height;
-	u8 *cpuFramePixels;
 	Vec2 scale;
 	float superSampleScale;
+	Vec2 subFrameCachedScale;
+	Vec2 outputSize;
+
 	bool useCpuAA;
 	bool blurDisabled;
-
-	Vec2 subFrameCachedScale;
 
 	VDrawCommandsList immVDrawCommandsList;
 
 	bool recordFrame;
+	bool debugDrawTextFieldRectsThisFrame;
 };
 SkiaSystem *skiaSys = NULL;
 
-void resetSkia(Vec2 size, Vec2 scale=v2(1, 1), bool useGpu=true, int msaaSamples=16);
+void resetSkia(Vec2 size, Vec2 scale=v2(1, 1), float superSampleScale=2);
 void drawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse={});
 void drawShape(SwfShape *shape, Matrix3 matrix, DrawShapeProps props);
 
@@ -231,155 +228,106 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize);
 
 // static void* get_proc(fastuidraw::c_string proc_name) { return SDL_GL_GetProcAddress(proc_name); }
 
-void resetSkia(Vec2 size, Vec2 scale, bool useGpu, int msaaSamples) {
+void resetSkia(Vec2 size, Vec2 scale, float superSampleScale) {
+	printf("Creating surface %fx%f (%f) surface\n", size.x, size.y, superSampleScale);
 	if (!skiaSys) {
 		skiaSys = (SkiaSystem *)zalloc(sizeof(SkiaSystem));
 		skiaSys->matrixStack[skiaSys->matrixStackNum++] = mat3();
-		skiaSys->superSampleScale = 2;
-
 		SkGraphics::Init();
 	}
+
+	skiaSys->superSampleScale = superSampleScale;
 
 	if (size.x == -1) {
 		size.x = skiaSys->width / skiaSys->superSampleScale;
 		size.y = skiaSys->height / skiaSys->superSampleScale;
 		scale = skiaSys->scale;
-		useGpu = skiaSys->useGpu;
-		msaaSamples = skiaSys->msaaSamples;
 	}
 	// logf("Skia reset to %.1f %.1f\n", size.x, size.y);
 
-	// skiaSys->backTextureWidth = size.x;
-	// skiaSys->backTextureHeight = size.y;
 	skiaSys->width = size.x * skiaSys->superSampleScale;
 	skiaSys->height = size.y * skiaSys->superSampleScale;
 	skiaSys->scale = scale;
-	skiaSys->msaaSamples = msaaSamples;
 
-	if (skiaSys->backTexture) destroyTexture(skiaSys->backTexture);
-	skiaSys->backTexture = createTexture(size.x, size.y);
+	skiaSys->outputSize = size;
 
-	bool oldUseGpu = skiaSys->useGpu;
-	skiaSys->useGpu = useGpu;
-	if (!oldUseGpu && skiaSys->mainCanvas) {
-		delete skiaSys->mainCanvas;
-		skiaSys->mainCanvas = NULL;
+	if (!skiaSys->grInterface) {
+		sk_sp<const GrGLInterface> grInterface = GrGLMakeNativeInterface();
+		if (!grInterface || !grInterface.get()) logf("NULL native interface\n");
+		skiaSys->grInterface = grInterface.release();
 	}
+
+	if (!skiaSys->grDirectContext) {
+		sk_sp<GrDirectContext> grDirectContext = GrDirectContext::MakeGL();
+		if (!grDirectContext || !grDirectContext.get()) logf("Failed to create grDirectContext\n");
+		skiaSys->grDirectContext = grDirectContext.release();
+	}
+
+	sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
+	SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
+
+	SkImageInfo imageInfo = SkImageInfo::MakeN32(skiaSys->width, skiaSys->height, SkAlphaType::kPremul_SkAlphaType);
 
 	if (skiaSys->gpuSurface) {
 		delete skiaSys->gpuSurface;
 		skiaSys->gpuSurface = NULL;
 	}
 
-	if (skiaSys->useGpu) {
-		if (!skiaSys->grInterface) {
-			sk_sp<const GrGLInterface> grInterface = GrGLMakeNativeInterface();
-			if (!grInterface || !grInterface.get()) logf("NULL native interface\n");
-			skiaSys->grInterface = grInterface.release();
-		}
+	sk_sp<SkSurface> gpuSurface = SkSurfaces::RenderTarget(
+		skiaSys->grDirectContext, skgpu::Budgeted::kNo,
+		imageInfo,
+		0, kBottomLeft_GrSurfaceOrigin,
+		&surfaceProps
+	);
 
-		if (!skiaSys->grDirectContext) {
-			sk_sp<GrDirectContext> grDirectContext = GrDirectContext::MakeGL();
-			if (!grDirectContext || !grDirectContext.get()) logf("Failed to create grDirectContext\n");
-			skiaSys->grDirectContext = grDirectContext.release();
-		}
-
-		sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
-		SkSurfaceProps surfaceProps(0, SkPixelGeometry::kUnknown_SkPixelGeometry);
-
-		SkImageInfo imageInfo = SkImageInfo::MakeN32(skiaSys->width, skiaSys->height, SkAlphaType::kPremul_SkAlphaType);
-
-#ifdef NEW_SKIA
-		sk_sp<SkSurface> gpuSurface = SkSurfaces::RenderTarget(
-			skiaSys->grDirectContext, skgpu::Budgeted::kNo,
-			imageInfo,
-			0, kBottomLeft_GrSurfaceOrigin,
-			&surfaceProps
-		);
-#else
-		sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(
-			skiaSys->grDirectContext, SkBudgeted::kNo,
-			imageInfo,
-			0, kBottomLeft_GrSurfaceOrigin,
-			&surfaceProps
-		);
-#endif
-
-		if (!gpuSurface) logf("Failed to create gpu surface\n");
-
-		GrGLTextureInfo textureInfo = {};
-#ifdef NEW_SKIA
-		GrBackendTexture backendTexture = SkSurfaces::GetBackendTexture(gpuSurface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
-		GrBackendTextures::GetGLTextureInfo(backendTexture, &textureInfo);
-#else
-		auto grTexture = gpuSurface->getBackendTexture(SkSurface::BackendHandleAccess::kFlushRead_BackendHandleAccess);
-		grTexture.getGLTextureInfo(&textureInfo);
-#endif
-
-		//@incomplete Skia also hacks the renderer api using Raylib
-		skiaSys->skiaTexture = (Texture *)zalloc(sizeof(Texture));
-		skiaSys->skiaTexture->width = imageInfo.width();
-		skiaSys->skiaTexture->height = imageInfo.height();
-#if defined(RAYLIB_MODE)
-		skiaSys->skiaTexture->backendTexture.raylibTexture.width = imageInfo.width();
-		skiaSys->skiaTexture->backendTexture.raylibTexture.height = imageInfo.height();
-		skiaSys->skiaTexture->backendTexture.raylibTexture.mipmaps = 1;
-		skiaSys->skiaTexture->backendTexture.raylibTexture.format = textureInfo.fFormat;
-		skiaSys->skiaTexture->backendTexture.raylibTexture.id = textureInfo.fID;
-#else
-		skiaSys->skiaTexture->backendTexture.width = imageInfo.width();
-		skiaSys->skiaTexture->backendTexture.height = imageInfo.height();
-		skiaSys->skiaTexture->backendTexture.id = textureInfo.fID;
-#endif
-		setTextureSmooth(skiaSys->skiaTexture, true);
-		// unsigned int id;        // OpenGL texture id
-		// int width;              // Texture base width
-		// int height;             // Texture base height
-		// int mipmaps;            // Mipmap levels, 1 by default
-		// int format;             // Data format (PixelFormat type)
-
-		if (!gpuSurface || !gpuSurface.get()) logf("Failed to create gpu surface\n");
-		skiaSys->gpuSurface = gpuSurface.release();
-
-		if (!skiaSys->gpuSurface) {
-			if (msaaSamples == 16) {
-				logf("Failed to create skia 16x MSAA surface, falling back\n");
-				resetSkia(size, scale, true, 8);
-			} else if (msaaSamples == 8) {
-				logf("Failed to create skia 8x MSAA surface, falling back\n");
-				resetSkia(size, scale, true, 4);
-			} else if (msaaSamples == 4) {
-				logf("Failed to create skia 4x MSAA surface, falling back\n");
-				resetSkia(size, scale, true, 2);
-			} else if (msaaSamples == 2) {
-				logf("Failed to create skia 2x MSAA surface, falling back\n");
-				resetSkia(size, scale, true, 0);
-			} else {
-				logf("Failed to create skia GPU surface, falling back\n");
-				resetSkia(size, scale, false, 0);
-			}
+	if (!gpuSurface) {
+		if (fabs(superSampleScale - 2) < 0.01) {
+			resetSkia(size, scale, 1.5);
+			return;
+		} else if (fabs(superSampleScale - 1.5) < 0.01) {
+			resetSkia(size, scale, 1);
+			return;
+		} else if (fabs(superSampleScale - 1) < 0.01) {
+			resetSkia(size, scale, 0.75);
+			return;
+		} else if (fabs(superSampleScale - 0.75) < 0.01) {
+			resetSkia(size, scale, 0.5);
+			return;
+		} else {
+			logf("Failed to create gpu surface\n");
 			return;
 		}
-
-		skiaSys->mainCanvas = skiaSys->gpuSurface->getCanvas();
-
-		if (!skiaSys->mainCanvas) logf("Failed to create skia canvas\n");
-		// bindVertexArray(renderer->defaultVao);
-
-		// glPopClientAttrib();
-	} else {
-		SkImageInfo info = SkImageInfo::Make(skiaSys->width, skiaSys->height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-		skiaSys->bitmap.allocPixels(info);
-
-		skiaSys->mainCanvas = new SkCanvas(skiaSys->bitmap);
 	}
+
+	GrGLTextureInfo textureInfo = {};
+	GrBackendTexture backendTexture = SkSurfaces::GetBackendTexture(gpuSurface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
+	GrBackendTextures::GetGLTextureInfo(backendTexture, &textureInfo);
+
+	//@incomplete Skia also hacks the renderer api using Raylib
+	skiaSys->skiaTexture = (Texture *)zalloc(sizeof(Texture));
+	skiaSys->skiaTexture->width = imageInfo.width();
+	skiaSys->skiaTexture->height = imageInfo.height();
+#if defined(RAYLIB_MODE)
+	skiaSys->skiaTexture->backendTexture.raylibTexture.width = imageInfo.width();
+	skiaSys->skiaTexture->backendTexture.raylibTexture.height = imageInfo.height();
+	skiaSys->skiaTexture->backendTexture.raylibTexture.mipmaps = 1;
+	skiaSys->skiaTexture->backendTexture.raylibTexture.format = textureInfo.fFormat;
+	skiaSys->skiaTexture->backendTexture.raylibTexture.id = textureInfo.fID;
+#else
+	skiaSys->skiaTexture->backendTexture.width = imageInfo.width();
+	skiaSys->skiaTexture->backendTexture.height = imageInfo.height();
+	skiaSys->skiaTexture->backendTexture.id = textureInfo.fID;
+#endif
+	setTextureSmooth(skiaSys->skiaTexture, true);
+
+	skiaSys->gpuSurface = gpuSurface.release();
+
+	skiaSys->mainCanvas = skiaSys->gpuSurface->getCanvas();
+	if (!skiaSys->mainCanvas) logf("Failed to create skia canvas\n");
+
 	skiaSys->canvas = skiaSys->mainCanvas;
 
-	if (skiaSys->cpuFramePixels) {
-		free(skiaSys->cpuFramePixels);
-		skiaSys->cpuFramePixels = NULL;
-	}
-	if (!skiaSys->useGpu) skiaSys->cpuFramePixels = (u8 *)malloc(skiaSys->width * skiaSys->height * 4);
+	printf("Good surface!\n");
 }
 
 void drawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transformsNum, DrawSpriteRecurseData recurse) {
@@ -405,8 +353,9 @@ VDrawCommand *createCommand(VDrawCommandsList *cmdList, VDrawCommandType type) {
 	}
 
 	VDrawCommand *cmd = &cmdList->cmds[cmdList->cmdsNum++];
-	memset(cmd, 0, sizeof(VDrawCommand));
+	// memset(cmd, 0, sizeof(VDrawCommand));
 	cmd->type = type;
+	cmd->gradientRatiosNum = 0;
 	return cmd;
 }
 
@@ -518,10 +467,15 @@ void genDrawShape(SwfShape *shape, DrawShapeProps props, VDrawCommandsList *cmdL
 
 			if (paintCmd) {
 				for (int i = 0; i < 16; i++) {
+#if 1
+					int a = (float)((paintCmd->colors[i] >> 24) & 0xFF) * props.alpha;
+					paintCmd->colors[i] = (paintCmd->colors[i] & 0x00FFFFFF) | (a << 24);
+#else
 					int a, r, g, b;
 					hexToArgb(paintCmd->colors[i], &a, &r, &g, &b);
 					a = ((a/255.0) * Clamp01(props.alpha)) * 255.0;
 					paintCmd->colors[i] = argbToHex(a, r, g, b);
+#endif
 				}
 			}
 		} ///
@@ -562,7 +516,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 
 		Allocator *allocator = (Allocator *)frameMalloc(sizeof(Allocator));
 		allocator->type = ALLOCATOR_FRAME;
-		recurse.nameTransformMap = createHashMap(sizeof(char *), sizeof(SpriteTransform *), 64, allocator);
+		recurse.nameTransformMap = createHashMap(sizeof(char *), sizeof(SpriteTransform *), 1024, allocator);
 		recurse.nameTransformMap->usesStreq = true;
 		for (int i = 0; i < transformsNum; i++) {
 			SpriteTransform *transform = &transforms[i];
@@ -589,8 +543,17 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	int charsAddedToPath = 0;
 	if (name) {
 		charsAddedToPath += strlen(name) + 1;
+#if 1
+		recurse.path = frameSprintf(
+			"%s%s%s", 
+			recurse.path,
+			strlen(recurse.path) != 0 ? "." : "",
+			name
+		);
+#else
 		if (strlen(recurse.path) != 0) strcat(recurse.path, ".");
 		strcat(recurse.path, name);
+#endif
 
 		hashMapGet(recurse.nameTransformMap, &recurse.path, (int)stringHash32(recurse.path), &matchingTransform);
 	}
@@ -700,7 +663,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 				if (drawable->type == SWF_DRAWABLE_SHAPE) {
 					DrawShapeProps props = {};
 					props.useClip = nextUseClip;
-					props.alpha = recurse.alpha * alphaMultiplier;
+					props.alpha = Clamp01(recurse.alpha * alphaMultiplier);
 					props.tint = recurse.tint;
 					props.colorTransform = recurse.colorTransform;
 
@@ -710,6 +673,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 					newRecurse.useClip = nextUseClip;
 					newRecurse.altName = drawable->name;
 					newRecurse.alpha *= alphaMultiplier;
+					newRecurse.alpha = Clamp01(newRecurse.alpha);
 					if (drawable->colorTransform) newRecurse.colorTransform = applyColorTransform(newRecurse.colorTransform, *drawable->colorTransform);
 
 					bool shouldStopBlur = false;
@@ -850,7 +814,6 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	createCommand(cmdList, VDRAW_END_SPRITE);
 }
 
-int usingInvalidBlendModeWarnings = 0;
 void execCommands(VDrawCommandsList *cmdList) {
 	if (skiaSys->width == 0) {
 		logf("You have to call resize at least once to draw\n");
@@ -858,15 +821,17 @@ void execCommands(VDrawCommandsList *cmdList) {
 	}
 
 	SkPaint paint = SkPaint();
-	if (!skiaSys->useGpu && skiaSys->useCpuAA) paint.setAntiAlias(true);
+	// paint.setAntiAlias(true);
 
 	SkPath path = SkPath();
 
 	for (int i = 0; i < cmdList->cmdsNum; i++) {
 		VDrawCommand *cmd = &cmdList->cmds[i];
+		VDrawCommand *nextCmd = NULL;
+		if (i < cmdList->cmdsNum-1) nextCmd = &cmdList->cmds[i+1];
 		// logf("Cmd %d\n", i);
 		if (cmd->type == VDRAW_SET_MATRIX) {
-			skiaSys->canvas->setMatrix(toSkMatrix(cmd->matrix));
+			if (!nextCmd || nextCmd->type != VDRAW_SET_MATRIX) skiaSys->canvas->setMatrix(toSkMatrix(cmd->matrix));
 		} else if (cmd->type == VDRAW_CLIP_PATH) {
 			skiaSys->canvas->clipPath(path);
 		} else if (cmd->type == VDRAW_DRAW_CACHED_PATH) {
@@ -911,6 +876,8 @@ void execCommands(VDrawCommandsList *cmdList) {
 		} else if (cmd->type == VDRAW_END_COLOR_MATRIX) {
 			paint.setColorFilter(NULL);
 		} else if (cmd->type == VDRAW_SET_BLEND_MODE) {
+			static int _usingInvalidBlendModeWarnings = 0;
+
 			SkBlendMode blendMode = SkBlendMode::kSrcOver;
 			if (cmd->blendMode == SWF_BLEND_NORMAL || cmd->blendMode == SWF_BLEND_NONE || cmd->blendMode == 0) {
 				blendMode = SkBlendMode::kSrcOver;
@@ -925,10 +892,10 @@ void execCommands(VDrawCommandsList *cmdList) {
 			} else if (cmd->blendMode == SWF_BLEND_SUBTRACT) {
 				blendMode = SkBlendMode::kDifference;
 			} else {
-				if (usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
-				usingInvalidBlendModeWarnings++;
+				if (_usingInvalidBlendModeWarnings < 8) logf("Using invalid blend mode\n");
+				_usingInvalidBlendModeWarnings++;
 			}
-			if (usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
+			if (_usingInvalidBlendModeWarnings == 8) logf("Too many blend mode warnings, stopping reports.\n");
 
 			if (skiaSys->useSaveLayerBlendMode) {
 				SkPaint blendModePaint = SkPaint();
@@ -959,7 +926,7 @@ void execCommands(VDrawCommandsList *cmdList) {
 			paint.setColor(0xFFFFFFFF);
 
 			SkMatrix mat = toSkMatrix(cmd->matrix);
-			paint.setShader(SkGradientShader::MakeRadial( SkPoint::Make(0, 0), 16384.0/20, (SkColor *)cmd->colors, cmd->gradientRatios, cmd->gradientRatiosNum, SkTileMode::kClamp, 0, &mat));
+			paint.setShader(SkGradientShader::MakeRadial(SkPoint::Make(0, 0), 16384.0/20, (SkColor *)cmd->colors, cmd->gradientRatios, cmd->gradientRatiosNum, SkTileMode::kClamp, 0, &mat));
 
 			// for (int i = 0; i < cmd->gradientRatiosNum; i++) {
 			// 	logf("Grad %d: 0x%X (%f)\n", i, cmd->colors[i], cmd->gradientRatios[i]);
@@ -970,16 +937,16 @@ void execCommands(VDrawCommandsList *cmdList) {
 
 			SkMatrix mat = toSkMatrix(cmd->matrix);
 			paint.setShader(SkGradientShader::MakeTwoPointConical(
-				SkPoint::Make(16384/20.0 * cmd->position.x, 0),
-				0,
-				SkPoint::Make(0, 0),
-				16384/20.0,
-				(SkColor *)cmd->colors,
-				cmd->gradientRatios,
-				cmd->gradientRatiosNum,
-				SkTileMode::kClamp,
-				0,
-				&mat
+					SkPoint::Make(16384/20.0 * cmd->position.x, 0),
+					0,
+					SkPoint::Make(0, 0),
+					16384/20.0,
+					(SkColor *)cmd->colors,
+					cmd->gradientRatios,
+					cmd->gradientRatiosNum,
+					SkTileMode::kClamp,
+					0,
+					&mat
 			));
 		} else if (cmd->type == VDRAW_SET_LINE_STYLE) {
 			paint.setStyle(SkPaint::Style::kStroke_Style);
@@ -1015,6 +982,39 @@ void execCommands(VDrawCommandsList *cmdList) {
 				logf("Missing bitmap\n");
 			}
 		} else if (cmd->type == VDRAW_TEXT) {
+#if 0
+			SkPaint fontPaint = SkPaint();
+			fontPaint.setStyle(SkPaint::Style::kFill_Style);
+			fontPaint.setColor(cmd->colors[0]);
+
+			if (!cmd->font->skiaUserData) {
+				int fontDataSize;
+				void *fontData = readFile(cmd->font->path, &fontDataSize);
+				sk_sp<SkData> skiaData = SkData::MakeWithCopy(fontData, fontDataSize);
+				free(fontData);
+				sk_sp<SkTypeface> skiaTypeface = SkTypeface::MakeFromData(skiaData);
+				SkFont *skiaFont = new SkFont(skiaTypeface, cmd->font->fontSize);
+				cmd->font->skiaUserData = skiaFont;
+			}
+
+			SkFont *skiaFont = (SkFont *)cmd->font->skiaUserData;
+			sk_sp<SkTextBlob> skiaTextBlob = SkTextBlob::MakeFromString(cmd->text, *skiaFont);
+
+			SkRect skiaBounds = skiaTextBlob->bounds();
+			// float offsetY = skiaBounds.height();
+			float offsetY = cmd->control.y;
+
+			Matrix3 matrix = mat3();
+			matrix.TRANSLATE(cmd->position);
+			matrix.TRANSLATE(0, offsetY);
+
+			skiaSys->canvas->save();
+			skiaSys->canvas->concat(toSkMatrix(matrix));
+
+			skiaSys->canvas->drawTextBlob(skiaTextBlob, 0, 0, fontPaint);
+
+			skiaSys->canvas->restore();
+#else
 			SkPaint fontPaint = SkPaint();
 			fontPaint.setStyle(SkPaint::Style::kFill_Style);
 			fontPaint.setColor(cmd->colors[0]);
@@ -1042,27 +1042,6 @@ void execCommands(VDrawCommandsList *cmdList) {
 
 			Rect textRect = getInnerRectOfAspect(toFit, actualTextSize, cmd->gravity);
 
-			{
-				// SkPaint outlineRed = SkPaint();
-				// outlineRed.setStyle(SkPaint::Style::kStroke_Style);
-				// outlineRed.setColor(0xFFFF0000);
-				// outlineRed.setStrokeWidth(1);
-
-				// SkPaint outlineBlue = SkPaint();
-				// outlineBlue.setStyle(SkPaint::Style::kStroke_Style);
-				// outlineBlue.setColor(0xFF0000FF);
-				// outlineBlue.setStrokeWidth(1);
-
-				// SkPaint outlineGreen = SkPaint();
-				// outlineGreen.setStyle(SkPaint::Style::kStroke_Style);
-				// outlineGreen.setColor(0xFF00FF00);
-				// outlineGreen.setStrokeWidth(1);
-
-				// skiaSys->canvas->drawRect(skiaBounds, outlineRed);
-				// skiaSys->canvas->drawRect(SkRect::MakeXYWH(textRect.x, textRect.y, textRect.width, textRect.height), outlineBlue);
-				// skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlineGreen);
-			}
-
 			Vec2 scaleRatio = getSize(textRect) / actualTextSize;
 
 			textRect.y += textRect.height/2 + actualTextSize.y/2*scaleRatio.y;
@@ -1076,6 +1055,28 @@ void execCommands(VDrawCommandsList *cmdList) {
 			skiaSys->canvas->drawTextBlob(skiaTextBlob, 0, 0, fontPaint);
 
 			skiaSys->canvas->restore();
+
+			if (skiaSys->debugDrawTextFieldRectsThisFrame) {
+				SkPaint outlineRed = SkPaint();
+				outlineRed.setStyle(SkPaint::Style::kStroke_Style);
+				outlineRed.setColor(0xFFFF0000);
+				outlineRed.setStrokeWidth(1);
+
+				SkPaint outlineBlue = SkPaint();
+				outlineBlue.setStyle(SkPaint::Style::kStroke_Style);
+				outlineBlue.setColor(0xFF0000FF);
+				outlineBlue.setStrokeWidth(1);
+
+				SkPaint outlineGreen = SkPaint();
+				outlineGreen.setStyle(SkPaint::Style::kStroke_Style);
+				outlineGreen.setColor(0xFF00FF00);
+				outlineGreen.setStrokeWidth(1);
+
+				// skiaSys->canvas->drawRect(skiaBounds, outlineRed);
+				// skiaSys->canvas->drawRect(SkRect::MakeXYWH(textRect.x, textRect.y, textRect.width, textRect.height), outlineBlue);
+				skiaSys->canvas->drawRect(SkRect::MakeXYWH(toFit.x, toFit.y, toFit.width, toFit.height), outlineGreen);
+			}
+#endif
 		} else {
 			logf("Unknown VDrawCommandType %d\n", cmd->type);
 		}
@@ -1099,60 +1100,16 @@ void startSkiaFrame() {
 }
 
 void endSkiaFrame() {
-	if (skiaSys->useGpu) {
-		setRendererBlendMode(BLEND_NORMAL);
-		GLint last_viewport[4]; glGetIntegerv(GL_VIEWPORT, last_viewport); //@speed This could be very slow
+	skiaSys->grDirectContext->resetContext();
 
-		skiaSys->grDirectContext->resetContext();
+	execCommands(&skiaSys->immVDrawCommandsList);
+	skiaSys->immVDrawCommandsList.cmdsNum = 0;
 
-		execCommands(&skiaSys->immVDrawCommandsList);
-		skiaSys->immVDrawCommandsList.cmdsNum = 0;
+	// skiaSys->grDirectContext->flushAndSubmit();
+	skiaSys->grDirectContext->flush();
 
-		skiaSys->grDirectContext->flushAndSubmit();
-
-		resetRenderContext();
-		glViewport(last_viewport[0], last_viewport[1], (GLsizei)last_viewport[2], (GLsizei)last_viewport[3]);
-		clearScissor();
-
-// #if RAYLIB_MODE
-// 		glBindVertexArray(0);
-// 		glVertexAttribDivisor(0, 0);
-// 		glVertexAttribDivisor(1, 0);
-// 		glVertexAttribDivisor(2, 0);
-// #endif
-
-		pushTargetTexture(skiaSys->backTexture);
-		clearRenderer();
-
-		Matrix3 matrix = mat3();
-		matrix.SCALE(getSize(skiaSys->backTexture));
-		drawSimpleTexture(skiaSys->skiaTexture, matrix);
-		popTargetTexture();
-
-	} else {
-		execCommands(&skiaSys->immVDrawCommandsList);
-		skiaSys->immVDrawCommandsList.cmdsNum = 0;
-
-		SkImageInfo info = {};
-		size_t rowBytes = 0;
-
-		u8 *inPixels = (u8 *)skiaSys->mainCanvas->accessTopLayerPixels(&info, &rowBytes);
-		u8 *outPixels = skiaSys->cpuFramePixels;
-		int w = skiaSys->width;
-		int h = skiaSys->height;
-		for (int y = 0; y < h; y++) {
-			int y1 = (h-1)-y;
-			memcpy(outPixels + (y1*w)*4, inPixels + (y*w)*4, w * 4);
-		}
-
-// #if RAYLIB_MODE
-		setTextureData(skiaSys->backTexture, outPixels, skiaSys->width, skiaSys->height);
-// #else
-// 		glActiveTexture(GL_TEXTURE0);
-// 		glBindTexture(GL_TEXTURE_2D, skiaSys->backTexture->texture->id);
-// 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, skiaSys->width, skiaSys->height, GL_RGBA8, GL_UNSIGNED_BYTE, outPixels);
-// #endif
-	}
+	resetRenderContext();
+	clearScissor(); // This should be a part of resetRenderContext
 
 	if (skiaSys->recordFrame) {
 		skiaSys->recordFrame = false;
@@ -1187,7 +1144,11 @@ Texture *getSkiaFrameAsTexture(Vec2 size) {
 void drawSkiaFrameOnTexture(Texture *texture, bool doClear) {
 	pushTargetTexture(texture);
 	if (doClear) clearRenderer();
-	drawSimpleTexture(skiaSys->backTexture);
+
+	Matrix3 matrix = mat3();
+	matrix.SCALE(skiaSys->outputSize);
+	drawSimpleTexture(skiaSys->skiaTexture, matrix);
+
 	popTargetTexture();
 }
 
@@ -1197,6 +1158,7 @@ void initSpriteTransforms(SpriteTransform *transforms, int transformsNum) {
 	for (int i = 0; i < transformsNum; i++) {
 		SpriteTransform *transform = &transforms[i];
 		transform->matrix = mat3();
+		transform->outMatrix = mat3();
 		transform->alpha = 1;
 	}
 }
@@ -1328,10 +1290,14 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 		endSkiaFrame();
 		skiaSys->scale = oldScale;
 
+		{
 		pushTargetTexture(aSys->spriteTexture);
 		clearRenderer();
-		drawSimpleTexture(skiaSys->backTexture);
+		Matrix3 matrix = mat3();
+		matrix.SCALE(skiaSys->outputSize);
+		drawSimpleTexture(skiaSys->skiaTexture, matrix);
 		popTargetTexture();
+		}
 
 		if (aSys->recordFrame) {
 			aSys->recordFrame = false;
@@ -1373,7 +1339,7 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			Vec2 size = getSize(sprite->bounds);
 			size.x = ceilf(size.x);
 			size.y = ceilf(size.y);
-			resetSkia(size, v2(1, 1), true, 16);
+			resetSkia(size, v2(1, 1));
 			// game->skiaFlagsDirty = true;
 
 			Texture *texture = createTexture(size.x, size.y);
@@ -1395,10 +1361,14 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 
 				endSkiaFrame();
 
-				pushTargetTexture(texture);
-				clearRenderer();
-				drawSimpleTexture(skiaSys->backTexture);
-				popTargetTexture();
+				{
+					pushTargetTexture(texture);
+					clearRenderer();
+					Matrix3 matrix = mat3();
+					matrix.SCALE(skiaSys->outputSize);
+					drawSimpleTexture(skiaSys->skiaTexture, matrix);
+					popTargetTexture();
+				}
 
 				u8 *bitmapData = getTextureData(texture, _F_TD_FLIP_Y);
 
@@ -1500,10 +1470,14 @@ void drawSwfAnalyzer(char *basePath, Vec2 screenSize) {
 			endSkiaFrame();
 			skiaSys->scale = oldScale;
 
-			pushTargetTexture(aSys->shapeTexture);
-			clearRenderer();
-			drawSimpleTexture(skiaSys->backTexture);
-			popTargetTexture();
+			{
+				pushTargetTexture(aSys->shapeTexture);
+				clearRenderer();
+				Matrix3 matrix = mat3();
+				matrix.SCALE(skiaSys->outputSize);
+				drawSimpleTexture(skiaSys->skiaTexture, matrix);
+				popTargetTexture();
+			}
 
 			imGuiTexture(aSys->shapeTexture);
 			Rect bounds = toRect(shape->shapeBounds);

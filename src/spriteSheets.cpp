@@ -1,7 +1,8 @@
-#define SPRITE_SHEET_WIDTH_MAX 2048
-#define SPRITE_SHEET_HEIGHT_MAX 2048
+#define SPRITE_SHEET_WIDTH_MAX 4096
+#define SPRITE_SHEET_HEIGHT_MAX 4096
 
 struct SpriteSheetImage {
+	char *name;
 	int srcX;
 	int srcY;
 	int srcWidth;
@@ -29,6 +30,9 @@ SpriteSheet *getSpriteSheet(char *dir);
 SpriteSheet *createSpriteSheet(char *dir);
 void destroySpriteSheet(SpriteSheet *sheet);
 void clearSpriteSheetCache();
+
+SpriteSheetImage *getImage(SpriteSheet *sheet, char *name);
+void getUvs(SpriteSheet *sheet, SpriteSheetImage *image, Vec2 *uv0, Vec2 *uv1);
 /// FUNCTIONS ^
 
 SpriteSheet *getSpriteSheet(char *dir) {
@@ -39,7 +43,9 @@ SpriteSheet *getSpriteSheet(char *dir) {
     }
   }
 
-  return createSpriteSheet(dir);
+	SpriteSheet *sheet = createSpriteSheet(dir);
+  _cachedSpriteSheets[_cachedSpriteSheetsNum++] = sheet;
+  return sheet;
 }
 
 SpriteSheet *createSpriteSheet(char *dir) {
@@ -49,7 +55,7 @@ SpriteSheet *createSpriteSheet(char *dir) {
   strcpy(sheet->path, dir);
 
 	int pathsNum;
-	char **paths = getFrameDirectoryList(dir, &pathsNum, false, true, true);
+	char **paths = getFrameDirectoryList(dir, &pathsNum);
 
 	bool goodDir = true;
 	for (int i = 0; i < pathsNum; i++) {
@@ -73,20 +79,25 @@ SpriteSheet *createSpriteSheet(char *dir) {
 		int pngDataSize;
 		u8 *pngData = (u8 *)readFile(path, &pngDataSize);
 
-		int width, height, channels;
+		int srcWidth, srcHeight, channels;
 		stbi_set_flip_vertically_on_load(false);
-		srcBitmaps[i] = stbi_load_from_memory(pngData, pngDataSize, &width, &height, &channels, 4);
+		srcBitmaps[i] = stbi_load_from_memory(pngData, pngDataSize, &srcWidth, &srcHeight, &channels, 4);
 		stbi_set_flip_vertically_on_load(true);
 		free(pngData);
 
+		char *imageName = frameStringClone(path);
+		imageName += strlen(dir);
+		if (imageName[0] == '/') imageName++;
+		image->name = stringClone(imageName);
+
 		{ // Add trimming here!
-			image->srcWidth = width;
-			image->srcHeight = height;
+			image->srcWidth = srcWidth;
+			image->srcHeight = srcHeight;
 
 			image->destOffX = 0;
 			image->destOffY = 0;
-			image->width = width;
-			image->height = height;
+			image->width = srcWidth;
+			image->height = srcHeight;
 		}
 
 		stbRect->id = i;
@@ -119,20 +130,16 @@ SpriteSheet *createSpriteSheet(char *dir) {
 
 		image->srcX = rpRect->x + startX + padding;
 		image->srcY = rpRect->y + startY + padding;
-		// image->srcY -= SPRITE_SHEET_HEIGHT_MAX - rpRect->h;
 
 		for (int y = startY; y < endY; y++) {
 			for (int x = startX; x < endX; x++) {
 				u8 *readStart = &srcBitmaps[i][((y+image->destOffY)*image->srcWidth + (x+image->destOffX))*4];
 
-				int writeY = rpRect->y + padding + y;
 				int writeX = rpRect->x + padding + x;
+				int writeY = rpRect->y + padding + y;
 				u8 *writeStart = &bitmapData[(writeY*SPRITE_SHEET_WIDTH_MAX + writeX)*4];
 
-				int pixel = *(int *)readStart;
-
-				*(int *)writeStart = pixel;
-				// memcpy(writeStart, readStart, 4);
+				*(int *)writeStart = *(int *)readStart;
 			}
 		}
 
@@ -143,13 +150,17 @@ SpriteSheet *createSpriteSheet(char *dir) {
 	setTextureData(sheet->texture, bitmapData, SPRITE_SHEET_WIDTH_MAX, SPRITE_SHEET_HEIGHT_MAX, _F_TD_FLIP_Y);
 	free(bitmapData);
 
-  _cachedSpriteSheets[_cachedSpriteSheetsNum++] = sheet;
-
 	return sheet;
 }
 
 void destroySpriteSheet(SpriteSheet *sheet) {
 	destroyTexture(sheet->texture);
+
+	for (int i = 0; i < sheet->imagesNum; i++) {
+		SpriteSheetImage *image = &sheet->images[i];
+		if (image->name) free(image->name);
+	}
+
 	free(sheet->images);
 	free(sheet);
 }
@@ -161,4 +172,19 @@ void clearSpriteSheetCache() {
   }
 
   _cachedSpriteSheetsNum = 0;
+}
+
+SpriteSheetImage *getImage(SpriteSheet *sheet, char *name) {
+	for (int i = 0; i < sheet->imagesNum; i++) {
+		SpriteSheetImage *image = &sheet->images[i];
+		if (streq(image->name, name)) return image;
+	}
+	return NULL;
+}
+
+void getUvs(SpriteSheet *sheet, SpriteSheetImage *image, Vec2 *uv0, Vec2 *uv1) {
+	uv0->x = (float)image->srcX / sheet->texture->width;
+	uv0->y = (float)image->srcY / sheet->texture->height;
+	uv1->x = (float)(image->srcX+image->srcWidth) / sheet->texture->width;
+	uv1->y = (float)(image->srcY+image->srcHeight) / sheet->texture->height;
 }

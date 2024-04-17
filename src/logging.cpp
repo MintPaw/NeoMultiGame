@@ -8,20 +8,39 @@ struct LogfBuffer {
 	bool isInfo;
 };
 
+struct LogGroupBuffer {
+	char *text;
+	float logTime;
+};
+
+struct LogGroup {
+#define LOG_GROUP_NAME_MAX_LEN 64
+	char name[LOG_GROUP_NAME_MAX_LEN];
+#define LOG_GROUP_BUFFERS_MAX 1024
+	LogGroupBuffer buffers[LOG_GROUP_BUFFERS_MAX];
+	int buffersNum;
+};
+
 #define PI_LOG_PATH "P:/logs/log.txt"
 
-LogfBuffer *loggerLogString(char *msg);
-char *getLogfBufferString();
-void showLogfBufferErrorWindow();
-void writeCrashLog();
+void initLoggingSystem();
 void logf(const char *msg, ...);
+LogfBuffer *loggerLogString(char *msg);
 void loggerAssert(bool expr, const char *fileName, int lineNum);
 void loggerPanic(const char *msg, const char *fileName, int lineNum);
 void logfToFile(char *fileName, char *msg, ...);
+
+char *getLogfBufferString();
+void showLogfBufferErrorWindow();
+void writeCrashLog();
+
+LogGroup *getLogGroup(char *groupName);
+void logTo(char *groupName, const char *msg, ...);
+void guiDrawLogging();
+
 #define Assert(expr) loggerAssert(expr, __FILE__, __LINE__)
 #define Panic(msg) loggerPanic(msg, __FILE__, __LINE__)
 /// FUNCTIONS ^
-
 
 #else
 
@@ -31,9 +50,11 @@ struct LoggingSystem {
 	volatile u32 logfMutex; 
 	DataStream *logStream;
 
-	float time;
-
 	char *redirectPath;
+
+#define LOG_GROUPS_MAX 32
+	LogGroup groups[LOG_GROUPS_MAX];
+	int groupsNum;
 };
 
 LoggingSystem *logSys = NULL;
@@ -44,24 +65,24 @@ void initLoggingSystem() {
 	logSys->logStream = newDataStream();
 }
 
-void infof(const char *msg, ...) {
-	if (!logSys) initLoggingSystem();
+// void infof(const char *msg, ...) {
+// 	if (!logSys) initLoggingSystem();
 
-	va_list args;
-	va_start(args, msg);
-	int size = stbsp_vsnprintf(NULL, 0, msg, args);
-	va_end(args);
+// 	va_list args;
+// 	va_start(args, msg);
+// 	int size = stbsp_vsnprintf(NULL, 0, msg, args);
+// 	va_end(args);
 
-	char *str = frameMalloc(size+1);
+// 	char *str = frameMalloc(size+1);
 
-	va_start(args, msg);
-	stbsp_vsnprintf(str, size+1, msg, args);
-	va_end(args);
+// 	va_start(args, msg);
+// 	stbsp_vsnprintf(str, size+1, msg, args);
+// 	va_end(args);
 
-	LogfBuffer *buffer = loggerLogString(str);
-	buffer->isInfo = true;
-	writeString(logSys->logStream, frameSprintf("[info] %.1f: %s", logSys->time, str));
-}
+// 	LogfBuffer *buffer = loggerLogString(str);
+// 	buffer->isInfo = true;
+// 	writeString(logSys->logStream, frameSprintf("[info] %.1f: %s", platform->time, str));
+// }
 
 void logf(const char *msg, ...) {
 	if (!logSys) initLoggingSystem();
@@ -80,11 +101,13 @@ void logf(const char *msg, ...) {
 	va_end(args);
 
 	{
-		char *logStr = frameSprintf("[log] %.1f: %s", logSys->time, str);
+		char *logStr = frameSprintf("[log] %.1f: %s", platform->time, str);
 		logStr[strlen(logStr)-1] = 0;
 		writeString(logSys->logStream, logStr);
 	}
 
+	printf("%s", str);
+	fflush(stdout);
 	LogfBuffer *buffer = loggerLogString(str);
 
 	DecMutex(&logSys->logfMutex);
@@ -115,10 +138,7 @@ LogfBuffer *loggerLogString(char *msg) {
 		log->buffer = (char *)malloc(sizeof(char) * log->size);
 	}
 	strncpy(log->buffer, msg, log->size);
-	log->logTime = logSys->time;
-
-	printf("%s", msg);
-	fflush(stdout);
+	log->logTime = platform->time;
 
 	if (log->buffer[strlen(log->buffer)-1] == '\n') {
 		log->buffer[strlen(log->buffer)-1] = 0;
@@ -236,4 +256,70 @@ void writeCrashLog() {
 	}
 }
 
+LogGroup *getLogGroup(char *groupName) {
+	for (int i = 0; i < logSys->groupsNum; i++) {
+		LogGroup *group = &logSys->groups[i];
+		if (streq(group->name, groupName)) {
+			return group;
+		}
+	}
+
+	if (logSys->groupsNum > LOG_GROUPS_MAX-1) {
+		printf("Too many log groups! (They will leak)\n");
+		logSys->groupsNum--;
+	}
+
+	LogGroup *group = &logSys->groups[logSys->groupsNum++];
+	memset(group, 0, sizeof(LogGroup));
+	strncpy(group->name, groupName, LOG_GROUP_NAME_MAX_LEN);
+	return group;
+}
+
+void logTo(char *groupName, const char *msg, ...) {
+	if (!logSys) initLoggingSystem();
+
+	IncMutex(&logSys->logfMutex);
+
+	va_list args;
+	va_start(args, msg);
+	int size = stbsp_vsnprintf(NULL, 0, msg, args);
+	va_end(args);
+
+	char *str = frameMalloc(size+1);
+
+	va_start(args, msg);
+	stbsp_vsnprintf(str, size+1, msg, args);
+	va_end(args);
+
+	LogGroup *group = getLogGroup(groupName);
+	if (group->buffersNum > LOG_GROUP_BUFFERS_MAX-1) {
+		free(group->buffers[0].text);
+		arraySpliceIndex(group->buffers, group->buffersNum, sizeof(LogGroupBuffer), 0);
+		group->buffersNum--;
+	}
+
+	LogGroupBuffer *buffer = &group->buffers[group->buffersNum++];
+	memset(buffer, 0, sizeof(LogGroupBuffer));
+	buffer->logTime = platform->time;
+	buffer->text = stringClone(str);
+
+	DecMutex(&logSys->logfMutex);
+}
+
+void guiDrawLogging() {
+	for (int i = 0; i < logSys->groupsNum; i++) {
+		LogGroup *group = &logSys->groups[i];
+		if (ImGui::TreeNode(frameSprintf("%s", group->name))) {
+
+			ImGui::BeginChild(frameSprintf("%s logChild", group->name), ImVec2(platform->windowWidth*0.2, platform->windowHeight*0.2));
+			for (int i = 0; i < group->buffersNum; i++) {
+				LogGroupBuffer *buffer = &group->buffers[i];
+				ImGui::Text("[%.2f] %s", buffer->logTime, buffer->text);
+			}
+			ImGui::EndChild();
+
+			ImGui::TreePop();
+		}
+	}
+}
 #endif

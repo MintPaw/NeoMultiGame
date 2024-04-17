@@ -9,6 +9,7 @@ struct DataStream {
 
 void readBytes(DataStream *stream, void *ptr, int size);
 char *readString(DataStream *stream);
+char *readTempString(DataStream *stream);
 char *readJaiString(DataStream *stream);
 char *readFrameString(DataStream *stream);
 void readStringInto(DataStream *stream, char *dest, int max);
@@ -67,7 +68,8 @@ void writeAABB(DataStream *stream, AABB value) { writeBytes(stream, &value, size
 void readBytes(DataStream *stream, void *ptr, int size) {
 	if (stream->index + size > stream->dataMax) { // This used to be stream->dataMax-1
 		size = stream->dataMax - stream->index;
-		logf("Read too many bytes\n");
+		// logf("Read too many bytes\n");
+		Panic("Read too many bytes\n");
 	}
 
 	memcpy(ptr, &stream->data[stream->index], size);
@@ -90,6 +92,13 @@ char *readString(DataStream *stream) {
 	stream->index += size;
 
 	return str;
+}
+
+char *readTempString(DataStream *stream) {
+	char *str = readString(stream);
+	char *tempStr = frameStringClone(str);
+	free(str);
+	return tempStr;
 }
 
 char *readJaiString(DataStream *stream) {

@@ -12,9 +12,10 @@ struct BackendTexture {
 
 u32 _vertexBuffer;
 u32 _currentFramebuffer;
+int _currentActiveTextureSlot;
 u32 _renderTextureFbId;
-u32 _currentShaderId;
 u32 _glVao;
+Rect _viewportRect;
 int _glErrorCount;
 
 GLuint compileShader(char *text, GLint shaderType);
@@ -28,6 +29,12 @@ void backendInit() {
 	glGenBuffers(1, &_vertexBuffer);
 	glGenFramebuffers(1, &_renderTextureFbId);
 	glDepthMask(false); // zii!
+
+	logf("Opengl inited\n");
+
+	int value;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
+	logf("Max texture size: %d\n", value);
 
 	backendResetRenderContext();
 }
@@ -136,11 +143,15 @@ void backendSetShaderUniform(BackendShader *backendShader, int loc, void *ptr, S
 
 void backendSetShader(BackendShader *backendShader) {
 	glUseProgram(backendShader->id);
-	_currentShaderId = backendShader->id;
 }
 
 void backendSetTexture(BackendTexture *backendTexture, int slot) {
-	glActiveTexture(GL_TEXTURE0+slot);
+	// if (_currentActiveTextureSlot != slot) {
+	// 	_currentActiveTextureSlot = slot;
+	// 	glActiveTexture(GL_TEXTURE0 + _currentActiveTextureSlot);
+	// }
+	glActiveTexture(GL_TEXTURE0 + _currentActiveTextureSlot);
+
 	glBindTexture(GL_TEXTURE_2D, backendTexture ? backendTexture->id : 0);
 }
 
@@ -180,8 +191,6 @@ void backendSetTextureData(void *data, int width, int height, int flags) {
 }
 
 u8 *backendGetTextureData(BackendTexture *backendTexture) {
-	logf("This getTextureData has not been tested\n");
-
 	u32 fboId = 0;
 	glGenFramebuffers(1, &fboId);
 	glBindFramebuffer(GL_FRAMEBUFFER, fboId);
@@ -216,13 +225,15 @@ void backendSetTargetTexture(BackendTexture *backendTexture) {
 		if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) logf("Framebuffer incomplete error %d (0x%x)\n", framebufferStatus, framebufferStatus);
 #endif
 
-		glViewport(0, 0, backendTexture->width, backendTexture->height);
+		_viewportRect = makeRect(0, 0, backendTexture->width, backendTexture->height);
 	} else {
 		_currentFramebuffer = 0;
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		glViewport(0, 0, platform->windowWidth, platform->windowHeight);
+		_viewportRect = makeRect(0, 0, platform->windowWidth, platform->windowHeight);
 	}
+
+	glViewport(_viewportRect.x, _viewportRect.x, _viewportRect.width, _viewportRect.height);
 }
 
 void backendSetScissor(Rect rect) {
@@ -300,6 +311,10 @@ void backendDrawVerts(GpuVertex *verts, int vertsNum) {
 
 void backendResetRenderContext() {
 	glBindVertexArray(_glVao);
+
+	glActiveTexture(GL_TEXTURE0 + _currentActiveTextureSlot);
+
+	glViewport(_viewportRect.x, _viewportRect.x, _viewportRect.width, _viewportRect.height);
 
 	glBindBuffer(GL_ARRAY_BUFFER, _vertexBuffer);
 	glEnableVertexAttribArray(0);

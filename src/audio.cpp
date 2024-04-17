@@ -17,7 +17,8 @@
 // #define STORED_SAMPLES_MAX (SAMPLE_BUFFER_LIMIT*4)
 // #define STORED_SAMPLES_MAX ((int)(SAMPLE_BUFFER_LIMIT*1.5))
 
-#define CHANNELS_MAX 512
+// #define CHANNELS_MAX 512
+#define CHANNELS_MAX 8192
 #define SOUNDS_MAX 8192
 #define SAMPLE_RATE 44100
 
@@ -41,6 +42,7 @@ struct Sound {
 
 	int concurrentInstances;
 	int maxConcurrentInstances;
+	float lastUsedTime;
 };
 
 struct Channel {
@@ -75,7 +77,8 @@ struct Audio {
 
 	float masterVolume;
 
-	int memoryUsed;
+	s64 oggMemoryUsed;
+	s64 tempSoundMemoryUsed;
 
 	char soundStoreNames[SOUNDS_MAX][PATH_MAX_LEN];
 	int soundStoreNamesNum;
@@ -104,6 +107,7 @@ Audio *audio = NULL;
 void initAudio();
 
 void initSound(Sound *sound);
+void deinitSound(Sound *sound);
 void updateAudio();
 Channel *playSound(Sound *sound, bool looping=false);
 void stopChannel(int channelId);
@@ -127,8 +131,12 @@ void initAudio() {
 
 	audio = (Audio *)zalloc(sizeof(Audio));
 	audio->masterVolume = 1;
-	// audio->sampleBufferLimit = 8192;
+#ifdef __EMSCRIPTEN__
+	audio->sampleBufferLimit = 8192;
+#else
 	audio->sampleBufferLimit = 4096;
+#endif
+	// audio->sampleBufferLimit = (8192 + 4096) / 2;
 	// audio->sampleBufferLimit = 2048;
 	// audio->sampleBufferLimit = 1470;
 	// audio->sampleBufferLimit = 1024;
@@ -211,11 +219,15 @@ void reconnectAudioDevice() {
 
 	alSourceQueueBuffers(audio->source, 2, audio->buffers);
 	alSourcePlay(audio->source);
+
+	audio->storedSamplesMax = audio->sampleBufferLimit;
+	audio->storedSamples = (s16 *)zalloc(sizeof(s16) * audio->storedSamplesMax);
 }
 
 void initSound(Sound *sound) {
-	sound->vorbisTempMem.alloc_buffer = (char *)malloc(500*1024);
 	sound->vorbisTempMem.alloc_buffer_length_in_bytes = 500*1024;
+	sound->vorbisTempMem.alloc_buffer = (char *)malloc(sound->vorbisTempMem.alloc_buffer_length_in_bytes);
+	audio->tempSoundMemoryUsed += sound->vorbisTempMem.alloc_buffer_length_in_bytes;
 
 	int err;
 	sound->vorbis = stb_vorbis_open_memory(sound->oggData, sound->oggDataLen, &err, &sound->vorbisTempMem);
@@ -231,6 +243,28 @@ void initSound(Sound *sound) {
 	sound->sampleRate = vorbisInfo.sample_rate;
 	sound->channels = vorbisInfo.channels;
 	sound->samplesTotal = stb_vorbis_stream_length_in_samples(sound->vorbis) * sound->channels;
+}
+
+void deinitSound(Sound *sound) {
+	if (sound->samples) {
+		free(sound->samples);
+		sound->samples = NULL;
+		audio->tempSoundMemoryUsed -= sound->samplesTotal * sizeof(s16);
+	}
+
+	sound->lastUsedTime = 0;
+	sound->length = 0;
+	sound->sampleRate = 0;
+	sound->channels = 0;
+	sound->samplesTotal = 0;
+	sound->samplesStreamed = 0;
+
+	if (sound->vorbis) {
+		stb_vorbis_close(sound->vorbis);
+		sound->vorbis = NULL;
+		free(sound->vorbisTempMem.alloc_buffer);
+		audio->tempSoundMemoryUsed -= sound->vorbisTempMem.alloc_buffer_length_in_bytes;
+	}
 }
 
 Channel *playSound(Sound *sound, bool looping) {
@@ -312,6 +346,20 @@ void updateAudio() {
 	}
 #endif
 
+#if 0
+	if (platform->frameCount % 30 == 0) {
+		// char *deviceName = (char *)alcGetString(NULL, ALC_ALL_DEVICES_SPECIFIER);
+		// for (;;) {
+		// 	logf("Device: %s\n", deviceName);
+		// 	deviceName += strlen(deviceName) + 1;
+		// 	if (strlen(deviceName) == 0) break;
+		// }
+
+		char *defaultDeviceName = (char *)alcGetString(NULL, ALC_DEFAULT_ALL_DEVICES_SPECIFIER);
+		logf("Dev: %s\n", defaultDeviceName);
+	}
+#endif
+
 	if (elapsed > 1/60.0) elapsed = 1/60.0;
 	int samplesToAdd = elapsed * SAMPLE_RATE * 2;
 	if (samplesToAdd > audio->sampleBufferLimit) samplesToAdd = audio->sampleBufferLimit;
@@ -373,6 +421,29 @@ void updateAudio() {
 			continue;
 		}
 	}
+
+	Sound *lruSound = NULL;
+	if (audio->tempSoundMemoryUsed > Megabytes(100)) {
+		for (int i = 0; i < audio->soundsNum; i++) {
+			Sound *sound = &audio->sounds[i];
+			if (!sound->length) continue;
+
+			bool isPlaying = false;
+			for (int i = 0; i < audio->channelsNum; i++) {
+				Channel *channel = &audio->channels[i];
+				if (channel->sound == sound) {
+					isPlaying = true;
+					break;
+				}
+			}
+
+			if (isPlaying) continue;
+
+			if (!lruSound || lruSound->lastUsedTime > sound->lastUsedTime) lruSound = sound;
+		}
+
+		if (lruSound) deinitSound(lruSound);
+	}
 }
 
 void mixSound(s16 *destBuffer, int destSamplesNum) {
@@ -387,7 +458,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 		if (sound->samplesStreamed < sound->samplesTotal) {
 			if (!sound->samples) {
 				sound->samples = (s16 *)malloc(sound->samplesTotal * sizeof(s16));
-				audio->memoryUsed += sound->samplesTotal * sizeof(s16);
+				audio->tempSoundMemoryUsed += sound->samplesTotal * sizeof(s16);
 			}
 
 			int samplesGot = 0;
@@ -407,8 +478,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 				stb_vorbis_close(sound->vorbis);
 				sound->vorbis = NULL;
 				free(sound->vorbisTempMem.alloc_buffer);
-
-				free(sound->oggData);
+				audio->tempSoundMemoryUsed -= sound->vorbisTempMem.alloc_buffer_length_in_bytes;
 			}
 		}
 
@@ -484,7 +554,7 @@ void mixSound(s16 *destBuffer, int destSamplesNum) {
 void mixSoundInToGlobalBuffer(int samplesToAdd) {
 	if (samplesToAdd % 2 == 1) samplesToAdd--;
 
-#if 1
+#if 0
 	int maxSamplesNeeded = audio->storedSamplesPosition + samplesToAdd;
 	if (maxSamplesNeeded > 8192) maxSamplesNeeded = 8192;
 	if (maxSamplesNeeded > audio->storedSamplesMax) {
@@ -495,11 +565,15 @@ void mixSoundInToGlobalBuffer(int samplesToAdd) {
 		// logf("storedSamplesMax is %d???\n", audio->storedSamplesMax);
 	}
 #else
-	int maxSamplesLeft = STORED_SAMPLES_MAX - audio->storedSamplesPosition;
+	int maxSamplesLeft = audio->storedSamplesMax - audio->storedSamplesPosition;
 	if (samplesToAdd > maxSamplesLeft) {
 		samplesToAdd = maxSamplesLeft;
 	}
 #endif
+
+	int storedSamplesPosition = audio->storedSamplesPosition;
+	Audio *_audio = audio;
+	Platform *_platform = platform;
 
 	mixSound(audio->storedSamples + audio->storedSamplesPosition, samplesToAdd);
 	audio->storedSamplesPosition += samplesToAdd;
@@ -526,6 +600,7 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 		char *soundName = audio->soundStoreNames[i];
 		if (streq(soundName, path)) {
 			Sound *sound = audio->soundStore[i];
+			sound->lastUsedTime = platform->time;
 			if (!onlyLoadRaw && sound->length == 0) initSound(sound);
 			return sound;
 		}
@@ -540,8 +615,10 @@ Sound *getSound(const char *path, bool onlyLoadRaw) {
 		sound->path = stringClone(path);
 		sound->tweakVolume = 1;
 		sound->maxConcurrentInstances = audio->defaultMaxConcurrentInstances;
+		sound->lastUsedTime = platform->time;
 
 		sound->oggData = (unsigned char *)readFile(sound->path, &sound->oggDataLen);
+		audio->oggMemoryUsed += sound->oggDataLen;
 
 		if (!onlyLoadRaw) initSound(sound);
 

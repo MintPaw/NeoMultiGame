@@ -27,6 +27,7 @@ struct PlatformEvent {
   Vec2 position;
 	int keyCode;
 	int wheelValue;
+	int inputUTF;
 };
 
 struct BackendNanoTime;
@@ -43,10 +44,12 @@ int backendPlatformGetKeyboardInputChars();
 void backendPlatformMaximizeWindow();
 void backendPlatformMinimizeWindow();
 void backendPlatformRestoreWindow();
+void backendPlatformFullscreenWindow();
+bool backendPlatformIsWindowFullscreen();
 void backendPlatformResizeWindow(int width, int height);
+
 void backendHideCursor();
 void backendShowCursor();
-
 
 void backendPlatformSleep(int ms);
 BackendNanoTime backendPlatformGetNanoTime();
@@ -57,7 +60,7 @@ void backendPlatformNavigateToUrl(char *url);
 
 void backendPlatformShowErrorWindow(char *msg);
 char *backendPlatformGetLastErrorMessage();
-int backendPlatformGetMemoryUsage();
+u64 backendPlatformGetMemoryUsage();
 
 void backendPlatformImGuiInit();
 void backendPlatformImGuiStartFrame(int windowWidth, int windowHeight);

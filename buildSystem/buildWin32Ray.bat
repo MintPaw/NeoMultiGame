@@ -86,7 +86,7 @@ if [%CLANG_MODE%]==[1] (
 
 ) else (
 	if [%FAST_CLANG_MODE%]==[1] (
-		set COMPILER=clang-cl -Wno-writable-strings -Wno-deprecated-declarations
+		set COMPILER=clang-cl -Wno-writable-strings -Wno-deprecated-declarations -fstack-protector-all
 	) else (
 		set COMPILER=cl
 	)

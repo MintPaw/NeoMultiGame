@@ -36,10 +36,11 @@ enum NguiStyleType {
 	NGUI_STYLE_ICON_TINT=34,
 	NGUI_STYLE_Y_POSITION_TINT=35,
 	NGUI_STYLE_SLIDER_SNAP_INTERVAL=36,
-	NGUI_STYLE_JUSTIFY_TEXT=37,
+	NGUI_STYLE_CENTER_TEXT=37,
 	NGUI_STYLE_FONT=38,
 	NGUI_STYLE_LABEL_X_OFFSET=39,
 	NGUI_STYLE_ELEMENT_DEATH_SPEED=40,
+	NGUI_STYLE_SLIDER_TEXTURE_PTR=41,
 	NGUI_STYLE_TYPES_MAX,
 };
 
@@ -122,6 +123,7 @@ struct NguiElement {
 	Vec2 visualScroll;
 
 	bool isRestrictedFocusWindow;
+	bool wasClippedOut;
 
 	void *userData;
 };
@@ -483,17 +485,17 @@ void nguiInit() {
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 	nguiPushStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL, 0);
 
-	info = &ngui->styleTypeInfos[NGUI_STYLE_JUSTIFY_TEXT];
-	info->enumName = "NGUI_STYLE_JUSTIFY_TEXT";
-	info->name = "Justify Text";
+	info = &ngui->styleTypeInfos[NGUI_STYLE_CENTER_TEXT];
+	info->enumName = "NGUI_STYLE_CENTER_TEXT";
+	info->name = "Center Text";
 	info->dataType = NGUI_DATA_TYPE_INT;
-	nguiPushStyleInt(NGUI_STYLE_JUSTIFY_TEXT, 0);
+	nguiPushStyleInt(NGUI_STYLE_CENTER_TEXT, 0);
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_FONT];
 	info->enumName = "NGUI_STYLE_FONT";
 	info->name = "Font";
-	info->dataType = NGUI_DATA_TYPE_PTR;
-	nguiPushStylePtr(NGUI_STYLE_FONT, createFont("assets/common/arial.ttf", 80));
+	info->dataType = NGUI_DATA_TYPE_STRING_PTR;
+	nguiPushStyleStringPtr(NGUI_STYLE_FONT, "assets/common/arial.ttf");
 
 	info = &ngui->styleTypeInfos[NGUI_STYLE_LABEL_X_OFFSET];
 	info->enumName = "NGUI_STYLE_LABEL_X_OFFSET";
@@ -506,6 +508,12 @@ void nguiInit() {
 	info->name = "Element death speed";
 	info->dataType = NGUI_DATA_TYPE_FLOAT;
 	nguiPushStyleFloat(NGUI_STYLE_ELEMENT_DEATH_SPEED, 1);
+
+	info = &ngui->styleTypeInfos[NGUI_STYLE_SLIDER_TEXTURE_PTR];
+	info->enumName = "NGUI_STYLE_SLIDER_TEXTURE_PTR";
+	info->name = "Slider texture pointer";
+	info->dataType = NGUI_DATA_TYPE_PTR;
+	nguiPushStylePtr(NGUI_STYLE_SLIDER_TEXTURE_PTR, NULL);
 
   ngui->sfxVolume = 0.1;
 }
@@ -898,11 +906,6 @@ void nguiDraw(float elapsed) {
 					label = newLabel;
 				}
 
-				float alpha = 1;
-				alpha *= child->alive;
-				alpha *= clampMap(child->creationTime, 0, 0.05, 0, 1);
-				pushColor(v4(alpha, 1, 1, 1));
-
 				Rect childRect = child->childRect;
 
 				int bgColor = nguiGetStyleColorInt(NGUI_STYLE_BG_COLOR);
@@ -913,7 +916,7 @@ void nguiDraw(float elapsed) {
 				int labelTextColor = nguiGetStyleColorInt(NGUI_STYLE_TEXT_COLOR);
 				bool disabled = nguiGetStyleInt(NGUI_STYLE_ELEMENT_DISABLED);
 				int disabledTint = nguiGetStyleColorInt(NGUI_STYLE_ELEMENT_DISABLED_TINT);
-				bool justify = nguiGetStyleInt(NGUI_STYLE_JUSTIFY_TEXT);
+				bool centerText = nguiGetStyleInt(NGUI_STYLE_CENTER_TEXT);
 
 				if (disabled) {
 					bgColor = tintColor(bgColor, disabledTint);
@@ -942,6 +945,14 @@ void nguiDraw(float elapsed) {
 
 				if (child->fgColor == 0) child->fgColor = fgColor;
 				child->fgColor = lerpColor(child->fgColor, fgColor, 0.1);
+
+				child->wasClippedOut = false;
+				if (!isZero(clippingRect) && !contains(clippingRect, childRect)) child->wasClippedOut = true;
+
+				float alpha = 1;
+				alpha *= child->alive;
+				alpha *= clampMap(child->creationTime, 0, 0.05, 0, 1);
+				pushColor(v4(alpha, 1, 1, 1));
 
 				auto drawElementBg = [](NguiElement *child, Rect rect, Rect *iconOutRect)->void {
 					{
@@ -1042,7 +1053,7 @@ void nguiDraw(float elapsed) {
 					}
 
 					Rect iconRect = {};
-					if (isZero(clippingRect) || contains(clippingRect, graphicsRect)) drawElementBg(child, graphicsRect, &iconRect);
+					if (!child->wasClippedOut) drawElementBg(child, graphicsRect, &iconRect);
 
 					{
 						float labelXOffset = nguiGetStyleFloat(NGUI_STYLE_LABEL_X_OFFSET);
@@ -1052,8 +1063,9 @@ void nguiDraw(float elapsed) {
 
 						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
 						Rect textRect = getInnerRectOfSize(textFitRect, getSize(textFitRect)*labelSize, labelGravity);
-						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), labelTextColor);
-						drawTextInRect(label, props, textRect, labelGravity, justify);
+						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), labelTextColor);
+						if (centerText) props.centered = true;
+						if (!child->wasClippedOut) drawTextInRect(label, props, textRect, labelGravity);
 					}
 
 					if (child->subText[0]) {
@@ -1061,8 +1073,9 @@ void nguiDraw(float elapsed) {
 						subTextColor = lerpColor(subTextColor, 0x00FFFFFF&subTextColor, 0.25);
 
 						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
-						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), subTextColor);
-						drawTextInRect(child->subText, props, subTextRect, v2(1, 1), justify);
+						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), subTextColor);
+						if (centerText) props.centered = true;
+						if (!child->wasClippedOut) drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
 					}
 				} else if (child->type == NGUI_ELEMENT_SLIDER) {
 					Rect graphicsRect = childRect;
@@ -1072,8 +1085,9 @@ void nguiDraw(float elapsed) {
 
 					{
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.6), v2(0, 0));
-						DrawTextProps props = newDrawTextProps((Font *)nguiGetStylePtr(NGUI_STYLE_FONT), labelTextColor);
-						drawTextInRect(label, props, textRect, labelGravity, justify);
+						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), labelTextColor);
+						if (centerText) props.centered = true;
+						drawTextInRect(label, props, textRect, labelGravity);
 					}
 
 					int snapInterval = nguiGetStyleFloat(NGUI_STYLE_SLIDER_SNAP_INTERVAL);
@@ -1110,25 +1124,41 @@ void nguiDraw(float elapsed) {
 
 					float perc = norm(child->valueMin, child->valueMax, *(float *)child->valuePtr);
 					Rect buttonRect;
-					bool useRectButton = false;
-					if (vertical) {
-						useRectButton = true;
-						Vec2 buttonScale = v2(0.9, 0.2);
-						buttonRect = makeRect(v2(0, 0), getSize(barRect)*buttonScale);
-						buttonRect.x = barRect.x + barRect.width/2 - buttonRect.width/2;
-						buttonRect.y = lerp(barRect.y, barRect.y + barRect.height - buttonRect.height, perc);
-					} else {
-						Vec2 buttonScale = v2(1.5, 1.5);
-						buttonRect = makeRect(0, 0, barRect.height*buttonScale.x, barRect.height*buttonScale.y);
-						buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
-						buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
-					}
 
-					if (useRectButton) {
-						drawRect(buttonRect, labelTextColor);
+					Texture *texture = (Texture *)nguiGetStylePtr(NGUI_STYLE_SLIDER_TEXTURE_PTR);
+					if (texture) {
+						if (vertical) {
+							Vec2 buttonSize = getSize(texture) * ngui->uiScale;
+							buttonRect = makeRect(v2(0, 0), buttonSize);
+							buttonRect.x = barRect.x + barRect.width/2 - buttonRect.width/2;
+							buttonRect.y = lerp(barRect.y, barRect.y + barRect.height - buttonRect.height, perc);
+
+							RenderProps props = newRenderProps(texture, buttonRect);
+							drawTexture(texture, props);
+						} else {
+							logf("Horizontal not supported\n");
+						}
 					} else {
-						Circle buttonCircle = makeCircle(getCenter(buttonRect), buttonRect.width/2);
-						drawCircle(buttonCircle, labelTextColor);
+						bool useRectButton = false;
+						if (vertical) {
+							useRectButton = true;
+							Vec2 buttonScale = v2(0.9, 0.2);
+							buttonRect = makeRect(v2(0, 0), getSize(barRect)*buttonScale);
+							buttonRect.x = barRect.x + barRect.width/2 - buttonRect.width/2;
+							buttonRect.y = lerp(barRect.y, barRect.y + barRect.height - buttonRect.height, perc);
+						} else {
+							Vec2 buttonScale = v2(1.5, 1.5);
+							buttonRect = makeRect(0, 0, barRect.height*buttonScale.x, barRect.height*buttonScale.y);
+							buttonRect.x = barRect.x + barRect.width*perc - buttonRect.width/2;
+							buttonRect.y = barRect.y + barRect.height/2 - buttonRect.height/2;
+						}
+
+						if (useRectButton) {
+							drawRect(buttonRect, labelTextColor);
+						} else {
+							Circle buttonCircle = makeCircle(getCenter(buttonRect), buttonRect.width/2);
+							drawCircle(buttonCircle, labelTextColor);
+						}
 					}
 
 					auto getPercFromMouseClick = [](Rect rect, Vec2 mouse, bool vertical)->float {
@@ -1240,7 +1270,9 @@ void nguiDraw(float elapsed) {
 	}
 	ngui->currentStyleStack = &ngui->globalStyleStack;
 
-	if (!keyPressed(MOUSE_LEFT)) ngui->draggingId = 0;
+	if (!keyPressed(MOUSE_LEFT)) {
+		ngui->draggingId = 0;
+	}
 	ngui->afterElementBgDraw = NULL;
 	ngui->time += elapsed;
 }
@@ -1521,6 +1553,8 @@ void nguiShowImGuiStyleEditor(NguiStyleStack *styleStack) {
 		styleTypes[styleTypesNum++] = NGUI_STYLE_SLIDER_IS_VERTICAL;
 		hiddenStyleTypes[hiddenStyleTypesNum++] = NGUI_STYLE_FONT;
 
+		hiddenStyleTypes[hiddenStyleTypesNum++] = NGUI_STYLE_SLIDER_TEXTURE_PTR;
+
 		for (int i = 0; i < NGUI_STYLE_TYPES_MAX; i++) {
 			NguiStyleType toAdd = (NguiStyleType)i;
 
@@ -1663,4 +1697,3 @@ bool nguiArrowButton(char *name, char *texturePath, NguiDirection dir) {
 
 	return value;
 };
-

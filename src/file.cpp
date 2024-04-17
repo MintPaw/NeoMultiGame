@@ -76,8 +76,19 @@ void initFileOperations() {
 	strcpy(filePathPrefix, "");
 
 	cantSaveTempFiles = EM_ASM_INT(
-		if (typeof(Storage) === "undefined") return 0;
-		return 1;
+		if (typeof localStorage === 'undefined') return 1;
+
+		try {
+			localStorage.setItem('feature_test', 'yes');
+			if (localStorage.getItem('feature_test') === 'yes') {
+				localStorage.removeItem('feature_test');
+				return 0;
+			} else {
+				return 1;
+			}
+		} catch(e) {
+			return 1;
+		}
 	);
 
 	if (fileExists("assets/preloader.zip")) {
@@ -135,15 +146,12 @@ void errorLoadingRemoteFile(const char *result) {
 #define DIRECTORY_LIST_LIMIT 4096
 char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnderscored, bool shallow, bool includeFolders) {
 	char realRootDir[PATH_MAX_LEN];
-	bool usedPrefix;
 	int pathOffset;
 	if (dirPath[1] != ':') {
 		strcpy(realRootDir, filePathPrefix); //@robustness Do this everywhere
 		pathOffset = strlen(filePathPrefix);
-		usedPrefix = true;
 	} else {
 		realRootDir[0] = 0;
-		usedPrefix = false;
 		pathOffset = 0;
 	}
 	strcat(realRootDir, dirPath);
@@ -156,7 +164,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 #if defined(_WIN32)
 	char *dirNames[DIRECTORY_LIST_LIMIT];
 	int dirNamesNum = 0;
-	dirNames[dirNamesNum++] = stringClone(realRootDir);
+	dirNames[dirNamesNum++] = frameStringClone(realRootDir);
 
 	for (int i = 0; i < dirNamesNum; i++) {
 		char realDirPath[PATH_MAX_LEN];
@@ -211,7 +219,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 #elif defined(__linux__) || defined(__EMSCRIPTEN__)
 	char *dirNames[DIRECTORY_LIST_LIMIT];
 	int dirNamesNum = 0;
-	dirNames[dirNamesNum++] = stringClone(realRootDir);
+	dirNames[dirNamesNum++] = frameStringClone(realRootDir);
 
 	for (int i = 0; i < dirNamesNum; i++) {
 		char realDirName[PATH_MAX_LEN] = {};

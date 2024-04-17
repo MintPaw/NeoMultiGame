@@ -39,16 +39,27 @@ void backendPlatformInit(int windowWidth, int windowHeight, char *windowTitle) {
 	glfwSetErrorCallback(glfwErrorCallback);
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	_glfwWindow = glfwCreateWindow(windowWidth, windowHeight, windowTitle, NULL, NULL);
-	if (!_glfwWindow) Panic("Failed to create _glfwWindow");
+	if (!_glfwWindow) {
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		_glfwWindow = glfwCreateWindow(windowWidth, windowHeight, windowTitle, NULL, NULL);
+		if (!_glfwWindow) {
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
+			_glfwWindow = glfwCreateWindow(windowWidth, windowHeight, windowTitle, NULL, NULL);
+			if (!_glfwWindow) Panic("Failed to create _glfwWindow");
+		}
+	}
 
 	glfwMakeContextCurrent(_glfwWindow);
 
 	GLenum err = glewInit();
 	if (GLEW_OK != err) Panic(frameSprintf("GLEW Error: %s\n", glewGetErrorString(err)));
-	// gladLoadGL();
 
 	glfwSwapInterval(1);
 
@@ -80,6 +91,11 @@ void backendPlatformInit(int windowWidth, int windowHeight, char *windowTitle) {
 		if (key == GLFW_KEY_F12) key = KEY_F12;
 		if (key == GLFW_KEY_ENTER) key = KEY_ENTER;
 		if (key == GLFW_KEY_TAB) key = KEY_TAB;
+		if (key == GLFW_KEY_DELETE) key = KEY_DELETE;
+		if (key == GLFW_KEY_HOME) key = KEY_HOME;
+		if (key == GLFW_KEY_END) key = KEY_END;
+		if (key == GLFW_KEY_PAGE_UP) key = KEY_PAGE_UP;
+		if (key == GLFW_KEY_PAGE_DOWN) key = KEY_PAGE_DOWN;
 
 		if (action == GLFW_PRESS) {
 			PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_KEY_DOWN);
@@ -122,7 +138,7 @@ void backendPlatformInit(int windowWidth, int windowHeight, char *windowTitle) {
 
 	auto charCallback = [](GLFWwindow *window, u32 character) {
 		PlatformEvent *event = createPlatformEvent(PLATFORM_EVENT_INPUT_CHARACTER);
-		event->keyCode = character;
+		event->inputUTF = character;
 	};
 	glfwSetCharCallback(_glfwWindow, charCallback);
 }
@@ -147,9 +163,17 @@ void backendPlatformExit() {
 }
 
 void backendPlatformUpdateLoop() {
+	BackendNanoTime startTime = backendPlatformGetNanoTime();
+
 	glfwPollEvents();
 	_platformFrontendUpdateCallback();
 	glfwSwapBuffers(_glfwWindow);
+
+	for (;;) {
+		float msLeft = (1/60.0 * 1000) - backendPlatformGetMsPassed(startTime);
+		if (msLeft <= 0) break;
+		if (msLeft > 1) backendPlatformSleep(msLeft-1);
+	}
 }
 
 int backendPlatformGetWindowWidth() {
@@ -167,7 +191,31 @@ int backendPlatformGetWindowHeight() {
 void backendPlatformMaximizeWindow() { glfwMaximizeWindow(_glfwWindow); }
 void backendPlatformMinimizeWindow() { glfwIconifyWindow(_glfwWindow); }
 void backendPlatformRestoreWindow() { glfwRestoreWindow(_glfwWindow); }
-void backendPlatformResizeWindow(int width, int height) { glfwSetWindowSize(_glfwWindow, width, height); }
+
+void backendPlatformFullscreenWindow() {
+	const GLFWvidmode *mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+	glfwSetWindowAttrib(_glfwWindow, GLFW_DECORATED, false);
+	glfwSetWindowMonitor(_glfwWindow, NULL, 0, 0, mode->width, mode->height, mode->refreshRate);
+}
+
+bool backendPlatformIsWindowFullscreen() {
+	int width, height;
+	glfwGetWindowSize(_glfwWindow, &width, &height);
+	const GLFWvidmode *mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+
+	if (mode->width == width && mode->height == height) return true;
+	return false;
+}
+
+void backendPlatformResizeWindow(int width, int height) {
+	backendPlatformRestoreWindow();
+	glfwSetWindowAttrib(_glfwWindow, GLFW_DECORATED, true);
+	glfwSetWindowSize(_glfwWindow, width, height);
+
+	const GLFWvidmode *mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+	glfwSetWindowPos(_glfwWindow, mode->width/2 - width/2, mode->height/2 - height/2);
+}
+
 void backendHideCursor() { glfwSetInputMode(_glfwWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN); }
 void backendShowCursor() { glfwSetInputMode(_glfwWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL); }
 
@@ -192,32 +240,23 @@ char *backendPlatformGetLastErrorMessage() {
 	DWORD errorMessageID = ::GetLastError();
 	if (errorMessageID) {
 		LPSTR messageBuffer = NULL;
-		size_t size = FormatMessageA(
-			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-			NULL,
-			errorMessageID,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPSTR)&messageBuffer,
-			0,
-			NULL
-		);
+		FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 
 		char *ret = frameStringClone(messageBuffer);
-
 		LocalFree(messageBuffer);
-
 		return ret;
 	}
 
 	return "No error";
 }
 
-int backendPlatformGetMemoryUsage() {
+u64 backendPlatformGetMemoryUsage() {
 #if defined(_WIN32) && defined(FALLOW_DEBUG)
-	PROCESS_MEMORY_COUNTERS pmc;
-	if (GetProcessMemoryInfo(_processHandle, &pmc, sizeof(pmc))) return pmc.WorkingSetSize;
-	return 0;
+	PROCESS_MEMORY_COUNTERS_EX pmc;
+	if (GetProcessMemoryInfo(_processHandle, (PROCESS_MEMORY_COUNTERS *)&pmc, sizeof(pmc))) return pmc.PrivateUsage;
 #endif
+	return 0;
 }
 
 void backendPlatformImGuiInit() {

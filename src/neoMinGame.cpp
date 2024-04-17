@@ -130,11 +130,8 @@ void runGame() {
 	Vec2 res = v2(1920, 1080);
 
 	initPlatform(res.x, res.y, "neoMinGame");
-	platform->sleepWait = true;
 	initAudio();
 	initRenderer(res.x, res.y);
-  renderer->defaultSetSrcWidthAndSrcHeightTo1 = true;
-	initTextureSystem();
 	initFonts();
 	nguiInit();
 
@@ -203,8 +200,8 @@ void updateGame() {
 	}
 
   float timeScaleLeft = game->timeScale;
-	if (platform->trueRightMouseDown) timeScaleLeft *= 5;
-	if (platform->trueRightMouseDown && platform->trueMouseDown) timeScaleLeft *= 2;
+	if (keyPressed(MOUSE_RIGHT, true)) timeScaleLeft *= 5;
+	if (keyPressed(MOUSE_RIGHT, true) && keyPressed(MOUSE_LEFT, true)) timeScaleLeft *= 2;
 	if (keyPressed('Z')) timeScaleLeft *= 0.5;
 	if (keyPressed('X')) timeScaleLeft *= 0.1;
 
@@ -229,7 +226,7 @@ void stepGame(float elapsed, bool lastSubFrame) {
     if (!equal(game->realSize, newRealSize) || !equal(game->screenOverlayOffset, newScreenOverlayOffset)) {
       game->realSize = newRealSize;
       game->screenOverlayOffset = newScreenOverlayOffset;
-			platform->scissorScale = v2(game->sizeScale, game->sizeScale);
+			renderer->scissorScale = v2(game->sizeScale, game->sizeScale);
 
       if (game->gameTexture) destroyTexture(game->gameTexture);
       game->gameTexture = NULL;
@@ -496,7 +493,7 @@ void stepGame(float elapsed, bool lastSubFrame) {
 	if (keyPressed(KEY_CTRL) && keyPressed(KEY_SHIFT) && keyJustPressed('F')) game->debugShowFrameTimes = !game->debugShowFrameTimes;
 	if (game->debugShowFrameTimes) drawText(game->defaultFont, frameSprintf("%.1fms", platform->frameTimeAvg), v2(300, 0), 0xFF808080);
 
-	if (lastSubFrame) guiDraw();
+	if (lastSubFrame) imGuiDraw();
 	drawOnScreenLog();
 
   { /// Update music

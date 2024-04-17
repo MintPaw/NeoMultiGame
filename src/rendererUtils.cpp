@@ -27,13 +27,14 @@ RenderProps newRenderProps(Texture *texture, Rect rect) {
 	RenderProps props = newRenderProps();
 	props.matrix.TRANSLATE(rect.x, rect.y);
 	props.matrix.SCALE(rect.width/(float)texture->width, rect.height/(float)texture->height);
+	props.matrix.SCALE(getSize(texture));
 	return props;
 }
 
 void drawLine(Vec2 start, Vec2 end, int thickness, int color) {
 	Matrix3 matrix = mat3();
 	matrix.TRANSLATE(start.x, start.y);
-	matrix.ROTATE(-toDeg(radsBetween(start, end))); //@WeirdCoords Why is there a negative here?
+	matrix.ROTATE(toDeg(radsBetween(start, end))); //@WeirdCoords Sometimes I need a negative here??
 	matrix.TRANSLATE(0, -thickness/2);
 
 	float width = start.distance(end);

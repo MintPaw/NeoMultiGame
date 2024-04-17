@@ -500,6 +500,8 @@ Equation *getEquation(char *name) {
 		Equation *eq = &eqSet->eqs[i];
 		if (streq(eq->name, name)) return eq;
   }
+
+	logf("Couldn't find equation %s\n", name);
   return NULL;
 }
 
@@ -526,7 +528,6 @@ EqEvalData *getEvalData(char *eqName, char *name) {
 
   Equation *eq = NULL;
   if (streq(eqName, "Debug")) {
-
     eq = &eqSet->eqs[eqSys->selectedEqIndex];
   } else {
     eq = getEquation(eqName);
@@ -865,9 +866,13 @@ void guiShowEquationNodeWindow() {
 		editorStyle.PinBorderWidth = 5;
 		editorStyle.LinkStrength = 500;
 
-		eqSys->windowBgColor = guiGetStyleColor(ImGuiCol_WindowBg);
-		eqSys->gridColor = fromImColor(editorStyle.Colors[ImNode::StyleColor_Grid]);
-		eqSys->bgColor = fromImColor(editorStyle.Colors[ImNode::StyleColor_Bg]);
+		// eqSys->windowBgColor = guiGetStyleColor(ImGuiCol_WindowBg);
+		// eqSys->gridColor = fromImColor(editorStyle.Colors[ImNode::StyleColor_Grid]);
+		// eqSys->bgColor = fromImColor(editorStyle.Colors[ImNode::StyleColor_Bg]);
+
+		eqSys->windowBgColor = 0x832B2B36;
+		eqSys->bgColor = 0x3C161616;
+		eqSys->gridColor = 0x28D4ECFF;
 
 		eqSys->windowBgColor = setAofArgb(eqSys->windowBgColor, getAofArgb(eqSys->windowBgColor) * 0.8);
 	}

@@ -1,4 +1,4 @@
-BACKEND_TYPE=raylib
+BACKEND_TYPE=glfw
 
 ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=parametersGame
@@ -7,6 +7,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=dynaGame
 # GAME_NAME=rtsClient2
 # GAME_NAME=testGame
+# GAME_NAME=neoTestGame
 # GAME_NAME=catsFirstGame
 # GAME_NAME=interrogationGame
 # GAME_NAME=zooBoundGame
@@ -34,6 +35,7 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
 # GAME_NAME=tower2Game
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
+# GAME_NAME=neoTestGame
 # GAME_NAME=horseGame
 # GAME_NAME=catCardGame
 GAME_NAME=boxingGame
@@ -213,8 +215,7 @@ bwrel:
 		"
 
 rw:
-
-	$(WIN_CMD) "C:\Users\MintPaw\AppData\Local\Chromium\Application\chrome.exe 127.0.0.1/game" &
+	$(WIN_CMD) "chrome.exe -incognito 127.0.0.1/game" &
 
 debugVs:
 	# $(MAKE) debugC
