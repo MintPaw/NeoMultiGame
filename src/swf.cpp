@@ -1451,6 +1451,18 @@ Swf *loadSwf(char *path) {
 						subShape->fillStyleIndex = fillStyleIndex;
 						subShape->runtimeCachedPath = new SkPath();
 						currentSubShape = subShape;
+
+						int pointCount = 1;
+						for (int j = i; j < tag->drawEdgesNum; j++) {
+							DrawEdgeRecord *futureEdge = &tag->drawEdges[j];
+							if (futureEdge->fillStyleIndex != fillStyleIndex || futureEdge->lineStyleIndex != lineStyleIndex) break;
+							if (futureEdge->type == DRAW_EDGE_STRAIGHT_EDGE) pointCount += 1;
+							if (futureEdge->type == DRAW_EDGE_CURVED_EDGE) pointCount += 2;
+						}
+						currentSubShape->runtimeCachedPath->incReserve(pointCount);
+						// static int _totalSubShapes = 0;
+						// _totalSubShapes++;
+						// if (_totalSubShapes % 5000 == 0) logf("There's %d sub shapes\n", _totalSubShapes);
 					}
 
 					if (!cursor.equal(edge->start)) {
@@ -2384,9 +2396,9 @@ SwfSprite *getSpriteByName(Swf *swf, char *spriteName, bool depth) {
 		if (sprite) return sprite;
 	}
 
-	if (depth == 0) {
-		logf("Can't find sprite %s\n", spriteName);
-	}
+	// if (depth == 0) {
+	// 	logf("Can't find sprite '%s'\n", spriteName);
+	// }
 	return NULL;
 }
 

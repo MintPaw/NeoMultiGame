@@ -158,6 +158,9 @@ void platformUpdate() {
 	}
 	_platformEventsNum = 0; //@incomplete backendPlatformGetEvents()
 
+	void updateFontSystem(); //@headerHack
+	updateFontSystem();
+
 	void updateAudio(); //@headerHack
 	updateAudio();
 
@@ -424,10 +427,12 @@ LONG CALLBACK win32ExceptionHandler(EXCEPTION_POINTERS* e) {
 }
 #endif
 
+#if _WIN32
 extern "C" {
     __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+#endif
 
 
 

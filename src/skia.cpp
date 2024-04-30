@@ -211,6 +211,7 @@ void endSkiaSubFrame();
 
 void drawSkiaFrameOnTexture(Texture *Texture, bool doClear=false);
 Texture *getSkiaFrameAsTexture(Vec2 size);
+void deinitSkiaFont(Font *font);
 
 void initSpriteTransforms(SpriteTransform *transforms, int transformsNum);
 
@@ -543,17 +544,12 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	int charsAddedToPath = 0;
 	if (name) {
 		charsAddedToPath += strlen(name) + 1;
-#if 1
 		recurse.path = frameSprintf(
 			"%s%s%s", 
 			recurse.path,
 			strlen(recurse.path) != 0 ? "." : "",
 			name
 		);
-#else
-		if (strlen(recurse.path) != 0) strcat(recurse.path, ".");
-		strcat(recurse.path, name);
-#endif
 
 		hashMapGet(recurse.nameTransformMap, &recurse.path, (int)stringHash32(recurse.path), &matchingTransform);
 	}
@@ -589,7 +585,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 
 	if (canDraw) {
 		if (sprite->isTextField) {
-			if (!font) font = fontSys->defaultFont;
+			if (!font) font = getFontInternal(ARIAL_FONT, 24);
 			if (!text) text = sprite->initialText;
 			Rect textRect = sprite->bounds;
 
@@ -1100,6 +1096,7 @@ void startSkiaFrame() {
 }
 
 void endSkiaFrame() {
+	processBatchDraws();
 	skiaSys->grDirectContext->resetContext();
 
 	execCommands(&skiaSys->immVDrawCommandsList);
@@ -1139,6 +1136,12 @@ Texture *getSkiaFrameAsTexture(Vec2 size) {
 	Texture *texture = createTexture(size.x, size.y);
 	drawSkiaFrameOnTexture(texture);
 	return texture;
+}
+
+void deinitSkiaFont(Font *font) {
+	if (!font->skiaUserData) return;
+	SkFont *skiaFont = (SkFont *)font->skiaUserData;
+	delete skiaFont;
 }
 
 void drawSkiaFrameOnTexture(Texture *texture, bool doClear) {

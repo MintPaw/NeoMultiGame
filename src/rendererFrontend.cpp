@@ -383,7 +383,6 @@ void setTextureData(Texture *texture, void *data, int width, int height, int fla
 		flipBitmapData((u8 *)data, width, height);
 	}
 
-
 	backendSetTexture(&texture->backendTexture);
 	backendSetTextureData(data, width, height, flags);
 }

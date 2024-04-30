@@ -223,7 +223,6 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 		logf("Updating emitter with no info!\n");
 		return;
 	}
-	if (info->rate < 0.001) info->rate = 0.001;
 
   if (emitter->reloadInfo) {
 #ifdef FALLOW_DEBUG
@@ -246,6 +245,7 @@ void updateEmitter(Emitter *emitter, float elapsed) {
 		if (emitter->enabled) emitter->timeSinceLastEmit += elapsed;
 
 		if (!info->explode) {
+			if (info->rate < 0.001) info->rate = 0.001;
 			while (emitter->timeSinceLastEmit > info->rate) {
 				emitter->timeSinceLastEmit -= info->rate;
 				emit(emitter);

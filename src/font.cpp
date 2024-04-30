@@ -6,6 +6,7 @@
 // #define MAX_UNICODE_CHAR 127
 
 #define L_FONT "Font Log"
+#define ARIAL_FONT "assets/common/arial.ttf"
 
 #define Font __OTHER_FONT // Because X11 has a Font typedef // And so does raylib
 struct Font {
@@ -30,8 +31,6 @@ struct FontSizeMapping {
 
 struct FontSystem {
 	bool disabled;
-	Font *defaultFont;
-	Font *logFont;
 	bool yIsUp;
 
 #define FONTS_MAX 64
@@ -46,44 +45,42 @@ struct FontSystem {
 	u8 *temp4bppPixels;
 };
 
-struct DrawTextProps {
-	bool skipDraw;
-	Font *font;
+struct TextProps {
+	char *fontPath;
 	Vec2 position;
 	int color;
 	float maxWidth;
-	Vec2 scale;
+	float scale;
 	bool centered;
-
 	float lineSpacingScale;
 
-	void (*charCallback)(DrawTextProps *);
+	void (*charCallback)(TextProps *);
 	void *charCallbackUserData;
 	Vec2 currentOffset;
 	int currentColor;
 	int currentIndex;
 	Vec2 currentCursor;
+
+	bool skipDraw;
+	Font *internalFont;
 };
 
 FontSystem *fontSys = NULL;
 
 void initFonts();
-Font *createFont(char *ttfPath, int fontSize);
+Font *createFontInternal(char *ttfPath, int fontSize);
 
-Vec2 getTextSize(char *string, DrawTextProps props);
+Rect drawTextInRect(char *text, TextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
+
+TextProps createTextProps(char *fontPath, int color=0xFFFFFFFF, Vec2 position=v2());
+
+Vec2 drawText(char *text, TextProps props);
+Vec2 getTextSize(char *string, TextProps props);
+
 int scanNextGlyph(char *text, int index, int *outCharsInThisGlyph);
+int drawSingleTextLine(char *text, TextProps textProps);
 
-Rect drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity=v2(0.5, 0.5));
-
-DrawTextProps newDrawTextProps();
-DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position=v2());
-DrawTextProps createDrawTextProps() { return newDrawTextProps(); }
-DrawTextProps createDrawTextProps(Font *font, int color, Vec2 position=v2()) { return newDrawTextProps(font, color, position); }
-Vec2 drawText(char *text, DrawTextProps props);
-
-int drawSingleTextLine(char *text, DrawTextProps drawTextProps);
-
-Font *getFont(char *ttfPath, int fontSize);
+Font *getFontInternal(char *ttfPath, int fontSize);
 void drawOnScreenLog();
 void destroyFont(Font *font);
 
@@ -100,20 +97,14 @@ void initFonts() {
 
 	fontSys = (FontSystem *)zalloc(sizeof(FontSystem));
 
-	if (fileExists("assets/common/arial.ttf")) {
-		fontSys->defaultFont = createFont("assets/common/arial.ttf", 20);
-		fontSys->logFont = createFont("assets/common/arial.ttf", 30);
-	} else {
-		logf("Need a default font\n");
-		Panic("Can't continue");
-	}
+	if (!fileExists(ARIAL_FONT)) Panic("Need arial font!\n");
 }
 
-Font *createFont(char *ttfPath, int fontSize) {
+Font *createFontInternal(char *ttfPath, int fontSize) {
 	NanoTime startTime = getNanoTime();
 	if (!fileExists(ttfPath)) {
 		logf("Can't find font at %s\n", ttfPath);
-		return fontSys->defaultFont;
+		ttfPath = ARIAL_FONT;
 	}
 
 	Font *font = (Font *)zalloc(sizeof(Font));
@@ -185,43 +176,28 @@ Font *createFont(char *ttfPath, int fontSize) {
 	return font;
 }
 
-Vec2 getTextSize(char *string, DrawTextProps props) {
-	props.skipDraw = true;
-	return drawText(string, props);
-}
-
-DrawTextProps newDrawTextProps() {
-	DrawTextProps props = {};
-	props.font = fontSys->defaultFont;
-	props.color = 0xFF000000;
+TextProps createTextProps(char *fontPath, int color, Vec2 position) {
+	TextProps props = {};
+	props.fontPath = fontPath;
+	props.color = color;
+	props.position = position;
 	props.maxWidth = 9999;
-	props.scale = v2(1, 1);
+	props.scale = 1;
 	props.lineSpacingScale = 1;
 	return props;
 }
 
-DrawTextProps newDrawTextProps(Font *font, int color, Vec2 position) {
-	DrawTextProps props = newDrawTextProps();
-	props.font = font;
-	props.color = color;
-	props.position = position;
-	return props;
-}
-
-Vec2 drawText(char *text, DrawTextProps drawTextProps) {
-	if (!drawTextProps.font) drawTextProps.font = fontSys->defaultFont;
-	drawTextProps.scale *= drawTextProps.font->renderScale;
+Vec2 drawText(char *text, TextProps textProps) {
+	if (textProps.internalFont) logf("Why does this textProps already have a font???\n");
+	if (!textProps.fontPath) textProps.fontPath = ARIAL_FONT;
 
 	{
-		int origFontSize = drawTextProps.font->fontSize;
-		float origScale = drawTextProps.scale.y;
-		float wantedFontSize = drawTextProps.font->fontSize * drawTextProps.scale.y;
-		drawTextProps.font = getFont(drawTextProps.font->path, roundf(wantedFontSize));
-		float gotFontSize = drawTextProps.font->fontSize * drawTextProps.font->renderScale;
+		float wantedFontSize = 24 * textProps.scale;
+		textProps.internalFont = getFontInternal(textProps.fontPath, roundf(wantedFontSize));
+		float gotFontSize = textProps.internalFont->fontSize * textProps.internalFont->renderScale;
 
-		float scale = wantedFontSize / gotFontSize;
-		drawTextProps.scale = v2(scale, scale);
-		drawTextProps.scale *= drawTextProps.font->renderScale;
+		textProps.scale = wantedFontSize / gotFontSize;
+		textProps.scale *= textProps.internalFont->renderScale;
 	}
 
 	int linesMax = 128;
@@ -237,6 +213,7 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 	float lineWidth = 0;
 
 	int textIndex = 0;
+	int prevGlyph = 0;
 	for (;;) {
 		int charsInThisGlyph = 0;
 		int glyph = scanNextGlyph(text, textIndex, &charsInThisGlyph);
@@ -250,6 +227,7 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 
 		if (canLineBreakHere) {
 			char *nextBreakableChars = " -\n";
+
 			char *nextBreakPtr = strpbrk(&text[textIndex+1], nextBreakableChars);
 			int nextBreakIndex;
 			if (nextBreakPtr) nextBreakIndex = nextBreakPtr - text;
@@ -261,8 +239,9 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 				int charsInThisGlyph = 0;
 				int wordGlyph = scanNextGlyph(text, wordTextIndex, &charsInThisGlyph);
 
-				stbtt_packedchar *charData = &drawTextProps.font->charData[wordGlyph];
-				float charWidth = charData->xadvance + drawTextProps.scale.x; //@todo Kerning support for wordwrap would go here, if we used kerning at all...
+				stbtt_packedchar *charData = &textProps.internalFont->charData[wordGlyph];
+				float charWidth = charData->xadvance * textProps.scale;
+				if (wordTextIndex == nextBreakIndex-1) charWidth = charData->xoff + (charData->x1 - charData->x0) * textProps.scale;
 
 				wordWidth += charWidth;
 
@@ -270,7 +249,7 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 				if (wordTextIndex == nextBreakIndex) break;
 			}
 
-			if (lineWidth + wordWidth > drawTextProps.maxWidth) breakLine = true;
+			if (lineWidth + wordWidth > textProps.maxWidth) breakLine = true;
 		}
 
 		bool addChar = true;
@@ -281,6 +260,11 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 		}
 
 		if (breakLine) {
+			if (prevGlyph) {
+				stbtt_packedchar *charData = &textProps.internalFont->charData[prevGlyph];
+				lineWidth -= charData->xadvance * textProps.scale;
+				lineWidth += (charData->xoff + (charData->x1 - charData->x0)) * textProps.scale;
+			}
 			lineWidths[linesNum] = lineWidth;
 			lines[linesNum] = frameStringClone(line);
 			linesNum++;
@@ -295,14 +279,20 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 			}
 			line[lineCharIndex] = 0;
 
-			stbtt_packedchar *charData = &drawTextProps.font->charData[glyph];
-			float charWidth = charData->xadvance * drawTextProps.scale.x; //@todo Kerning support for wordwrap would go here, if we used kerning at all...
+			stbtt_packedchar *charData = &textProps.internalFont->charData[glyph];
+			float charWidth = charData->xadvance * textProps.scale;
 			lineWidth += charWidth;
 		}
 
+		prevGlyph = glyph;
 		textIndex += charsInThisGlyph;
 	}
 	if (lineCharIndex > 0) {
+		if (prevGlyph) {
+			stbtt_packedchar *charData = &textProps.internalFont->charData[prevGlyph];
+			lineWidth -= charData->xadvance * textProps.scale;
+			lineWidth += (charData->xoff + (charData->x1 - charData->x0)) * textProps.scale;
+		}
 		lineWidths[linesNum] = lineWidth;
 		lines[linesNum] = frameStringClone(line);
 		linesNum++;
@@ -314,96 +304,30 @@ Vec2 drawText(char *text, DrawTextProps drawTextProps) {
 		if (widestWidth < lineWidth) widestWidth = lineWidth;
 	}
 
-	drawTextProps.maxWidth = 9999;
-	Vec2 cursor = drawTextProps.position;
-	float maxHeight = 0;
+	textProps.maxWidth = 9999;
+	Vec2 cursor = textProps.position;
 	for (int i = 0; i < linesNum; i++) {
 		char *line = lines[i];
 		float lineWidth = lineWidths[i];
 
-		DrawTextProps lineProps = drawTextProps;
+		TextProps lineProps = textProps;
 		lineProps.position = cursor;
-		if (drawTextProps.centered) lineProps.position.x += (widestWidth - lineWidth)/2;
-		drawTextProps.currentIndex += drawSingleTextLine(line, lineProps);
+		if (textProps.centered) lineProps.position.x += (widestWidth - lineWidth)/2;
+		textProps.currentIndex += drawSingleTextLine(line, lineProps);
 
 		if (i == linesNum - 1) { // The last line is always full height
-			cursor.y += drawTextProps.font->lineSpacing * drawTextProps.scale.y;
+			cursor.y += textProps.internalFont->lineSpacing * textProps.scale;
 		} else {
-			cursor.y += drawTextProps.font->lineSpacing * drawTextProps.lineSpacingScale * drawTextProps.scale.y;
+			cursor.y += textProps.internalFont->lineSpacing * textProps.lineSpacingScale * textProps.scale;
 		}
 	}
 
-	return v2(widestWidth, cursor.y - drawTextProps.position.y);
+	return v2(widestWidth, cursor.y - textProps.position.y);
 }
 
-int drawSingleTextLine(char *line, DrawTextProps drawTextProps) {
-	if (fontSys->disabled) return 0;
-	if (!line) return 0;
-
-	drawTextProps.currentCursor = drawTextProps.position;
-
-	int lineIndex = 0;
-
-	if (line[0] == ' ') {
-		lineIndex += 1;
-		drawTextProps.currentIndex += 1;
-	}
-
-	for (;;) {
-		Matrix3 charMatrix = mat3();
-		Matrix3 charUvMatrix = mat3();
-		bool charDisabled = false;
-		{
-			if (lineIndex == strlen(line)) break;
-
-			drawTextProps.currentOffset = v2();
-			drawTextProps.currentColor = drawTextProps.color;
-			if (drawTextProps.charCallback) drawTextProps.charCallback(&drawTextProps);
-
-			int charsInThisGlyph = 0;
-			int glyph = scanNextGlyph(line, lineIndex, &charsInThisGlyph);
-			drawTextProps.currentIndex += charsInThisGlyph;
-			lineIndex += charsInThisGlyph;
-
-			if (glyph == ' ') charDisabled = true;
-
-			stbtt_packedchar *charData = &drawTextProps.font->charData[glyph];
-
-			float srcX = charData->x0;
-			float srcY = charData->y0;
-			float srcWidth = charData->x1 - charData->x0;
-			float srcHeight = charData->y1 - charData->y0;
-			float textureWidth = drawTextProps.font->texture->width;
-			float textureHeight = drawTextProps.font->texture->height;
-
-			charUvMatrix.TRANSLATE(srcX/textureWidth, srcY/textureHeight);
-			charUvMatrix.SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
-
-			Vec2 charDataOff = v2();
-			charDataOff.x = charData->xoff;
-			charDataOff.y = charData->yoff + drawTextProps.font->ascent;
-
-			charMatrix.TRANSLATE(drawTextProps.currentOffset);
-			charMatrix.TRANSLATE(drawTextProps.currentCursor);
-			charMatrix.SCALE(drawTextProps.scale);
-			charMatrix.TRANSLATE(charDataOff);
-			charMatrix.SCALE(srcWidth, srcHeight);
-
-			drawTextProps.currentCursor.x += charData->xadvance * drawTextProps.scale.x;
-		}
-
-		if (drawTextProps.skipDraw || charDisabled) continue;
-
-		RenderProps props = newRenderProps();
-		props.tint = drawTextProps.currentColor;
-		props.srcWidth = 1;
-		props.srcHeight = 1;
-		props.matrix = charMatrix;
-		props.uvMatrix = charUvMatrix;
-		drawTexture(drawTextProps.font->texture, props);
-	}
-
-	return lineIndex;
+Vec2 getTextSize(char *string, TextProps props) {
+	props.skipDraw = true;
+	return drawText(string, props);
 }
 
 int scanNextGlyph(char *text, int index, int *outCharsInThisGlyph) {
@@ -448,12 +372,80 @@ int scanNextGlyph(char *text, int index, int *outCharsInThisGlyph) {
 	return glyph;
 }
 
-Rect drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) { // justify relies on you manually wrapping with \n's
+int drawSingleTextLine(char *line, TextProps textProps) {
+	if (fontSys->disabled) return 0;
+	if (!line) return 0;
+
+	textProps.currentCursor = textProps.position;
+
+	int lineIndex = 0;
+
+	if (line[0] == ' ') {
+		lineIndex += 1;
+		textProps.currentIndex += 1;
+	}
+
+	for (;;) {
+		bool charDisabled = false;
+		if (lineIndex == strlen(line)) break;
+
+		textProps.currentOffset = v2();
+		textProps.currentColor = textProps.color;
+		if (textProps.charCallback) textProps.charCallback(&textProps);
+
+		int charsInThisGlyph = 0;
+		int glyph = scanNextGlyph(line, lineIndex, &charsInThisGlyph);
+		lineIndex += charsInThisGlyph;
+		textProps.currentIndex += charsInThisGlyph;
+
+		if (glyph == ' ') charDisabled = true;
+
+		stbtt_packedchar *charData = &textProps.internalFont->charData[glyph];
+
+		float srcX = charData->x0;
+		float srcY = charData->y0;
+		float srcWidth = charData->x1 - charData->x0;
+		float srcHeight = charData->y1 - charData->y0;
+		float textureWidth = textProps.internalFont->texture->width;
+		float textureHeight = textProps.internalFont->texture->height;
+
+		Matrix3 charUvMatrix = mat3();
+		charUvMatrix.TRANSLATE(srcX/textureWidth, srcY/textureHeight);
+		charUvMatrix.SCALE(srcWidth/textureWidth, srcHeight/textureHeight);
+
+		Vec2 charDataOff = v2();
+		charDataOff.x = charData->xoff;
+		charDataOff.y = charData->yoff + textProps.internalFont->ascent;
+
+		Matrix3 charMatrix = mat3();
+		charMatrix.TRANSLATE(textProps.currentOffset);
+		charMatrix.TRANSLATE(textProps.currentCursor);
+		charMatrix.SCALE(textProps.scale);
+		charMatrix.TRANSLATE(charDataOff);
+		charMatrix.SCALE(srcWidth, srcHeight);
+
+		textProps.currentCursor.x += charData->xadvance * textProps.scale;
+
+		if (textProps.skipDraw || charDisabled) continue;
+
+		RenderProps props = newRenderProps();
+		props.tint = textProps.currentColor;
+		props.srcWidth = 1;
+		props.srcHeight = 1;
+		props.matrix = charMatrix;
+		props.uvMatrix = charUvMatrix;
+		drawTexture(textProps.internalFont->texture, props);
+	}
+
+	return lineIndex;
+}
+
+Rect drawTextInRect(char *text, TextProps props, Rect toFit, Vec2 gravity) {
 	Vec2 size = getTextSize(text, props);
 	Rect textRect = getInnerRectOfAspect(toFit, size, gravity);
 	Vec2 textScale = getSize(textRect) / size;
 
-	props.scale = textScale;
+	props.scale = textScale.x;
 	props.position = getPosition(textRect);
 
 	drawText(text, props);
@@ -461,7 +453,7 @@ Rect drawTextInRect(char *text, DrawTextProps props, Rect toFit, Vec2 gravity) {
 	return textRect;
 }
 
-Font *getFont(char *ttfPath, int fontSize) {
+Font *getFontInternal(char *ttfPath, int fontSize) {
 	auto addFontSizeMapping = [](Font *font, int srcSize) {
 		if (fontSys->fontSizeMappingsNum > FONT_SIZE_MAPPINGS_MAX-1) {
 			logf("Too many font size mappings!\n");
@@ -474,28 +466,29 @@ Font *getFont(char *ttfPath, int fontSize) {
 		mapping->bestFont = font;
 	};
 
-	if (fontSize <= 1) fontSize = 24;
+	int MIN_FONT_SIZE = 12;
 
-	Font *existingFont = getFontFromMappingCache(ttfPath, fontSize);
-	if (existingFont) return existingFont;
+	int requestedFontSize = fontSize;
+	if (fontSize <= MIN_FONT_SIZE) fontSize = MIN_FONT_SIZE;
+
+	{
+		Font *existingFont = getFontFromMappingCache(ttfPath, fontSize);
+		if (existingFont) return existingFont;
+	}
 
 	Font *font = NULL;
 	float renderScale = 1;
 	int originalFontSize = fontSize;
 
-	while (fontSize < 12) {
-		fontSize *= 2;
-		renderScale /= 2;
-	}
 	for (int i = 0; i < 10; i++) {
-		font = createFont(ttfPath, fontSize);
+		font = createFontInternal(ttfPath, fontSize);
 		if (font) break;
 
 		fontSize /= 2;
 		renderScale *= 2;
-		if (fontSize <= 1) {
-			logf("Font too small (%d)\n", fontSize);
-			fontSize = 12;
+		if (fontSize <= MIN_FONT_SIZE) {
+			logf("ERROR: Font too small (%d)\n", fontSize);
+			fontSize = MIN_FONT_SIZE;
 		}
 
 		font = getFontFromMappingCache(ttfPath, fontSize);
@@ -516,7 +509,7 @@ Font *getFont(char *ttfPath, int fontSize) {
 		int lruFontIndex = -1;
 		for (int i = 0; i < fontSys->fontsNum; i++) {
 			Font *font = fontSys->fonts[i];
-			if (!lruFont || lruFont->lastAccessedTime > font->lastAccessedTime) {
+			if (!lruFont || lruFont->lastAccessedTime < font->lastAccessedTime) {
 				lruFont = font;
 				lruFontIndex = i;
 			}
@@ -567,11 +560,10 @@ void drawOnScreenLog() {
 
 		float textScale = platform->windowHeight / 1080.0;
 
-		DrawTextProps textProps = createDrawTextProps();
-		textProps.font = fontSys->logFont;
+		TextProps textProps = createTextProps(ARIAL_FONT);
 		textProps.color = color;
 		textProps.maxWidth = platform->windowWidth;
-		textProps.scale.x = textProps.scale.y = textScale;
+		textProps.scale = textScale;
 
 		Vec2 size = getTextSize(logBuffer->buffer, textProps);
 		Vec2 position;
@@ -600,9 +592,12 @@ void drawOnScreenLog() {
 
 void destroyFont(Font *font) {
 	logTo(L_FONT, "Destroying font %s(%d)\n", font->path, font->fontSize);
-	if (font == fontSys->defaultFont) return;
 	destroyTexture(font->texture);
 	free(font->charData);
+
+	void deinitSkiaFont(Font *font); //@headerHack
+	deinitSkiaFont(font);
+
 	free(font);
 }
 
@@ -630,8 +625,20 @@ void destroyFontSizeMappings(Font *font) {
 	}
 }
 
+void updateFontSystem() {
+	for (int i = 0; i < fontSys->fontsNum; i++) {
+		Font *font = fontSys->fonts[i];
+		if (platform->time - font->lastAccessedTime > 15) {
+			destroyFontSizeMappings(font);
+			destroyFont(font);
+			arraySpliceIndex(fontSys->fonts, fontSys->fontsNum, sizeof(Font *), i);
+			fontSys->fontsNum--;
+		}
+	}
+}
+
 void guiDrawFontDebug() {
-	if (ImGui::TreeNode(frameSprintf("Font loaded [%d/%d]###fontLoaded", fontSys->fontsNum, FONTS_MAX))) {
+	if (ImGui::TreeNode(frameSprintf("Fonts loaded [%d/%d]###fontLoaded", fontSys->fontsNum, FONTS_MAX))) {
 		for (int i = 0; i < fontSys->fontsNum; i++) {
 			Font *font = fontSys->fonts[i];
 			ImGui::Text("%s - %d x%g (%gpx)\n", font->path, font->fontSize, font->renderScale, font->fontSize * font->renderScale);

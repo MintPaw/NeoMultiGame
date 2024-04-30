@@ -1063,7 +1063,7 @@ void nguiDraw(float elapsed) {
 
 						Vec2 labelSize = nguiGetStyleVec2(NGUI_STYLE_LABEL_SIZE);
 						Rect textRect = getInnerRectOfSize(textFitRect, getSize(textFitRect)*labelSize, labelGravity);
-						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), labelTextColor);
+						TextProps props = createTextProps(nguiGetStyleStringPtr(NGUI_STYLE_FONT), labelTextColor);
 						if (centerText) props.centered = true;
 						if (!child->wasClippedOut) drawTextInRect(label, props, textRect, labelGravity);
 					}
@@ -1073,7 +1073,7 @@ void nguiDraw(float elapsed) {
 						subTextColor = lerpColor(subTextColor, 0x00FFFFFF&subTextColor, 0.25);
 
 						Rect subTextRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(0.8, 0.3), v2(1, 1));
-						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), subTextColor);
+						TextProps props = createTextProps(nguiGetStyleStringPtr(NGUI_STYLE_FONT), subTextColor);
 						if (centerText) props.centered = true;
 						if (!child->wasClippedOut) drawTextInRect(child->subText, props, subTextRect, v2(1, 1));
 					}
@@ -1085,7 +1085,7 @@ void nguiDraw(float elapsed) {
 
 					{
 						Rect textRect = getInnerRectOfSize(graphicsRect, getSize(graphicsRect)*v2(1, 0.6), v2(0, 0));
-						DrawTextProps props = newDrawTextProps(getFont(nguiGetStyleStringPtr(NGUI_STYLE_FONT), 24), labelTextColor);
+						TextProps props = createTextProps(nguiGetStyleStringPtr(NGUI_STYLE_FONT), labelTextColor);
 						if (centerText) props.centered = true;
 						drawTextInRect(label, props, textRect, labelGravity);
 					}

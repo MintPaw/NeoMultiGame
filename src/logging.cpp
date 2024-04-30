@@ -101,7 +101,9 @@ void logf(const char *msg, ...) {
 	va_end(args);
 
 	{
-		char *logStr = frameSprintf("[log] %.1f: %s", platform->time, str);
+		float time = 0;
+		if (platform) time = platform->time;
+		char *logStr = frameSprintf("[log] %.1f: %s", time, str);
 		logStr[strlen(logStr)-1] = 0;
 		writeString(logSys->logStream, logStr);
 	}
@@ -138,7 +140,7 @@ LogfBuffer *loggerLogString(char *msg) {
 		log->buffer = (char *)malloc(sizeof(char) * log->size);
 	}
 	strncpy(log->buffer, msg, log->size);
-	log->logTime = platform->time;
+	if (platform) log->logTime = platform->time;
 
 	if (log->buffer[strlen(log->buffer)-1] == '\n') {
 		log->buffer[strlen(log->buffer)-1] = 0;
