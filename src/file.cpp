@@ -1,5 +1,6 @@
 void initFileOperations();
-void initFileOperations(const char **possibleAssetPaths, int possibleAssetPathsNum);
+char *addPathPrefix(char *path); // Only valid for one frame
+void testPathCasing(char *path);
 void refreshAssetPaths();
 
 #ifndef NO_ZIP
@@ -101,6 +102,47 @@ void initFileOperations() {
 	refreshAssetPaths();
 }
 
+char *addPathPrefix(char *path) { // Only valid for one frame
+	if (path[1] != ':' && path[0] != '/') path = frameSprintf("%s%s", filePathPrefix, path);
+	return path;
+}
+
+void testPathCasing(char *path) { //@incomplete This doesn't work for directories!
+#if !defined(FALLOW_INTERNAL)
+	return;
+#endif
+
+#ifndef _WIN32
+	return;
+#endif
+
+	path = frameStringClone(path);
+	for (char *p = path; *p; p++) if (*p == '\\') *p = '/';
+
+	HANDLE hFile = CreateFile(
+		path,
+		GENERIC_READ,          // open for reading
+		FILE_SHARE_READ,       // share for reading
+		NULL,                  // default security
+		OPEN_EXISTING,         // existing file only
+		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, // normal file
+		NULL                   // no attr. template
+	);
+
+	if (hFile == INVALID_HANDLE_VALUE) return;
+	char diskPath[PATH_MAX_LEN] = {};
+	GetFinalPathNameByHandleA(hFile, diskPath, PATH_MAX_LEN, 0);
+
+	for (char *p = diskPath; *p; p++) if (*p == '\\') *p = '/';
+
+	if (!stringEndsWith(diskPath, path)) {
+		char *shortDiskPath = diskPath + (strlen(diskPath) - strlen(path));
+		logf("File has incorrect case! %s %s \n", path, shortDiskPath);
+	}
+
+	CloseHandle(hFile);
+}
+
 void refreshAssetPaths() {
 	if (assetPaths) {
 		for (int i = 0; i < assetPathsNum; i++) free(assetPaths[i]);
@@ -155,6 +197,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 		pathOffset = 0;
 	}
 	strcat(realRootDir, dirPath);
+	testPathCasing(realRootDir);
 	// logf("Getting the directly list of %s(%s)\n", realRootDir, dirPath);
 
 	int fileNamesMax = 32;
@@ -368,9 +411,7 @@ bool directoryExists(const char *dirPath) {
 bool fileExists(const char *fileName) {
 	if (!fileName || !fileName[0]) return false;
 
-	char realName[PATH_MAX_LEN] = {};
-	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
-	strcat(realName, fileName);
+	char *realName = addPathPrefix((char *)fileName);
 
 	if (strContains(fileName, "assets/raw/")) return false;
 
@@ -388,6 +429,7 @@ bool fileExists(const char *fileName) {
 	if (hFile == INVALID_HANDLE_VALUE) return false;
 
 	CloseHandle(hFile);
+	testPathCasing(realName);
 	return true;
 #else
 	FILE *filePtr = fopen(realName, "rb");
@@ -669,9 +711,8 @@ void appendFile(const char *fileName, void *data, int length) {
 }
 
 bool readFileDirect(const char *fileName, u8 *outData, int outDataSize, int *outSize) {
-	char realName[PATH_MAX_LEN] = {};
-	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
-	strcat(realName, fileName);
+	char *realName = addPathPrefix((char *)fileName);
+	testPathCasing(realName);
 
 	FILE *filePtr = fopen(realName, "rb");
 	if (!filePtr) {
@@ -697,9 +738,8 @@ bool readFileDirect(const char *fileName, u8 *outData, int outDataSize, int *out
 }
 
 void *readFile(const char *fileName, int *outSize) {
-	char realName[PATH_MAX_LEN] = {};
-	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
-	strcat(realName, fileName);
+	char *realName = addPathPrefix((char *)fileName);
+	testPathCasing(realName);
 
 	FILE *filePtr = fopen(realName, "rb");
 	if (!filePtr) {

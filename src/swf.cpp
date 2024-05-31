@@ -896,6 +896,12 @@ struct SwfHeader {
 	u16 frameCount;
 };
 
+struct CachedSwfSpriteTexture {
+	char *name;
+	int frame;
+	Texture *texture;
+};
+
 struct Swf {
 	SwfHeader header;
 	SwfTagPointer *tags;
@@ -926,6 +932,10 @@ struct Swf {
 
 	MemoryArena *drawablesArena;
 	ResizingPool *shapePool;
+
+	CachedSwfSpriteTexture *cachedSpriteTextures;
+	int cachedSpriteTexturesNum;
+	int cachedSpriteTexturesMax;
 };
 
 bool swfFreeDrawEdges = true;
@@ -935,6 +945,7 @@ SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
 void destroySwf(Swf *swf);
+void clearCache(Swf *swf);
 
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
@@ -2453,8 +2464,22 @@ void destroySwf(Swf *swf) {
 	free(swf->tags);
 	destroyMemoryArena(swf->drawablesArena);
 
+	clearCache(swf);
+	free(swf->cachedSpriteTextures);
+
 	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
 	free(swf);
+}
+
+void clearCache(Swf *swf) {
+	for (int i = 0; i < swf->cachedSpriteTexturesNum; i++) {
+		CachedSwfSpriteTexture *cachedSpriteTexture = &swf->cachedSpriteTextures[i];
+		free(cachedSpriteTexture->name);
+		destroyTexture(cachedSpriteTexture->texture);
+	}
+	swf->cachedSpriteTexturesNum = 0;
+
+	for (int i = 0; i < swf->loadedSwfsNum; i++) clearCache(swf->loadedSwfs[i]);
 }
 
 bool hasLabel(SwfSprite *sprite, char *label) {

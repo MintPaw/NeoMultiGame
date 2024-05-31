@@ -29,9 +29,29 @@ struct FontSizeMapping {
 	int srcSize;
 };
 
+struct TextProps {
+	char *fontPath;
+	Vec2 position;
+	int color;
+	float maxWidth;
+	float scale;
+	bool centered;
+	float lineSpacingScale;
+	float extrudeVertsPerc;
+
+	void (*charCallback)(TextProps *);
+	void *charCallbackUserData;
+	Vec2 currentOffset;
+	int currentColor;
+	int currentIndex;
+	Vec2 currentCursor;
+
+	bool skipDraw;
+	Font *internalFont;
+};
+
 struct FontSystem {
 	bool disabled;
-	bool yIsUp;
 
 #define FONTS_MAX 64
 	Font *fonts[FONTS_MAX];
@@ -43,26 +63,6 @@ struct FontSystem {
 
 	u8 *temp1bppPixels;
 	u8 *temp4bppPixels;
-};
-
-struct TextProps {
-	char *fontPath;
-	Vec2 position;
-	int color;
-	float maxWidth;
-	float scale;
-	bool centered;
-	float lineSpacingScale;
-
-	void (*charCallback)(TextProps *);
-	void *charCallbackUserData;
-	Vec2 currentOffset;
-	int currentColor;
-	int currentIndex;
-	Vec2 currentCursor;
-
-	bool skipDraw;
-	Font *internalFont;
 };
 
 FontSystem *fontSys = NULL;
@@ -117,10 +117,7 @@ Font *createFontInternal(char *ttfPath, int fontSize) {
 
 	if (!fontSys->temp1bppPixels) fontSys->temp1bppPixels = (u8 *)malloc(FONT_WIDTH_LIMIT * FONT_HEIGHT_LIMIT);
 	stbtt_pack_context packContext;
-
-	if (!stbtt_PackBegin(&packContext, fontSys->temp1bppPixels, FONT_WIDTH_LIMIT, FONT_HEIGHT_LIMIT, 0, 1, NULL)) Panic("Faied to PackBegin");
-
-	// stbtt_PackSetOversampling(&packContext, 2, 2);
+	if (!stbtt_PackBegin(&packContext, fontSys->temp1bppPixels, FONT_WIDTH_LIMIT, FONT_HEIGHT_LIMIT, 0, 16, NULL)) Panic("Faied to PackBegin");
 
 	font->charData = (stbtt_packedchar *)malloc(MAX_UNICODE_CHAR * sizeof(stbtt_packedchar));
 
@@ -200,13 +197,13 @@ Vec2 drawText(char *text, TextProps textProps) {
 		textProps.scale *= textProps.internalFont->renderScale;
 	}
 
-	int linesMax = 128;
+	int linesMax = strlen(text)+1;
 	char **lines = (char **)frameMalloc(sizeof(char *) * linesMax);
 	int linesNum = 0;
 
 	float *lineWidths = (float *)frameMalloc(sizeof(float) * linesMax);
 
-	int lineMaxLen = 256;
+	int lineMaxLen = strlen(text)+1;
 	char *line = (char *)frameMalloc(sizeof(char) * lineMaxLen);
 	int lineCharIndex = 0;
 
@@ -428,13 +425,78 @@ int drawSingleTextLine(char *line, TextProps textProps) {
 
 		if (textProps.skipDraw || charDisabled) continue;
 
-		RenderProps props = newRenderProps();
-		props.tint = textProps.currentColor;
-		props.srcWidth = 1;
-		props.srcHeight = 1;
-		props.matrix = charMatrix;
-		props.uvMatrix = charUvMatrix;
-		drawTexture(textProps.internalFont->texture, props);
+		if (textProps.extrudeVertsPerc) {
+			GpuVertex gpuVerts[4];
+
+			gpuVerts[0].position = v3(charMatrix * v2(0, 0), 1);
+			gpuVerts[1].position = v3(charMatrix * v2(0, 1), 1);
+			gpuVerts[2].position = v3(charMatrix * v2(1, 1), 1);
+			gpuVerts[3].position = v3(charMatrix * v2(1, 0), 1);
+
+			gpuVerts[0].uv = charUvMatrix * v2(0, 0);
+			gpuVerts[1].uv = charUvMatrix * v2(0, 1);
+			gpuVerts[2].uv = charUvMatrix * v2(1, 1);
+			gpuVerts[3].uv = charUvMatrix * v2(1, 0);
+
+			{
+				Vec2 centerPos = (v2(gpuVerts[0].position) + v2(gpuVerts[1].position) + v2(gpuVerts[2].position) + v2(gpuVerts[3].position))/4;
+				float dist = distance(centerPos, v2(gpuVerts[0].position));
+				for (int i = 0; i < 4; i++) {
+					GpuVertex *vert = &gpuVerts[i];
+					Vec2 dir = normalize(v2(vert->position) - centerPos);
+					Vec2 offset = dir * dist * textProps.extrudeVertsPerc;
+					vert->position.x += offset.x;
+					vert->position.y += offset.y;
+				}
+			}
+
+			{
+				Vec2 centerPos = (gpuVerts[0].uv + gpuVerts[1].uv + gpuVerts[2].uv + gpuVerts[3].uv)/4;
+				float dist = distance(centerPos, gpuVerts[0].uv);
+				for (int i = 0; i < 4; i++) {
+					GpuVertex *vert = &gpuVerts[i];
+					Vec2 dir = normalize(vert->uv - centerPos);
+					Vec2 offset = dir * dist * textProps.extrudeVertsPerc;
+					vert->uv.x += offset.x;
+					vert->uv.y += offset.y;
+				}
+			}
+
+
+			gpuVerts[0].color = hexToArgbFloat(textProps.currentColor);
+			gpuVerts[1].color = hexToArgbFloat(textProps.currentColor);
+			gpuVerts[2].color = hexToArgbFloat(textProps.currentColor);
+			gpuVerts[3].color = hexToArgbFloat(textProps.currentColor);
+
+			Matrix3 flipMatrix = {
+				1,  0,  0,
+				0, -1,  0,
+				0,  1,  1
+			};
+
+			Matrix3 baseMatrix = getCurrentVertexMatrix();
+			for (int i = 0; i < 4; i++) {
+				gpuVerts[i].position = baseMatrix * gpuVerts[i].position;
+				gpuVerts[i].uv = flipMatrix * gpuVerts[i].uv;
+			}
+
+			GpuVertex gpuVerts6[6];
+			gpuVerts6[0] = gpuVerts[0];
+			gpuVerts6[1] = gpuVerts[1];
+			gpuVerts6[2] = gpuVerts[2];
+			gpuVerts6[3] = gpuVerts[0];
+			gpuVerts6[4] = gpuVerts[2];
+			gpuVerts6[5] = gpuVerts[3];
+
+			setTexture(textProps.internalFont->texture);
+			drawVerts(gpuVerts6, 6);
+		} else {
+			RenderProps props = newRenderProps();
+			props.tint = textProps.currentColor;
+			props.matrix = charMatrix;
+			props.uvMatrix = charUvMatrix;
+			drawTexture(textProps.internalFont->texture, props);
+		}
 	}
 
 	return lineIndex;
@@ -467,9 +529,7 @@ Font *getFontInternal(char *ttfPath, int fontSize) {
 	};
 
 	int MIN_FONT_SIZE = 12;
-
-	int requestedFontSize = fontSize;
-	if (fontSize <= MIN_FONT_SIZE) fontSize = MIN_FONT_SIZE;
+	if (fontSize < MIN_FONT_SIZE) fontSize = MIN_FONT_SIZE;
 
 	{
 		Font *existingFont = getFontFromMappingCache(ttfPath, fontSize);

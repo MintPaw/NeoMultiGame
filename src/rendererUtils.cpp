@@ -7,7 +7,8 @@ void drawLine(Vec2 start, Vec2 end, int thickness, int color);
 void drawLine(Line2 line, int thickness, int color) { drawLine(line.start, line.end, thickness, color); }
 void drawRectOutline(Rect rect, float outlineSize, int color);
 Vec2 getSize(Texture *texture);
-Rect makeRect(Texture *texture);
+Rect getRect(Texture *texture);
+Rect getInnerRectOfAspect(Rect toFit, Texture *texture, Vec2 gravity=v2(0.5, 0.5)) { return getInnerRectOfAspect(toFit, getSize(texture), gravity); }
 void drawCapsule(Capsule2 cap, int color);
 
 RenderProps newRenderProps() {
@@ -17,7 +18,7 @@ RenderProps newRenderProps() {
 	props.matrix = mat3();
 	props.uvMatrix = mat3();
 	props.uv1 = v2(1, 1);
-  if (!renderer->useBadSrcSize) props.srcWidth = props.srcHeight = 1;
+  // if (!renderer->useBadSrcSize) props.srcWidth = props.srcHeight = 1;
 	return props;
 }
 
@@ -61,10 +62,10 @@ Vec2 getSize(Texture *texture) {
 	return v2(texture->width, texture->height);
 }
 
-Rect makeRect(Texture *texture) {
+Rect getRect(Texture *texture) {
 	if (!texture) {
 		return makeRect();
-		logf("makeRect of NULL texture\n");
+		logf("getRect of NULL texture\n");
 	}
 	return makeRect(0, 0, texture->width, texture->height);
 }

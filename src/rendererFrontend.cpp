@@ -16,8 +16,8 @@ struct RenderProps {
 	float alpha;
 	int tint;
 
-	int srcWidth;
-	int srcHeight;
+	// int srcWidth;
+	// int srcHeight;
 
 #define _F_CIRCLE (1 << 6)
 	u32 flags;
@@ -29,6 +29,7 @@ struct RenderProps {
 
 struct Shader {
 	int mvpLoc;
+	int resolutionLoc;
 	BackendShader backendShader;
 };
 
@@ -88,8 +89,6 @@ struct Renderer {
 
 	Allocator textureMapAllocator;
 	HashMap *textureMap;
-
-  bool useBadSrcSize;
 };
 
 Renderer *renderer = NULL;
@@ -122,6 +121,7 @@ bool writeTextureToFile(Texture *texture, char *path);
 
 Texture *getTexture(char *path, int flags=0);
 void destroyTexture(Texture *texture);
+void destroy(Texture *texture) { destroyTexture(texture); }
 void clearTextureCache();
 
 void drawTexture(Texture *texture, RenderProps props);
@@ -132,6 +132,7 @@ void drawCircle(Circle circle, int color);
 
 void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0=v2(0, 0), Vec2 uv1=v2(1, 1), int tint=0xFFFFFFFF, int flags=0);
 void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
+Matrix3 getCurrentVertexMatrix();
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture);
 void drawVerts(GpuVertex *verts, int vertsNum);
 
@@ -233,6 +234,7 @@ Shader *loadShader(char *vsPath, char *fsPath) {
 	backendLoadShader(&shader->backendShader, (char *)frameReadFile(vsPath), (char *)frameReadFile(fsPath));
 
 	shader->mvpLoc = getUniformLocation(shader, "mvp");
+	shader->resolutionLoc = getUniformLocation(shader, "resolution");
 
 	return shader;
 }
@@ -466,12 +468,6 @@ void drawTexture(Texture *texture, RenderProps props) {
 		Panic("drawTexture called with null texture!");
 	}
 
-	if (renderer->useBadSrcSize) {
-		if (props.srcWidth == 0) props.srcWidth = texture->width;
-		if (props.srcHeight == 0) props.srcHeight = texture->height;
-		props.matrix.SCALE(props.srcWidth, props.srcHeight);
-	}
-
 	props.tint = setAofArgb(props.tint, getAofArgb(props.tint) * props.alpha);
 	int flags = props.flags;
 	Vec2 uv0 = props.uvMatrix * props.uv0;
@@ -574,15 +570,20 @@ void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, int tin
 }
 
 void drawVerts(Vec2 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture) {
-	Vec2 targetSize = v2(platform->windowWidth, platform->windowHeight);
-	if (renderer->targetTextureStackNum > 0) targetSize = getSize(renderer->targetTextureStack[renderer->targetTextureStackNum-1]);
-	Matrix3 matrix = getProjectionMatrix(targetSize.x, targetSize.y) * renderer->baseMatrix2d;
+	Matrix3 matrix = getCurrentVertexMatrix();
 
 	Vec3 *verts3 = (Vec3 *)frameMalloc(sizeof(Vec3) * vertsNum);
 	for (int i = 0; i < vertsNum; i++) verts3[i] = v3(matrix * verts[i], renderer->current2dDrawDepth);
 
 	renderer->current2dDrawDepth += 1.0/RENDERER_BACKEND_MAX_DRAWS_PER_BATCH; // Should really be a fraction of the far-near clip plane
 	drawVerts(verts3, uvs, colors, vertsNum, texture);
+}
+
+Matrix3 getCurrentVertexMatrix() {
+	Vec2 targetSize = v2(platform->windowWidth, platform->windowHeight);
+	if (renderer->targetTextureStackNum > 0) targetSize = getSize(renderer->targetTextureStack[renderer->targetTextureStackNum-1]);
+	Matrix3 matrix = getProjectionMatrix(targetSize.x, targetSize.y) * renderer->baseMatrix2d;
+	return matrix;
 }
 
 void drawVerts(Vec3 *verts, Vec2 *uvs, int *colors, int vertsNum, Texture *texture) {
@@ -755,6 +756,9 @@ void setShader(Shader *shader) {
 void setTexture(Texture *texture, int slot) {
 	if (renderer->textureSlots[slot] == texture) return;
 	renderer->textureSlots[slot] = texture;
+
+	Shader *shader = renderer->currentShader;
+	if (shader->resolutionLoc && slot == 0) setShaderUniform(shader, shader->resolutionLoc, getSize(texture));
 
 	processBatchDraws();
 	backendSetTexture(&texture->backendTexture, slot);

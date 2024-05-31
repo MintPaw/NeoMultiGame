@@ -1098,3 +1098,54 @@ void spliceIndex(StaticArray<T, N> *array, int index) {
 }
 
 /// /Static Array
+
+/// Debug Flags
+
+void setDebugFlagOnImGuiActive(char *flagName);
+void setDebugFlag(char *flagName, bool value);
+bool getDebugFlag(char *flagName);
+
+struct DebugFlag {
+#define DEBUG_FLAG_NAME_MAX_LEN 128
+	char name[DEBUG_FLAG_NAME_MAX_LEN];
+	bool value;
+};
+
+DebugFlag *_debugFlags;
+int _debugFlagsNum;
+
+void setDebugFlagOnImGuiActive(char *flagName) {
+	bool value = false;
+	if (ImGui::IsItemHovered() || ImGui::IsItemActive()) value = true;
+	setDebugFlag(flagName, value);
+}
+
+void setDebugFlag(char *flagName, bool value) {
+	for (int i = 0; i < _debugFlagsNum; i++) {
+		DebugFlag *flag = &_debugFlags[i];
+		if (streq(flag->name, flagName)) {
+			flag->value = value;
+			return;
+		}
+	}
+
+	_debugFlags = (DebugFlag *)resizeArray(_debugFlags, sizeof(DebugFlag), _debugFlagsNum, _debugFlagsNum+1);
+	DebugFlag *flag = &_debugFlags[_debugFlagsNum++];
+	strncpy(flag->name, flagName, DEBUG_FLAG_NAME_MAX_LEN);
+	flag->value = value;
+}
+
+bool getDebugFlag(char *flagName) {
+#if !defined(FALLOW_DEBUG)
+	return false;
+#endif
+
+	for (int i = 0; i < _debugFlagsNum; i++) {
+		DebugFlag *flag = &_debugFlags[i];
+		if (streq(flag->name, flagName)) return flag->value;
+	}
+
+	return false;
+}
+
+/// /Debug Flags

@@ -34,10 +34,7 @@ struct Platform {
 
 	NanoTime frameNano;
 
-#define PLATFORM_FRAME_TIMES_MAX 60
-  float frameTimes[PLATFORM_FRAME_TIMES_MAX];
-	float frameTimeAvg;
-	float frameTimeHighest;
+	RollingFloatBuffer *frameTimes;
 
 #define PLATFORM_INPUT_CHARACTERS_MAX 128
 	int inputCharacters[PLATFORM_INPUT_CHARACTERS_MAX];
@@ -75,6 +72,7 @@ void setClipboard(char *str) { backendPlatformSetClipboard(str); }
 void platformSleep(int ms) { backendPlatformSleep(ms); }
 NanoTime getNanoTime();
 float getMsPassed(NanoTime startTime) { return backendPlatformGetMsPassed(startTime.backendNanoTime); }
+float getSecondsPassed(NanoTime startTime) { return getMsPassed(startTime) / 1000.0; }
 void navigateToUrl(char *url) { backendPlatformNavigateToUrl(url); }
 void showErrorWindow(char *msg) { backendPlatformShowErrorWindow(msg); }
 void logLastOSError() { logf("%s\n", backendPlatformGetLastErrorMessage()); }
@@ -94,6 +92,7 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 	platform = (Platform *)zalloc(sizeof(Platform));
 	platform->windowWidth = windowWidth;
 	platform->windowHeight = windowHeight;
+	platform->frameTimes = createRollingFloatBuffer(60);
 
 #if defined(FALLOW_DEBUG)
 	platform->isDebugVersion = true;
@@ -120,7 +119,6 @@ void initPlatform(int windowWidth, int windowHeight, char *windowTitle) {
 
 void platformUpdateLoop(void (*gameUpdateCallback)()) {
 	platform->gameUpdateCallback = gameUpdateCallback;
-
   backendPlatformStartUpdateLoop(platformUpdate);
 }
 
@@ -182,17 +180,7 @@ void platformUpdate() {
 
 	if (keyPressed(KEY_CTRL) && keyPressed('Q')) backendPlatformExit();
 
-	{ // Calcuate frame times
-		platform->frameTimes[platform->frameCount % PLATFORM_FRAME_TIMES_MAX] = getMsPassed(platform->frameNano);
-
-		platform->frameTimeAvg = 0;
-		platform->frameTimeHighest = 0;
-		for (int i = 0; i < PLATFORM_FRAME_TIMES_MAX; i++) {
-			platform->frameTimeAvg += platform->frameTimes[i];
-			if (platform->frameTimeHighest < platform->frameTimes[i]) platform->frameTimeHighest = platform->frameTimes[i];
-		}
-		platform->frameTimeAvg /= (float)PLATFORM_FRAME_TIMES_MAX;
-	}
+	push(platform->frameTimes, getSecondsPassed(platform->frameNano));
 
 	platform->frameCount++;
 	platform->time += platform->elapsed;
@@ -378,6 +366,9 @@ void imGuiDraw() {
 
 	if (!_imGuiNeedToDrawThisFrame) return;
 	_imGuiNeedToDrawThisFrame = false;
+
+	void processBatchDraws(); //@headerHack
+	processBatchDraws();
 
 	ImGui::Render();
   backendPlatformImGuiDraw();

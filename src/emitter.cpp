@@ -429,7 +429,6 @@ void drawEmitter(Emitter *emitter) {
 			SpriteSheetImage *image = &sheet->images[particle->imageIndex];
 
 			RenderProps props = newRenderProps();
-			props.srcWidth = props.srcHeight = 1;
 
 			Vec2 position = particle->position + v2(image->destOffX, image->destOffY);
 			Vec2 textureSize = v2(image->srcWidth, image->srcHeight);

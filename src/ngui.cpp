@@ -161,6 +161,8 @@ struct Ngui {
 	int currentParentId;
 
 	void (*afterElementBgDraw)(NguiElement*, Rect); // declare foo as pointer to function (pointer to int, Rect) returning void
+
+	bool debugInEditor;
 };
 Ngui *ngui = NULL;
 
@@ -836,6 +838,7 @@ void nguiDraw(float elapsed) {
 
 			Rect windowRect = makeRect(window->position, window->size);
 
+			if (ngui->debugInEditor) drawRectOutline(windowRect, 5, 0x44FF00FF);
 			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
 			Rect clippingRect = makeRect();
@@ -971,7 +974,6 @@ void nguiDraw(float elapsed) {
 					props.uvMatrix.SCALE(nguiGetStyleFloat(NGUI_STYLE_HIGHLIGHT_CRUSH));
 					props.uv0 = v2(0, 1);
 					props.uv1 = v2(1, 0);
-					props.srcWidth = props.srcHeight = 1;
 
 					int highlightColor = tintColor(child->bgColor, nguiGetStyleColorInt(NGUI_STYLE_HIGHLIGHT_TINT));
 					props.tint = highlightColor;
@@ -980,14 +982,13 @@ void nguiDraw(float elapsed) {
 					Texture *iconTexture = (Texture *)nguiGetStylePtr(NGUI_STYLE_ICON_PTR);
 					if (iconTexture) {
 						Vec2 iconGravity = nguiGetStyleVec2(NGUI_STYLE_ICON_GRAVITY);
-						Rect iconRect = getInnerRectOfAspect(rect, getSize(iconTexture) * nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE), iconGravity);
+						Rect iconRect = getInnerRectOfAspect(rect, getSize(iconTexture), iconGravity);
 						if (iconOutRect) *iconOutRect = iconRect;
-						// setScissor(iconRect);
 
 						Matrix3 matrix = mat3();
 						matrix.TRANSLATE(iconRect.x, iconRect.y);
 						matrix.TRANSLATE(getSize(iconRect)/2);
-						// matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE)); // Scale calculated in rect
+						matrix.SCALE(nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE)); // Scale calculated in rect
 						matrix.ROTATE(nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION));
 						matrix.TRANSLATE(nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION));
 						matrix.TRANSLATE(-getSize(iconRect)/2);
@@ -995,13 +996,10 @@ void nguiDraw(float elapsed) {
 
 						float alpha = nguiGetStyleFloat(NGUI_STYLE_ICON_ALPHA);
 						RenderProps props = newRenderProps();
-						props.srcWidth = props.srcHeight = 1;
 						props.matrix = matrix;
 						props.alpha = alpha;
 						props.tint = nguiGetStyleColorInt(NGUI_STYLE_ICON_TINT);
 						drawTexture(iconTexture, props);
-						// drawSimpleTexture(iconTexture, matrix, v2(0, 0), v2(1, 1), alpha);
-						// clearScissor();
 					}
 				};
 
@@ -1275,6 +1273,7 @@ void nguiDraw(float elapsed) {
 	}
 	ngui->afterElementBgDraw = NULL;
 	ngui->time += elapsed;
+	ngui->debugInEditor = false;
 }
 
 NguiElement *getAndReviveNguiElement(char *name) {
@@ -1410,6 +1409,8 @@ int FORCE_INLINE getSizeForDataType(NguiDataType dataType) {
 }
 
 void nguiShowImGuiStylesEditor(NguiNamedStyleStack *styleStacks, int *styleStacksNum, int styleStacksMax) {
+	ngui->debugInEditor = true;
+
 	for (int i = 0; i < *styleStacksNum; i++) {
 		ImGui::PushID(i);
 

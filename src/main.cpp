@@ -213,11 +213,11 @@ void logLastOSError();
 #endif
 #include "spriteSheets.cpp"
 
-#if defined(PLAYING_boxingGame)
-#include "oldEmitter.cpp"
-#else
+// #if defined(PLAYING_boxingGame)
+// #include "oldEmitter.cpp"
+// #else
 #include "emitter.cpp"
-#endif
+// #endif
 
 #include "equations.cpp"
 

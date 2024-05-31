@@ -785,3 +785,138 @@ void destroy(BucketArray *bucketArray) {
 //
 /// Bucket array end
 //
+
+//
+/// Rolling Float Buffer start
+//
+
+struct RollingFloatBuffer {
+	float *values;
+	int valuesNum;
+	int max;
+
+	int index;
+};
+
+RollingFloatBuffer *createRollingFloatBuffer(int max);
+void push(RollingFloatBuffer *buffer, float value);
+float getAverage(RollingFloatBuffer *buffer);
+float getHighest(RollingFloatBuffer *buffer);
+
+RollingFloatBuffer *createRollingFloatBuffer(int max) {
+	RollingFloatBuffer *buffer = (RollingFloatBuffer *)zalloc(sizeof(RollingFloatBuffer));
+	buffer->max = max;
+	buffer->values = (float *)zalloc(sizeof(float) * buffer->max);
+	return buffer;
+}
+
+void push(RollingFloatBuffer *buffer, float value) {
+	buffer->values[buffer->index++] = value;
+	if (buffer->index > buffer->max-1) buffer->index = 0;
+	if (buffer->valuesNum < buffer->index) buffer->valuesNum = buffer->index;
+}
+
+float getAverage(RollingFloatBuffer *buffer) {
+	int count = 0;
+	float sum = 0;
+	for (int i = 0; i < buffer->valuesNum; i++) {
+		sum += buffer->values[i];
+		count++;
+	}
+
+	if (sum == 0) return 0;
+	return sum / count;
+}
+
+float getHighest(RollingFloatBuffer *buffer) {
+	float highest = 0;
+	for (int i = 0; i < buffer->valuesNum; i++) {
+		float value = buffer->values[i];
+		if (highest < value) highest = value;
+	}
+
+	return highest;
+}
+
+//
+/// Rolling Float Buffer end
+//
+
+//
+/// Simple Item Cache start
+//
+
+template <typename T>
+struct CacheItem {
+	char *key;
+	T value;
+	float lastUseTime;
+};
+
+template <typename T>
+struct SimpleItemCache {
+	CacheItem<T> *items;
+	int itemsNum;
+	int itemsMax;
+	int softMax;
+};
+
+template <typename T>
+SimpleItemCache<T> *createSimpleItemCache(int softMax) {
+	SimpleItemCache<T> *cache = (SimpleItemCache<T> *)zalloc(sizeof(SimpleItemCache<T>));
+	cache->softMax = softMax;
+	return cache;
+}
+
+template <typename T>
+CacheItem<T> *getItem(SimpleItemCache<T> *cache, char *key) {
+	for (int i = 0; i < cache->itemsNum; i++) {
+		CacheItem<T> *item = &cache->items[i];
+		if (streq(item->key, key)) {
+			item->lastUseTime = platform->time;
+			return item;
+		}
+	}
+
+	if (cache->itemsNum > cache->itemsMax-1) {
+		int newMax = cache->itemsMax;
+		newMax *= 1.5;
+		if (newMax < 8) newMax = 8;
+
+		cache->items = (CacheItem<T> *)resizeArray(cache->items, sizeof(CacheItem<T>), cache->itemsMax, newMax);
+		cache->itemsMax = newMax;
+	}
+
+	CacheItem<T> *item = &cache->items[cache->itemsNum++];
+	memset(item, 0, sizeof(CacheItem<T>));
+	item->key = stringClone(key);
+	item->lastUseTime = platform->time;
+	return item;
+}
+
+template <typename T>
+void update(SimpleItemCache<T> *cache) {
+	while (cache->itemsNum > cache->softMax) {
+		CacheItem<T> *lruItem = NULL;
+		int lruIndex = -1;
+		for (int i = 0; i < cache->itemsNum; i++) {
+			CacheItem<T> *item = &cache->items[i];
+			if (!lruItem || lruItem->lastUseTime > item->lastUseTime) {
+				lruItem = item;
+				lruIndex = i;
+			}
+		}
+
+		assert(cache->softMax > 0);
+		assert(cache->itemsNum > 0);
+
+		free(lruItem->key);
+		destroy(lruItem->value);
+		arraySpliceIndex(cache->items, cache->itemsNum, sizeof(CacheItem<T>), lruIndex);
+		cache->itemsNum--;
+	}
+}
+
+//
+/// Simple Item Cache end
+//
