@@ -939,13 +939,18 @@ struct Swf {
 };
 
 bool swfFreeDrawEdges = true;
+#define ALL_LOADED_SWFS_MAX 512
+Swf *_allLoadedSwfs[ALL_LOADED_SWFS_MAX];
+int _allLoadedSwfsNum = 0;
 
 Swf *loadSwf(char *path);
 SwfDrawable makeDrawableById(Swf *swf, PlaceObject *placeObject);
 int processSubPath(DrawEdgeRecord *dest, int destNum, DrawEdgeRecord *src, int srcNum);
 SwfSprite *getAliasedSprite(SwfSprite *sourceSprite, Swf *swf);
 void destroySwf(Swf *swf);
-void clearCache(Swf *swf);
+void clearCachedTextures(Swf *swf);
+void clearCachedTexturesRecursively(Swf *swf);
+void clearAllSwfCachedTextures();
 
 bool hasLabel(SwfSprite *sprite, char *label);
 char *getLabelWithPrefix(SwfSprite *sprite, char *prefix);
@@ -1839,17 +1844,16 @@ Swf *loadSwf(char *path) {
 			bitmap->pixels = (u8 *)malloc(bitmap->width * bitmap->height * 4);
 			int pixelsNum = 0;
 
-			u64 uncompressedDataSize = Megabytes(5);
-			u8 *uncompressedData = (u8 *)malloc(uncompressedDataSize);
-			int err = uncompress(uncompressedData, (unsigned long *)&uncompressedDataSize, &stream.data[stream.byteIndex], bytesLeft);
-			if (err != Z_OK) {
-				showErrorWindow(frameSprintf("zlib error: %d (file: %s)\n", err, path));
-				Panic("RIP");
-			}
+			// u64 uncompressedDataSize = Megabytes(5);
+			// u8 *uncompressedData = (u8 *)malloc(uncompressedDataSize);
+			// int err = uncompress(uncompressedData, (unsigned long *)&uncompressedDataSize, &stream.data[stream.byteIndex], bytesLeft);
+			// if (err != Z_OK) {
+			// 	showErrorWindow(frameSprintf("zlib error: %d (file: %s)\n", err, path));
+			// 	Panic("RIP");
+			// }
 
 			SwfDataStream subStream = {};
-			subStream.data = uncompressedData;
-			subStream.size = uncompressedDataSize;
+			subStream.data = (u8 *)uncompressBytes(&stream.data[stream.byteIndex], bytesLeft, &subStream.size);
 
 			if (bitmapFormat == SWF_BITMAP_FORMAT_8) {
 				int *table = (int *)frameMalloc(sizeof(int) * bitmapColorTableSize + 1);
@@ -1910,7 +1914,7 @@ Swf *loadSwf(char *path) {
 				logf("Bitmap version %d format %d was probably parsed wrong %d/%d\n", version, bitmapFormat, subStream.byteIndex, subStream.size);
 			}
 
-			free(uncompressedData);
+			free(subStream.data);
 
 			skipBytes(&stream, bytesLeft);
 		} else if (recordHeader.type == SWF_TAG_IMPORT_ASSETS) {
@@ -2276,6 +2280,12 @@ Swf *loadSwf(char *path) {
 	// logf("Parsing %s complete %d tags\n", path, swf->tagsNum);
 	free(stream.toFree);
 
+	if (_allLoadedSwfsNum > ALL_LOADED_SWFS_MAX-1) {
+		logf("Too many loaded swfs??\n");
+		_allLoadedSwfsNum--;
+	}
+
+	_allLoadedSwfs[_allLoadedSwfsNum++] = swf;
 	float ms = getMsPassed(startTime);
 	if (ms > 1000) logf("Took %.1fsec to load %s\n", ms/1000, path);
 	return swf;
@@ -2464,22 +2474,41 @@ void destroySwf(Swf *swf) {
 	free(swf->tags);
 	destroyMemoryArena(swf->drawablesArena);
 
-	clearCache(swf);
+	clearCachedTextures(swf);
 	free(swf->cachedSpriteTextures);
 
 	for (int i = 0; i < swf->loadedSwfsNum; i++) destroySwf(swf->loadedSwfs[i]);
+
+	for (int i = 0; i < _allLoadedSwfsNum; i++) {
+		if (_allLoadedSwfs[i] == swf) {
+			arraySpliceIndex(_allLoadedSwfs, _allLoadedSwfsNum, sizeof(Swf *), i);
+			_allLoadedSwfsNum--;
+			break;
+		}
+	}
+
 	free(swf);
 }
 
-void clearCache(Swf *swf) {
+void clearCachedTextures(Swf *swf) {
 	for (int i = 0; i < swf->cachedSpriteTexturesNum; i++) {
 		CachedSwfSpriteTexture *cachedSpriteTexture = &swf->cachedSpriteTextures[i];
 		free(cachedSpriteTexture->name);
 		destroyTexture(cachedSpriteTexture->texture);
 	}
 	swf->cachedSpriteTexturesNum = 0;
+}
 
-	for (int i = 0; i < swf->loadedSwfsNum; i++) clearCache(swf->loadedSwfs[i]);
+void clearCachedTexturesRecursively(Swf *swf) {
+	clearCachedTextures(swf);
+	for (int i = 0; i < swf->loadedSwfsNum; i++) clearCachedTexturesRecursively(swf->loadedSwfs[i]);
+}
+
+void clearAllSwfCachedTextures() {
+	for (int i = 0; i < _allLoadedSwfsNum; i++) {
+		Swf *swf = _allLoadedSwfs[i];
+		clearCachedTextures(swf);
+	}
 }
 
 bool hasLabel(SwfSprite *sprite, char *label) {

@@ -846,6 +846,7 @@ float getHighest(RollingFloatBuffer *buffer) {
 /// Simple Item Cache start
 //
 
+float _dsPlatformTime = 0; //@hack
 template <typename T>
 struct CacheItem {
 	char *key;
@@ -873,7 +874,7 @@ CacheItem<T> *getItem(SimpleItemCache<T> *cache, char *key) {
 	for (int i = 0; i < cache->itemsNum; i++) {
 		CacheItem<T> *item = &cache->items[i];
 		if (streq(item->key, key)) {
-			item->lastUseTime = platform->time;
+			item->lastUseTime = _dsPlatformTime;
 			return item;
 		}
 	}
@@ -890,7 +891,7 @@ CacheItem<T> *getItem(SimpleItemCache<T> *cache, char *key) {
 	CacheItem<T> *item = &cache->items[cache->itemsNum++];
 	memset(item, 0, sizeof(CacheItem<T>));
 	item->key = stringClone(key);
-	item->lastUseTime = platform->time;
+	item->lastUseTime = _dsPlatformTime;
 	return item;
 }
 

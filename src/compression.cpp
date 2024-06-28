@@ -24,19 +24,35 @@ void *compressBytes(void *inBytes, int inBytesLen, int *compressedBytesSize) {
 void *uncompressBytes(void *inBytes, int inBytesLen, int *uncompressedBytesSize) {
 	if (uncompressedBytesSize) *uncompressedBytesSize = 0;
 
-  unsigned long newLen = Megabytes(100);
-  u8 *buffer = (u8 *)malloc(newLen);
-	int compressStatus = uncompress(buffer, &newLen, (u8 *)inBytes, inBytesLen);
+  u64 bufferSize = Megabytes(5);
+	u8 *buffer = (u8 *)malloc(bufferSize);
 
-	if (compressStatus != Z_OK) {
-		printf("Error uncompressing %d bytes (%d)\n", inBytesLen, compressStatus);
+	for (;;) {
+		int compressStatus = uncompress(buffer, (unsigned long *)&bufferSize, (u8 *)inBytes, inBytesLen);
+		if (compressStatus == Z_OK) break;
+
+		if (compressStatus == Z_BUF_ERROR) {
+			bufferSize *= 2;
+			if (bufferSize > Gigabytes(1)) {
+				logf("Refusing to uncompressed over 1gb\n");
+				free(buffer);
+				return NULL;
+			}
+
+			free(buffer);
+			buffer = (u8 *)malloc(bufferSize);
+			continue;
+		}
+
+		logf("Zlib uncompress error %d bytes (%d)\n", inBytesLen, compressStatus);
+		free(buffer);
 		return NULL;
 	}
 
-	void *res = malloc(newLen);
-	memcpy(res, buffer, newLen);
+	void *res = malloc(bufferSize);
+	memcpy(res, buffer, bufferSize);
   free(buffer);
 
-	if (uncompressedBytesSize) *uncompressedBytesSize = newLen;
+	if (uncompressedBytesSize) *uncompressedBytesSize = bufferSize;
 	return res;
 }

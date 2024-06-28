@@ -108,7 +108,7 @@ struct NguiElement {
 
 	Vec2 position;
 	Vec2 size; // Only used for windows right now
-	Xform2 graphicsXform;
+	SimpleXform2 graphicsXform;
 	int bgColor;
 	int fgColor;
 
@@ -124,6 +124,7 @@ struct NguiElement {
 
 	bool isRestrictedFocusWindow;
 	bool wasClippedOut;
+	bool isScrollable;
 
 	void *userData;
 };
@@ -177,7 +178,7 @@ void nguiPushStyleFloat(NguiStyleType type, float value);
 void nguiPushStyleVec2(NguiStyleType type, Vec2 value);
 void nguiPushStyleStringPtr(NguiStyleType type, char *value);
 void nguiPushStylePtr(NguiStyleType type, void *value);
-void nguiPushStyleIconXform(Xform2 xform);
+void nguiPushStyleIconXform(SimpleXform2 xform);
 void nguiPushWindowPositionAndPivot(Vec2 position, Vec2 pivot);
 void nguiPushStyleStack(NguiStyleStack *styleStack);
 
@@ -214,8 +215,8 @@ void *nguiGetStylePtr(NguiStyleType type) {
 	nguiGetStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &ret);
 	return ret;
 }
-Xform2 nguiGetStyleIconXform() {
-	Xform2 ret;
+SimpleXform2 nguiGetStyleIconXform() {
+	SimpleXform2 ret;
 	ret.rotation = nguiGetStyleFloat(NGUI_STYLE_ICON_ROTATION);
 	ret.scale = nguiGetStyleVec2(NGUI_STYLE_ICON_SCALE);
 	ret.translation = nguiGetStyleVec2(NGUI_STYLE_ICON_TRANSLATION);
@@ -587,7 +588,7 @@ void nguiPushStyleStringPtr(NguiStyleType type, char *value) {
 void nguiPushStylePtr(NguiStyleType type, void *value) {
 	nguiPushStyleOfType(ngui->currentStyleStack, type, NGUI_DATA_TYPE_PTR, &value);
 }
-void nguiPushStyleIconXform(Xform2 xform) {
+void nguiPushStyleIconXform(SimpleXform2 xform) {
 	nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, xform.rotation);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_SCALE, xform.scale);
 	nguiPushStyleVec2(NGUI_STYLE_ICON_TRANSLATION, xform.translation);
@@ -842,7 +843,11 @@ void nguiDraw(float elapsed) {
 			drawRect(windowRect, nguiGetStyleColorInt(NGUI_STYLE_WINDOW_BG_COLOR));
 
 			Rect clippingRect = makeRect();
-			if (windowSize.x < childrenSize.x || windowSize.y < childrenSize.y) clippingRect = windowRect;
+			window->isScrollable = false;
+			if (windowSize.x < childrenSize.x || windowSize.y < childrenSize.y) {
+				window->isScrollable = true;
+				clippingRect = windowRect;
+			}
 
 			bool noFocusForThisWindow = false;
 			if (hasRestrictedFocusWindows && !window->isRestrictedFocusWindow) noFocusForThisWindow = true;
@@ -1004,7 +1009,7 @@ void nguiDraw(float elapsed) {
 				};
 
 				if (child->type == NGUI_ELEMENT_BUTTON) {
-					Xform2 graphicsXform = createXform2();
+					SimpleXform2 graphicsXform = createSimpleXform2();
 
 					if (mouseInClipRect && contains(childRect, ngui->mouse) && !disabled) {
 						if (child->hoveringTime == 0) {
@@ -1680,11 +1685,12 @@ bool saveLoadNamedStyleStacks(DataStream *stream, bool save, int version, NguiNa
 }
 
 /// Helpers
-bool nguiArrowButton(char *name, char *texturePath, NguiDirection dir) {
+bool nguiArrowButton(char *name, char *texturePath, NguiDirection dir, Vec2 iconGravity=v2(0.5, 0.5));
+bool nguiArrowButton(char *name, char *texturePath, NguiDirection dir, Vec2 iconGravity) {
 	Vec2 elementSize = nguiGetStyleVec2(NGUI_STYLE_ELEMENT_SIZE);
 	nguiPushStyleVec2(NGUI_STYLE_ELEMENT_SIZE, v2(elementSize.x, elementSize.y*0.5));
 	nguiPushStylePtr(NGUI_STYLE_ICON_PTR, getTexture(texturePath));
-	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, v2(0.5, 0.5));
+	nguiPushStyleVec2(NGUI_STYLE_ICON_GRAVITY, iconGravity);
 	if (dir == NGUI_DIR_UP) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 0);
 	if (dir == NGUI_DIR_LEFT) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 90);
 	if (dir == NGUI_DIR_DOWN) nguiPushStyleFloat(NGUI_STYLE_ICON_ROTATION, 180);

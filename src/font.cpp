@@ -53,7 +53,7 @@ struct TextProps {
 struct FontSystem {
 	bool disabled;
 
-#define FONTS_MAX 64
+#define FONTS_MAX 128
 	Font *fonts[FONTS_MAX];
 	int fontsNum;
 
@@ -190,7 +190,18 @@ Vec2 drawText(char *text, TextProps textProps) {
 
 	{
 		float wantedFontSize = 24 * textProps.scale;
-		textProps.internalFont = getFontInternal(textProps.fontPath, roundf(wantedFontSize));
+
+		int closestAllowedSize = 0;
+		{
+			int allowedFontSizes[] = {8, 10, 12, 14, 16, 18, 24, 30, 36, 42, 50, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300};
+			for (int i = 0; i < ArrayLength(allowedFontSizes); i++) {
+				if (fabs(closestAllowedSize - allowedFontSizes[i]) > fabs(wantedFontSize - allowedFontSizes[i])) {
+					closestAllowedSize = allowedFontSizes[i];
+				}
+			}
+		}
+
+		textProps.internalFont = getFontInternal(textProps.fontPath, closestAllowedSize);
 		float gotFontSize = textProps.internalFont->fontSize * textProps.internalFont->renderScale;
 
 		textProps.scale = wantedFontSize / gotFontSize;
@@ -462,7 +473,6 @@ int drawSingleTextLine(char *line, TextProps textProps) {
 				}
 			}
 
-
 			gpuVerts[0].color = hexToArgbFloat(textProps.currentColor);
 			gpuVerts[1].color = hexToArgbFloat(textProps.currentColor);
 			gpuVerts[2].color = hexToArgbFloat(textProps.currentColor);
@@ -528,7 +538,7 @@ Font *getFontInternal(char *ttfPath, int fontSize) {
 		mapping->bestFont = font;
 	};
 
-	int MIN_FONT_SIZE = 12;
+	int MIN_FONT_SIZE = 2;
 	if (fontSize < MIN_FONT_SIZE) fontSize = MIN_FONT_SIZE;
 
 	{
@@ -664,7 +674,7 @@ void destroyFont(Font *font) {
 Font *getFontFromMappingCache(char *ttfPath, int fontSize) {
 	for (int i = 0; i < fontSys->fontSizeMappingsNum; i++) {
 		FontSizeMapping *mapping = &fontSys->fontSizeMappings[i];
-		if (fabs(fontSize - mapping->srcSize) < 20 && streq(mapping->bestFont->path, ttfPath)) {
+		if (fabs(fontSize - mapping->srcSize) < 1 && streq(mapping->bestFont->path, ttfPath)) {
 			mapping->bestFont->lastAccessedTime = platform->time;
 			return mapping->bestFont;
 		}

@@ -18,11 +18,11 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-PC)
 # GAME_NAME=turnBasedGame
 # GAME_NAME=destinyGame
 # GAME_NAME=swfTestGame
-# GAME_NAME=horseGame
 # GAME_NAME=catCardGame
-GAME_NAME=boxingGame
 # GAME_NAME=gladiators2Game
 # GAME_NAME=catAnimGame
+GAME_NAME=horseGame
+# GAME_NAME=boxingGame
 endif
 
 ifeq ($(shell echo $$HOSTNAME), mintpaw-lappy)
@@ -36,9 +36,9 @@ ifeq ($(shell echo $$HOSTNAME), MintPaw-tablet)
 # GAME_NAME=dynaGame
 # GAME_NAME=testGame
 # GAME_NAME=neoTestGame
-GAME_NAME=horseGame
+# GAME_NAME=horseGame
 # GAME_NAME=catCardGame
-# GAME_NAME=boxingGame
+GAME_NAME=boxingGame
 # GAME_NAME=gladiators2Game
 # GAME_NAME=catAnimGame
 endif
@@ -157,17 +157,6 @@ rclang:
 			type info & \
 			type log & \
 			"
-
-wasm:
-	$(MAKE) bwasm
-
-bwasm:
-	mkdir -p /c/bin/wasm
-	clang++ --target=wasm32-unknown-wasi --sysroot buildSystem/wasiSysroot -O3 -o C:/bin/wasm/main.o -c \
-	-I include/raylib \
-	-I include/raylib/skia \
-	src/main.cpp
-	wasm-ld --no-entry --export-all --lto-O3 --allow-undefined --import-memory C:/bin/wasm/main.o -o C:/bin/wasm/main.wasm
 
 w:
 	$(MAKE) bw

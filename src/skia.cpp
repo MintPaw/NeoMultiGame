@@ -804,7 +804,7 @@ void genDrawSprite(SwfSprite *sprite, SpriteTransform *transforms, int transform
 	recurse.path[zeroIndex] = 0;
 
 	if (firstSprite) {
-		popSpriteMatrix(cmdList);
+		popSpriteMatrix(cmdList); // superSampleScale
 	}
 
 	createCommand(cmdList, VDRAW_END_SPRITE);

@@ -17,6 +17,9 @@ struct SpriteSheetImage {
 struct SpriteSheet {
 	char path[PATH_MAX_LEN];
 	Texture *texture;
+#define SPRITE_SHEET_TEXTURES_MAX 32
+	Texture *textures[SPRITE_SHEET_TEXTURES_MAX];
+	int texturesNum;
 
 	SpriteSheetImage *images;
 	int imagesNum;

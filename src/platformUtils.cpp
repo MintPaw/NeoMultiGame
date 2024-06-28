@@ -1,3 +1,6 @@
+char *platformRun(const char *cmd, bool blocks);
+char *saveFileForUser(char *fileName, void *data, int dataNum);
+
 char *platformRun(const char *cmd, bool blocks) {
 #if defined(_WIN32)
 	SECURITY_ATTRIBUTES saAttr; 
@@ -74,5 +77,41 @@ char *platformRun(const char *cmd, bool blocks) {
 #else
 	logf("Can't platformRun on this platform\n");
 	return NULL;
+#endif
+}
+
+char *saveFileForUser(char *fileName, void *data, int dataNum) {
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		let fileNamePtr = $0;
+		let dataPtr = $1;
+		let dataSize = $2;
+
+		let fileName = UTF8ToString(fileNamePtr);
+
+		let dataArray = new Uint8Array(dataSize);
+		for (let i = 0; i < dataSize; i++) {
+			dataArray[i] = getValue(dataPtr + i, "i8");
+		}
+		let blob = new Blob([dataArray], {type: "octet/stream"});
+
+		let url = window.URL.createObjectURL(blob);
+
+		var link = document.createElement('a');
+		link.href = url;
+		link.download = fileName;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+	}, fileName, data, dataNum);
+	return NULL;
+#else
+	char *path = frameSprintf("%s/%s", exeDir, fileName);
+	if (writeFile(path, data, dataNum)) {
+		for (char *p = path; *p; p++) if (*p == '\\') *p = '/';
+		return path;
+	} else {
+		return NULL;
+	}
 #endif
 }

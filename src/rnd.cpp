@@ -1,4 +1,5 @@
-void pushRndSeed(u32 newSeed);
+void rndSetSeed(u32 seed);
+void pushRndSeed(u32 seed);
 u32 popRndSeed();
 u32 rnd();
 float FORCE_INLINE rndFloat(float min, float max);
@@ -15,14 +16,14 @@ void rndTest();
 u32 lcgSeedStack[LCG_SEED_STACK_MAX];
 int lcgSeedStackNum = 0;
 
-u32 lcgM = pow(2, 32)-1;
+u32 rndMax = pow(2, 32)-1;
 u32 lcgSeed = 1;
 
-void pushRndSeed(u32 newSeed) {
+void pushRndSeed(u32 seed) {
 	if (lcgSeedStackNum > LCG_SEED_STACK_MAX-1) Panic("Lcg seed stack overflow\n");
 
 	lcgSeedStack[lcgSeedStackNum++] = lcgSeed;
-	lcgSeed = newSeed;
+	rndSetSeed(seed);
 }
 
 u32 popRndSeed() {
@@ -33,24 +34,62 @@ u32 popRndSeed() {
 	}
 
 	u32 oldSeed = lcgSeed;
-	lcgSeed = lcgSeedStack[lcgSeedStackNum-1];
+	rndSetSeed(lcgSeedStack[lcgSeedStackNum-1]);
 	lcgSeedStackNum--;
 
 	return oldSeed;
 }
 
-u32 rnd() {
-	u32 lcgA = 1664525;
-	u32 lcgC = 1013904223;
+// https://github.com/ESultanik/mtwister
+#define STATE_VECTOR_LENGTH 624
+#define STATE_VECTOR_M      397 /* changes to STATE_VECTOR_LENGTH also require changes to this */
 
-	lcgSeed = (lcgA * lcgSeed + lcgC) & lcgM;
-	return lcgSeed;
+u32 mtArray[STATE_VECTOR_LENGTH];
+s32 mtIndex;
+
+void rndSetSeed(u32 seed) {
+  mtArray[0] = seed & 0xffffffff;
+  for(mtIndex=1; mtIndex<STATE_VECTOR_LENGTH; mtIndex++) {
+    mtArray[mtIndex] = (6069 * mtArray[mtIndex-1]) & 0xffffffff;
+  }
+	lcgSeed = seed;
 }
 
-float rndFloat(float min, float max) { return min + (rnd() / (float)lcgM) * (max - min); }
+u32 rnd() {
+#define MT_UPPER_MASK       0x80000000
+#define MT_LOWER_MASK       0x7fffffff
+#define MT_TEMPERING_MASK_B 0x9d2c5680
+#define MT_TEMPERING_MASK_C 0xefc60000
+
+  u32 y;
+  static u32 mag[2] = {0x0, 0x9908b0df}; /* mag[x] = x * 0x9908b0df for x = 0,1 */
+  if (mtIndex >= STATE_VECTOR_LENGTH || mtIndex < 0) {
+    s32 kk;
+    if (mtIndex >= STATE_VECTOR_LENGTH+1 || mtIndex < 0) rndSetSeed(4357);
+    for (kk=0; kk<STATE_VECTOR_LENGTH-STATE_VECTOR_M; kk++) {
+      y = (mtArray[kk] & MT_UPPER_MASK) | (mtArray[kk+1] & MT_LOWER_MASK);
+      mtArray[kk] = mtArray[kk+STATE_VECTOR_M] ^ (y >> 1) ^ mag[y & 0x1];
+    }
+    for (; kk<STATE_VECTOR_LENGTH-1; kk++) {
+      y = (mtArray[kk] & MT_UPPER_MASK) | (mtArray[kk+1] & MT_LOWER_MASK);
+      mtArray[kk] = mtArray[kk+(STATE_VECTOR_M-STATE_VECTOR_LENGTH)] ^ (y >> 1) ^ mag[y & 0x1];
+    }
+    y = (mtArray[STATE_VECTOR_LENGTH-1] & MT_UPPER_MASK) | (mtArray[0] & MT_LOWER_MASK);
+    mtArray[STATE_VECTOR_LENGTH-1] = mtArray[STATE_VECTOR_M-1] ^ (y >> 1) ^ mag[y & 0x1];
+    mtIndex = 0;
+  }
+  y = mtArray[mtIndex++];
+  y ^= (y >> 11);
+  y ^= (y << 7) & MT_TEMPERING_MASK_B;
+  y ^= (y << 15) & MT_TEMPERING_MASK_C;
+  y ^= (y >> 18);
+  return y;
+}
+
+float rndFloat(float min, float max) { return min + (rnd() / (float)rndMax) * (max - min); }
 int rndInt(int min, int max) { 
 	if (min >= max) return min;
-	return min + rnd() / (lcgM / (max - min + 1) + 1);
+	return min + rnd() / (rndMax / (max - min + 1) + 1);
 }
 bool rndBool() { return rndFloat(0, 1) > 0.5; }
 bool rndPerc(float perc) { return rndFloat(0, 1) < perc; }

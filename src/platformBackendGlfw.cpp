@@ -276,7 +276,6 @@ void backendPlatformImGuiDraw() {
 
 PlatformEvent *createPlatformEvent(PlatformEventType type) {
 	if (_platformEventsNum > PLATFORM_EVENTS_MAX-1) {
-		logf("Too many platform events!\n");
 		_platformEventsNum--;
 	}
 

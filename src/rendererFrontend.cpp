@@ -399,7 +399,7 @@ bool writeTextureToFile(Texture *texture, char *path) {
 
 	stbi_flip_vertically_on_write(true);
 	if (!stbi_write_png(frameSprintf("%s%s", filePathPrefix, path), texture->width, texture->height, 4, bitmapData, texture->width*4)) {
-		logf("Failed to write sprite sheet: %s\n", path);
+		logf("Failed to write texture to file: %s\n", path);
 		free(bitmapData);
 		return false;
 	}
@@ -522,13 +522,15 @@ void drawQuadVerts(Texture *texture, Matrix3 matrix, Vec2 uv0, Vec2 uv1, int tin
 		verts[i] = matrix * verts[i];
 	}
 
-	Matrix3 flipMatrix = {
-		1,  0,  0,
-		0, -1,  0,
-		0,  1,  1
-	};
-	uv0 = flipMatrix * uv0;
-	uv1 = flipMatrix * uv1;
+	// Matrix3 flipMatrix = {
+	// 	1,  0,  0,
+	// 	0, -1,  0,
+	// 	0,  1,  1
+	// };
+	// uv0 = flipMatrix * uv0;
+	// uv1 = flipMatrix * uv1;
+	uv0.y = 1 - uv0.y;
+	uv1.y = 1 - uv1.y;
 
 	Vec2 uvs[] = {
 		v2(uv0.x, uv0.y),

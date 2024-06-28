@@ -1,9 +1,12 @@
 cd /d "%~dp0.."
 
+set IS_64_BIT=0
+
 set BIN_DIR=C:\bin
 set PROJECT_DIR=%~dp0..
 set INCLUDE_DIR=%PROJECT_DIR%\include\raylib
-set LIB_DIR=%PROJECT_DIR%\lib\raylib\emscripten
+set LIB_DIR=%PROJECT_DIR%\lib\wasm32
+if [%IS_64_BIT%]==[1] set LIB_DIR=%PROJECT_DIR%\lib\wasm64
 set SRC_DIR=%PROJECT_DIR%\src
 
 if not exist C:\bin\webgl mkdir C:\bin\webgl
@@ -57,7 +60,7 @@ cd /d C:\bin\webgl
 
 if [%INTERNAL_MODE%]==[1] (
 	REM set INTERNAL_ARGS=-DFALLOW_INTERNAL -s GL_ASSERTIONS=1 -s ASSERTIONS=1 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=2 -s DEMANGLE_SUPPORT=1 -s VERBOSE=1
-	set INTERNAL_ARGS=-DFALLOW_INTERNAL -s GL_ASSERTIONS=1 -s ASSERTIONS=1 -s DEMANGLE_SUPPORT=1
+	set INTERNAL_ARGS=-DFALLOW_INTERNAL -s GL_ASSERTIONS=1 -s ASSERTIONS=1
 ) else (
 	set INTERNAL_ARGS=
 )
@@ -75,8 +78,14 @@ if [%OPTIMIZED_MODE%]==[1] (
 	set OPT_ARGS=
 )
 
+set WASM_LIBS=%LIB_DIR%\libbox2d.a %LIB_DIR%\libskia.a
+if [%IS_64_BIT%]==[1] set WASM_LIBS= %LIB_DIR%\libbox2d.a %LIB_DIR%\libskia.a %LIB_DIR%\jaiLib.wasm 
+
+set ARCH_ARGS=
+if [%IS_64_BIT%]==[1] set ARCH_ARGS=-s MEMORY64=1
+
 call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html ^
-	%SRC_DIR%\main.cpp %LIB_DIR%\libskia.a %LIB_DIR%\libbox2d.a ^
+	%SRC_DIR%\main.cpp %WASM_LIBS% ^
 	-I%INCLUDE_DIR% -I%INCLUDE_DIR%\skia -L%LIB_DIR% ^
 	-lidbfs.js ^
 	-fno-rtti -fno-exceptions -Wno-c++11-compat-deprecated-writable-strings -Wno-writable-strings ^
@@ -87,6 +96,7 @@ call em++ -std=c++17 %DEBUG_ARGS% %INTERNAL_ARGS% %OPT_ARGS% -o index.html ^
 	-s ERROR_ON_UNDEFINED_SYMBOLS=0 ^
 	-s INITIAL_MEMORY=64MB ^
 	-s STACK_SIZE=10MB ^
+	%ARCH_ARGS% ^
 	--preload-file ..\assetsEmbed@assets
 
 xcopy %LIB_DIR%\*.js . /sy

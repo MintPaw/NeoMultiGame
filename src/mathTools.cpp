@@ -492,10 +492,21 @@ struct Xform {
 };
 
 struct Rect {
-	float x;
-	float y;
-	float width;
-	float height;
+	union {
+		Vec2 position;
+		struct {
+			float x;
+			float y;
+		};
+	};
+
+	union {
+		Vec2 size;
+		struct {
+			float width;
+			float height;
+		};
+	};
 
 	bool equals(Rect other);
 	bool contains(Vec2 point);
@@ -504,7 +515,6 @@ struct Rect {
 	Vec2 getClosestPoint(Vec2 from);
 	Vec2 pos();
 	Vec2 center();
-	Vec2 size();
 	Rect inflate(Vec2 size);
 	Rect inflate(float size);
 	void print(const char *label=NULL);
@@ -2491,13 +2501,6 @@ Vec2 Rect::center() {
 	Vec2 ret;
 	ret.x = this->x + this->width/2;
 	ret.y = this->y + this->height/2;
-	return ret;
-}
-
-Vec2 Rect::size() {
-	Vec2 ret;
-	ret.x = this->width;
-	ret.y = this->height;
 	return ret;
 }
 
@@ -4702,9 +4705,10 @@ bool overlaps(Rect rect, Tri2 tri) {
 /// / Tri2
 
 struct Xform2 {
-	Vec2 translation;
+	Vec2 position;
 	Vec2 scale;
 	float rotation;
+	Vec2 pivot;
 };
 
 Xform2 createXform2();
@@ -4714,8 +4718,30 @@ Xform2 createXform2() {
 	return xform;
 }
 
-Xform2 lerp(Xform2 a, Xform2 b, float perc);
-Xform2 lerp(Xform2 a, Xform2 b, float perc) {
+Matrix3 toMatrix(Xform2 xform) {
+	Matrix3 mat = mat3();
+	mat.TRANSLATE(xform.position);
+	mat.ROTATE(xform.rotation);
+	mat.SCALE(xform.scale);
+	mat.TRANSLATE(-xform.pivot);
+	return mat;
+}
+
+struct SimpleXform2 {
+	Vec2 translation;
+	Vec2 scale;
+	float rotation;
+};
+
+SimpleXform2 createSimpleXform2();
+SimpleXform2 createSimpleXform2() {
+	SimpleXform2 xform = {};
+	xform.scale = v2(1, 1);
+	return xform;
+}
+
+SimpleXform2 lerp(SimpleXform2 a, SimpleXform2 b, float perc);
+SimpleXform2 lerp(SimpleXform2 a, SimpleXform2 b, float perc) {
 	a.translation = lerp(a.translation, b.translation, perc);
 	a.scale = lerp(a.scale, b.scale, perc);
 	a.rotation = lerp(a.rotation, b.rotation, perc);

@@ -184,6 +184,7 @@ void platformUpdate() {
 
 	platform->frameCount++;
 	platform->time += platform->elapsed;
+	_dsPlatformTime = platform->time;
 
 	freeFrameMemory();
 }

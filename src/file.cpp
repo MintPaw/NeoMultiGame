@@ -25,13 +25,14 @@ char *resolveFuzzyPath(const char *fileName, const char *fileName2=NULL, FuzzyPa
 bool directoryExists(const char *dirPath);
 bool fileExists(const char *fileName);
 bool createDirectory(const char *dirName);
+void createAllDirectories(char *path);
 void removeDirectory(const char *dirName);
 void renameFile(const char *currentName, const char *newName);
 void appendFile(const char *fileName, void *data, int length);
 bool writeFile(const char *fileName, void *data, int length);
 void *readFile(const char *fileName, int *outSize=NULL);
 void *frameReadFile(const char *fileName, int *outSize=NULL);
-void deleteFile(const char *fileName);
+bool deleteFile(const char *fileName);
 void loadRemoteZip(const char *url, const char *path);
 void loadedRemoteFile(const char *result);
 void errorLoadingRemoteFile(const char *result);
@@ -112,10 +113,7 @@ void testPathCasing(char *path) { //@incomplete This doesn't work for directorie
 	return;
 #endif
 
-#ifndef _WIN32
-	return;
-#endif
-
+#ifdef _WIN32
 	path = frameStringClone(path);
 	for (char *p = path; *p; p++) if (*p == '\\') *p = '/';
 
@@ -141,6 +139,7 @@ void testPathCasing(char *path) { //@incomplete This doesn't work for directorie
 	}
 
 	CloseHandle(hFile);
+#endif
 }
 
 void refreshAssetPaths() {
@@ -198,6 +197,7 @@ char **getDirectoryList(const char *dirPath, int *numFiles, bool includingUnders
 	}
 	strcat(realRootDir, dirPath);
 	testPathCasing(realRootDir);
+	if (realRootDir[strlen(realRootDir)-1] == '/') realRootDir[strlen(realRootDir)-1] = 0;
 	// logf("Getting the directly list of %s(%s)\n", realRootDir, dirPath);
 
 	int fileNamesMax = 32;
@@ -441,18 +441,18 @@ bool fileExists(const char *fileName) {
 }
 
 bool isFirstPathNewer(const char *firstPath, const char *secondPath);
-bool isFirstPathNewer(const char *firstPath, const char *secondPath) {
-	char realFirstPath[PATH_MAX_LEN];
+bool isFirstPathNewer(const char *firstPath, const char *secondPath) { // It returns true if the secondPath is earlier than the firstPath
+	char realFirstPath[PATH_MAX_LEN] = {};
 	if (firstPath[1] != ':' && firstPath[0] != '/') strcpy(realFirstPath, filePathPrefix);
 	strcat(realFirstPath, firstPath);
 
-	char realSecondPath[PATH_MAX_LEN];
+	char realSecondPath[PATH_MAX_LEN] = {};
 	if (secondPath[1] != ':' && secondPath[0] != '/') strcpy(realSecondPath, filePathPrefix);
 	strcat(realSecondPath, secondPath);
 
 #if defined(_WIN32)
-		HANDLE inHandle = CreateFile(realFirstPath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-		HANDLE outHandle = CreateFile(realSecondPath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		HANDLE inHandle = CreateFile(realFirstPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		HANDLE outHandle = CreateFile(realSecondPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 		FILETIME creationTime;
 		FILETIME lastAccessTime;
@@ -521,6 +521,22 @@ bool createDirectory(const char *dirName) {
 	if (!good) return false;
 	return true;
 #endif
+}
+
+void createAllDirectories(char *path) {
+	int segmentsNum = 0;
+	char **segments = frameSplitString(path, "/", &segmentsNum);
+
+	char *combinedPath = segments[0];
+	for (int i = 1; i < segmentsNum; i++) {
+		if (i == segmentsNum-1 && strchr(segments[i], '.')) break;
+		combinedPath = frameSprintf("%s/%s", combinedPath, segments[i]);
+		if (!directoryExists(combinedPath)) {
+			if (!createDirectory(combinedPath)) {
+				logf("Failed to create %s (while creating all of %s)\n", combinedPath, path);
+			}
+		}
+	}
 }
 
 void removeDirectory(const char *dirName) {
@@ -784,22 +800,24 @@ void *frameReadFile(const char *fileName, int *outSize) {
 	return str;
 }
 
-void deleteFile(const char *fileName) {
+bool deleteFile(const char *fileName) {
 	char realName[PATH_MAX_LEN] = {};
 	if (fileName[1] != ':' && fileName[0] != '/') strcpy(realName, filePathPrefix);
 	strcat(realName, fileName);
 
 #if defined(_WIN32)
-	BOOL good = DeleteFileA(realName);
-
-	if (!good) {
+	if (!DeleteFileA(realName)) {
 		logf("Failed to delete %s\n", realName);
+		return false;
 	}
 #else
-	if(remove(realName) != 0 ) {
+	if (remove(realName) != 0) {
 		logf("Failed to delete %s\n", realName);
+		return false;
 	}
 #endif
+
+	return true;
 }
 
 char *readTempSave() {

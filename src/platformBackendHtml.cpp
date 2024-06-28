@@ -5,6 +5,9 @@
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #include "backends/imgui_impl_opengl3.cpp"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 struct BackendNanoTime {
 	timespec timeSpec;
 };

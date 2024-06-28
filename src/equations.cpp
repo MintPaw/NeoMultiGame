@@ -744,7 +744,7 @@ EqNodeEvalData *getNodeEvalData(EqNode *node, EqEvalData *evalData) {
 
 	EqNodeEvalData *nodeEvalData = (EqNodeEvalData *)getNext(evalData->nodeDataArray);
 	nodeEvalData->relatedNodeId = node->id;
-	if (node->type == EQ_NODE_ORDERED_RNG) nodeEvalData->rngSeed = rndInt(0, lcgM);
+	if (node->type == EQ_NODE_ORDERED_RNG) nodeEvalData->rngSeed = rndInt(0, rndMax);
 	return nodeEvalData;
 }
 
